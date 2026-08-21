@@ -572,7 +572,7 @@ numericExpression
     ;
 
 actualParameterList
-    : '(' (parameter (',' parameter)*)? ')'
+    : '(' parameter (',' parameter)* ')'
     ;
 
 parameter
@@ -719,7 +719,7 @@ nullStmt
     ;
 
 procedureCallStmt
-    : (builtInProcedure | procedureRef) actualParameterList ';'
+    : (builtInProcedure | procedureRef) actualParameterList? ';'
     ;
 
 builtInProcedure

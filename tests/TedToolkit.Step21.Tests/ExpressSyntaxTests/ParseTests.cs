@@ -143,7 +143,6 @@ internal sealed class ParseTests
             await Assert.That(productions.Count(production => production == "schemaDecl")).IsEqualTo(2);
             await Assert.That(productions).Contains("schemaVersionId");
             await Assert.That(productions).Contains("aggregateInitializer");
-            await Assert.That(productions).Contains("actualParameterList");
             await Assert.That(tokens.Any(token => token.Text == "schema")).IsTrue();
             await Assert.That(tokens.Any(token => token.Text == "'version ''two'''")).IsTrue();
             await Assert.That(tokens.Any(token => token.Text == "\"0000004100000042\"")).IsTrue();

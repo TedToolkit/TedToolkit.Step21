@@ -43,4 +43,56 @@ internal sealed class SyntaxErrorTests
             await Assert.That(result.Diagnostics.Single().Message).Contains("unexpected");
         }
     }
+
+    /// <summary>
+    /// Verifies that a parameterless procedure call omits an actual-parameter list.
+    /// </summary>
+    [Test]
+    public async Task Should_accept_parameterless_procedure_call_without_parentheses()
+    {
+        const string text = """
+            SCHEMA calls;
+            PROCEDURE ping; END_PROCEDURE;
+            PROCEDURE invoke;
+              ping;
+            END_PROCEDURE;
+            END_SCHEMA;
+            """;
+
+        var result = ExpressSyntaxParser.Parse("calls.exp", text);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics).IsEmpty();
+            await Assert.That(result.Root).IsNotNull();
+            await Assert.That(result.Root!.DescendantsAndSelf().Count(node => node.Production == "procedureCallStmt"))
+                .IsEqualTo(1);
+            await Assert.That(result.Root.DescendantsAndSelf().Any(node => node.Production == "actualParameterList"))
+                .IsFalse();
+        }
+    }
+
+    /// <summary>
+    /// Verifies that present actual-parameter lists contain at least one expression.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_empty_actual_parameter_list()
+    {
+        const string text = """
+            SCHEMA calls;
+            PROCEDURE ping; END_PROCEDURE;
+            PROCEDURE invoke;
+              ping();
+            END_PROCEDURE;
+            END_SCHEMA;
+            """;
+
+        var result = ExpressSyntaxParser.Parse("calls.exp", text);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Root).IsNull();
+            await Assert.That(result.Diagnostics).IsNotEmpty();
+        }
+    }
 }
