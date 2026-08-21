@@ -1,0 +1,84 @@
+# Architecture principles
+
+## AP-001: ISO 10303-21 defines the product boundary
+
+- Status: Active
+- Strength: Required
+- Scope: public APIs, grammar scope, generated types, package positioning, and conformance claims
+- Owner: repository maintainer
+- Review trigger: a feature is justified only by one application protocol, file extension, or domain model
+
+### Default
+
+Model ISO 10303-21 exchange-structure concepts directly and treat STEP application protocols, IFC, and other EXPRESS-schema ecosystems only as consumers and conformance evidence.
+
+### Rationale
+
+Allowing a sampled schema or file extension to define the runtime would create incompatible abstractions, distort standard terminology, and prevent the same physical-file implementation from serving other EXPRESS schemas.
+
+### Practical implications
+
+- Public types use ISO 10303-21 terminology such as exchange structure, data section, entity instance name, and parameter.
+- Domain conveniences do not enter the core runtime unless they are expressed as optional adapters outside the standard model.
+- Tests use NIST, buildingSMART, and other corpora as interoperability evidence, never as substitutes for a standard clause.
+- README and package descriptions distinguish currently implemented conformance from the library's governing scope.
+
+### Exception route
+
+Any domain-specific core abstraction requires an accepted ADR that defines a narrower package boundary without changing the ISO-neutral runtime.
+
+## AP-002: Keep the runtime schema-neutral
+
+- Status: Active
+- Strength: Required
+- Scope: runtime, EXPRESS compiler, source generator, and generated-code dependencies
+- Owner: repository maintainer
+- Review trigger: a dependency points from the runtime to a schema, analyzer, or generator-only library
+
+### Default
+
+The runtime defines schema-independent ISO 10303-21 values, identity, model, resolution, diagnostics, and writing contracts; generated schema code depends on those contracts, and generator implementation dependencies remain isolated in the analyzer package.
+
+### Rationale
+
+This direction permits any EXPRESS schema to use one runtime, keeps Roslyn and ANTLR generation details out of consumer objects, and allows raw exchange structures to be processed without compile-time schema generation.
+
+### Practical implications
+
+- The Analyzer may depend on the EXPRESS compiler, ANTLR, Roslyn, and TedToolkit.RoslynHelper.
+- Generated code references only TedToolkit.Step21 runtime contracts.
+- TedToolkit.Step21 does not depend on the Analyzer or a concrete generated schema at runtime.
+- Generated schema metadata bridges raw parameters and typed records without reflection-based domain discovery.
+
+### Exception route
+
+A reversed or cyclic dependency requires an accepted ADR demonstrating why a schema-neutral contract cannot represent the requirement.
+
+## AP-003: ISO semantics first, idiomatic C# second
+
+- Status: Active
+- Strength: Required
+- Scope: public domain model, generated schema types, naming, nullability, inheritance, collections, identity, reading, and writing
+- Owner: repository maintainer
+- Review trigger: a public domain type or behavior cannot cite its ISO 10303-21 or EXPRESS source, or a C# convention would alter that source semantics
+
+### Default
+
+Preserve ISO 10303-21 and EXPRESS semantics without addition or reinterpretation; only after semantic equivalence is established may the implementation choose the most idiomatic C# representation.
+
+### Rationale
+
+Standard fidelity is the library's interoperability contract. C# design quality makes that contract usable, but convenience cannot justify a wrapper, state, relationship, or behavior that the exchange structure or schema does not contain. Conversely, literal syntax-shaped APIs should not be retained when C# can express the same semantics more naturally and completely.
+
+### Practical implications
+
+- Every public domain type and member traces to an ISO 10303-21 concept or a declaration in the selected EXPRESS schema.
+- Direct entity properties express the EXPRESS entity-valued attribute in ordinary C#; model-owned instance-name bookkeeping remains implementation infrastructure required for ISO writing.
+- `OPTIONAL` may map to C# nullability only when absence remains distinct from EXPRESS values such as LOGICAL unknown.
+- Interfaces and records are C# representations of EXPRESS entity assignability and data; they do not add another domain type system.
+- Parser, diagnostic, schema-mapping, and writer contracts are clearly named infrastructure. They do not appear as additional values or relationships in generated entities.
+- Working API names such as `P21Model<TSchema>` are not accepted merely for implementation convenience; final public names must use standard concepts such as exchange structure, section, entity instance, parameter, or schema declaration where applicable.
+
+### Exception route
+
+A public domain concept without a normative or schema source is prohibited. An unavoidable public infrastructure abstraction must document its operational role and demonstrate that it contributes no new exchange-structure semantics; a difficult-to-reverse exception requires an accepted ADR.
