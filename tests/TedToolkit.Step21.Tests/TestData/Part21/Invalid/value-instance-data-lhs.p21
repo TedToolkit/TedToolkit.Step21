@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Invalid data lhs'),'4;3');
+FILE_NAME('value-instance-data-lhs.p21','2026-08-21T17:00:00+08:00',('Author'),('Organization'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+DATA;
+@1=EXAMPLE_ENTITY();
+ENDSEC;
+END-ISO-10303-21;

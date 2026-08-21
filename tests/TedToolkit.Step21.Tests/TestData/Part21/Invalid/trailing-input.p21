@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Trailing input'),'4;1');
+FILE_NAME('trailing-input.p21','2026-08-21T17:00:00+08:00',('Author'),('Organization'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+DATA;
+ENDSEC;
+END-ISO-10303-21;
+TRAILING

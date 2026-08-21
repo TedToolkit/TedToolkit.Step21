@@ -1,0 +1,12 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Wrong section order'),'4;3');
+FILE_NAME('section-order.p21','2026-08-21T17:00:00+08:00',('Author'),('Organization'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+DATA;
+ENDSEC;
+ANCHOR;
+<late> = $;
+ENDSEC;
+END-ISO-10303-21;

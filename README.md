@@ -13,6 +13,8 @@ TedToolkit.Step21 is a .NET library focused on ISO 10303-21 exchange structures 
 
 STEP application protocols and IFC files are useful conformance fixtures, but they do not define the library's public model or supported scope. See the [product intent](docs/product/README.md), [design principles](docs/principles/README.md), and [current architecture draft](docs/architecture/schema-bound-round-trip.md).
 
+The Part 21 parser's `exchangeFile` entry rule recognizes the complete ISO 10303-21:2016 Edition 3 clear-text section and token syntax, enforces the normative section order, and consumes EOF. This recognition does not yet provide operational anchor/reference resolution, signature verification, archive handling, ECMAScript execution, or schema-bound materialization. See the [production-to-clause traceability](docs/conformance/part21-edition3-grammar.md) for the exact syntax boundary and fixtures.
+
 ## Quick start
 
 Clone the repository with its TedToolkit submodule, then build the solution in Release mode:
@@ -31,7 +33,7 @@ The projects currently target .NET 10 and .NET Standard 2.0, so the .NET 10 SDK 
 | --- | --- |
 | `src/TedToolkit.Step21` | Hosts the generated ISO 10303-21 parser and packages the analyzer. |
 | `src/TedToolkit.Step21.Analyzer` | Hosts the generated EXPRESS parser and Roslyn analyzer foundation. |
-| `src/grammar` | Contains the source grammars used to generate the parser code. |
+| `src/grammar` | Contains the source grammars used to generate the parsers; Part 21 uses a split lexer/parser so signature Base64 is context-bound without target-language actions. |
 | `build/TedToolkit.Step21.Build` | Runs the repository build pipeline. |
 
 ## Development

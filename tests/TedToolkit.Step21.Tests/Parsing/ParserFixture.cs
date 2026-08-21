@@ -8,7 +8,12 @@ internal static class ParserFixture
 {
     public static ParseResult ParseStep(string relativePath)
     {
-        var input = new AntlrInputStream(File.ReadAllText(GetTestDataPath(relativePath)));
+        return ParseStepText(File.ReadAllText(GetTestDataPath(relativePath)));
+    }
+
+    public static ParseResult ParseStepText(string text)
+    {
+        var input = new AntlrInputStream(text);
         var lexer = new STEPLexer(input);
         var lexerErrors = new CollectingErrorListener<int>();
         lexer.RemoveErrorListeners();
@@ -18,7 +23,7 @@ internal static class ParserFixture
         var parserErrors = new CollectingErrorListener<IToken>();
         parser.RemoveErrorListeners();
         parser.AddErrorListener(parserErrors);
-        parser.file();
+        parser.exchangeFile();
 
         return CreateResult(lexerErrors.Errors, parserErrors.Errors, parser.CurrentToken.Type);
     }

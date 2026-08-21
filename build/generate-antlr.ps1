@@ -61,9 +61,9 @@ foreach ($outputDirectory in @($stepOutput, $expressOutput)) {
 
 Push-Location $grammarDirectory
 try {
-    & java -jar $antlrJar -Dlanguage=CSharp -visitor -no-listener -package TedToolkit.Step21.Grammar -o $stepOutput STEP.g4
+    & java -jar $antlrJar -Dlanguage=CSharp -visitor -no-listener -package TedToolkit.Step21.Grammar -o $stepOutput STEPLexer.g4 STEPParser.g4
     if ($LASTEXITCODE -ne 0) {
-        throw "ANTLR failed to generate STEP.g4 (exit code $LASTEXITCODE)."
+        throw "ANTLR failed to generate the STEP lexer/parser grammars (exit code $LASTEXITCODE)."
     }
 
     & java -jar $antlrJar -Dlanguage=CSharp -visitor -no-listener -package TedToolkit.Step21.Analyzer.Grammar -o $expressOutput Express.g4

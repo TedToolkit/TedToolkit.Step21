@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -80,12 +80,14 @@ The current grammar proves only two classic minimal files and one missing `ENDSE
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA, grammar/generated/test artifacts, and any scope deviation |
-| Behavior-case proof | Clause references and commands/results for BC-17 and BC-21 |
-| Migration and documentation | Exact supported syntax boundary documented |
-| Dependent-item unlock | Complete parse-tree and section guarantee for SBRT-003 |
+| Delivery-boundary check | Starting SHA `0df61cf`. Changed the Part 21 grammar from one combined prototype to target-independent `STEPLexer.g4` and `STEPParser.g4`, regenerated the internal parser/lexer/visitor artifacts, updated both native generation scripts and their artifact contract test, changed both parser test adapters to call `exchangeFile`, and added clause-traced positive/negative fixtures plus conformance documentation. The split is an implementation factoring required to make signature Base64 contextual without target-language actions; it does not broaden the authorized outcome or add operational semantics. `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-17: `docs/conformance/part21-edition3-grammar.md` maps every Table 1/2/3/4 production family to clauses, grammar rules, and focused fixtures; no corpus-only extension was introduced. BC-21 Red first failed on all-section, zero-DATA/multiple-signature, trailing-input, ignored-control, invalid-Base64, valid lowercase URI escape, invalid URI-structure, and non-graphic-control cases as their boundaries were introduced. Green/Refactor: focused `FileTests` passed 20/20; the complete fast TUnit project passed 23/23. Valid fixtures prove all section forms, zero and multiple DATA/signature cardinalities, typed/untyped/omitted/list parameters, simple/complex records, all occurrence-name forms, RFC 2396 URI forms, tag/anchor forms, string directives, print controls, ignored controls inside/between tokens, and EOF. Negative fixtures prove ordering, required header order, trailing input, token case/shape, URI escaping/structure, tag/anchor constraints, DATA left-hand side, Base64, and Table 3 signature punctuation. |
+| Regression proof | `dotnet run --no-restore --project tests/TedToolkit.Step21.IntegrationTests --configuration Release` passed 2/2 enabled policy/manifest cases; the network corpus case was explicitly skipped because `TEDTOOLKIT_STEP21_EXTERNAL_CORPUS` was not opted in. `dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore` passed with 0 warnings and 0 errors. PowerShell and shell generation produced the same 16 paths and byte-identical SHA-256 content. |
+| Migration and documentation | `README.md` states the exact complete Edition 3 clear-text recognition boundary and explicitly excludes advanced operation. `docs/conformance/part21-edition3-grammar.md` records production/token traceability, the WSN-authoritative no-semicolon signature decision, test evidence, and the distinction between recognition and operation. The internal visitor names change from combined-grammar `STEPVisitor`/`STEPBaseVisitor` to split-grammar `STEPParserVisitor`/`STEPParserBaseVisitor`; no public API changes. |
+| Effort and variance | Approximately 3 elapsed implementation/verification hours, materially below the 0.8–1.5 person-month range because the final text, generation foundation, and small parser-test harness were already available. The main unplanned work was exact ignored-control handling, lexical overlap between keywords and tag names, context-bound RFC 4648 signature recognition, and context-bound RFC 2396 URI recognition. |
+| Dependent-item unlock | `exchangeFile` now guarantees complete section ordering and EOF, and internal visitors expose every Edition 3 clear-text parse form. SBRT-003 may build its internal syntax model and advanced-operation diagnostics without encoding a subset grammar. |
 
 ## ⚠️ Risks and open questions
 

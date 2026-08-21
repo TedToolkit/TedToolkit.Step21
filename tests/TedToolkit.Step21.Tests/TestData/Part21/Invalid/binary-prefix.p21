@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Invalid binary prefix'),'4;1');
+FILE_NAME('binary-prefix.p21','2026-08-21T17:00:00+08:00',('Author'),('Organization'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+DATA;
+#1=EXAMPLE_ENTITY("4ABC");
+ENDSEC;
+END-ISO-10303-21;

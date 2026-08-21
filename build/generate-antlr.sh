@@ -52,7 +52,7 @@ mkdir -p "$step_output" "$express_output"
 
 cd "$repository_root/src/grammar"
 java -jar "$antlr_jar" -Dlanguage=CSharp -visitor -no-listener \
-    -package TedToolkit.Step21.Grammar -o "$step_output" STEP.g4
+    -package TedToolkit.Step21.Grammar -o "$step_output" STEPLexer.g4 STEPParser.g4
 java -jar "$antlr_jar" -Dlanguage=CSharp -visitor -no-listener \
     -package TedToolkit.Step21.Analyzer.Grammar -o "$express_output" Express.g4
 

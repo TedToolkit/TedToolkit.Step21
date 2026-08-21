@@ -10,8 +10,8 @@ internal sealed class ArtifactsTests
     [
         "src/TedToolkit.Step21/Generated/STEP/STEPParser.cs",
         "src/TedToolkit.Step21/Generated/STEP/STEPLexer.cs",
-        "src/TedToolkit.Step21/Generated/STEP/STEPVisitor.cs",
-        "src/TedToolkit.Step21/Generated/STEP/STEPBaseVisitor.cs",
+        "src/TedToolkit.Step21/Generated/STEP/STEPParserVisitor.cs",
+        "src/TedToolkit.Step21/Generated/STEP/STEPParserBaseVisitor.cs",
         "src/TedToolkit.Step21.Analyzer/Generated/Express/ExpressParser.cs",
         "src/TedToolkit.Step21.Analyzer/Generated/Express/ExpressLexer.cs",
         "src/TedToolkit.Step21.Analyzer/Generated/Express/ExpressVisitor.cs",

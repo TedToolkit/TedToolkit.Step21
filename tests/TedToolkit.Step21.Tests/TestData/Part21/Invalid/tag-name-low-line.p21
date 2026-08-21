@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Invalid tag name'),'4;2');
+FILE_NAME('tag-name-low-line.p21','2026-08-21T17:00:00+08:00',('Author'),('Organization'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+ANCHOR;
+<root> = #1 {bad_tag:#1};
+ENDSEC;
+END-ISO-10303-21;
