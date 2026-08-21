@@ -3,6 +3,7 @@ set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+output_root=${1:-$repository_root}
 
 if ! command -v dotnet >/dev/null 2>&1; then
     echo '.NET SDK is required to read the centrally managed ANTLR version.' >&2
@@ -20,8 +21,7 @@ dotnet msbuild "$script_directory/GetPackageVersion.proj" \
     -property:PackageId=Antlr4.Runtime.Standard \
     "-property:VersionOutputFile=$version_output_file"
 
-antlr_version=''
-IFS= read -r antlr_version < "$version_output_file" || true
+antlr_version=$(tr -d '\r\n' < "$version_output_file")
 if [ -z "$antlr_version" ]; then
     echo 'Antlr4.Runtime.Standard has an empty centrally managed version.' >&2
     exit 1
@@ -44,8 +44,8 @@ if [ ! -f "$antlr_jar" ]; then
         "https://www.antlr.org/download/antlr-$antlr_version-complete.jar"
 fi
 
-step_output="$repository_root/src/TedToolkit.Step21/Generated/STEP"
-express_output="$repository_root/src/TedToolkit.Step21.Analyzer/Generated/Express"
+step_output="$output_root/src/TedToolkit.Step21/Generated/STEP"
+express_output="$output_root/src/TedToolkit.Step21.Analyzer/Generated/Express"
 
 rm -rf -- "$step_output" "$express_output"
 mkdir -p "$step_output" "$express_output"
@@ -69,4 +69,13 @@ for source_file in "$step_output"/*.cs "$express_output"/*.cs; do
         -e 's/[[:blank:]]*$//' \
         "$source_file" > "$source_file.tmp"
     mv -- "$source_file.tmp" "$source_file"
+done
+
+for generated_file in "$step_output"/* "$express_output"/*; do
+    case $generated_file in
+        *.cs) continue ;;
+    esac
+
+    sed -e 's/\r$//' "$generated_file" > "$generated_file.tmp"
+    mv -- "$generated_file.tmp" "$generated_file"
 done

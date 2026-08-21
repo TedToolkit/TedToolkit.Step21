@@ -1,0 +1,3 @@
+/build/*.sh text eol=lf
+/src/TedToolkit.Step21/Generated/** text eol=lf
+/src/TedToolkit.Step21.Analyzer/Generated/** text eol=lf

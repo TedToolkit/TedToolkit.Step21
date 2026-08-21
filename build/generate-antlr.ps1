@@ -1,10 +1,19 @@
 [CmdletBinding()]
-param()
+param(
+    [Parameter()]
+    [string] $OutputRoot
+)
 
 $ErrorActionPreference = 'Stop'
 
 $scriptDirectory = $PSScriptRoot
 $repositoryRoot = Split-Path -Parent $scriptDirectory
+$generationRoot = if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $repositoryRoot
+}
+else {
+    [System.IO.Path]::GetFullPath($OutputRoot)
+}
 $toolsDirectory = Join-Path $scriptDirectory 'tools'
 $versionOutputFile = Join-Path $toolsDirectory 'antlr-version.txt'
 
@@ -39,8 +48,8 @@ if (-not (Test-Path -LiteralPath $antlrJar)) {
 }
 
 $grammarDirectory = Join-Path $repositoryRoot 'src/grammar'
-$stepOutput = Join-Path $repositoryRoot 'src/TedToolkit.Step21/Generated/STEP'
-$expressOutput = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Analyzer/Generated/Express'
+$stepOutput = Join-Path $generationRoot 'src/TedToolkit.Step21/Generated/STEP'
+$expressOutput = Join-Path $generationRoot 'src/TedToolkit.Step21.Analyzer/Generated/Express'
 
 foreach ($outputDirectory in @($stepOutput, $expressOutput)) {
     if (Test-Path -LiteralPath $outputDirectory) {
@@ -63,17 +72,21 @@ try {
     }
 
     $publicTypePattern = '(?m)^\[System\.CLSCompliant\(false\)\]\r?\npublic (?=(?:partial class|interface)\s)'
-    foreach ($sourceFile in Get-ChildItem -LiteralPath $stepOutput, $expressOutput -Filter '*.cs' -File) {
-        $source = [System.IO.File]::ReadAllText($sourceFile.FullName)
-        $rewrittenSource = $source -replace $publicTypePattern, 'internal '
-        if ($rewrittenSource -ceq $source) {
-            throw "ANTLR generated no public top-level type in '$($sourceFile.FullName)'."
+    foreach ($generatedFile in Get-ChildItem -LiteralPath $stepOutput, $expressOutput -File) {
+        $content = [System.IO.File]::ReadAllText($generatedFile.FullName)
+        if ($generatedFile.Extension -ceq '.cs') {
+            $rewrittenContent = $content -replace $publicTypePattern, 'internal '
+            if ($rewrittenContent -ceq $content) {
+                throw "ANTLR generated no public top-level type in '$($generatedFile.FullName)'."
+            }
+
+            $content = $rewrittenContent -replace '[\t ]+(?=\r?\n|$)', ''
         }
 
-        $rewrittenSource = $rewrittenSource -replace '[\t ]+(?=\r?\n|$)', ''
+        $content = $content -replace "\r\n?", "`n"
         [System.IO.File]::WriteAllText(
-            $sourceFile.FullName,
-            $rewrittenSource,
+            $generatedFile.FullName,
+            $content,
             [System.Text.UTF8Encoding]::new($false))
     }
 }

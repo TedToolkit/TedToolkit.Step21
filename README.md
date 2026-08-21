@@ -49,6 +49,9 @@ Parser generation requires the .NET SDK and Java 11 or newer. The shell script a
 ```
 
 Both scripts read the centrally managed ANTLR version from `Directory.Packages.props` and replace the generated parser directories.
+They normalize generated files to UTF-8 with LF line endings, retain visitors, omit listeners, and
+internalize generated top-level types. For isolated verification, pass an output root with
+`-OutputRoot <path>` to the PowerShell script or as the first argument to the shell script.
 
 ### Run the parser tests
 

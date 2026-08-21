@@ -2,7 +2,9 @@
 
 ## 📌 Status
 
-Approved
+Implemented
+
+- Implemented from starting SHA `c1c0b32` on 2026-08-21. The repository maintainer required local per-work-item commits and prohibited creating a branch; because this repository has no remote, hosted-runner execution remains a future CI regression gate rather than current completion evidence.
 
 ## 🚦 Delivery priority
 
@@ -78,12 +80,14 @@ Both scripts request visitors and suppress listeners, but no repository gate pro
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and actual changed artifacts |
-| Behavior-case proof | Commands, results, and BC-20 assertions |
-| Migration and documentation | Script/maintainer guidance update, or not-applicable rationale |
-| Dependent-item unlock | Deterministic internal visitor artifact guarantee for SBRT-002 and SBRT-007 |
+| Delivery-boundary check | Starting SHA `c1c0b32`; changed `.gitattributes`, `build/generate-antlr.ps1`, `build/generate-antlr.sh`, `.github/workflows/build.yml`, `README.md`, and `tests/TedToolkit.Step21.Tests/AntlrGenerationTests/ArtifactsTests.cs`. Regenerated parser artifacts are byte-equivalent to the pinned sources and contain no semantic diff. |
+| Behavior-case proof | Red: the focused Release test failed because isolated `-OutputRoot` generation was unavailable. Green: focused TUnit passed 1/1. Full fast TUnit passed 6/6. PowerShell and shell each regenerated 16 artifacts repeatedly; SHA-256 snapshots were byte-identical across scripts, required parser/lexer/visitor/base-visitor sources were present, listener files were absent, and top-level generated types were internal. The workflow now repeats this proof on `windows-latest` and `ubuntu-latest` and compares their uploaded bytes. |
+| Regression proof | `dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore` passed with 0 warnings and 0 errors. Integration tests passed 2/2 enabled cases with the network corpus case explicitly skipped. |
+| Migration and documentation | `README.md` now documents UTF-8/LF normalization, visitor/listener/internal visibility guarantees, and isolated output-root usage. |
+| Effort and variance | Approximately 0.5 elapsed implementation/verification hours, materially below the 0.2–0.3 person-month range because both native generation paths and authoritative artifacts already existed; work concentrated on isolation, normalization, tests, and CI gates. |
+| Dependent-item unlock | Deterministic internal visitor artifact guarantee is implemented and locally proven for SBRT-002 and SBRT-007. The checked-in workflow will repeat the proof on exact hosted runners once a remote repository exists. |
 
 ## ⚠️ Risks and open questions
 
