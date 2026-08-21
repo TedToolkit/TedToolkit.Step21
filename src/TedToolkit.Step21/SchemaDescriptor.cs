@@ -4,8 +4,9 @@ namespace TedToolkit.Step21;
 /// Defines the minimal identity shared by generated EXPRESS schema descriptors.
 /// </summary>
 /// <remarks>
-/// Generated mapping hooks are added by a later delivery item. Descriptor identity is ordinal and is snapshotted by
-/// <see cref="ExchangeStructure"/> construction.
+/// Descriptor identity is ordinal and is snapshotted by <see cref="ExchangeStructure"/> construction. Runtime
+/// operations dispatch through internal non-virtual methods to statically generated protected overrides without
+/// reflection or public processing contexts.
 /// </remarks>
 public abstract class SchemaDescriptor
 {
@@ -16,4 +17,51 @@ public abstract class SchemaDescriptor
 
     /// <summary>Gets the descriptor's stable schema name.</summary>
     public abstract SchemaName Name { get; }
+
+    internal Entity? AllocateEntity(IReadOnlyList<string> entityNames) => AllocateEntityCore(entityNames);
+
+    internal IReadOnlyList<Step21Diagnostic> HydrateEntity(
+        ExchangeStructure structure,
+        Entity value,
+        IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) =>
+        HydrateEntityCore(structure, value, components);
+
+    internal ValidationResult Validate(ExchangeStructure structure) => ValidateCore(structure);
+
+    internal IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnostics(ExchangeStructure structure) =>
+        GetCapabilityDiagnosticsCore(structure);
+
+    internal IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntity(Entity value) =>
+        ProjectEntityCore(value);
+
+    /// <summary>Allocates a generated entity for one ordered physical entity-name group.</summary>
+    /// <param name="entityNames">The physical entity names in component order.</param>
+    /// <returns>The allocated generated entity, or <see langword="null"/> when the names are not supported.</returns>
+    protected abstract Entity? AllocateEntityCore(IReadOnlyList<string> entityNames);
+
+    /// <summary>Assigns strong physical component parameters to an allocated generated entity.</summary>
+    /// <param name="structure">The structure owning resolved entity references.</param>
+    /// <param name="value">The allocated generated entity.</param>
+    /// <param name="components">The ordered physical component names and strong parameter lists.</param>
+    /// <returns>Every detected hydration diagnostic in deterministic order.</returns>
+    protected abstract IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
+        ExchangeStructure structure,
+        Entity value,
+        IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components);
+
+    /// <summary>Validates the schema-owned portion of an exchange structure.</summary>
+    /// <param name="structure">The exchange structure to validate.</param>
+    /// <returns>Every detected schema validation failure in deterministic order.</returns>
+    protected abstract ValidationResult ValidateCore(ExchangeStructure structure);
+
+    /// <summary>Reports unsupported schema operations before a public boundary starts producing output.</summary>
+    /// <param name="structure">The exchange structure to inspect.</param>
+    /// <returns>Every applicable capability diagnostic in deterministic order.</returns>
+    protected abstract IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(ExchangeStructure structure);
+
+    /// <summary>Projects a generated entity to ordered strong physical component parameters.</summary>
+    /// <param name="value">The generated entity to project.</param>
+    /// <returns>The physical component names and strong parameter lists in standard order.</returns>
+    protected abstract IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+        Entity value);
 }

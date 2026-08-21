@@ -11,8 +11,8 @@ namespace TedToolkit.Step21.PackedConsumer;
 
 internal static class Consumer
 {
-    internal static SchemaName CreateSchemaName()
+    internal static SchemaDescriptor GetSchemaDescriptor()
     {
-        return new SchemaName("lunar_catalog");
+        return Generated.LunarCatalog.SchemaDescriptor.Instance;
     }
 }

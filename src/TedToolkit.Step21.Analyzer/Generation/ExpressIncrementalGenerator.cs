@@ -59,7 +59,11 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
 
             foreach (var schema in result.Compilation.Schemas.Where(schema => !plan.InvalidSchemas.Contains(schema)))
             {
-                ExpressSchemaMarkerEmitter.Emit(productionContext, schema);
+                ExpressSchemaDescriptorEmitter.Emit(
+                    productionContext,
+                    schema,
+                    plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
+                    valueResolver);
             }
         });
     }

@@ -136,6 +136,19 @@ public sealed class ExchangeStructure
     internal bool TryGetSchemaDescriptor(SchemaName name, out SchemaDescriptor? descriptor) =>
         _schemaDescriptorsByName.TryGetValue(name, out descriptor);
 
+    internal IReadOnlyList<Step21Diagnostic> GetSchemaDescriptorDiagnostics(SchemaName name)
+    {
+        return _schemaDescriptorsByName.ContainsKey(name)
+            ? []
+            :
+            [
+                new Step21Diagnostic(
+                    "P21-BIND-SCHEMA",
+                    Step21DiagnosticSeverity.Error,
+                    $"No supplied schema descriptor matches '{name}'."),
+            ];
+    }
+
     internal bool TryGetEntity(EntityInstanceName name, out Entity? entity)
     {
         if (_registrationsByName.TryGetValue(name, out var registration))

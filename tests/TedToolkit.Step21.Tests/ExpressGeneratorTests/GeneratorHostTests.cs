@@ -29,10 +29,10 @@ public sealed class GeneratorHostTests
         """;
 
     /// <summary>
-    /// Verifies that an arbitrary non-IFC schema produces a compiled marker.
+    /// Verifies that an arbitrary non-IFC schema produces a compiled descriptor.
     /// </summary>
     [Test]
-    public async Task Should_generate_compiled_marker_for_arbitrary_schema()
+    public async Task Should_generate_compiled_descriptor_for_arbitrary_schema()
     {
         var result = Run(("models/lunar.exp", VALID_SCHEMA));
 
@@ -42,11 +42,12 @@ public sealed class GeneratorHostTests
             await Assert.That(result.GeneratedSources.Select(source => source.HintName))
                 .IsEquivalentTo(["ExpressEntity_LUNAR_CATALOG_CRATER.g.cs", "ExpressSchema_LUNAR_CATALOG.g.cs"])
                 .Because(string.Join(", ", result.GeneratedSources.Select(source => source.HintName)));
-            var marker = result.GeneratedSources.Single(source => source.HintName == "ExpressSchema_LUNAR_CATALOG.g.cs");
-            await Assert.That(marker.SourceText.ToString())
-                .Contains("internal sealed class ExpressSchema_lunar_catalog");
-            await Assert.That(marker.SourceText.ToString())
-                .Contains("const string SchemaName = \"lunar_catalog\"");
+            var descriptor = result.GeneratedSources.Single(
+                source => source.HintName == "ExpressSchema_LUNAR_CATALOG.g.cs");
+            await Assert.That(descriptor.SourceText.ToString())
+                .Contains("public sealed class SchemaDescriptor");
+            await Assert.That(descriptor.SourceText.ToString())
+                .Contains("SchemaName(\"lunar_catalog\")");
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(item => item.Severity == DiagnosticSeverity.Error)).IsEmpty();
         }

@@ -244,7 +244,8 @@ public sealed class AggregateProjectionTests
                     "TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Generated.AggregateFoundation.RemoteChoice>");
             await Assert.That(RequiredProperty(holder, "OptionalValues").Type.NullableAnnotation)
                 .IsEqualTo(NullableAnnotation.Annotated);
-            await Assert.That(generatedText).DoesNotContain("global::System.Collections.Generic.List<");
+            await Assert.That(generatedText)
+                .DoesNotContain("global::System.Collections.Generic.List<global::System.Numerics.BigInteger>");
             await Assert.That(generatedText).DoesNotContain("System.Reflection");
             await Assert.That(generatedText).DoesNotContain(" dynamic ");
         }

@@ -11,6 +11,21 @@ internal sealed class TestEntity(params Entity[] references) : Entity
 internal sealed class TestSchemaDescriptor(string name) : SchemaDescriptor
 {
     public override SchemaName Name { get; } = new(name);
+
+    protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) => null;
+
+    protected override IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
+        ExchangeStructure structure,
+        Entity value,
+        IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) => [];
+
+    protected override ValidationResult ValidateCore(ExchangeStructure structure) => new([]);
+
+    protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
+        ExchangeStructure structure) => [];
+
+    protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+        Entity value) => [];
 }
 
 internal static class TestHeader

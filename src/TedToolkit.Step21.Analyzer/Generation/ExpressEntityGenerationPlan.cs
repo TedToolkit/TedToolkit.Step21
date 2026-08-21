@@ -135,7 +135,7 @@ internal sealed class ExpressEntityGenerationPlan
                     : new[] { CreateGeneratedType(projection.Declaration.Symbol, projection.Name), }));
         foreach (var group in generatedTypes
                      .GroupBy(item => item.GeneratedName, StringComparer.Ordinal)
-                     .Where(group => group.Count() > 1))
+                     .Where(group => group.Count() > 1 || group.Key == "SchemaDescriptor"))
         {
             invalidSchemas.Add(schema);
             foreach (var item in group)

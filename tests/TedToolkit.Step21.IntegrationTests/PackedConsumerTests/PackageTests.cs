@@ -20,7 +20,7 @@ namespace TedToolkit.Step21.IntegrationTests.PackedConsumerTests;
 internal sealed class PackageTests
 {
     /// <summary>
-    /// Verifies a local package generates and compiles a schema marker without runtime analyzer dependencies.
+    /// Verifies a local package generates and compiles a schema descriptor without runtime analyzer dependencies.
     /// </summary>
     [Test]
     public async Task Should_generate_schema_artifact_when_local_package_is_consumed()
@@ -38,6 +38,7 @@ internal sealed class PackageTests
                 "TedToolkit.Step21.PackedConsumer",
                 "TedToolkit.Step21.PackedConsumer.csproj");
             var packageDirectory = Path.Combine(temporaryRoot, "packages");
+            var consumerPackagesDirectory = Path.Combine(temporaryRoot, "consumer-packages");
             var intermediateDirectory = Path.Combine(temporaryRoot, "obj") + Path.DirectorySeparatorChar;
             var outputDirectory = Path.Combine(temporaryRoot, "bin") + Path.DirectorySeparatorChar;
             Directory.CreateDirectory(packageDirectory);
@@ -64,6 +65,10 @@ internal sealed class PackageTests
                 consumerProject,
                 "--source",
                 packageDirectory,
+                "--packages",
+                consumerPackagesDirectory,
+                "--force",
+                "--no-cache",
                 $"--property:BaseIntermediateOutputPath={intermediateDirectory}",
                 $"--property:MSBuildProjectExtensionsPath={intermediateDirectory}");
             await RunDotNet(
@@ -86,7 +91,9 @@ internal sealed class PackageTests
 
             using (Assert.Multiple())
             {
-                await Assert.That(generatedSource).Contains("internal sealed class ExpressSchema_lunar_catalog");
+                await Assert.That(generatedSource).Contains("public sealed class SchemaDescriptor");
+                await Assert.That(generatedSource).Contains("global::TedToolkit.Step21.SchemaDescriptor");
+                await Assert.That(generatedSource).Contains("public static SchemaDescriptor Instance");
                 await Assert.That(runtimeLibraries.Any(name => name.StartsWith(
                     "TedToolkit.RoslynHelper/",
                     StringComparison.OrdinalIgnoreCase))).IsFalse();

@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -19,7 +19,7 @@ Approved
 
 ## 🧩 Explicit governing constraints
 
-Descriptors are generated mapping/validation infrastructure, not a new ISO domain object. The public base exposes `SchemaName Name`, runtime-internal non-virtual dispatch, and exact protected `AllocateEntityCore`/`HydrateEntityCore`/`ValidateCore`/`GetCapabilityDiagnosticsCore`/`ProjectEntityCore` hooks over an ordered BCL list of component-name/strong-parameter-list pairs plus model, diagnostic, and result values; every schema generates one sealed descriptor with `Instance`. No public context, raw syntax, projection DTO, resolver, registry, or writer callback exists. `DataSection` retains only its governing `SchemaName`; dispatch never uses reflection/discovery. Schema-bound manual construction snapshots descriptors and rejects duplicate names before returning a structure.
+Descriptors are generated mapping/validation infrastructure, not a new ISO domain object. The public base is an abstract `class` and every schema descriptor is an ordinary sealed `class`, not a `record`: descriptors have singleton identity and behavior but no value/structural-equality semantics. The public base exposes `SchemaName Name`, runtime-internal non-virtual dispatch, and exact protected `AllocateEntityCore`/`HydrateEntityCore`/`ValidateCore`/`GetCapabilityDiagnosticsCore`/`ProjectEntityCore` hooks over an ordered BCL list of component-name/strong-parameter-list pairs plus model, diagnostic, and result values; every schema generates one sealed descriptor with `Instance`. No public context, raw syntax, projection DTO, resolver, registry, or writer callback exists. `DataSection` retains only its governing `SchemaName`; dispatch never uses reflection/discovery. Schema-bound manual construction snapshots descriptors and rejects duplicate names before returning a structure.
 
 <!-- work-item: scope -->
 ## 🎯 Outcome, scope, and non-goals
@@ -54,7 +54,7 @@ Generated types have no binder/writer metadata. This item supplies the smallest 
 
 | Observable boundary or governing constraint | Required result | Compatibility or invariant |
 | --- | --- | --- |
-| Descriptor dispatch/accessibility | Exact base/internal dispatch/protected core/name/singleton compile across an ordinary packed consumer and map/project an ordered simple one-component strong `ParameterValue` shape directly | `ExchangeStructure` remains non-generic; no public context/projection DTO, syntax/raw graph, resolver, registry, facade, nested type, reflection, or dynamic dispatch |
+| Descriptor dispatch/accessibility | Exact abstract base `class`/internal dispatch/protected core/name/singleton and generated sealed `class` compile across an ordinary packed consumer and map/project an ordered simple one-component strong `ParameterValue` shape directly | Neither descriptor is a `record`; `ExchangeStructure` remains non-generic; no public context/projection DTO, syntax/raw graph, resolver, registry, facade, nested type, reflection, or dynamic dispatch |
 | Construction binding | Generated descriptors snapshot into the structure by unique nominal schema name; duplicate names fail before construction succeeds | Descriptor collection mutation after construction cannot change dispatch and no section edit validates |
 | Simple mapping | Inherited-free explicit parameters retain physical order and every SBRT-011 typed/untyped/absence/derived form | No reflection/property-name guessing or schema-specific runtime dependency |
 
@@ -87,10 +87,12 @@ Generated types have no binder/writer metadata. This item supplies the smallest 
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and descriptor/generator/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-09, BC-11D, BC-13, and BC-23A descriptor assertions |
-| Migration and documentation | Descriptor supply/identity contract documented |
-| Dependent-item unlock | Reflection-free simple mapping for SBRT-015, SBRT-018, and SBRT-022 |
+| Delivery-boundary check | Started from `1974230`. Extended only the approved abstract `SchemaDescriptor` protected-core/runtime-dispatch ABI, exact schema lookup diagnostics, generated ordinary sealed singleton descriptor classes, simple physical allocation/hydration/projection, reserved descriptor-name collision checking, tests, packed-consumer proof, and descriptor documentation. Neither base nor generated descriptor is a `record`; no public context, syntax, projection DTO, resolver, registry, writer facade, reflection, dynamic dispatch, schema-specific runtime dependency, rule execution, read boundary, or write boundary was added. The work-item validator reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-09 round-trips mandatory/absent OPTIONAL values, every raw scalar without narrowing, nominal wrappers, closed/extensible enumerations, typed SELECT and entity alternatives, resolved entity identity, and literal-bounded `ARRAY`/`LIST`/`BAG`/`SET` candidates with exact bound/`OPTIONAL`/`UNIQUE` metadata; `*` on an explicit attribute returns `P21-BIND-PARAMETER`. BC-11D proves descriptor-free editing, unique ordered snapshotting, inert source-list mutation, and pre-construction duplicate rejection. BC-13 proves exact case-sensitive lookup and stable `P21-BIND-SCHEMA`. BC-23A fixes the exact public/protected/internal ABI, directly executes all five non-virtual dispatch paths, proves a sealed non-record singleton with no nested type, rejects the reserved `SchemaDescriptor` generated-name collision atomically with `STEP21EXP004`, and compiles the descriptor from the real packed package. Fast TUnit passed 151/151. |
+| Migration and documentation | `README.md` links `docs/conformance/generated-schema-descriptors.md`, which documents why descriptors are classes rather than records, exact singleton/dispatch shape, strong simple mapping, diagnostics, aggregate constraint authority, and deferred complex/read/validation/write behavior. Generator-host and aggregate conformance documents were updated from the former marker/later-descriptor boundary. Runtime and generated caller-visible members have XML summaries; `SBRT-013.approved.txt` pins the complete public/protected base-class surface. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors. Integration TUnit passed all 3 enabled cases and compiled an ordinary packed consumer against the generated descriptor; only the explicit opt-in network corpus case was skipped. Runtime `IsAotCompatible`, trim, and AOT analyzer build passed with 0 warnings/errors. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Limited formatting, `git diff --check`, and work-item validation passed. Strict read-only review found and corrected an extreme ARRAY-domain overflow risk, a reserved descriptor-name collision gap, and repeat-run packed-fixture isolation; the final review found no remaining blocking, important, suggestion, or design-deviation findings. |
+| Dependent-item unlock | The exact reflection-free descriptor ABI and simple strong physical mapping now supply SBRT-014 direct-reference enumeration, SBRT-015 structural validation, SBRT-018 atomic simple typed read, and SBRT-022 canonical projection without exposing stage machinery. |
+| Actual effort and variance | Completed in one continuing agent implementation session; the human person-month estimate is not directly comparable. Supporting literal-bounded simple aggregate mapping was included because SBRT-011/012 parameter forms are part of this item's approved physical mapping; symbolic/nested aggregate execution and complex components remain explicitly deferred. |
 
 ## ⚠️ Risks and open questions
 
