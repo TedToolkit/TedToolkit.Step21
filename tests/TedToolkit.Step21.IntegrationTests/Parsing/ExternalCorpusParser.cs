@@ -45,7 +45,7 @@ internal static class ExternalCorpusParser
         var parserErrors = new CollectingErrorListener<IToken>();
         parser.RemoveErrorListeners();
         parser.AddErrorListener(parserErrors);
-        parser.schemaDecl();
+        parser.syntax();
 
         return CompleteErrors(lexerErrors.Errors, parserErrors.Errors, parser.CurrentToken.Type);
     }

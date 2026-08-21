@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -82,10 +82,11 @@ The current repository proves only a minimal schema and a missing terminator. No
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and grammar/IR/visitor/test artifacts |
-| Behavior-case proof | Commands/results for BC-02 syntax and BC-02B preservation |
-| Migration and documentation | Maintainer IR/conformance notes |
-| Dependent-item unlock | Complete source-located IR for SBRT-008 and SBRT-016 |
+| Delivery-boundary check | Started from `774aaa0`. Replaced the former IFC-oriented grammar deviations with the ISO 10303-11:2004 Edition 2 production boundary, regenerated only the pinned internal ANTLR artifacts, and added only Analyzer-internal syntax IR/parser/visitor/diagnostics plus focused fixtures and conformance documentation. No name/type binding, execution, generated schema API, or public procedure surface was introduced. |
+| Behavior-case proof | BC-02 passed invalid-type and trailing-input cases: deterministic `EXPRESS-SYNTAX` evidence retains the logical path and 1-based line/column, and `Root` is null whenever lexer/parser diagnostics exist. BC-02B passed declaration, type, expression, statement, Edition 2, lexical, immutability, span, visitor, and public-surface assertions in the fast TUnit suite (91/91). Functions, procedures, rules, locals, and all statement families remain ordered syntax IR and are never executed. |
+| Migration and documentation | No public migration applies because every new type is Analyzer-internal. `docs/conformance/express-edition2-grammar.md` records the standard baseline, production families, fixtures, half-open source spans, and the deliberate syntax/name-binding boundary. A machine comparison audited 219 BNF productions with zero missing non-lexical, non-binding-dependent productions; the six syntactically indistinguishable semantic aliases are losslessly retained as `namedApplication`/`namedReference` for SBRT-008. |
+| Dependent-item unlock | `syntax` now accepts one or more complete schemas through EOF and the generated visitor transforms every rule/terminal into immutable ordered IR with original token spelling and deterministic spans. This supplies SBRT-008 and SBRT-016 with complete source evidence while withholding invalid partial trees. |
+| Regression and deployment proof | Clean pinned regeneration matched every checked-in ANTLR artifact byte-for-byte. Release solution build passed with 0 warnings/errors; fast TUnit passed 91/91; integration TUnit passed 2/2 enabled tests with the explicit opt-in network corpus test skipped; runtime AOT/trim analysis passed with 0 warnings/errors; runtime dependency inspection still shows only `Antlr4.Runtime.Standard` 4.13.1; the work-item validator reported `Work-item delivery boundary: valid`. Strict read-only review found no blocking or advisory findings. |
 
 ## ⚠️ Risks and open questions
 

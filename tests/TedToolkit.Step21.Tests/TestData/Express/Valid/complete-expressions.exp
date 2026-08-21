@@ -1,0 +1,60 @@
+SCHEMA complete_expressions;
+
+ENTITY item;
+  numeric_value : INTEGER;
+END_ENTITY;
+
+FUNCTION helper(input_value : INTEGER) : INTEGER;
+  RETURN(input_value);
+END_FUNCTION;
+
+PROCEDURE touch(VAR target_value : INTEGER);
+  target_value := target_value + 1;
+END_PROCEDURE;
+
+FUNCTION exercise(items : LIST [0:?] OF INTEGER; flag : BOOLEAN) : INTEGER;
+  LOCAL
+    total : INTEGER := 0;
+    selected : LIST [0:?] OF INTEGER := [];
+  END_LOCAL;
+
+  ALIAS current FOR total;
+    current := -1 + 2 * 3 ** 2 DIV 1 MOD 2;
+  END_ALIAS;
+
+  selected := QUERY(x <* items | (x >= 0) AND (x <= 10));
+  selected := [1, 2, 3];
+  total := item(1).numeric_value;
+  total := items[1];
+  total := state.on;
+  total := %101;
+
+  IF flag XOR FALSE THEN
+    total := helper(total);
+  ELSE
+    ESCAPE;
+  END_IF;
+
+  IF {0 <= total < 10} THEN
+    total := total + 1;
+  END_IF;
+
+  CASE total OF
+    0, 1 : total := 2;
+    OTHERWISE : SKIP;
+  END_CASE;
+
+  REPEAT i := 1 TO 10 BY 2 WHILE total < 100 UNTIL total = 42;
+    touch(total);
+    total := total + i;
+  END_REPEAT;
+
+  BEGIN
+    total := ABS(total);
+    ;
+  END;
+
+  RETURN(total);
+END_FUNCTION;
+
+END_SCHEMA;

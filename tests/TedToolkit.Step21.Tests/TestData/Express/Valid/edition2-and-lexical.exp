@@ -1,0 +1,23 @@
+schema first_schema 'version ''two''';
+  (* outer (* nested *) remark *)
+  type open_set = set of integer;
+  end_type;
+
+  function no_arguments : string;
+    local
+      empty_values : list of integer := [];
+    end_local;
+    return('it''s valid');
+  end_function;
+
+  function call_no_arguments : string;
+    return(no_arguments());
+  end_function;
+end_schema;
+
+schema second_schema;
+  type encoded = string;
+  where
+    encoded_value: "0000004100000042" = "0000004100000042";
+  end_type;
+end_schema;

@@ -1,0 +1,89 @@
+SCHEMA complete_declarations;
+REFERENCE FROM external_schema (external_entity AS imported_entity);
+USE FROM base_schema (base_entity AS renamed_entity);
+
+CONSTANT
+  answer : INTEGER := 42;
+END_CONSTANT;
+
+TYPE text_label = STRING(32) FIXED;
+WHERE
+  WR1: LENGTH(SELF) > 0;
+END_TYPE;
+
+TYPE state = ENUMERATION OF (on, off);
+END_TYPE;
+
+TYPE choice_type = SELECT (text_label, base_entity);
+END_TYPE;
+
+TYPE integer_array = ARRAY [1:?] OF OPTIONAL UNIQUE INTEGER;
+END_TYPE;
+
+TYPE integer_bag = BAG [0:?] OF INTEGER;
+END_TYPE;
+
+TYPE integer_list = LIST [0:?] OF UNIQUE INTEGER;
+END_TYPE;
+
+TYPE integer_set = SET [0:?] OF INTEGER;
+END_TYPE;
+
+TYPE open_set = SET OF INTEGER;
+END_TYPE;
+
+TYPE base_enum = EXTENSIBLE ENUMERATION OF (one, two);
+END_TYPE;
+
+TYPE extended_enum = ENUMERATION BASED_ON base_enum WITH (three);
+END_TYPE;
+
+TYPE base_select = EXTENSIBLE GENERIC_ENTITY SELECT (root);
+END_TYPE;
+
+TYPE extended_select = SELECT BASED_ON base_select WITH (child);
+END_TYPE;
+
+ENTITY root
+  ABSTRACT SUPERTYPE OF (ONEOF(child));
+  code : STRING;
+  maybe : OPTIONAL INTEGER;
+DERIVE
+  computed : INTEGER := 1 + 2;
+INVERSE
+  owners : SET [0:?] OF child FOR parent;
+UNIQUE
+  UR1: code;
+WHERE
+  WR1: EXISTS(code);
+END_ENTITY;
+
+ENTITY child
+  SUBTYPE OF (root);
+  parent : root;
+END_ENTITY;
+
+SUBTYPE_CONSTRAINT root_partition FOR root;
+  ABSTRACT SUPERTYPE;
+  TOTAL_OVER (child);
+  ONEOF(child);
+END_SUBTYPE_CONSTRAINT;
+
+FUNCTION hidden_function(input_value : INTEGER) : INTEGER;
+  LOCAL
+    result : INTEGER := input_value;
+  END_LOCAL;
+  result := result + 1;
+  RETURN(result);
+END_FUNCTION;
+
+PROCEDURE hidden_procedure(VAR target_value : INTEGER);
+  target_value := target_value + 1;
+END_PROCEDURE;
+
+RULE all_roots FOR (root);
+WHERE
+  WR1: SIZEOF(root) >= 0;
+END_RULE;
+
+END_SCHEMA;

@@ -32,53 +32,413 @@ using IToken = Antlr4.Runtime.IToken;
 [System.CodeDom.Compiler.GeneratedCode("ANTLR", "4.13.1")]
 internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.actualParams"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.syntax"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitActualParams([NotNull] ExpressParser.ActualParamsContext context);
+	Result VisitSyntax([NotNull] ExpressParser.SyntaxContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateExpr"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.schemaDecl"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAggregateExpr([NotNull] ExpressParser.AggregateExprContext context);
+	Result VisitSchemaDecl([NotNull] ExpressParser.SchemaDeclContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateLiteral"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.schemaId"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAggregateLiteral([NotNull] ExpressParser.AggregateLiteralContext context);
+	Result VisitSchemaId([NotNull] ExpressParser.SchemaIdContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateType"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.schemaVersionId"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAggregateType([NotNull] ExpressParser.AggregateTypeContext context);
+	Result VisitSchemaVersionId([NotNull] ExpressParser.SchemaVersionIdContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aliasDef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.schemaBody"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAliasDef([NotNull] ExpressParser.AliasDefContext context);
+	Result VisitSchemaBody([NotNull] ExpressParser.SchemaBodyContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aliasRef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.interfaceSpecification"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAliasRef([NotNull] ExpressParser.AliasRefContext context);
+	Result VisitInterfaceSpecification([NotNull] ExpressParser.InterfaceSpecificationContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.aliasStmt"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.referenceClause"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAliasStmt([NotNull] ExpressParser.AliasStmtContext context);
+	Result VisitReferenceClause([NotNull] ExpressParser.ReferenceClauseContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.allTypeSel"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.useClause"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitAllTypeSel([NotNull] ExpressParser.AllTypeSelContext context);
+	Result VisitUseClause([NotNull] ExpressParser.UseClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.resourceOrRename"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitResourceOrRename([NotNull] ExpressParser.ResourceOrRenameContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.namedTypeOrRename"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitNamedTypeOrRename([NotNull] ExpressParser.NamedTypeOrRenameContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.resourceRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitResourceRef([NotNull] ExpressParser.ResourceRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.renameId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRenameId([NotNull] ExpressParser.RenameIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.declaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDeclaration([NotNull] ExpressParser.DeclarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.constantDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConstantDecl([NotNull] ExpressParser.ConstantDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.constantBody"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConstantBody([NotNull] ExpressParser.ConstantBodyContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.entityDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEntityDecl([NotNull] ExpressParser.EntityDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.entityHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEntityHead([NotNull] ExpressParser.EntityHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subsuper"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubsuper([NotNull] ExpressParser.SubsuperContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeConstraint"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSupertypeConstraint([NotNull] ExpressParser.SupertypeConstraintContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.abstractSupertypeDeclaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAbstractSupertypeDeclaration([NotNull] ExpressParser.AbstractSupertypeDeclarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.abstractEntityDeclaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAbstractEntityDeclaration([NotNull] ExpressParser.AbstractEntityDeclarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeRule"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSupertypeRule([NotNull] ExpressParser.SupertypeRuleContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeConstraint"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeConstraint([NotNull] ExpressParser.SubtypeConstraintContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeDeclaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeDeclaration([NotNull] ExpressParser.SubtypeDeclarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeExpression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSupertypeExpression([NotNull] ExpressParser.SupertypeExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeFactor"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSupertypeFactor([NotNull] ExpressParser.SupertypeFactorContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeTerm"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSupertypeTerm([NotNull] ExpressParser.SupertypeTermContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.oneOf"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitOneOf([NotNull] ExpressParser.OneOfContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.entityBody"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEntityBody([NotNull] ExpressParser.EntityBodyContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.explicitAttr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitExplicitAttr([NotNull] ExpressParser.ExplicitAttrContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.attributeDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAttributeDecl([NotNull] ExpressParser.AttributeDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.redeclaredAttribute"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRedeclaredAttribute([NotNull] ExpressParser.RedeclaredAttributeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.qualifiedAttribute"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitQualifiedAttribute([NotNull] ExpressParser.QualifiedAttributeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.deriveClause"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDeriveClause([NotNull] ExpressParser.DeriveClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.derivedAttr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDerivedAttr([NotNull] ExpressParser.DerivedAttrContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.inverseClause"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitInverseClause([NotNull] ExpressParser.InverseClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.inverseAttr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitInverseAttr([NotNull] ExpressParser.InverseAttrContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.uniqueClause"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitUniqueClause([NotNull] ExpressParser.UniqueClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.uniqueRule"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitUniqueRule([NotNull] ExpressParser.UniqueRuleContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.referencedAttribute"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitReferencedAttribute([NotNull] ExpressParser.ReferencedAttributeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.whereClause"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitWhereClause([NotNull] ExpressParser.WhereClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.domainRule"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDomainRule([NotNull] ExpressParser.DomainRuleContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.functionDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitFunctionDecl([NotNull] ExpressParser.FunctionDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.functionHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitFunctionHead([NotNull] ExpressParser.FunctionHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.procedureDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitProcedureDecl([NotNull] ExpressParser.ProcedureDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.procedureHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitProcedureHead([NotNull] ExpressParser.ProcedureHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.formalParameter"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitFormalParameter([NotNull] ExpressParser.FormalParameterContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.algorithmHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAlgorithmHead([NotNull] ExpressParser.AlgorithmHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.localDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitLocalDecl([NotNull] ExpressParser.LocalDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.localVariable"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitLocalVariable([NotNull] ExpressParser.LocalVariableContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.ruleDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRuleDecl([NotNull] ExpressParser.RuleDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.ruleHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRuleHead([NotNull] ExpressParser.RuleHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeConstraintDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeConstraintDecl([NotNull] ExpressParser.SubtypeConstraintDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeConstraintHead"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeConstraintHead([NotNull] ExpressParser.SubtypeConstraintHeadContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeConstraintBody"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeConstraintBody([NotNull] ExpressParser.SubtypeConstraintBodyContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.abstractSupertype"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAbstractSupertype([NotNull] ExpressParser.AbstractSupertypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.totalOver"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTotalOver([NotNull] ExpressParser.TotalOverContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeDecl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeDecl([NotNull] ExpressParser.TypeDeclContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.underlyingType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitUnderlyingType([NotNull] ExpressParser.UnderlyingTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.constructedTypes"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConstructedTypes([NotNull] ExpressParser.ConstructedTypesContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.enumerationType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEnumerationType([NotNull] ExpressParser.EnumerationTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.enumerationExtension"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEnumerationExtension([NotNull] ExpressParser.EnumerationExtensionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.enumerationItems"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEnumerationItems([NotNull] ExpressParser.EnumerationItemsContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.selectType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSelectType([NotNull] ExpressParser.SelectTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.selectExtension"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSelectExtension([NotNull] ExpressParser.SelectExtensionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.selectList"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSelectList([NotNull] ExpressParser.SelectListContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.concreteTypes"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConcreteTypes([NotNull] ExpressParser.ConcreteTypesContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.aggregationTypes"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAggregationTypes([NotNull] ExpressParser.AggregationTypesContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.arrayType"/>.
 	/// </summary>
@@ -86,47 +446,29 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitArrayType([NotNull] ExpressParser.ArrayTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.assignmentStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitAssignmentStmt([NotNull] ExpressParser.AssignmentStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.attrDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitAttrDef([NotNull] ExpressParser.AttrDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.attributes"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitAttributes([NotNull] ExpressParser.AttributesContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.attrRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitAttrRef([NotNull] ExpressParser.AttrRefContext context);
-	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.bagType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitBagType([NotNull] ExpressParser.BagTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.binaryType"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.listType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitBinaryType([NotNull] ExpressParser.BinaryTypeContext context);
+	Result VisitListType([NotNull] ExpressParser.ListTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.booleanType"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.setType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitBooleanType([NotNull] ExpressParser.BooleanTypeContext context);
+	Result VisitSetType([NotNull] ExpressParser.SetTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.boundSpec"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitBoundSpec([NotNull] ExpressParser.BoundSpecContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.bound1"/>.
 	/// </summary>
@@ -140,371 +482,29 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitBound2([NotNull] ExpressParser.Bound2Context context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.boundSpec"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.instantiableType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitBoundSpec([NotNull] ExpressParser.BoundSpecContext context);
+	Result VisitInstantiableType([NotNull] ExpressParser.InstantiableTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.caseAction"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.simpleTypes"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitCaseAction([NotNull] ExpressParser.CaseActionContext context);
+	Result VisitSimpleTypes([NotNull] ExpressParser.SimpleTypesContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.caseBody"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.binaryType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitCaseBody([NotNull] ExpressParser.CaseBodyContext context);
+	Result VisitBinaryType([NotNull] ExpressParser.BinaryTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.caseLabel"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.booleanType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitCaseLabel([NotNull] ExpressParser.CaseLabelContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.caseStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitCaseStmt([NotNull] ExpressParser.CaseStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.choice"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitChoice([NotNull] ExpressParser.ChoiceContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.collectionType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitCollectionType([NotNull] ExpressParser.CollectionTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.collectionTypeSel"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitCollectionTypeSel([NotNull] ExpressParser.CollectionTypeSelContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.compoundStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitCompoundStmt([NotNull] ExpressParser.CompoundStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.conformantArray"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConformantArray([NotNull] ExpressParser.ConformantArrayContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.conformantBag"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConformantBag([NotNull] ExpressParser.ConformantBagContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.conformantList"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConformantList([NotNull] ExpressParser.ConformantListContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.conformantSet"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConformantSet([NotNull] ExpressParser.ConformantSetContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.conformantType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConformantType([NotNull] ExpressParser.ConformantTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.constantDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConstantDecl([NotNull] ExpressParser.ConstantDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.constantRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConstantRef([NotNull] ExpressParser.ConstantRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.constBody"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConstBody([NotNull] ExpressParser.ConstBodyContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.constDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConstDef([NotNull] ExpressParser.ConstDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.constRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitConstRef([NotNull] ExpressParser.ConstRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.declaration"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDeclaration([NotNull] ExpressParser.DeclarationContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.deriveClause"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDeriveClause([NotNull] ExpressParser.DeriveClauseContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.deriveDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDeriveDef([NotNull] ExpressParser.DeriveDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.derivedAttr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDerivedAttr([NotNull] ExpressParser.DerivedAttrContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.derivedRedef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDerivedRedef([NotNull] ExpressParser.DerivedRedefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.derivedPath"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDerivedPath([NotNull] ExpressParser.DerivedPathContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.domainRule"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDomainRule([NotNull] ExpressParser.DomainRuleContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.domainRules"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitDomainRules([NotNull] ExpressParser.DomainRulesContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.element"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitElement([NotNull] ExpressParser.ElementContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.embeddedRemark"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEmbeddedRemark([NotNull] ExpressParser.EmbeddedRemarkContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityBody"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityBody([NotNull] ExpressParser.EntityBodyContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityDecl([NotNull] ExpressParser.EntityDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityDef([NotNull] ExpressParser.EntityDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityHead"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityHead([NotNull] ExpressParser.EntityHeadContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityLiteral"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityLiteral([NotNull] ExpressParser.EntityLiteralContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.entityRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEntityRef([NotNull] ExpressParser.EntityRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.enumDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEnumDef([NotNull] ExpressParser.EnumDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.enumRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEnumRef([NotNull] ExpressParser.EnumRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.enumType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEnumType([NotNull] ExpressParser.EnumTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.enumValues"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEnumValues([NotNull] ExpressParser.EnumValuesContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.escapeStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitEscapeStmt([NotNull] ExpressParser.EscapeStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.explDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitExplDef([NotNull] ExpressParser.ExplDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.explicitClause"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitExplicitClause([NotNull] ExpressParser.ExplicitClauseContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.explRedef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitExplRedef([NotNull] ExpressParser.ExplRedefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.expression"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitExpression([NotNull] ExpressParser.ExpressionContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.factor"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFactor([NotNull] ExpressParser.FactorContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.formalParam"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFormalParam([NotNull] ExpressParser.FormalParamContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.formalParams"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFormalParams([NotNull] ExpressParser.FormalParamsContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.funcDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFuncDef([NotNull] ExpressParser.FuncDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.funcHead"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFuncHead([NotNull] ExpressParser.FuncHeadContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.returnTypeChoice"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitReturnTypeChoice([NotNull] ExpressParser.ReturnTypeChoiceContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.funcRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFuncRef([NotNull] ExpressParser.FuncRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.functionDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitFunctionDecl([NotNull] ExpressParser.FunctionDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.genericType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitGenericType([NotNull] ExpressParser.GenericTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.ifStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitIfStmt([NotNull] ExpressParser.IfStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.importEntity"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitImportEntity([NotNull] ExpressParser.ImportEntityContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.importItem"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitImportItem([NotNull] ExpressParser.ImportItemContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.importList"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitImportList([NotNull] ExpressParser.ImportListContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.importRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitImportRef([NotNull] ExpressParser.ImportRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.incr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitIncr([NotNull] ExpressParser.IncrContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.incrementControl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitIncrementControl([NotNull] ExpressParser.IncrementControlContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.init"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInit([NotNull] ExpressParser.InitContext context);
+	Result VisitBooleanType([NotNull] ExpressParser.BooleanTypeContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.integerType"/>.
 	/// </summary>
@@ -512,113 +512,11 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitIntegerType([NotNull] ExpressParser.IntegerTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.interfaceSpecification"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInterfaceSpecification([NotNull] ExpressParser.InterfaceSpecificationContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.interval"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInterval([NotNull] ExpressParser.IntervalContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.inverseAttr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInverseAttr([NotNull] ExpressParser.InverseAttrContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.inverseClause"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInverseClause([NotNull] ExpressParser.InverseClauseContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.inverseDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInverseDef([NotNull] ExpressParser.InverseDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.inverseRedef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInverseRedef([NotNull] ExpressParser.InverseRedefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.inverseType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitInverseType([NotNull] ExpressParser.InverseTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.labelDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLabelDef([NotNull] ExpressParser.LabelDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.listType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitListType([NotNull] ExpressParser.ListTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.literal"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLiteral([NotNull] ExpressParser.LiteralContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.localDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLocalDecl([NotNull] ExpressParser.LocalDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.localRules"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLocalRules([NotNull] ExpressParser.LocalRulesContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.localVar"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLocalVar([NotNull] ExpressParser.LocalVarContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.logicalExpr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitLogicalExpr([NotNull] ExpressParser.LogicalExprContext context);
-	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.logicalType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitLogicalType([NotNull] ExpressParser.LogicalTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.namedType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitNamedType([NotNull] ExpressParser.NamedTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.nullStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitNullStmt([NotNull] ExpressParser.NullStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.numberExpr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitNumberExpr([NotNull] ExpressParser.NumberExprContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.numberType"/>.
 	/// </summary>
@@ -626,275 +524,11 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitNumberType([NotNull] ExpressParser.NumberTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.otherAction"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitOtherAction([NotNull] ExpressParser.OtherActionContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.paramDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitParamDef([NotNull] ExpressParser.ParamDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.parameter"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitParameter([NotNull] ExpressParser.ParameterContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.paramRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitParamRef([NotNull] ExpressParser.ParamRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.precisionSpec"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitPrecisionSpec([NotNull] ExpressParser.PrecisionSpecContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.procCallStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProcCallStmt([NotNull] ExpressParser.ProcCallStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.procDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProcDef([NotNull] ExpressParser.ProcDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.procedureDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProcedureDecl([NotNull] ExpressParser.ProcedureDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.procHead"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProcHead([NotNull] ExpressParser.ProcHeadContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.procRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProcRef([NotNull] ExpressParser.ProcRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.prolog"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitProlog([NotNull] ExpressParser.PrologContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.pseudoType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitPseudoType([NotNull] ExpressParser.PseudoTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.qualifier"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitQualifier([NotNull] ExpressParser.QualifierContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.queryAssignment"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitQueryAssignment([NotNull] ExpressParser.QueryAssignmentContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.queryExpr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitQueryExpr([NotNull] ExpressParser.QueryExprContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.queryScan"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitQueryScan([NotNull] ExpressParser.QueryScanContext context);
-	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.realType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitRealType([NotNull] ExpressParser.RealTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.referenceClause"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitReferenceClause([NotNull] ExpressParser.ReferenceClauseContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.referencedAttr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitReferencedAttr([NotNull] ExpressParser.ReferencedAttrContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.remark"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRemark([NotNull] ExpressParser.RemarkContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.remarkStuff"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRemarkStuff([NotNull] ExpressParser.RemarkStuffContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.repeatControl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRepeatControl([NotNull] ExpressParser.RepeatControlContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.repeateStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRepeateStmt([NotNull] ExpressParser.RepeateStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.repetition"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRepetition([NotNull] ExpressParser.RepetitionContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.returnStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitReturnStmt([NotNull] ExpressParser.ReturnStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.ruleDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRuleDecl([NotNull] ExpressParser.RuleDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.ruleDef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRuleDef([NotNull] ExpressParser.RuleDefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.ruleHead"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRuleHead([NotNull] ExpressParser.RuleHeadContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.ruleList"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitRuleList([NotNull] ExpressParser.RuleListContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.schemaBody"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSchemaBody([NotNull] ExpressParser.SchemaBodyContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.schemaDecl"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSchemaDecl([NotNull] ExpressParser.SchemaDeclContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.schemaRef"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSchemaRef([NotNull] ExpressParser.SchemaRefContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.selector"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSelector([NotNull] ExpressParser.SelectorContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.selectType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSelectType([NotNull] ExpressParser.SelectTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.selectValues"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSelectValues([NotNull] ExpressParser.SelectValuesContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.setType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSetType([NotNull] ExpressParser.SetTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.simpleExpr"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSimpleExpr([NotNull] ExpressParser.SimpleExprContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.simpleFactor"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSimpleFactor([NotNull] ExpressParser.SimpleFactorContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.simpleType"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSimpleType([NotNull] ExpressParser.SimpleTypeContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.skipStmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitSkipStmt([NotNull] ExpressParser.SkipStmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.stdConst"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitStdConst([NotNull] ExpressParser.StdConstContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.stdFunc"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitStdFunc([NotNull] ExpressParser.StdFuncContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.stdProc"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitStdProc([NotNull] ExpressParser.StdProcContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.stmt"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitStmt([NotNull] ExpressParser.StmtContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.stmts"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitStmts([NotNull] ExpressParser.StmtsContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.stringType"/>.
 	/// </summary>
@@ -902,47 +536,107 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitStringType([NotNull] ExpressParser.StringTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.subSuper"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.widthSpec"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSubSuper([NotNull] ExpressParser.SubSuperContext context);
+	Result VisitWidthSpec([NotNull] ExpressParser.WidthSpecContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.subscript"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.width"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSubscript([NotNull] ExpressParser.SubscriptContext context);
+	Result VisitWidth([NotNull] ExpressParser.WidthContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeDecl"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.precisionSpec"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSubtypeDecl([NotNull] ExpressParser.SubtypeDeclContext context);
+	Result VisitPrecisionSpec([NotNull] ExpressParser.PrecisionSpecContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeDecl"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.parameterType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSupertypeDecl([NotNull] ExpressParser.SupertypeDeclContext context);
+	Result VisitParameterType([NotNull] ExpressParser.ParameterTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeExpr"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalizedTypes"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSupertypeExpr([NotNull] ExpressParser.SupertypeExprContext context);
+	Result VisitGeneralizedTypes([NotNull] ExpressParser.GeneralizedTypesContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.supertypeFactor"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateType"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitSupertypeFactor([NotNull] ExpressParser.SupertypeFactorContext context);
+	Result VisitAggregateType([NotNull] ExpressParser.AggregateTypeContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.tailRemark"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalAggregationTypes"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTailRemark([NotNull] ExpressParser.TailRemarkContext context);
+	Result VisitGeneralAggregationTypes([NotNull] ExpressParser.GeneralAggregationTypesContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalArrayType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGeneralArrayType([NotNull] ExpressParser.GeneralArrayTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalBagType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGeneralBagType([NotNull] ExpressParser.GeneralBagTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalListType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGeneralListType([NotNull] ExpressParser.GeneralListTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalSetType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGeneralSetType([NotNull] ExpressParser.GeneralSetTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.genericEntityType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGenericEntityType([NotNull] ExpressParser.GenericEntityTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.genericType"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGenericType([NotNull] ExpressParser.GenericTypeContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.namedTypes"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitNamedTypes([NotNull] ExpressParser.NamedTypesContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.expression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitExpression([NotNull] ExpressParser.ExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.simpleExpression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSimpleExpression([NotNull] ExpressParser.SimpleExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.addLikeOp"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAddLikeOp([NotNull] ExpressParser.AddLikeOpContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.term"/>.
 	/// </summary>
@@ -950,41 +644,209 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitTerm([NotNull] ExpressParser.TermContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeBody"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.multiplicationLikeOp"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeBody([NotNull] ExpressParser.TypeBodyContext context);
+	Result VisitMultiplicationLikeOp([NotNull] ExpressParser.MultiplicationLikeOpContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeDecl"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.factor"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeDecl([NotNull] ExpressParser.TypeDeclContext context);
+	Result VisitFactor([NotNull] ExpressParser.FactorContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeDef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.simpleFactor"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeDef([NotNull] ExpressParser.TypeDefContext context);
+	Result VisitSimpleFactor([NotNull] ExpressParser.SimpleFactorContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeLabel"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.primary"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeLabel([NotNull] ExpressParser.TypeLabelContext context);
+	Result VisitPrimary([NotNull] ExpressParser.PrimaryContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeRef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.namedApplication"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeRef([NotNull] ExpressParser.TypeRefContext context);
+	Result VisitNamedApplication([NotNull] ExpressParser.NamedApplicationContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.typeSel"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.namedReference"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitTypeSel([NotNull] ExpressParser.TypeSelContext context);
+	Result VisitNamedReference([NotNull] ExpressParser.NamedReferenceContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.builtInConstant"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitBuiltInConstant([NotNull] ExpressParser.BuiltInConstantContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.literal"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitLiteral([NotNull] ExpressParser.LiteralContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.logicalLiteral"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitLogicalLiteral([NotNull] ExpressParser.LogicalLiteralContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.stringLiteral"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitStringLiteral([NotNull] ExpressParser.StringLiteralContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateInitializer"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAggregateInitializer([NotNull] ExpressParser.AggregateInitializerContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.element"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitElement([NotNull] ExpressParser.ElementContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.repetition"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRepetition([NotNull] ExpressParser.RepetitionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.interval"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitInterval([NotNull] ExpressParser.IntervalContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.intervalLow"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIntervalLow([NotNull] ExpressParser.IntervalLowContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.intervalItem"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIntervalItem([NotNull] ExpressParser.IntervalItemContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.intervalHigh"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIntervalHigh([NotNull] ExpressParser.IntervalHighContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.intervalOp"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIntervalOp([NotNull] ExpressParser.IntervalOpContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.queryExpression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitQueryExpression([NotNull] ExpressParser.QueryExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.aggregateSource"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAggregateSource([NotNull] ExpressParser.AggregateSourceContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.logicalExpression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitLogicalExpression([NotNull] ExpressParser.LogicalExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.numericExpression"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitNumericExpression([NotNull] ExpressParser.NumericExpressionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.actualParameterList"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitActualParameterList([NotNull] ExpressParser.ActualParameterListContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.parameter"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitParameter([NotNull] ExpressParser.ParameterContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.builtInFunction"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitBuiltInFunction([NotNull] ExpressParser.BuiltInFunctionContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.qualifier"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitQualifier([NotNull] ExpressParser.QualifierContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.attributeQualifier"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAttributeQualifier([NotNull] ExpressParser.AttributeQualifierContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.groupQualifier"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGroupQualifier([NotNull] ExpressParser.GroupQualifierContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.indexQualifier"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIndexQualifier([NotNull] ExpressParser.IndexQualifierContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.index1"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIndex1([NotNull] ExpressParser.Index1Context context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.index2"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIndex2([NotNull] ExpressParser.Index2Context context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.index"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIndex([NotNull] ExpressParser.IndexContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.relOpExtended"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRelOpExtended([NotNull] ExpressParser.RelOpExtendedContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.relOp"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRelOp([NotNull] ExpressParser.RelOpContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.unaryOp"/>.
 	/// </summary>
@@ -992,59 +854,107 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitUnaryOp([NotNull] ExpressParser.UnaryOpContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.uniqueRule"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.stmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitUniqueRule([NotNull] ExpressParser.UniqueRuleContext context);
+	Result VisitStmt([NotNull] ExpressParser.StmtContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.uniqueRules"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.aliasStmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitUniqueRules([NotNull] ExpressParser.UniqueRulesContext context);
+	Result VisitAliasStmt([NotNull] ExpressParser.AliasStmtContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.untilControl"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.assignmentStmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitUntilControl([NotNull] ExpressParser.UntilControlContext context);
+	Result VisitAssignmentStmt([NotNull] ExpressParser.AssignmentStmtContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.useClause"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.caseStmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitUseClause([NotNull] ExpressParser.UseClauseContext context);
+	Result VisitCaseStmt([NotNull] ExpressParser.CaseStmtContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.useList"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.selector"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitUseList([NotNull] ExpressParser.UseListContext context);
+	Result VisitSelector([NotNull] ExpressParser.SelectorContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.varDef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.caseAction"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitVarDef([NotNull] ExpressParser.VarDefContext context);
+	Result VisitCaseAction([NotNull] ExpressParser.CaseActionContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.varParam"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.caseLabel"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitVarParam([NotNull] ExpressParser.VarParamContext context);
+	Result VisitCaseLabel([NotNull] ExpressParser.CaseLabelContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.varParams"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.compoundStmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitVarParams([NotNull] ExpressParser.VarParamsContext context);
+	Result VisitCompoundStmt([NotNull] ExpressParser.CompoundStmtContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.varRef"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.escapeStmt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitVarRef([NotNull] ExpressParser.VarRefContext context);
+	Result VisitEscapeStmt([NotNull] ExpressParser.EscapeStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.ifStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIfStmt([NotNull] ExpressParser.IfStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.nullStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitNullStmt([NotNull] ExpressParser.NullStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.procedureCallStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitProcedureCallStmt([NotNull] ExpressParser.ProcedureCallStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.builtInProcedure"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitBuiltInProcedure([NotNull] ExpressParser.BuiltInProcedureContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.repeatStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRepeatStmt([NotNull] ExpressParser.RepeatStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.repeatControl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRepeatControl([NotNull] ExpressParser.RepeatControlContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.incrementControl"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIncrementControl([NotNull] ExpressParser.IncrementControlContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.increment"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIncrement([NotNull] ExpressParser.IncrementContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.whileControl"/>.
 	/// </summary>
@@ -1052,10 +962,178 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitWhileControl([NotNull] ExpressParser.WhileControlContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="ExpressParser.width"/>.
+	/// Visit a parse tree produced by <see cref="ExpressParser.untilControl"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitWidth([NotNull] ExpressParser.WidthContext context);
+	Result VisitUntilControl([NotNull] ExpressParser.UntilControlContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.returnStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitReturnStmt([NotNull] ExpressParser.ReturnStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.skipStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSkipStmt([NotNull] ExpressParser.SkipStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.generalRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitGeneralRef([NotNull] ExpressParser.GeneralRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.attributeId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAttributeId([NotNull] ExpressParser.AttributeIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.attributeRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAttributeRef([NotNull] ExpressParser.AttributeRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.constantId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConstantId([NotNull] ExpressParser.ConstantIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.constantRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitConstantRef([NotNull] ExpressParser.ConstantRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.entityId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEntityId([NotNull] ExpressParser.EntityIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.entityRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEntityRef([NotNull] ExpressParser.EntityRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.enumerationId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEnumerationId([NotNull] ExpressParser.EnumerationIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.enumerationRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEnumerationRef([NotNull] ExpressParser.EnumerationRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.functionId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitFunctionId([NotNull] ExpressParser.FunctionIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.functionRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitFunctionRef([NotNull] ExpressParser.FunctionRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.parameterId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitParameterId([NotNull] ExpressParser.ParameterIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.parameterRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitParameterRef([NotNull] ExpressParser.ParameterRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.procedureId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitProcedureId([NotNull] ExpressParser.ProcedureIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.procedureRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitProcedureRef([NotNull] ExpressParser.ProcedureRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.ruleId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRuleId([NotNull] ExpressParser.RuleIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.ruleLabelId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitRuleLabelId([NotNull] ExpressParser.RuleLabelIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.schemaRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSchemaRef([NotNull] ExpressParser.SchemaRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.subtypeConstraintId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSubtypeConstraintId([NotNull] ExpressParser.SubtypeConstraintIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeId([NotNull] ExpressParser.TypeIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeRef([NotNull] ExpressParser.TypeRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeLabel"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeLabel([NotNull] ExpressParser.TypeLabelContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeLabelId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeLabelId([NotNull] ExpressParser.TypeLabelIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.typeLabelRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitTypeLabelRef([NotNull] ExpressParser.TypeLabelRefContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.variableId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitVariableId([NotNull] ExpressParser.VariableIdContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.variableRef"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitVariableRef([NotNull] ExpressParser.VariableRefContext context);
 }
 } // namespace TedToolkit.Step21.Analyzer.Grammar

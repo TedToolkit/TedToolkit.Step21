@@ -40,7 +40,7 @@ internal static class ParserFixture
         var parserErrors = new CollectingErrorListener<IToken>();
         parser.RemoveErrorListeners();
         parser.AddErrorListener(parserErrors);
-        parser.schemaDecl();
+        parser.syntax();
 
         return CreateResult(lexerErrors.Errors, parserErrors.Errors, parser.CurrentToken.Type);
     }

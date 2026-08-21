@@ -1,0 +1,49 @@
+SCHEMA complete_types;
+
+TYPE binary_code = BINARY(8) FIXED;
+END_TYPE;
+
+TYPE boolean_value = BOOLEAN;
+END_TYPE;
+
+TYPE integer_value = INTEGER;
+END_TYPE;
+
+TYPE logical_value = LOGICAL;
+END_TYPE;
+
+TYPE number_value = NUMBER;
+END_TYPE;
+
+TYPE real_value = REAL(12);
+END_TYPE;
+
+TYPE string_value = STRING(32) FIXED;
+END_TYPE;
+
+TYPE empty_extensible_enum = EXTENSIBLE ENUMERATION;
+END_TYPE;
+
+TYPE empty_extensible_select = EXTENSIBLE GENERIC_ENTITY SELECT;
+END_TYPE;
+
+ENTITY base ABSTRACT;
+  base_attribute : INTEGER;
+END_ENTITY;
+
+ENTITY child
+  SUBTYPE OF (base);
+  SELF\base.base_attribute RENAMED inherited_attribute : INTEGER;
+END_ENTITY;
+
+FUNCTION generalized_types(
+  aggregate_value : AGGREGATE : item_type OF GENERIC : item_type;
+  array_value : ARRAY OF OPTIONAL UNIQUE GENERIC;
+  bag_value : BAG OF GENERIC;
+  list_value : LIST OF UNIQUE GENERIC;
+  set_value : SET OF GENERIC;
+  entity_value : GENERIC_ENTITY : entity_type) : GENERIC;
+  RETURN(?);
+END_FUNCTION;
+
+END_SCHEMA;

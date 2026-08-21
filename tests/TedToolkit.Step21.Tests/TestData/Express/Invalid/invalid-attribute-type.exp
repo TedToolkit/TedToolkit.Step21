@@ -1,0 +1,5 @@
+SCHEMA invalid_attribute_type;
+ENTITY broken;
+  value : ;
+END_ENTITY;
+END_SCHEMA;
