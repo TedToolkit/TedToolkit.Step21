@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -80,10 +80,12 @@ The runtime Add contract can consume one-level references, but generated entitie
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and generator/test/XML artifacts |
-| Behavior-case proof | BC-11A command/results and reflection/API audit |
-| Migration and documentation | `DirectReferences` exact one-level XML contract |
-| Dependent-item unlock | Physical reference occurrence contract for SBRT-019 and SBRT-022 |
+| Delivery-boundary check | Started from `4fcbf2c`. Added one Analyzer-internal direct-reference expression composer, changed only generated `DirectReferences` composition/XML, corrected structural ownership of explicit-attribute and aggregate `OPTIONAL`/`UNIQUE` tokens, and added focused binding/generated-graph tests and documentation. No runtime/public API, entity back-pointer/name, recursive entity traversal, cache, deduplication, inverse/derived navigation, reflection, dynamic code, reference hydration, validation, or writing was added. The work-item validator reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-11A executes one cached returned enumerable before and after property/collection edits. It proves flattened physical attribute order across direct references, nested nominal `ARRAY`/`LIST`/`BAG`/`SET`, selected entity/aggregate SELECT alternatives and a non-reference alternative; preserves repeated occurrences; omits null/non-`Entity`, unset ARRAY slots, `DERIVE`, and `INVERSE`; and excludes a referenced entity's own child from the root's one-level view. Generated source contains no reflection or `Distinct`. A generated cyclic/shared graph then proves first Add registers each transitive object once, re-Add preserves all prior names, and one newly reachable entity receives only the next structure-local name. The focused tests passed 2/2 and complete fast TUnit passed 154/154. |
+| Migration and documentation | Generated XML now states that `DirectReferences` is live, one-level, non-null, physical-order, repeat-preserving, and non-recursive. `README.md` and `docs/conformance/generated-entity-hierarchy.md` document deferred re-enumeration, container-only unwrapping, exclusions, and Add composition; aggregate and generator-host boundaries were updated consistently. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors. Integration TUnit passed all 3 enabled cases with only the explicit opt-in external-network corpus case skipped. Runtime `IsAotCompatible`, trim, and AOT analyzer build passed with 0 warnings/errors. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Limited formatting and `git diff --check` passed. Strict read-only review found no remaining blocking, important, suggestion, or design-deviation findings. |
+| Dependent-item unlock | Generated physical occurrence enumeration is now stable for SBRT-019 reference hydration, SBRT-022 writer graph projection, and later complex mapping without reflection or public graph infrastructure. |
+| Actual effort and variance | Completed in one continuing agent implementation session; the human person-month estimate is not directly comparable. Structural modifier ownership was corrected because nested `ARRAY OF OPTIONAL` is part of the required direct-reference matrix and descendant-token matching incorrectly made the outer entity attribute nullable. |
 
 ## ⚠️ Risks and open questions
 

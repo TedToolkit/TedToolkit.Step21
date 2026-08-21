@@ -1495,7 +1495,7 @@ internal static class ExpressSchemaCompiler
                         attributeDeclaration,
                         ExpressAttributeKind.Explicit,
                         type,
-                        explicitAttribute.HasToken("OPTIONAL"));
+                        explicitAttribute.HasDirectToken("OPTIONAL"));
                 }
             }
 
@@ -1801,8 +1801,8 @@ internal static class ExpressSchemaCompiler
                 elementType,
                 bound?.RequiredChild("bound1").TokenText(),
                 bound?.RequiredChild("bound2").TokenText(),
-                syntax.HasToken("OPTIONAL"),
-                syntax.HasToken("UNIQUE"),
+                syntax.HasDirectToken("OPTIONAL"),
+                syntax.HasDirectToken("UNIQUE"),
                 syntax.ChildRules("typeLabel").SingleOrDefault()?.IdentifierToken().Text,
                 syntax.Span);
         }

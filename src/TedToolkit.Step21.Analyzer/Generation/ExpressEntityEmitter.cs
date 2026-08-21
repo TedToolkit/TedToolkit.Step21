@@ -25,9 +25,6 @@ internal static class ExpressEntityEmitter
     private static readonly DataType _directReferencesType = new(
         "global::System.Collections.Generic.IEnumerable<global::TedToolkit.Step21.Entity>");
 
-    private static readonly DataType _nullableDirectReferencesType = new(
-        "global::System.Collections.Generic.IEnumerable<global::TedToolkit.Step21.Entity?>");
-
     /// <summary>
     /// Emits one interface and mutable class for a projected EXPRESS entity.
     /// </summary>
@@ -43,7 +40,6 @@ internal static class ExpressEntityEmitter
         var entityClass = CreateClass(projection, valueResolver);
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
         var sourceFile = SourceComposer.File()
-            .AddUsing(SourceComposer.Using("System.Linq".ToSimpleName()))
             .AddNameSpace(SourceComposer.NameSpace(generatedNamespace)
                 .AddMember(entityInterface)
                 .AddMember(entityClass));
@@ -93,7 +89,7 @@ internal static class ExpressEntityEmitter
         }
 
         entityClass.AddMember(CreateConstructor(projection, valueResolver));
-        entityClass.AddMember(CreateDirectReferencesProperty(projection));
+        entityClass.AddMember(CreateDirectReferencesProperty(projection, valueResolver));
         entityClass.AddMember(CreateToStringMethod(projection));
         return entityClass;
     }
@@ -192,27 +188,21 @@ internal static class ExpressEntityEmitter
             : $"@{identifier}";
     }
 
-    private static Property CreateDirectReferencesProperty(ExpressEntityProjection projection)
+    private static Property CreateDirectReferencesProperty(
+        ExpressEntityProjection projection,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var property = SourceComposer<ExpressIncrementalGenerator>.Property(_directReferencesType, "DirectReferences");
         property.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         property.Polymorphism = Polymorphism.OVERRIDE;
-        AddSummary(property, "Gets the current direct entity references.");
+        AddSummary(
+            property,
+            "Gets a live one-level enumeration of non-null direct entity occurrences in physical attribute order, "
+            + "preserving repetitions without recursive entity traversal.");
 
         var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET);
-        var references = new CollectionExpression();
-        foreach (var attribute in projection.EffectiveAttributes.Where(attribute => attribute.TargetEntity is not null))
-        {
-            references.AddElement(attribute.Name.ToSimpleName().As(_entityType.Type));
-        }
-
-        var directReferences = references
-            .Cast(_nullableDirectReferencesType)
-            .Parenthesized
-            .Sub("OfType")
-            .Generic(_entityType)
-            .Invoke();
-        getter.AddStatement(directReferences.Return);
+        getter.AddStatement(new CustomExpression(
+            ExpressDirectReferenceExpression.Create(projection, valueResolver)).Return);
         property.AddAccessor(getter);
         return property;
     }

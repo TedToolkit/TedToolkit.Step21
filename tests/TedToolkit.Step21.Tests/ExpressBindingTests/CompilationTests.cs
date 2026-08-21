@@ -373,6 +373,47 @@ internal sealed class CompilationTests
         }
     }
 
+    /// <summary>
+    /// Verifies OPTIONAL and UNIQUE modifiers bind only to the grammar level that directly contains them.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_attribute_and_nested_aggregate_modifiers_structurally()
+    {
+        const string source = """
+            SCHEMA modifier_scope;
+            ENTITY item;
+              nested_optional : LIST [0:?] OF ARRAY [1:2] OF OPTIONAL STRING;
+              optional_attribute : OPTIONAL ARRAY [1:2] OF STRING;
+              nested_unique : ARRAY [1:2] OF LIST [0:?] OF UNIQUE STRING;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var compilation = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("modifier-scope.exp", source)]);
+        var attributes = compilation.Schemas.Single().Declarations
+            .OfType<ExpressBoundEntity>()
+            .Single()
+            .Attributes
+            .ToDictionary(attribute => attribute.Name);
+        var nestedOptional = (ExpressBoundAggregateType)attributes["nested_optional"].Type;
+        var nestedOptionalArray = (ExpressBoundAggregateType)nestedOptional.ElementType;
+        var optionalAttribute = (ExpressBoundAggregateType)attributes["optional_attribute"].Type;
+        var nestedUnique = (ExpressBoundAggregateType)attributes["nested_unique"].Type;
+        var nestedUniqueList = (ExpressBoundAggregateType)nestedUnique.ElementType;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(attributes["nested_optional"].IsOptional).IsFalse();
+            await Assert.That(nestedOptional.IsOptional).IsFalse();
+            await Assert.That(nestedOptionalArray.IsOptional).IsTrue();
+            await Assert.That(attributes["optional_attribute"].IsOptional).IsTrue();
+            await Assert.That(optionalAttribute.IsOptional).IsFalse();
+            await Assert.That(nestedUnique.IsUnique).IsFalse();
+            await Assert.That(nestedUniqueList.IsUnique).IsTrue();
+        }
+    }
+
     private static string Snapshot(ExpressSchemaCompilation compilation)
     {
         return string.Join(

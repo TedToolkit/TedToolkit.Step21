@@ -61,6 +61,18 @@ internal static class ExpressSyntaxNavigation
     }
 
     /// <summary>
+    /// Gets a value indicating whether the rule has a direct keyword or punctuation token.
+    /// </summary>
+    /// <param name="node">The parent rule.</param>
+    /// <param name="text">The source spelling to compare case-insensitively.</param>
+    /// <returns><see langword="true"/> when a matching direct terminal exists.</returns>
+    internal static bool HasDirectToken(this ExpressRuleSyntax node, string text)
+    {
+        return node.Children.OfType<ExpressTokenSyntax>().Any(token =>
+            string.Equals(token.Text, text, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Reconstructs a compact token spelling for retained bound and width expressions.
     /// </summary>
     /// <param name="node">The containing rule.</param>

@@ -13,7 +13,7 @@ For each independently valid schema, the generator retains one path-independent 
 
 The descriptor is generated mapping infrastructure, not an ISO domain value or public schema facade. Its exact boundary is documented by [generated schema descriptors](generated-schema-descriptors.md). Each entity additionally emits `ExpressEntity_<UPPERCASE_SCHEMA_NAME>_<UPPERCASE_ENTITY_NAME>.g.cs`; its public contract is documented by the [generated entity hierarchy boundary](generated-entity-hierarchy.md). Schema-rule validation remains a later work item.
 
-All source structure is composed with `TedToolkit.RoslynHelper` file, namespace, type, field, literal, and final emission primitives. The generator uses no text template, raw source fragment, or `SyntaxFactory` fallback.
+All declarations and control structure are composed with `TedToolkit.RoslynHelper` file, namespace, type, member, statement, and final-emission primitives. Bounded statically generated value expressions use RoslynHelper `CustomExpression` leaves; the generator uses no text template, whole-source string emission, or `SyntaxFactory` fallback.
 
 ## Determinism and failures
 
