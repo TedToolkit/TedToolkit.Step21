@@ -1,0 +1,24 @@
+<Project>
+  <Import Project="..\Directory.Packages.props" />
+
+  <Target Name="GetPackageVersion">
+    <Error Condition="'$(PackageId)' == ''"
+           Text="PackageId is required." />
+    <Error Condition="'$(VersionOutputFile)' == ''"
+           Text="VersionOutputFile is required." />
+
+    <ItemGroup>
+      <_RequestedPackageVersion Include="@(PackageVersion)"
+                                Condition="'%(PackageVersion.Identity)' == '$(PackageId)'" />
+    </ItemGroup>
+
+    <Error Condition="'@(_RequestedPackageVersion)' == ''"
+           Text="PackageVersion '$(PackageId)' was not found." />
+    <Error Condition="'@(_RequestedPackageVersion->Count())' != '1'"
+           Text="PackageVersion '$(PackageId)' must be declared exactly once." />
+
+    <WriteLinesToFile File="$(VersionOutputFile)"
+                      Lines="@(_RequestedPackageVersion->'%(Version)')"
+                      Overwrite="true" />
+  </Target>
+</Project>

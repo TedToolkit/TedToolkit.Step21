@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/SolutionItems/">
+    <File Path=".github/workflows/build.yml" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/build/">
+    <File Path="build/GetPackageVersion.proj" />
+    <File Path="build.ps1" />
+    <File Path="build.sh" />
+    <File Path="build/generate-antlr.sh" />
+    <File Path="build/generate-antlr.ps1" />
+    <Project Path="build/TedToolkit.Step21.Build/TedToolkit.Step21.Build.csproj">
+      <Build Project="false" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/">
+    <File Path="src/grammar/Express.g4" />
+    <File Path="src/grammar/STEP.g4" />
+    <Project Path="src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj" />
+    <Project Path="src/TedToolkit.Step21/TedToolkit.Step21.csproj">
+      <BuildDependency Project="src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj" />
+    </Project>
+  </Folder>
+</Solution>

@@ -1,0 +1,17 @@
+.vs
+.idea/
+
+bin
+obj
+
+temp
+
+*.user
+*.g.cs
+
+output
+
+artifacts
+
+build/TedToolkit.Step21.Build/appsettings.json
+build/tools/

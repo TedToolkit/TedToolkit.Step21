@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime.Standard" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.Step21.Analyzer.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\Antlr4.Runtime.Standard.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>
