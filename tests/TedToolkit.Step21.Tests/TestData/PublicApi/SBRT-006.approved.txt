@@ -1,0 +1,167 @@
+sealed class TedToolkit.Step21.DataSection : System.Object
+  constructor (TedToolkit.Step21.SchemaName schemaName)
+  property TedToolkit.Step21.SchemaName SchemaName { get; }
+abstract class TedToolkit.Step21.Entity : System.Object
+  protected constructor ()
+  property abstract System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> DirectReferences { get; }
+readonly struct TedToolkit.Step21.EntityInstanceName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.EntityInstanceName>
+  constructor (System.String digits)
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.EntityInstanceName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+sealed class TedToolkit.Step21.ExchangeStructureBindingException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureCapabilityException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureReadValidationException : System.Exception
+  constructor (TedToolkit.Step21.ValidationResult validationResult)
+  property TedToolkit.Step21.ValidationResult ValidationResult { get; }
+sealed class TedToolkit.Step21.ExchangeStructureSyntaxException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureWriteValidationException : System.Exception
+  constructor (TedToolkit.Step21.ValidationResult validationResult)
+  property TedToolkit.Step21.ValidationResult ValidationResult { get; }
+sealed class TedToolkit.Step21.ExpressArray`1 : System.Object
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.IEnumerable
+  constructor (System.Int32 lowerIndex, System.Int32 upperIndex, System.Boolean isOptional = False, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsOptional { get; }
+  property System.Boolean IsUnique { get; }
+  property T? Item[System.Int32 index] { get; set; }
+  property System.Int32 LowerIndex { get; }
+  property System.Int32 UpperIndex { get; }
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean IsSet(System.Int32 index)
+  method System.Boolean TryGetValue(System.Int32 index, out T? value)
+  method System.Void Unset(System.Int32 index)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressBag`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean Remove(T? item)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressList`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IList<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.Generic.IReadOnlyList<T>
+  interface System.Collections.IEnumerable
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Boolean IsUnique { get; }
+  property T? Item[System.Int32 index] { get; set; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Int32 IndexOf(T? item)
+  method System.Void Insert(System.Int32 index, T? item)
+  method System.Boolean Remove(T? item)
+  method System.Void RemoveAt(System.Int32 index)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressSet`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean Remove(T? item)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.FileDescription : System.Object
+  constructor (System.Collections.Generic.IEnumerable<System.String> description, System.String implementationLevel)
+  property System.Collections.Generic.IReadOnlyList<System.String> Description { get; }
+  property System.String ImplementationLevel { get; }
+sealed class TedToolkit.Step21.FileName : System.Object
+  constructor (System.String name, System.String timeStamp, System.Collections.Generic.IEnumerable<System.String> author, System.Collections.Generic.IEnumerable<System.String> organization, System.String preprocessorVersion, System.String originatingSystem, System.String authorization)
+  property System.Collections.Generic.IReadOnlyList<System.String> Author { get; }
+  property System.String Authorization { get; }
+  property System.String Name { get; }
+  property System.Collections.Generic.IReadOnlyList<System.String> Organization { get; }
+  property System.String OriginatingSystem { get; }
+  property System.String PreprocessorVersion { get; }
+  property System.String TimeStamp { get; }
+sealed class TedToolkit.Step21.FileSchema : System.Object
+  constructor (System.Collections.Generic.IEnumerable<System.String> schemaIdentifiers)
+  property System.Collections.Generic.IReadOnlyList<System.String> SchemaIdentifiers { get; }
+sealed class TedToolkit.Step21.HeaderSection : System.Object
+  constructor (TedToolkit.Step21.FileDescription fileDescription, TedToolkit.Step21.FileName fileName, TedToolkit.Step21.FileSchema fileSchema)
+  property TedToolkit.Step21.FileDescription FileDescription { get; }
+  property TedToolkit.Step21.FileName FileName { get; }
+  property TedToolkit.Step21.FileSchema FileSchema { get; }
+abstract class TedToolkit.Step21.SchemaDescriptor : System.Object
+  protected constructor ()
+  property abstract TedToolkit.Step21.SchemaName Name { get; }
+readonly struct TedToolkit.Step21.SchemaName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.SchemaName>
+  constructor (System.String value)
+  property System.String Value { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.SchemaName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+sealed class TedToolkit.Step21.SourceLocation : System.Object
+  constructor (System.String filePath, System.Int32 line, System.Int32 column)
+  property System.Int32 Column { get; }
+  property System.String FilePath { get; }
+  property System.Int32 Line { get; }
+sealed class TedToolkit.Step21.Step21Diagnostic : System.Object
+  constructor (System.String code, TedToolkit.Step21.Step21DiagnosticSeverity severity, System.String message, TedToolkit.Step21.SourceLocation? sourceLocation = null)
+  property System.String Code { get; }
+  property System.String Message { get; }
+  property TedToolkit.Step21.Step21DiagnosticSeverity Severity { get; }
+  property TedToolkit.Step21.SourceLocation? SourceLocation { get; }
+enum TedToolkit.Step21.Step21DiagnosticSeverity
+  value Information = 0
+  value Warning = 1
+  value Error = 2
+sealed class TedToolkit.Step21.ValidationFailure : System.Object
+  constructor (System.String code, System.String path, System.String message, TedToolkit.Step21.SourceLocation? sourceLocation = null)
+  property System.String Code { get; }
+  property System.String Message { get; }
+  property System.String Path { get; }
+  property TedToolkit.Step21.SourceLocation? SourceLocation { get; }
+sealed class TedToolkit.Step21.ValidationResult : System.Object
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.ValidationFailure> failures)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ValidationFailure> Failures { get; }
+  property System.Boolean IsValid { get; }

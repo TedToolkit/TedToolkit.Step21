@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -94,10 +94,11 @@ No runtime model exists. The contract must make manual ISO structure composition
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and runtime/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-11, BC-11A, BC-11B, BC-11C, and BC-11D |
-| Migration and documentation | Public identity/Add XML contract |
-| Dependent-item unlock | Entity/identity/section/Add/Remove guarantee for SBRT-010, SBRT-014, SBRT-020, and SBRT-022 |
+| Delivery-boundary check | Started from `21ecbaf`. Added only the strongly typed required ISO header/data-section values, minimal `SchemaName`/`SchemaDescriptor`/`Entity` identity contracts, structure-local registration implementation, focused tests, and strengthened public API/XML audits. Generated descriptor mapping hooks, binding, validation, and writing remain outside this item. `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-11 proves that one CLR object receives independent names in separate structures and no entity gains name/container state. BC-11A proves live one-level physical references, repeats, root-first depth-first traversal, sharing, cycles, reference identity despite overridden value equality, and new-reference discovery through both repeated Add overloads. BC-11B proves arbitrary-length names, leading-zero canonicalization, smallest-gap allocation/reuse, explicit-pair idempotence, both atomic conflict directions, both non-cascading Remove overloads, dangling references, and return values. BC-11C proves exact registration order/membership for automatic and explicit roots plus foreign-section rejection before enumeration or mutation; a negative compile probe failed only with expected `CS1501: No overload for method 'Add' takes 1 arguments`. BC-11D proves descriptor-free construction, immutable descriptor/name snapshot lookup, duplicate rejection, header identity, and freely editable sections. Focused behavior is included in the final fast TUnit result of 84/84. |
+| Migration and documentation | No prior runtime structure API existed. `SBRT-006.approved.txt` locks the exact two constructors, read-only `Header`, mutable `IList<DataSection>`, only two section-required Add and two Remove overloads, absence of Replace, strongly typed required header components, arbitrary-precision occurrence names, and abstract descriptor identity. Generated XML documents every caller- and derivation-visible type/member; the audit now distinguishes readonly structs, abstract members, and protected constructors. |
+| Dependent-item unlock | `Entity`, live `DirectReferences`, `EntityInstanceName`, `SchemaName`, abstract `SchemaDescriptor.Name`, strongly typed header/data sections, immutable descriptor binding, and structure-local reference-identity Add/Remove guarantees are stable for SBRT-010, SBRT-013, SBRT-014, SBRT-020, and SBRT-022. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors; fast TUnit passed 84/84; integration TUnit passed 2/2 enabled tests with the opt-in network corpus test skipped; runtime `IsAotCompatible`, trim, and AOT analyzers passed with 0 warnings/errors. Runtime dependency inspection still reports only the existing `Antlr4.Runtime.Standard` 4.13.1 package. Limited whitespace/style/analyzer verification passed for every touched C# file. |
 
 ## ⚠️ Risks and open questions
 

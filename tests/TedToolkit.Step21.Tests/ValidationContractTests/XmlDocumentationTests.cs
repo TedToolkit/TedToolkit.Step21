@@ -8,7 +8,7 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class XmlDocumentationTests
 {
     /// <summary>
-    /// Verifies that generated XML documentation contains every approved public validation-contract member.
+    /// Verifies that generated XML documentation contains every caller- or derivation-visible runtime member.
     /// </summary>
     [Test]
     public async Task Should_document_every_member_when_runtime_xml_is_generated()
@@ -41,7 +41,9 @@ internal sealed class XmlDocumentationTests
                     yield return $"F:{type.FullName}.{field.Name}";
             }
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            foreach (var property in type.GetProperties(
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                         .Where(property => property.GetAccessors(nonPublic: true).Any(IsApprovedVisibility)))
             {
                 var indexes = property.GetIndexParameters();
                 var suffix = indexes.Length == 0
@@ -50,15 +52,18 @@ internal sealed class XmlDocumentationTests
                 yield return $"P:{type.FullName}.{property.Name}{suffix}";
             }
 
-            foreach (var constructor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var constructor in type.GetConstructors(
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                         .Where(IsApprovedVisibility))
             {
                 var parameters = string.Join(",", constructor.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
                 var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";
                 yield return $"M:{type.FullName}.#ctor{suffix}";
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                         .Where(method => !method.IsSpecialName))
+            foreach (var method in type.GetMethods(
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                         .Where(method => !method.IsSpecialName && IsApprovedVisibility(method)))
             {
                 var parameters = string.Join(",", method.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
                 var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";
@@ -66,6 +71,9 @@ internal sealed class XmlDocumentationTests
             }
         }
     }
+
+    private static bool IsApprovedVisibility(MethodBase method) =>
+        method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly;
 
     private static string FormatXmlType(Type type)
     {

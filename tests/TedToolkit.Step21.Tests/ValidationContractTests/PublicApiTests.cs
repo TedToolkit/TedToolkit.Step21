@@ -8,7 +8,7 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class PublicApiTests
 {
     /// <summary>
-    /// Verifies that the runtime exposes exactly the public contract approved through SBRT-005.
+    /// Verifies that the runtime exposes exactly the public contract approved through SBRT-006.
     /// </summary>
     [Test]
     public async Task Should_match_approved_surface_when_validation_contract_is_inspected()
@@ -18,7 +18,7 @@ internal sealed class PublicApiTests
             AppContext.BaseDirectory,
             "TestData",
             "PublicApi",
-            "SBRT-005.approved.txt");
+            "SBRT-006.approved.txt");
         var expected = NormalizeLineEndings(await File.ReadAllTextAsync(expectedPath));
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));
 
@@ -50,7 +50,7 @@ internal sealed class PublicApiTests
             return;
         }
 
-        builder.Append(type.IsSealed ? "sealed class " : "class ")
+        builder.Append(FormatTypeDeclaration(type))
             .Append(type.FullName)
             .Append(" : ")
             .AppendLine(FormatType(type.BaseType!));
@@ -63,16 +63,24 @@ internal sealed class PublicApiTests
             builder.Append("  interface ").AppendLine(FormatType(contract));
         }
 
-        foreach (var constructor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
+        foreach (var constructor in type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                     .Where(IsApprovedVisibility)
                      .OrderBy(FormatConstructor, StringComparer.Ordinal))
         {
-            builder.Append("  constructor ").AppendLine(FormatConstructor(constructor));
+            builder.Append("  ")
+                .Append(FormatVisibility(constructor))
+                .Append("constructor ")
+                .AppendLine(FormatConstructor(constructor));
         }
 
-        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+        foreach (var property in type.GetProperties(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                     .Where(property => property.GetAccessors(nonPublic: true).Any(IsApprovedVisibility))
                      .OrderBy(property => property.Name, StringComparer.Ordinal))
         {
             builder.Append("  property ")
+                .Append(FormatVisibility(property.GetAccessors(nonPublic: true).First(IsApprovedVisibility)))
+                .Append(property.GetAccessors(nonPublic: true).Any(accessor => accessor.IsAbstract) ? "abstract " : string.Empty)
                 .Append(FormatType(property.PropertyType, new NullabilityInfoContext().Create(property).ReadState))
                 .Append(' ')
                 .Append(property.Name)
@@ -80,14 +88,40 @@ internal sealed class PublicApiTests
                 .AppendLine(property.SetMethod is null ? " { get; }" : " { get; set; }");
         }
 
-        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                     .Where(method => !method.IsSpecialName)
+        foreach (var method in type.GetMethods(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                     .Where(method => !method.IsSpecialName && IsApprovedVisibility(method))
                      .OrderBy(method => method.Name, StringComparer.Ordinal)
                      .ThenBy(FormatMethod, StringComparer.Ordinal))
         {
-            builder.Append("  method ").AppendLine(FormatMethod(method));
+            builder.Append("  ")
+                .Append(FormatVisibility(method))
+                .Append(method.IsAbstract ? "abstract " : string.Empty)
+                .Append("method ")
+                .AppendLine(FormatMethod(method));
         }
     }
+
+    private static string FormatTypeDeclaration(Type type)
+    {
+        if (type.IsValueType)
+        {
+            var isReadOnly = type.CustomAttributes.Any(attribute =>
+                attribute.AttributeType.FullName == "System.Runtime.CompilerServices.IsReadOnlyAttribute");
+            return isReadOnly ? "readonly struct " : "struct ";
+        }
+
+        if (type.IsAbstract && type.IsSealed)
+            return "static class ";
+        if (type.IsAbstract)
+            return "abstract class ";
+        return type.IsSealed ? "sealed class " : "class ";
+    }
+
+    private static bool IsApprovedVisibility(MethodBase method) =>
+        method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly;
+
+    private static string FormatVisibility(MethodBase method) => method.IsPublic ? string.Empty : "protected ";
 
     private static string FormatIndexer(PropertyInfo property)
     {
