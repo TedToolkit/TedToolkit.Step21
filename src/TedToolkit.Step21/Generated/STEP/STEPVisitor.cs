@@ -30,8 +30,7 @@ using IToken = Antlr4.Runtime.IToken;
 /// </summary>
 /// <typeparam name="Result">The return type of the visit operation.</typeparam>
 [System.CodeDom.Compiler.GeneratedCode("ANTLR", "4.13.1")]
-[System.CLSCompliant(false)]
-public interface ISTEPVisitor<Result> : IParseTreeVisitor<Result> {
+internal interface ISTEPVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="STEPParser.author"/>.
 	/// </summary>
@@ -62,6 +61,12 @@ public interface ISTEPVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitConstructor([NotNull] STEPParser.ConstructorContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="STEPParser.complexEntityInstance"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitComplexEntityInstance([NotNull] STEPParser.ComplexEntityInstanceContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="STEPParser.data"/>.
 	/// </summary>

@@ -55,3 +55,18 @@ java -jar "$antlr_jar" -Dlanguage=CSharp -visitor -no-listener \
     -package TedToolkit.Step21.Grammar -o "$step_output" STEP.g4
 java -jar "$antlr_jar" -Dlanguage=CSharp -visitor -no-listener \
     -package TedToolkit.Step21.Analyzer.Grammar -o "$express_output" Express.g4
+
+for source_file in "$step_output"/*.cs "$express_output"/*.cs; do
+    if ! grep -Eq '^public (partial class|interface)' "$source_file"; then
+        echo "ANTLR generated no public top-level type in '$source_file'." >&2
+        exit 1
+    fi
+
+    sed \
+        -e '/^\[System\.CLSCompliant(false)\][[:space:]]*$/d' \
+        -e 's/^public partial class/internal partial class/' \
+        -e 's/^public interface/internal interface/' \
+        -e 's/[[:blank:]]*$//' \
+        "$source_file" > "$source_file.tmp"
+    mv -- "$source_file.tmp" "$source_file"
+done

@@ -11,6 +11,8 @@ temp
 
 output
 
+# External STEP, IFC, and EXPRESS test files downloaded from the corpus manifest.
+artifacts/test-corpus/
 artifacts
 
 build/TedToolkit.Step21.Build/appsettings.json

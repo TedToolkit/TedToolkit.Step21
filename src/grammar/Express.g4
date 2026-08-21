@@ -564,7 +564,7 @@ schemaBody
 	;
 
 schemaDecl
-	: SCHEMA SchemaDef ';' schemaBody END_SCHEMA ';'
+	: SCHEMA SimpleId ';' schemaBody END_SCHEMA ';'
 	;
 
 schemaRef
@@ -916,10 +916,6 @@ WHERE : 'WHERE' ;
 WHILE : 'WHILE' ;
 XOR : 'XOR';
 
-SchemaDef
-	: ('IFC4'|'IFC2X3')
-	;
-
 SimpleId
 	: Letter (Letter|Digit|'_')*
 	;
@@ -1001,12 +997,13 @@ WS
 Comments
 	: '(*' .*? '*)' -> skip ;
 
+LineComment
+	: '--' ~[\r\n]* -> skip ;
+
 // IFC: Skip rules
 Rules
 	: 'RULE ' SimpleId .*? 'END_RULE;' -> skip ;
 
 Functons
 	: 'FUNCTION' .*? 'END_FUNCTION;' -> skip;
-
-
 

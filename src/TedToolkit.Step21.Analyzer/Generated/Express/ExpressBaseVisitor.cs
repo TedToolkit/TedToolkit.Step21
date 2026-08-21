@@ -33,8 +33,7 @@ using ParserRuleContext = Antlr4.Runtime.ParserRuleContext;
 /// <typeparam name="Result">The return type of the visit operation.</typeparam>
 [System.CodeDom.Compiler.GeneratedCode("ANTLR", "4.13.1")]
 [System.Diagnostics.DebuggerNonUserCode]
-[System.CLSCompliant(false)]
-public partial class ExpressBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, IExpressVisitor<Result> {
+internal partial class ExpressBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, IExpressVisitor<Result> {
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.actualParams"/>.
 	/// <para>

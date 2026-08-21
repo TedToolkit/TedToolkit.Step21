@@ -1,15 +1,17 @@
 # TedToolkit.Step21
 
-TedToolkit.Step21 provides the grammar and .NET project foundation for parsing ISO 10303-21 STEP physical files and analyzing EXPRESS schemas with ANTLR.
+TedToolkit.Step21 is a .NET library focused on ISO 10303-21 exchange structures and their EXPRESS-defined schemas. The current repository provides the parser and generator foundation; its product boundary is ISO 10303-21 itself, not a particular application protocol or domain-specific format such as IFC.
 
 [![Build](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml/badge.svg)](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml)
 
 ## What it provides
 
-- ANTLR grammars for STEP physical files and EXPRESS schemas.
+- ANTLR grammars for ISO 10303-21 exchange structures and EXPRESS schemas.
 - Generated C# lexers, parsers, and visitors built with ANTLR 4.13.1.
 - A Roslyn analyzer project packaged with the main library.
 - A shared TedToolkit build pipeline and GitHub Actions workflow.
+
+STEP application protocols and IFC files are useful conformance fixtures, but they do not define the library's public model or supported scope. See the [product intent](docs/product/README.md), [design principles](docs/principles/README.md), and [current architecture draft](docs/architecture/schema-bound-round-trip.md).
 
 ## Quick start
 
@@ -27,7 +29,7 @@ The projects currently target .NET 10 and .NET Standard 2.0, so the .NET 10 SDK 
 
 | Component | Responsibility |
 | --- | --- |
-| `src/TedToolkit.Step21` | Hosts the generated STEP parser and packages the analyzer. |
+| `src/TedToolkit.Step21` | Hosts the generated ISO 10303-21 parser and packages the analyzer. |
 | `src/TedToolkit.Step21.Analyzer` | Hosts the generated EXPRESS parser and Roslyn analyzer foundation. |
 | `src/grammar` | Contains the source grammars used to generate the parser code. |
 | `build/TedToolkit.Step21.Build` | Runs the repository build pipeline. |
@@ -47,6 +49,31 @@ Parser generation requires the .NET SDK and Java 11 or newer. The shell script a
 ```
 
 Both scripts read the centrally managed ANTLR version from `Directory.Packages.props` and replace the generated parser directories.
+
+### Run the parser tests
+
+Fast TUnit tests use small repository-owned STEP, IFC, and EXPRESS fixtures and require no network access:
+
+```powershell
+dotnet run --project tests/TedToolkit.Step21.Tests --configuration Release
+```
+
+The integration project always validates the external-corpus manifest and cache policy. Its network test is skipped unless explicitly enabled:
+
+```powershell
+$env:TEDTOOLKIT_STEP21_EXTERNAL_CORPUS = '1'
+dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release
+```
+
+```shell
+TEDTOOLKIT_STEP21_EXTERNAL_CORPUS=1 \
+  dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release
+```
+
+External NIST and buildingSMART artifacts are declared in
+`tests/TedToolkit.Step21.IntegrationTests/ExternalCorpus/manifest.json`. The manifest pins each
+download by byte size and SHA-256 and records its source and license. Verified files are cached in
+the Git-ignored `artifacts/test-corpus/` directory; they are never committed to the repository.
 
 ### Run the build pipeline
 

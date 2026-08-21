@@ -1,0 +1,95 @@
+{
+  "cacheDirectory": "artifacts/test-corpus",
+  "artifacts": [
+    {
+      "id": "nist-pmi-step-files",
+      "downloadUrl": "https://www.nist.gov/document/nist-pmi-step-files",
+      "fileName": "nist-pmi-step-files.zip",
+      "archiveKind": "zip",
+      "sizeBytes": 13976599,
+      "sha256": "8FA78429E6D8D9B0D7681D223B6AA9EC98C3772185C55B1A0E3679B21C181911",
+      "license": "NIST test cases may be used without restriction; attribution requested",
+      "sourcePage": "https://www.nist.gov/ctl/smart-connected-systems-division/smart-connected-manufacturing-systems-group/mbe-pmi-0",
+      "testFiles": [
+        {
+          "path": "NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_01_asme1_rd.stp",
+          "cacheFileName": "nist-ctc-01-ap203.stp",
+          "format": "part21"
+        },
+        {
+          "path": "NIST-PMI-STEP-Files/nist_stc_06_asme1_ap242-e3.stp",
+          "cacheFileName": "nist-stc-06-ap242-e3.stp",
+          "format": "part21"
+        }
+      ]
+    },
+    {
+      "id": "buildingsmart-ifc4-tessellated-item",
+      "downloadUrl": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2/tessellated-item.ifc",
+      "fileName": "tessellated-item.ifc",
+      "archiveKind": "file",
+      "sizeBytes": 5199,
+      "sha256": "758974F7D558F11B8D8121816954179DEF32594ED7EAFCD1FAAE70EE0A8E5946",
+      "license": "CC BY 4.0",
+      "sourcePage": "https://github.com/buildingSMART/Sample-Test-Files/blob/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2/tessellated-item.ifc",
+      "testFiles": [
+        {
+          "path": "tessellated-item.ifc",
+          "cacheFileName": "tessellated-item.ifc",
+          "format": "part21"
+        }
+      ]
+    },
+    {
+      "id": "buildingsmart-ifc4-wall-opening-window",
+      "downloadUrl": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2/wall-with-opening-and-window.ifc",
+      "fileName": "wall-with-opening-and-window.ifc",
+      "archiveKind": "file",
+      "sizeBytes": 12492,
+      "sha256": "73B0E45D931D5DC13BFEE5FDC7BD80F796526445458B2DE74C4168D209097832",
+      "license": "CC BY 4.0",
+      "sourcePage": "https://github.com/buildingSMART/Sample-Test-Files/blob/main/IFC%204.0.2.1%20%28IFC%204%29/ISO%20Spec%20-%20ReferenceView_V1.2/wall-with-opening-and-window.ifc",
+      "testFiles": [
+        {
+          "path": "wall-with-opening-and-window.ifc",
+          "cacheFileName": "wall-with-opening-and-window.ifc",
+          "format": "part21"
+        }
+      ]
+    },
+    {
+      "id": "buildingsmart-ifc4x3-building-architecture",
+      "downloadUrl": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/main/IFC%204.3.2.0%20%28IFC4X3_ADD2%29/PCERT-Sample-Scene/Building-Architecture.ifc",
+      "fileName": "building-architecture.ifc",
+      "archiveKind": "file",
+      "sizeBytes": 220789,
+      "sha256": "A42962F9E2068040AC96636B1E7F6117150B6C0E3371F81088721B22796E463F",
+      "license": "CC BY 4.0",
+      "sourcePage": "https://github.com/buildingSMART/Sample-Test-Files/blob/main/IFC%204.3.2.0%20%28IFC4X3_ADD2%29/PCERT-Sample-Scene/Building-Architecture.ifc",
+      "testFiles": [
+        {
+          "path": "building-architecture.ifc",
+          "cacheFileName": "building-architecture.ifc",
+          "format": "part21"
+        }
+      ]
+    },
+    {
+      "id": "buildingsmart-ifc4-add2-tc1-express",
+      "downloadUrl": "https://raw.githubusercontent.com/buildingSMART/IFC4.x-development/ifc4.3-main/reference_schemas/IFC4_ADD2_TC1.exp",
+      "fileName": "IFC4_ADD2_TC1.exp",
+      "archiveKind": "file",
+      "sizeBytes": 372374,
+      "sha256": "A2704BA20A1B3D0B7D9B61D6FD37D0BAA3B4996BA3E90D968A1D2CA2819D1046",
+      "license": "CC BY-ND 4.0",
+      "sourcePage": "https://github.com/buildingSMART/IFC4.x-development/blob/ifc4.3-main/reference_schemas/IFC4_ADD2_TC1.exp",
+      "testFiles": [
+        {
+          "path": "IFC4_ADD2_TC1.exp",
+          "cacheFileName": "IFC4_ADD2_TC1.exp",
+          "format": "express"
+        }
+      ]
+    }
+  ]
+}

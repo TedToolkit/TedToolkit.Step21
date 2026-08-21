@@ -16,11 +16,17 @@
     </Project>
   </Folder>
   <Folder Name="/src/">
-    <File Path="src/grammar/Express.g4" />
-    <File Path="src/grammar/STEP.g4" />
     <Project Path="src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj" />
     <Project Path="src/TedToolkit.Step21/TedToolkit.Step21.csproj">
       <BuildDependency Project="src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj" />
     </Project>
+  </Folder>
+  <Folder Name="/src/grammar/">
+    <File Path="src/grammar/Express.g4" />
+    <File Path="src/grammar/STEP.g4" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TedToolkit.Step21.IntegrationTests/TedToolkit.Step21.IntegrationTests.csproj" />
+    <Project Path="tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj" />
   </Folder>
 </Solution>

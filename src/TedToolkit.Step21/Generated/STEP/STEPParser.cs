@@ -32,42 +32,42 @@ using Antlr4.Runtime.Tree;
 using DFA = Antlr4.Runtime.Dfa.DFA;
 
 [System.CodeDom.Compiler.GeneratedCode("ANTLR", "4.13.1")]
-[System.CLSCompliant(false)]
-public partial class STEPParser : Parser {
+internal partial class STEPParser : Parser {
 	protected static DFA[] decisionToDFA;
 	protected static PredictionContextCache sharedContextCache = new PredictionContextCache();
 	public const int
-		T__0=1, T__1=2, T__2=3, T__3=4, T__4=5, T__5=6, T__6=7, T__7=8, IntegerLiteral=9, 
-		Letter=10, CapitalLetter=11, DateTime=12, PlusMinus=13, Derived=14, BoolLogical=15, 
-		Enum=16, RealLiteral=17, DATA=18, ENDSEC=19, FILE_DESCRIPTION=20, FILE_NAME=21, 
-		FILE_SCHEMA=22, HEADER=23, Id=24, ISO=25, ISO_END=26, StringLiteral=27, 
-		TypeRef=28, Undefined=29, AnyString=30, NewlineChar=31, WS=32, Comments=33;
+		T__0=1, T__1=2, T__2=3, T__3=4, T__4=5, T__5=6, T__6=7, IntegerLiteral=8,
+		Letter=9, CapitalLetter=10, DateTime=11, PlusMinus=12, Derived=13, BoolLogical=14,
+		Enum=15, RealLiteral=16, DATA=17, ENDSEC=18, FILE_DESCRIPTION=19, FILE_NAME=20,
+		FILE_SCHEMA=21, HEADER=22, Id=23, ISO=24, ISO_END=25, StringLiteral=26,
+		TypeRef=27, Undefined=28, AnyString=29, NewlineChar=30, WS=31, Comments=32;
 	public const int
-		RULE_author = 0, RULE_authorisation = 1, RULE_collection = 2, RULE_collectionValue = 3, 
-		RULE_constructor = 4, RULE_data = 5, RULE_description = 6, RULE_file = 7, 
-		RULE_fileDescription = 8, RULE_fileName = 9, RULE_filePath = 10, RULE_fileSchema = 11, 
-		RULE_header = 12, RULE_implementation = 13, RULE_instance = 14, RULE_name = 15, 
-		RULE_originating_system = 16, RULE_organization = 17, RULE_parameter = 18, 
-		RULE_preprocessor_version = 19, RULE_timeStamp = 20;
+		RULE_author = 0, RULE_authorisation = 1, RULE_collection = 2, RULE_collectionValue = 3,
+		RULE_constructor = 4, RULE_complexEntityInstance = 5, RULE_data = 6, RULE_description = 7,
+		RULE_file = 8, RULE_fileDescription = 9, RULE_fileName = 10, RULE_filePath = 11,
+		RULE_fileSchema = 12, RULE_header = 13, RULE_implementation = 14, RULE_instance = 15,
+		RULE_name = 16, RULE_originating_system = 17, RULE_organization = 18,
+		RULE_parameter = 19, RULE_preprocessor_version = 20, RULE_timeStamp = 21;
 	public static readonly string[] ruleNames = {
-		"author", "authorisation", "collection", "collectionValue", "constructor", 
-		"data", "description", "file", "fileDescription", "fileName", "filePath", 
-		"fileSchema", "header", "implementation", "instance", "name", "originating_system", 
-		"organization", "parameter", "preprocessor_version", "timeStamp"
+		"author", "authorisation", "collection", "collectionValue", "constructor",
+		"complexEntityInstance", "data", "description", "file", "fileDescription",
+		"fileName", "filePath", "fileSchema", "header", "implementation", "instance",
+		"name", "originating_system", "organization", "parameter", "preprocessor_version",
+		"timeStamp"
 	};
 
 	private static readonly string[] _LiteralNames = {
-		null, "'('", "','", "')'", "'()'", "';'", "'''", "'.'", "'='", null, null, 
-		null, null, null, "'*'", null, null, null, "'DATA'", "'ENDSEC'", "'FILE_DESCRIPTION'", 
-		"'FILE_NAME'", "'FILE_SCHEMA'", "'HEADER'", null, null, null, null, null, 
+		null, "'('", "','", "')'", "';'", "'''", "'.'", "'='", null, null, null,
+		null, null, "'*'", null, null, null, "'DATA'", "'ENDSEC'", "'FILE_DESCRIPTION'",
+		"'FILE_NAME'", "'FILE_SCHEMA'", "'HEADER'", null, null, null, null, null,
 		"'$'"
 	};
 	private static readonly string[] _SymbolicNames = {
-		null, null, null, null, null, null, null, null, null, "IntegerLiteral", 
-		"Letter", "CapitalLetter", "DateTime", "PlusMinus", "Derived", "BoolLogical", 
-		"Enum", "RealLiteral", "DATA", "ENDSEC", "FILE_DESCRIPTION", "FILE_NAME", 
-		"FILE_SCHEMA", "HEADER", "Id", "ISO", "ISO_END", "StringLiteral", "TypeRef", 
-		"Undefined", "AnyString", "NewlineChar", "WS", "Comments"
+		null, null, null, null, null, null, null, null, "IntegerLiteral", "Letter",
+		"CapitalLetter", "DateTime", "PlusMinus", "Derived", "BoolLogical", "Enum",
+		"RealLiteral", "DATA", "ENDSEC", "FILE_DESCRIPTION", "FILE_NAME", "FILE_SCHEMA",
+		"HEADER", "Id", "ISO", "ISO_END", "StringLiteral", "TypeRef", "Undefined",
+		"AnyString", "NewlineChar", "WS", "Comments"
 	};
 	public static readonly IVocabulary DefaultVocabulary = new Vocabulary(_LiteralNames, _SymbolicNames);
 
@@ -123,7 +123,7 @@ public partial class STEPParser : Parser {
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 42;
+			State = 44;
 			Match(AnyString);
 			}
 		}
@@ -160,7 +160,7 @@ public partial class STEPParser : Parser {
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 44;
+			State = 46;
 			Match(AnyString);
 			}
 		}
@@ -201,45 +201,45 @@ public partial class STEPParser : Parser {
 		EnterRule(_localctx, 4, RULE_collection);
 		int _la;
 		try {
-			State = 58;
+			State = 61;
 			ErrorHandler.Sync(this);
-			switch (TokenStream.LA(1)) {
-			case T__0:
+			switch ( Interpreter.AdaptivePredict(TokenStream,1,Context) ) {
+			case 1:
 				EnterOuterAlt(_localctx, 1);
 				{
-				State = 46;
+				State = 48;
 				Match(T__0);
-				State = 47;
+				State = 49;
 				collectionValue();
-				State = 52;
+				State = 54;
 				ErrorHandler.Sync(this);
 				_la = TokenStream.LA(1);
 				while (_la==T__1) {
 					{
 					{
-					State = 48;
+					State = 50;
 					Match(T__1);
-					State = 49;
+					State = 51;
 					collectionValue();
 					}
 					}
-					State = 54;
+					State = 56;
 					ErrorHandler.Sync(this);
 					_la = TokenStream.LA(1);
 				}
-				State = 55;
+				State = 57;
 				Match(T__2);
 				}
 				break;
-			case T__3:
+			case 2:
 				EnterOuterAlt(_localctx, 2);
 				{
-				State = 57;
-				Match(T__3);
+				State = 59;
+				Match(T__0);
+				State = 60;
+				Match(T__2);
 				}
 				break;
-			default:
-				throw new NoViableAltException(this);
 			}
 		}
 		catch (RecognitionException re) {
@@ -266,6 +266,9 @@ public partial class STEPParser : Parser {
 			return GetRuleContext<ConstructorContext>(0);
 		}
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode Undefined() { return GetToken(STEPParser.Undefined, 0); }
+		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode Derived() { return GetToken(STEPParser.Derived, 0); }
+		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode Enum() { return GetToken(STEPParser.Enum, 0); }
+		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode BoolLogical() { return GetToken(STEPParser.BoolLogical, 0); }
 		public CollectionValueContext(ParserRuleContext parent, int invokingState)
 			: base(parent, invokingState)
 		{
@@ -284,64 +287,84 @@ public partial class STEPParser : Parser {
 		CollectionValueContext _localctx = new CollectionValueContext(Context, State);
 		EnterRule(_localctx, 6, RULE_collectionValue);
 		try {
-			State = 68;
+			State = 74;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case T__0:
-			case T__3:
 				EnterOuterAlt(_localctx, 1);
 				{
-				State = 60;
+				State = 63;
 				collection();
 				}
 				break;
 			case RealLiteral:
 				EnterOuterAlt(_localctx, 2);
 				{
-				State = 61;
+				State = 64;
 				Match(RealLiteral);
 				}
 				break;
 			case IntegerLiteral:
 				EnterOuterAlt(_localctx, 3);
 				{
-				State = 62;
+				State = 65;
 				Match(IntegerLiteral);
 				}
 				break;
 			case StringLiteral:
 				EnterOuterAlt(_localctx, 4);
 				{
-				State = 63;
+				State = 66;
 				Match(StringLiteral);
 				}
 				break;
 			case AnyString:
 				EnterOuterAlt(_localctx, 5);
 				{
-				State = 64;
+				State = 67;
 				Match(AnyString);
 				}
 				break;
 			case Id:
 				EnterOuterAlt(_localctx, 6);
 				{
-				State = 65;
+				State = 68;
 				Match(Id);
 				}
 				break;
 			case TypeRef:
 				EnterOuterAlt(_localctx, 7);
 				{
-				State = 66;
+				State = 69;
 				constructor();
 				}
 				break;
 			case Undefined:
 				EnterOuterAlt(_localctx, 8);
 				{
-				State = 67;
+				State = 70;
 				Match(Undefined);
+				}
+				break;
+			case Derived:
+				EnterOuterAlt(_localctx, 9);
+				{
+				State = 71;
+				Match(Derived);
+				}
+				break;
+			case Enum:
+				EnterOuterAlt(_localctx, 10);
+				{
+				State = 72;
+				Match(Enum);
+				}
+				break;
+			case BoolLogical:
+				EnterOuterAlt(_localctx, 11);
+				{
+				State = 73;
+				Match(BoolLogical);
 				}
 				break;
 			default:
@@ -388,37 +411,96 @@ public partial class STEPParser : Parser {
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 70;
+			State = 76;
 			Match(TypeRef);
-			State = 71;
+			State = 77;
 			Match(T__0);
-			State = 73;
+			State = 79;
 			ErrorHandler.Sync(this);
 			_la = TokenStream.LA(1);
-			if ((((_la) & ~0x3f) == 0 && ((1L << _la) & 2030289426L) != 0)) {
+			if ((((_la) & ~0x3f) == 0 && ((1L << _la) & 1015144706L) != 0)) {
 				{
-				State = 72;
+				State = 78;
 				parameter();
 				}
 			}
 
-			State = 79;
+			State = 85;
 			ErrorHandler.Sync(this);
 			_la = TokenStream.LA(1);
 			while (_la==T__1) {
 				{
 				{
-				State = 75;
+				State = 81;
 				Match(T__1);
-				State = 76;
+				State = 82;
 				parameter();
 				}
 				}
-				State = 81;
+				State = 87;
 				ErrorHandler.Sync(this);
 				_la = TokenStream.LA(1);
 			}
-			State = 82;
+			State = 88;
+			Match(T__2);
+			}
+		}
+		catch (RecognitionException re) {
+			_localctx.exception = re;
+			ErrorHandler.ReportError(this, re);
+			ErrorHandler.Recover(this, re);
+		}
+		finally {
+			ExitRule();
+		}
+		return _localctx;
+	}
+
+	public partial class ComplexEntityInstanceContext : ParserRuleContext {
+		[System.Diagnostics.DebuggerNonUserCode] public ConstructorContext[] constructor() {
+			return GetRuleContexts<ConstructorContext>();
+		}
+		[System.Diagnostics.DebuggerNonUserCode] public ConstructorContext constructor(int i) {
+			return GetRuleContext<ConstructorContext>(i);
+		}
+		public ComplexEntityInstanceContext(ParserRuleContext parent, int invokingState)
+			: base(parent, invokingState)
+		{
+		}
+		public override int RuleIndex { get { return RULE_complexEntityInstance; } }
+		[System.Diagnostics.DebuggerNonUserCode]
+		public override TResult Accept<TResult>(IParseTreeVisitor<TResult> visitor) {
+			ISTEPVisitor<TResult> typedVisitor = visitor as ISTEPVisitor<TResult>;
+			if (typedVisitor != null) return typedVisitor.VisitComplexEntityInstance(this);
+			else return visitor.VisitChildren(this);
+		}
+	}
+
+	[RuleVersion(0)]
+	public ComplexEntityInstanceContext complexEntityInstance() {
+		ComplexEntityInstanceContext _localctx = new ComplexEntityInstanceContext(Context, State);
+		EnterRule(_localctx, 10, RULE_complexEntityInstance);
+		int _la;
+		try {
+			EnterOuterAlt(_localctx, 1);
+			{
+			State = 90;
+			Match(T__0);
+			State = 92;
+			ErrorHandler.Sync(this);
+			_la = TokenStream.LA(1);
+			do {
+				{
+				{
+				State = 91;
+				constructor();
+				}
+				}
+				State = 94;
+				ErrorHandler.Sync(this);
+				_la = TokenStream.LA(1);
+			} while ( _la==TypeRef );
+			State = 96;
 			Match(T__2);
 			}
 		}
@@ -458,33 +540,33 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public DataContext data() {
 		DataContext _localctx = new DataContext(Context, State);
-		EnterRule(_localctx, 10, RULE_data);
+		EnterRule(_localctx, 12, RULE_data);
 		int _la;
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 84;
+			State = 98;
 			Match(DATA);
-			State = 85;
-			Match(T__4);
-			State = 89;
+			State = 99;
+			Match(T__3);
+			State = 103;
 			ErrorHandler.Sync(this);
 			_la = TokenStream.LA(1);
 			while (_la==Id) {
 				{
 				{
-				State = 86;
+				State = 100;
 				instance();
 				}
 				}
-				State = 91;
+				State = 105;
 				ErrorHandler.Sync(this);
 				_la = TokenStream.LA(1);
 			}
-			State = 92;
+			State = 106;
 			Match(ENDSEC);
-			State = 93;
-			Match(T__4);
+			State = 107;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -519,23 +601,22 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public DescriptionContext description() {
 		DescriptionContext _localctx = new DescriptionContext(Context, State);
-		EnterRule(_localctx, 12, RULE_description);
+		EnterRule(_localctx, 14, RULE_description);
 		try {
-			State = 97;
+			State = 111;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case AnyString:
 				EnterOuterAlt(_localctx, 1);
 				{
-				State = 95;
+				State = 109;
 				Match(AnyString);
 				}
 				break;
 			case T__0:
-			case T__3:
 				EnterOuterAlt(_localctx, 2);
 				{
-				State = 96;
+				State = 110;
 				collection();
 				}
 				break;
@@ -579,17 +660,17 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public FileContext file() {
 		FileContext _localctx = new FileContext(Context, State);
-		EnterRule(_localctx, 14, RULE_file);
+		EnterRule(_localctx, 16, RULE_file);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 99;
+			State = 113;
 			Match(ISO);
-			State = 100;
+			State = 114;
 			header();
-			State = 101;
+			State = 115;
 			data();
-			State = 102;
+			State = 116;
 			Match(ISO_END);
 			}
 		}
@@ -628,24 +709,24 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public FileDescriptionContext fileDescription() {
 		FileDescriptionContext _localctx = new FileDescriptionContext(Context, State);
-		EnterRule(_localctx, 16, RULE_fileDescription);
+		EnterRule(_localctx, 18, RULE_fileDescription);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 104;
+			State = 118;
 			Match(FILE_DESCRIPTION);
-			State = 105;
+			State = 119;
 			Match(T__0);
-			State = 106;
+			State = 120;
 			description();
-			State = 107;
+			State = 121;
 			Match(T__1);
-			State = 108;
+			State = 122;
 			implementation();
-			State = 109;
+			State = 123;
 			Match(T__2);
-			State = 110;
-			Match(T__4);
+			State = 124;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -704,78 +785,76 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public FileNameContext fileName() {
 		FileNameContext _localctx = new FileNameContext(Context, State);
-		EnterRule(_localctx, 18, RULE_fileName);
+		EnterRule(_localctx, 20, RULE_fileName);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 112;
+			State = 126;
 			Match(FILE_NAME);
-			State = 113;
+			State = 127;
 			Match(T__0);
-			State = 114;
+			State = 128;
 			name();
-			State = 115;
+			State = 129;
 			Match(T__1);
-			State = 116;
+			State = 130;
 			timeStamp();
-			State = 117;
+			State = 131;
 			Match(T__1);
-			State = 120;
+			State = 134;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case AnyString:
 				{
-				State = 118;
+				State = 132;
 				author();
 				}
 				break;
 			case T__0:
-			case T__3:
 				{
-				State = 119;
+				State = 133;
 				collection();
 				}
 				break;
 			default:
 				throw new NoViableAltException(this);
 			}
-			State = 122;
+			State = 136;
 			Match(T__1);
-			State = 125;
+			State = 139;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case AnyString:
 				{
-				State = 123;
+				State = 137;
 				organization();
 				}
 				break;
 			case T__0:
-			case T__3:
 				{
-				State = 124;
+				State = 138;
 				collection();
 				}
 				break;
 			default:
 				throw new NoViableAltException(this);
 			}
-			State = 127;
+			State = 141;
 			Match(T__1);
-			State = 128;
+			State = 142;
 			preprocessor_version();
-			State = 129;
+			State = 143;
 			Match(T__1);
-			State = 130;
+			State = 144;
 			originating_system();
-			State = 131;
+			State = 145;
 			Match(T__1);
-			State = 132;
+			State = 146;
 			authorisation();
-			State = 133;
+			State = 147;
 			Match(T__2);
-			State = 134;
-			Match(T__4);
+			State = 148;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -810,45 +889,45 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public FilePathContext filePath() {
 		FilePathContext _localctx = new FilePathContext(Context, State);
-		EnterRule(_localctx, 20, RULE_filePath);
+		EnterRule(_localctx, 22, RULE_filePath);
 		int _la;
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 136;
-			Match(T__5);
-			State = 140;
-			ErrorHandler.Sync(this);
-			_la = TokenStream.LA(1);
-			while (_la==Letter) {
-				{
-				{
-				State = 137;
-				Match(Letter);
-				}
-				}
-				State = 142;
-				ErrorHandler.Sync(this);
-				_la = TokenStream.LA(1);
-			}
-			State = 143;
-			Match(T__6);
-			State = 147;
-			ErrorHandler.Sync(this);
-			_la = TokenStream.LA(1);
-			while (_la==Letter) {
-				{
-				{
-				State = 144;
-				Match(Letter);
-				}
-				}
-				State = 149;
-				ErrorHandler.Sync(this);
-				_la = TokenStream.LA(1);
-			}
 			State = 150;
+			Match(T__4);
+			State = 154;
+			ErrorHandler.Sync(this);
+			_la = TokenStream.LA(1);
+			while (_la==Letter) {
+				{
+				{
+				State = 151;
+				Match(Letter);
+				}
+				}
+				State = 156;
+				ErrorHandler.Sync(this);
+				_la = TokenStream.LA(1);
+			}
+			State = 157;
 			Match(T__5);
+			State = 161;
+			ErrorHandler.Sync(this);
+			_la = TokenStream.LA(1);
+			while (_la==Letter) {
+				{
+				{
+				State = 158;
+				Match(Letter);
+				}
+				}
+				State = 163;
+				ErrorHandler.Sync(this);
+				_la = TokenStream.LA(1);
+			}
+			State = 164;
+			Match(T__4);
 			}
 		}
 		catch (RecognitionException re) {
@@ -881,24 +960,24 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public FileSchemaContext fileSchema() {
 		FileSchemaContext _localctx = new FileSchemaContext(Context, State);
-		EnterRule(_localctx, 22, RULE_fileSchema);
+		EnterRule(_localctx, 24, RULE_fileSchema);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 152;
+			State = 166;
 			Match(FILE_SCHEMA);
-			State = 153;
+			State = 167;
 			Match(T__0);
-			State = 154;
+			State = 168;
 			Match(T__0);
-			State = 155;
+			State = 169;
 			Match(AnyString);
-			State = 156;
+			State = 170;
 			Match(T__2);
-			State = 157;
+			State = 171;
 			Match(T__2);
-			State = 158;
-			Match(T__4);
+			State = 172;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -940,24 +1019,24 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public HeaderContext header() {
 		HeaderContext _localctx = new HeaderContext(Context, State);
-		EnterRule(_localctx, 24, RULE_header);
+		EnterRule(_localctx, 26, RULE_header);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 160;
+			State = 174;
 			Match(HEADER);
-			State = 161;
-			Match(T__4);
-			State = 162;
+			State = 175;
+			Match(T__3);
+			State = 176;
 			fileDescription();
-			State = 163;
+			State = 177;
 			fileName();
-			State = 164;
+			State = 178;
 			fileSchema();
-			State = 165;
+			State = 179;
 			Match(ENDSEC);
-			State = 166;
-			Match(T__4);
+			State = 180;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -989,11 +1068,11 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public ImplementationContext implementation() {
 		ImplementationContext _localctx = new ImplementationContext(Context, State);
-		EnterRule(_localctx, 26, RULE_implementation);
+		EnterRule(_localctx, 28, RULE_implementation);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 168;
+			State = 182;
 			Match(AnyString);
 			}
 		}
@@ -1013,6 +1092,9 @@ public partial class STEPParser : Parser {
 		[System.Diagnostics.DebuggerNonUserCode] public ConstructorContext constructor() {
 			return GetRuleContext<ConstructorContext>(0);
 		}
+		[System.Diagnostics.DebuggerNonUserCode] public ComplexEntityInstanceContext complexEntityInstance() {
+			return GetRuleContext<ComplexEntityInstanceContext>(0);
+		}
 		public InstanceContext(ParserRuleContext parent, int invokingState)
 			: base(parent, invokingState)
 		{
@@ -1029,18 +1111,34 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public InstanceContext instance() {
 		InstanceContext _localctx = new InstanceContext(Context, State);
-		EnterRule(_localctx, 28, RULE_instance);
+		EnterRule(_localctx, 30, RULE_instance);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 170;
+			State = 184;
 			Match(Id);
-			State = 171;
-			Match(T__7);
-			State = 172;
-			constructor();
-			State = 173;
-			Match(T__4);
+			State = 185;
+			Match(T__6);
+			State = 188;
+			ErrorHandler.Sync(this);
+			switch (TokenStream.LA(1)) {
+			case TypeRef:
+				{
+				State = 186;
+				constructor();
+				}
+				break;
+			case T__0:
+				{
+				State = 187;
+				complexEntityInstance();
+				}
+				break;
+			default:
+				throw new NoViableAltException(this);
+			}
+			State = 190;
+			Match(T__3);
 			}
 		}
 		catch (RecognitionException re) {
@@ -1075,22 +1173,22 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public NameContext name() {
 		NameContext _localctx = new NameContext(Context, State);
-		EnterRule(_localctx, 30, RULE_name);
+		EnterRule(_localctx, 32, RULE_name);
 		try {
-			State = 177;
+			State = 194;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case AnyString:
 				EnterOuterAlt(_localctx, 1);
 				{
-				State = 175;
+				State = 192;
 				Match(AnyString);
 				}
 				break;
-			case T__5:
+			case T__4:
 				EnterOuterAlt(_localctx, 2);
 				{
-				State = 176;
+				State = 193;
 				filePath();
 				}
 				break;
@@ -1127,11 +1225,11 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public Originating_systemContext originating_system() {
 		Originating_systemContext _localctx = new Originating_systemContext(Context, State);
-		EnterRule(_localctx, 32, RULE_originating_system);
+		EnterRule(_localctx, 34, RULE_originating_system);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 179;
+			State = 196;
 			Match(AnyString);
 			}
 		}
@@ -1164,11 +1262,11 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public OrganizationContext organization() {
 		OrganizationContext _localctx = new OrganizationContext(Context, State);
-		EnterRule(_localctx, 34, RULE_organization);
+		EnterRule(_localctx, 36, RULE_organization);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 181;
+			State = 198;
 			Match(AnyString);
 			}
 		}
@@ -1215,86 +1313,85 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public ParameterContext parameter() {
 		ParameterContext _localctx = new ParameterContext(Context, State);
-		EnterRule(_localctx, 36, RULE_parameter);
+		EnterRule(_localctx, 38, RULE_parameter);
 		try {
-			State = 194;
+			State = 211;
 			ErrorHandler.Sync(this);
 			switch (TokenStream.LA(1)) {
 			case TypeRef:
 				EnterOuterAlt(_localctx, 1);
 				{
-				State = 183;
+				State = 200;
 				constructor();
 				}
 				break;
 			case T__0:
-			case T__3:
 				EnterOuterAlt(_localctx, 2);
 				{
-				State = 184;
+				State = 201;
 				collection();
 				}
 				break;
 			case Undefined:
 				EnterOuterAlt(_localctx, 3);
 				{
-				State = 185;
+				State = 202;
 				Match(Undefined);
 				}
 				break;
 			case StringLiteral:
 				EnterOuterAlt(_localctx, 4);
 				{
-				State = 186;
+				State = 203;
 				Match(StringLiteral);
 				}
 				break;
 			case Derived:
 				EnterOuterAlt(_localctx, 5);
 				{
-				State = 187;
+				State = 204;
 				Match(Derived);
 				}
 				break;
 			case Enum:
 				EnterOuterAlt(_localctx, 6);
 				{
-				State = 188;
+				State = 205;
 				Match(Enum);
 				}
 				break;
 			case BoolLogical:
 				EnterOuterAlt(_localctx, 7);
 				{
-				State = 189;
+				State = 206;
 				Match(BoolLogical);
 				}
 				break;
 			case RealLiteral:
 				EnterOuterAlt(_localctx, 8);
 				{
-				State = 190;
+				State = 207;
 				Match(RealLiteral);
 				}
 				break;
 			case AnyString:
 				EnterOuterAlt(_localctx, 9);
 				{
-				State = 191;
+				State = 208;
 				Match(AnyString);
 				}
 				break;
 			case Id:
 				EnterOuterAlt(_localctx, 10);
 				{
-				State = 192;
+				State = 209;
 				Match(Id);
 				}
 				break;
 			case IntegerLiteral:
 				EnterOuterAlt(_localctx, 11);
 				{
-				State = 193;
+				State = 210;
 				Match(IntegerLiteral);
 				}
 				break;
@@ -1331,11 +1428,11 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public Preprocessor_versionContext preprocessor_version() {
 		Preprocessor_versionContext _localctx = new Preprocessor_versionContext(Context, State);
-		EnterRule(_localctx, 38, RULE_preprocessor_version);
+		EnterRule(_localctx, 40, RULE_preprocessor_version);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 196;
+			State = 213;
 			Match(AnyString);
 			}
 		}
@@ -1368,11 +1465,11 @@ public partial class STEPParser : Parser {
 	[RuleVersion(0)]
 	public TimeStampContext timeStamp() {
 		TimeStampContext _localctx = new TimeStampContext(Context, State);
-		EnterRule(_localctx, 40, RULE_timeStamp);
+		EnterRule(_localctx, 42, RULE_timeStamp);
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 198;
+			State = 215;
 			Match(DateTime);
 			}
 		}
@@ -1388,67 +1485,73 @@ public partial class STEPParser : Parser {
 	}
 
 	private static int[] _serializedATN = {
-		4,1,33,201,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,7,
+		4,1,32,218,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,2,7,
 		7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,2,14,7,14,
-		2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,20,7,20,1,0,1,0,1,
-		1,1,1,1,2,1,2,1,2,1,2,5,2,51,8,2,10,2,12,2,54,9,2,1,2,1,2,1,2,3,2,59,8,
-		2,1,3,1,3,1,3,1,3,1,3,1,3,1,3,1,3,3,3,69,8,3,1,4,1,4,1,4,3,4,74,8,4,1,
-		4,1,4,5,4,78,8,4,10,4,12,4,81,9,4,1,4,1,4,1,5,1,5,1,5,5,5,88,8,5,10,5,
-		12,5,91,9,5,1,5,1,5,1,5,1,6,1,6,3,6,98,8,6,1,7,1,7,1,7,1,7,1,7,1,8,1,8,
-		1,8,1,8,1,8,1,8,1,8,1,8,1,9,1,9,1,9,1,9,1,9,1,9,1,9,1,9,3,9,121,8,9,1,
-		9,1,9,1,9,3,9,126,8,9,1,9,1,9,1,9,1,9,1,9,1,9,1,9,1,9,1,9,1,10,1,10,5,
-		10,139,8,10,10,10,12,10,142,9,10,1,10,1,10,5,10,146,8,10,10,10,12,10,149,
-		9,10,1,10,1,10,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,12,1,12,1,12,
-		1,12,1,12,1,12,1,12,1,12,1,13,1,13,1,14,1,14,1,14,1,14,1,14,1,15,1,15,
-		3,15,178,8,15,1,16,1,16,1,17,1,17,1,18,1,18,1,18,1,18,1,18,1,18,1,18,1,
-		18,1,18,1,18,1,18,3,18,195,8,18,1,19,1,19,1,20,1,20,1,20,0,0,21,0,2,4,
-		6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,0,0,207,0,42,1,0,0,
-		0,2,44,1,0,0,0,4,58,1,0,0,0,6,68,1,0,0,0,8,70,1,0,0,0,10,84,1,0,0,0,12,
-		97,1,0,0,0,14,99,1,0,0,0,16,104,1,0,0,0,18,112,1,0,0,0,20,136,1,0,0,0,
-		22,152,1,0,0,0,24,160,1,0,0,0,26,168,1,0,0,0,28,170,1,0,0,0,30,177,1,0,
-		0,0,32,179,1,0,0,0,34,181,1,0,0,0,36,194,1,0,0,0,38,196,1,0,0,0,40,198,
-		1,0,0,0,42,43,5,30,0,0,43,1,1,0,0,0,44,45,5,30,0,0,45,3,1,0,0,0,46,47,
-		5,1,0,0,47,52,3,6,3,0,48,49,5,2,0,0,49,51,3,6,3,0,50,48,1,0,0,0,51,54,
-		1,0,0,0,52,50,1,0,0,0,52,53,1,0,0,0,53,55,1,0,0,0,54,52,1,0,0,0,55,56,
-		5,3,0,0,56,59,1,0,0,0,57,59,5,4,0,0,58,46,1,0,0,0,58,57,1,0,0,0,59,5,1,
-		0,0,0,60,69,3,4,2,0,61,69,5,17,0,0,62,69,5,9,0,0,63,69,5,27,0,0,64,69,
-		5,30,0,0,65,69,5,24,0,0,66,69,3,8,4,0,67,69,5,29,0,0,68,60,1,0,0,0,68,
-		61,1,0,0,0,68,62,1,0,0,0,68,63,1,0,0,0,68,64,1,0,0,0,68,65,1,0,0,0,68,
-		66,1,0,0,0,68,67,1,0,0,0,69,7,1,0,0,0,70,71,5,28,0,0,71,73,5,1,0,0,72,
-		74,3,36,18,0,73,72,1,0,0,0,73,74,1,0,0,0,74,79,1,0,0,0,75,76,5,2,0,0,76,
-		78,3,36,18,0,77,75,1,0,0,0,78,81,1,0,0,0,79,77,1,0,0,0,79,80,1,0,0,0,80,
-		82,1,0,0,0,81,79,1,0,0,0,82,83,5,3,0,0,83,9,1,0,0,0,84,85,5,18,0,0,85,
-		89,5,5,0,0,86,88,3,28,14,0,87,86,1,0,0,0,88,91,1,0,0,0,89,87,1,0,0,0,89,
-		90,1,0,0,0,90,92,1,0,0,0,91,89,1,0,0,0,92,93,5,19,0,0,93,94,5,5,0,0,94,
-		11,1,0,0,0,95,98,5,30,0,0,96,98,3,4,2,0,97,95,1,0,0,0,97,96,1,0,0,0,98,
-		13,1,0,0,0,99,100,5,25,0,0,100,101,3,24,12,0,101,102,3,10,5,0,102,103,
-		5,26,0,0,103,15,1,0,0,0,104,105,5,20,0,0,105,106,5,1,0,0,106,107,3,12,
-		6,0,107,108,5,2,0,0,108,109,3,26,13,0,109,110,5,3,0,0,110,111,5,5,0,0,
-		111,17,1,0,0,0,112,113,5,21,0,0,113,114,5,1,0,0,114,115,3,30,15,0,115,
-		116,5,2,0,0,116,117,3,40,20,0,117,120,5,2,0,0,118,121,3,0,0,0,119,121,
-		3,4,2,0,120,118,1,0,0,0,120,119,1,0,0,0,121,122,1,0,0,0,122,125,5,2,0,
-		0,123,126,3,34,17,0,124,126,3,4,2,0,125,123,1,0,0,0,125,124,1,0,0,0,126,
-		127,1,0,0,0,127,128,5,2,0,0,128,129,3,38,19,0,129,130,5,2,0,0,130,131,
-		3,32,16,0,131,132,5,2,0,0,132,133,3,2,1,0,133,134,5,3,0,0,134,135,5,5,
-		0,0,135,19,1,0,0,0,136,140,5,6,0,0,137,139,5,10,0,0,138,137,1,0,0,0,139,
-		142,1,0,0,0,140,138,1,0,0,0,140,141,1,0,0,0,141,143,1,0,0,0,142,140,1,
-		0,0,0,143,147,5,7,0,0,144,146,5,10,0,0,145,144,1,0,0,0,146,149,1,0,0,0,
-		147,145,1,0,0,0,147,148,1,0,0,0,148,150,1,0,0,0,149,147,1,0,0,0,150,151,
-		5,6,0,0,151,21,1,0,0,0,152,153,5,22,0,0,153,154,5,1,0,0,154,155,5,1,0,
-		0,155,156,5,30,0,0,156,157,5,3,0,0,157,158,5,3,0,0,158,159,5,5,0,0,159,
-		23,1,0,0,0,160,161,5,23,0,0,161,162,5,5,0,0,162,163,3,16,8,0,163,164,3,
-		18,9,0,164,165,3,22,11,0,165,166,5,19,0,0,166,167,5,5,0,0,167,25,1,0,0,
-		0,168,169,5,30,0,0,169,27,1,0,0,0,170,171,5,24,0,0,171,172,5,8,0,0,172,
-		173,3,8,4,0,173,174,5,5,0,0,174,29,1,0,0,0,175,178,5,30,0,0,176,178,3,
-		20,10,0,177,175,1,0,0,0,177,176,1,0,0,0,178,31,1,0,0,0,179,180,5,30,0,
-		0,180,33,1,0,0,0,181,182,5,30,0,0,182,35,1,0,0,0,183,195,3,8,4,0,184,195,
-		3,4,2,0,185,195,5,29,0,0,186,195,5,27,0,0,187,195,5,14,0,0,188,195,5,16,
-		0,0,189,195,5,15,0,0,190,195,5,17,0,0,191,195,5,30,0,0,192,195,5,24,0,
-		0,193,195,5,9,0,0,194,183,1,0,0,0,194,184,1,0,0,0,194,185,1,0,0,0,194,
-		186,1,0,0,0,194,187,1,0,0,0,194,188,1,0,0,0,194,189,1,0,0,0,194,190,1,
-		0,0,0,194,191,1,0,0,0,194,192,1,0,0,0,194,193,1,0,0,0,195,37,1,0,0,0,196,
-		197,5,30,0,0,197,39,1,0,0,0,198,199,5,12,0,0,199,41,1,0,0,0,13,52,58,68,
-		73,79,89,97,120,125,140,147,177,194
+		2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,20,7,20,2,21,7,21,
+		1,0,1,0,1,1,1,1,1,2,1,2,1,2,1,2,5,2,53,8,2,10,2,12,2,56,9,2,1,2,1,2,1,
+		2,1,2,3,2,62,8,2,1,3,1,3,1,3,1,3,1,3,1,3,1,3,1,3,1,3,1,3,1,3,3,3,75,8,
+		3,1,4,1,4,1,4,3,4,80,8,4,1,4,1,4,5,4,84,8,4,10,4,12,4,87,9,4,1,4,1,4,1,
+		5,1,5,4,5,93,8,5,11,5,12,5,94,1,5,1,5,1,6,1,6,1,6,5,6,102,8,6,10,6,12,
+		6,105,9,6,1,6,1,6,1,6,1,7,1,7,3,7,112,8,7,1,8,1,8,1,8,1,8,1,8,1,9,1,9,
+		1,9,1,9,1,9,1,9,1,9,1,9,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,3,10,135,
+		8,10,1,10,1,10,1,10,3,10,140,8,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,
+		10,1,10,1,11,1,11,5,11,153,8,11,10,11,12,11,156,9,11,1,11,1,11,5,11,160,
+		8,11,10,11,12,11,163,9,11,1,11,1,11,1,12,1,12,1,12,1,12,1,12,1,12,1,12,
+		1,12,1,13,1,13,1,13,1,13,1,13,1,13,1,13,1,13,1,14,1,14,1,15,1,15,1,15,
+		1,15,3,15,189,8,15,1,15,1,15,1,16,1,16,3,16,195,8,16,1,17,1,17,1,18,1,
+		18,1,19,1,19,1,19,1,19,1,19,1,19,1,19,1,19,1,19,1,19,1,19,3,19,212,8,19,
+		1,20,1,20,1,21,1,21,1,21,0,0,22,0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,
+		30,32,34,36,38,40,42,0,0,228,0,44,1,0,0,0,2,46,1,0,0,0,4,61,1,0,0,0,6,
+		74,1,0,0,0,8,76,1,0,0,0,10,90,1,0,0,0,12,98,1,0,0,0,14,111,1,0,0,0,16,
+		113,1,0,0,0,18,118,1,0,0,0,20,126,1,0,0,0,22,150,1,0,0,0,24,166,1,0,0,
+		0,26,174,1,0,0,0,28,182,1,0,0,0,30,184,1,0,0,0,32,194,1,0,0,0,34,196,1,
+		0,0,0,36,198,1,0,0,0,38,211,1,0,0,0,40,213,1,0,0,0,42,215,1,0,0,0,44,45,
+		5,29,0,0,45,1,1,0,0,0,46,47,5,29,0,0,47,3,1,0,0,0,48,49,5,1,0,0,49,54,
+		3,6,3,0,50,51,5,2,0,0,51,53,3,6,3,0,52,50,1,0,0,0,53,56,1,0,0,0,54,52,
+		1,0,0,0,54,55,1,0,0,0,55,57,1,0,0,0,56,54,1,0,0,0,57,58,5,3,0,0,58,62,
+		1,0,0,0,59,60,5,1,0,0,60,62,5,3,0,0,61,48,1,0,0,0,61,59,1,0,0,0,62,5,1,
+		0,0,0,63,75,3,4,2,0,64,75,5,16,0,0,65,75,5,8,0,0,66,75,5,26,0,0,67,75,
+		5,29,0,0,68,75,5,23,0,0,69,75,3,8,4,0,70,75,5,28,0,0,71,75,5,13,0,0,72,
+		75,5,15,0,0,73,75,5,14,0,0,74,63,1,0,0,0,74,64,1,0,0,0,74,65,1,0,0,0,74,
+		66,1,0,0,0,74,67,1,0,0,0,74,68,1,0,0,0,74,69,1,0,0,0,74,70,1,0,0,0,74,
+		71,1,0,0,0,74,72,1,0,0,0,74,73,1,0,0,0,75,7,1,0,0,0,76,77,5,27,0,0,77,
+		79,5,1,0,0,78,80,3,38,19,0,79,78,1,0,0,0,79,80,1,0,0,0,80,85,1,0,0,0,81,
+		82,5,2,0,0,82,84,3,38,19,0,83,81,1,0,0,0,84,87,1,0,0,0,85,83,1,0,0,0,85,
+		86,1,0,0,0,86,88,1,0,0,0,87,85,1,0,0,0,88,89,5,3,0,0,89,9,1,0,0,0,90,92,
+		5,1,0,0,91,93,3,8,4,0,92,91,1,0,0,0,93,94,1,0,0,0,94,92,1,0,0,0,94,95,
+		1,0,0,0,95,96,1,0,0,0,96,97,5,3,0,0,97,11,1,0,0,0,98,99,5,17,0,0,99,103,
+		5,4,0,0,100,102,3,30,15,0,101,100,1,0,0,0,102,105,1,0,0,0,103,101,1,0,
+		0,0,103,104,1,0,0,0,104,106,1,0,0,0,105,103,1,0,0,0,106,107,5,18,0,0,107,
+		108,5,4,0,0,108,13,1,0,0,0,109,112,5,29,0,0,110,112,3,4,2,0,111,109,1,
+		0,0,0,111,110,1,0,0,0,112,15,1,0,0,0,113,114,5,24,0,0,114,115,3,26,13,
+		0,115,116,3,12,6,0,116,117,5,25,0,0,117,17,1,0,0,0,118,119,5,19,0,0,119,
+		120,5,1,0,0,120,121,3,14,7,0,121,122,5,2,0,0,122,123,3,28,14,0,123,124,
+		5,3,0,0,124,125,5,4,0,0,125,19,1,0,0,0,126,127,5,20,0,0,127,128,5,1,0,
+		0,128,129,3,32,16,0,129,130,5,2,0,0,130,131,3,42,21,0,131,134,5,2,0,0,
+		132,135,3,0,0,0,133,135,3,4,2,0,134,132,1,0,0,0,134,133,1,0,0,0,135,136,
+		1,0,0,0,136,139,5,2,0,0,137,140,3,36,18,0,138,140,3,4,2,0,139,137,1,0,
+		0,0,139,138,1,0,0,0,140,141,1,0,0,0,141,142,5,2,0,0,142,143,3,40,20,0,
+		143,144,5,2,0,0,144,145,3,34,17,0,145,146,5,2,0,0,146,147,3,2,1,0,147,
+		148,5,3,0,0,148,149,5,4,0,0,149,21,1,0,0,0,150,154,5,5,0,0,151,153,5,9,
+		0,0,152,151,1,0,0,0,153,156,1,0,0,0,154,152,1,0,0,0,154,155,1,0,0,0,155,
+		157,1,0,0,0,156,154,1,0,0,0,157,161,5,6,0,0,158,160,5,9,0,0,159,158,1,
+		0,0,0,160,163,1,0,0,0,161,159,1,0,0,0,161,162,1,0,0,0,162,164,1,0,0,0,
+		163,161,1,0,0,0,164,165,5,5,0,0,165,23,1,0,0,0,166,167,5,21,0,0,167,168,
+		5,1,0,0,168,169,5,1,0,0,169,170,5,29,0,0,170,171,5,3,0,0,171,172,5,3,0,
+		0,172,173,5,4,0,0,173,25,1,0,0,0,174,175,5,22,0,0,175,176,5,4,0,0,176,
+		177,3,18,9,0,177,178,3,20,10,0,178,179,3,24,12,0,179,180,5,18,0,0,180,
+		181,5,4,0,0,181,27,1,0,0,0,182,183,5,29,0,0,183,29,1,0,0,0,184,185,5,23,
+		0,0,185,188,5,7,0,0,186,189,3,8,4,0,187,189,3,10,5,0,188,186,1,0,0,0,188,
+		187,1,0,0,0,189,190,1,0,0,0,190,191,5,4,0,0,191,31,1,0,0,0,192,195,5,29,
+		0,0,193,195,3,22,11,0,194,192,1,0,0,0,194,193,1,0,0,0,195,33,1,0,0,0,196,
+		197,5,29,0,0,197,35,1,0,0,0,198,199,5,29,0,0,199,37,1,0,0,0,200,212,3,
+		8,4,0,201,212,3,4,2,0,202,212,5,28,0,0,203,212,5,26,0,0,204,212,5,13,0,
+		0,205,212,5,15,0,0,206,212,5,14,0,0,207,212,5,16,0,0,208,212,5,29,0,0,
+		209,212,5,23,0,0,210,212,5,8,0,0,211,200,1,0,0,0,211,201,1,0,0,0,211,202,
+		1,0,0,0,211,203,1,0,0,0,211,204,1,0,0,0,211,205,1,0,0,0,211,206,1,0,0,
+		0,211,207,1,0,0,0,211,208,1,0,0,0,211,209,1,0,0,0,211,210,1,0,0,0,212,
+		39,1,0,0,0,213,214,5,29,0,0,214,41,1,0,0,0,215,216,5,11,0,0,216,43,1,0,
+		0,0,15,54,61,74,79,85,94,103,111,134,139,154,161,188,194,211
 	};
 
 	public static readonly ATN _ATN =

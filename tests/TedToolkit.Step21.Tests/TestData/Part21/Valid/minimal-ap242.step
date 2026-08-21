@@ -1,0 +1,12 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Minimal AP242 syntax fixture'),'2;1');
+FILE_NAME('minimal-ap242.step','2026-08-21T00:00:00',('TedToolkit'),('TedToolkit'),'TedToolkit.Step21','TedToolkit.Step21','');
+FILE_SCHEMA(('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF'));
+ENDSEC;
+DATA;
+#1=CARTESIAN_POINT('',(0.,1.0,-2.5E+3));
+#2=DIRECTION('',(1.,0.,0.));
+#3=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+ENDSEC;
+END-ISO-10303-21;

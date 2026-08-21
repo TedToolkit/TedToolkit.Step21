@@ -61,6 +61,21 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "ANTLR failed to generate Express.g4 (exit code $LASTEXITCODE)."
     }
+
+    $publicTypePattern = '(?m)^\[System\.CLSCompliant\(false\)\]\r?\npublic (?=(?:partial class|interface)\s)'
+    foreach ($sourceFile in Get-ChildItem -LiteralPath $stepOutput, $expressOutput -Filter '*.cs' -File) {
+        $source = [System.IO.File]::ReadAllText($sourceFile.FullName)
+        $rewrittenSource = $source -replace $publicTypePattern, 'internal '
+        if ($rewrittenSource -ceq $source) {
+            throw "ANTLR generated no public top-level type in '$($sourceFile.FullName)'."
+        }
+
+        $rewrittenSource = $rewrittenSource -replace '[\t ]+(?=\r?\n|$)', ''
+        [System.IO.File]::WriteAllText(
+            $sourceFile.FullName,
+            $rewrittenSource,
+            [System.Text.UTF8Encoding]::new($false))
+    }
 }
 finally {
     Pop-Location

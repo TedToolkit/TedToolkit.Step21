@@ -13,4 +13,9 @@
     <PackageReference Include="Antlr4.Runtime.Standard" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TedToolkit.Step21.IntegrationTests" />
+    <InternalsVisibleTo Include="TedToolkit.Step21.Tests" />
+  </ItemGroup>
+
 </Project>

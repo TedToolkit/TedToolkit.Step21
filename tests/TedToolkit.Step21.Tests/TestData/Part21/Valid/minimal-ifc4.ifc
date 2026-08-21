@@ -1,0 +1,12 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Minimal IFC4 syntax fixture'),'2;1');
+FILE_NAME('minimal-ifc4.ifc','2026-08-21T00:00:00',('TedToolkit'),('TedToolkit'),'TedToolkit.Step21','TedToolkit.Step21','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPERSON($,'Doe','Jane',$,$,$,$,$);
+#2=IFCORGANIZATION($,'TedToolkit',$,$,$);
+#3=IFCPERSONANDORGANIZATION(#1,#2,$);
+ENDSEC;
+END-ISO-10303-21;

@@ -33,8 +33,7 @@ using ParserRuleContext = Antlr4.Runtime.ParserRuleContext;
 /// <typeparam name="Result">The return type of the visit operation.</typeparam>
 [System.CodeDom.Compiler.GeneratedCode("ANTLR", "4.13.1")]
 [System.Diagnostics.DebuggerNonUserCode]
-[System.CLSCompliant(false)]
-public partial class STEPBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, ISTEPVisitor<Result> {
+internal partial class STEPBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, ISTEPVisitor<Result> {
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="STEPParser.author"/>.
 	/// <para>
@@ -85,6 +84,16 @@ public partial class STEPBaseVisitor<Result> : AbstractParseTreeVisitor<Result>,
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	public virtual Result VisitConstructor([NotNull] STEPParser.ConstructorContext context) { return VisitChildren(context); }
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="STEPParser.complexEntityInstance"/>.
+	/// <para>
+	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
+	/// on <paramref name="context"/>.
+	/// </para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	public virtual Result VisitComplexEntityInstance([NotNull] STEPParser.ComplexEntityInstanceContext context) { return VisitChildren(context); }
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="STEPParser.data"/>.
 	/// <para>

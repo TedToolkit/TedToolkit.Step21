@@ -10,7 +10,7 @@ authorisation
 
 collection
 	: '(' collectionValue (',' collectionValue)* ')'
-	| '()'
+	| '(' ')'
 	;
 
 collectionValue
@@ -22,10 +22,17 @@ collectionValue
 	| Id
 	| constructor
 	| Undefined
+	| Derived
+	| Enum
+	| BoolLogical
 	;
 
 constructor
 	: TypeRef '(' parameter? (',' parameter)* ')'
+	;
+
+complexEntityInstance
+	: '(' constructor+ ')'
 	;
 
 data
@@ -66,7 +73,7 @@ implementation
 	;
 
 instance
-	: Id '=' constructor ';'
+	: Id '=' (constructor|complexEntityInstance) ';'
 	;
 
 name
@@ -149,7 +156,7 @@ Enum
 	;
 
 RealLiteral
-	: '-'? Digits '.'? Digits* (('e'|'E') '-'? Digits)? // IFC: Scientific 'E' was not supported.
+	: ('+'|'-')? Digits '.'? Digits* (('e'|'E') ('+'|'-')? Digits)? // IFC: Scientific 'E' was not supported.
 	;
 
 DATA : 'DATA' ; 
@@ -175,7 +182,7 @@ StringLiteral
 	;
 
 TypeRef
-	: CapitalLetter (CapitalLetter|Digit)*
+	: CapitalLetter (CapitalLetter|Digit|'_')*
 	;
 	
 Undefined 
