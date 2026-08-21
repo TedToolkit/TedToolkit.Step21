@@ -17,6 +17,8 @@ The Part 21 parser's `exchangeFile` entry rule recognizes the complete ISO 10303
 
 The Analyzer's `syntax` entry rule recognizes ISO 10303-11:2004 Edition 2 EXPRESS and transforms complete input into internal immutable, source-located IR without executing declarations. Supplied schema texts then bind as one deterministic closed universe without external lookup. See the [EXPRESS grammar boundary](docs/conformance/express-edition2-grammar.md) and [closed-set binding boundary](docs/conformance/express-closed-set-binding.md).
 
+The packaged incremental generator consumes every `.exp` MSBuild `AdditionalFiles` item without a schema-name whitelist. Each independently valid schema currently emits a deterministic internal compiled marker; later generator work items extend that structural output with schema-bound runtime types. See the [generator host boundary](docs/conformance/express-generator-host.md).
+
 ## Quick start
 
 Clone the repository with its TedToolkit submodule, then build the solution in Release mode:
@@ -28,6 +30,17 @@ dotnet build TedToolkit.Step21.slnx --configuration Release
 ```
 
 The projects currently target .NET 10 and .NET Standard 2.0, so the .NET 10 SDK is required to build the complete solution.
+
+To supply an EXPRESS schema from a consuming project, reference the package and mark the schema as an additional file:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="TedToolkit.Step21" Version="1.0.0" />
+  <AdditionalFiles Include="Schemas/my-schema.exp" />
+</ItemGroup>
+```
+
+Invalid EXPRESS syntax or binding is reported as a build diagnostic at the originating additional file. Generated sources are withheld for invalid schemas.
 
 ## Components
 
@@ -56,6 +69,7 @@ Both scripts read the centrally managed ANTLR version from `Directory.Packages.p
 They normalize generated files to UTF-8 with LF line endings, retain visitors, omit listeners, and
 internalize generated top-level types. For isolated verification, pass an output root with
 `-OutputRoot <path>` to the PowerShell script or as the first argument to the shell script.
+Generated lexer and parser defaults use null writers so analyzer-host execution never reads or writes the process console.
 
 ### Run the parser tests
 

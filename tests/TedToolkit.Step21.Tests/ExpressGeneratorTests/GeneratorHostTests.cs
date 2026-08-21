@@ -1,0 +1,140 @@
+// -----------------------------------------------------------------------
+// <copyright file="GeneratorHostTests.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
+using System.Collections.Immutable;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
+
+using TedToolkit.Step21.Analyzer.Generation;
+
+namespace TedToolkit.Step21.Tests.ExpressGeneratorTests;
+
+/// <summary>
+/// Proves the minimal EXPRESS incremental-generator boundary.
+/// </summary>
+public sealed class GeneratorHostTests
+{
+    private const string ValidSchema = """
+        SCHEMA lunar_catalog;
+        ENTITY crater;
+          diameter : REAL;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    /// <summary>
+    /// Verifies that an arbitrary non-IFC schema produces a compiled marker.
+    /// </summary>
+    [Test]
+    public async Task Should_generate_compiled_marker_for_arbitrary_schema()
+    {
+        var result = Run(("models/lunar.exp", ValidSchema));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics.Where(item => item.Severity == DiagnosticSeverity.Error)).IsEmpty();
+            await Assert.That(result.GeneratedSources.Select(source => source.HintName))
+                .IsEquivalentTo(["ExpressSchema_LUNAR_CATALOG.g.cs"])
+                .Because(string.Join(", ", result.GeneratedSources.Select(source => source.HintName)));
+            await Assert.That(result.GeneratedSources.Single().SourceText.ToString())
+                .Contains("internal sealed class ExpressSchema_lunar_catalog");
+            await Assert.That(result.GeneratedSources.Single().SourceText.ToString())
+                .Contains("const string SchemaName = \"lunar_catalog\"");
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(item => item.Severity == DiagnosticSeverity.Error)).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies output is independent of input order and machine-specific paths.
+    /// </summary>
+    [Test]
+    public async Task Should_generate_identical_output_for_reordered_relocated_inputs()
+    {
+        const string secondSchema = "SCHEMA orbit_data; END_SCHEMA;";
+        var first = Run(
+            ("C:/agent-a/input/lunar.exp", ValidSchema),
+            ("C:/agent-a/input/orbit.exp", secondSchema));
+        var second = Run(
+            ("D:/agent-b/schemas/orbit.exp", secondSchema),
+            ("D:/agent-b/schemas/lunar.exp", ValidSchema));
+
+        await Assert.That(Snapshot(first)).IsEqualTo(Snapshot(second));
+    }
+
+    /// <summary>
+    /// Verifies invalid EXPRESS reports a source-located diagnostic and emits no artifact.
+    /// </summary>
+    [Test]
+    public async Task Should_report_invalid_schema_without_emitting_source()
+    {
+        var result = Run(("invalid/broken.exp", "SCHEMA broken;"));
+        var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP001");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.GeneratedSources).IsEmpty();
+            await Assert.That(diagnostic.Location.GetLineSpan().Path).IsEqualTo("invalid/broken.exp");
+            await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(0);
+        }
+    }
+
+    private static GeneratorResult Run(params (string Path, string Text)[] sources)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText("internal sealed class Consumer { }");
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Select(path => MetadataReference.CreateFromFile(path));
+        var compilation = CSharpCompilation.Create(
+            "Consumer",
+            [syntaxTree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var additionalTexts = sources
+            .Select(source => (AdditionalText)new InMemoryAdditionalText(source.Path, source.Text))
+            .ToImmutableArray();
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            [new ExpressIncrementalGenerator().AsSourceGenerator()],
+            additionalTexts: additionalTexts);
+
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out var outputCompilation,
+            out var diagnostics);
+        var runResult = driver.GetRunResult();
+        return new GeneratorResult(
+            runResult.Results.SelectMany(result => result.GeneratedSources).ToImmutableArray(),
+            runResult.Diagnostics,
+            outputCompilation);
+    }
+
+    private static string Snapshot(GeneratorResult result)
+    {
+        return string.Join(
+            "\n---\n",
+            result.GeneratedSources
+                .OrderBy(source => source.HintName, StringComparer.Ordinal)
+                .Select(source => $"{source.HintName}\n{source.SourceText}"));
+    }
+
+    private sealed class InMemoryAdditionalText(string path, string text) : AdditionalText
+    {
+        public override string Path { get; } = path;
+
+        public override SourceText GetText(CancellationToken cancellationToken = default)
+        {
+            return SourceText.From(text);
+        }
+    }
+
+    private sealed record GeneratorResult(
+        ImmutableArray<GeneratedSourceResult> GeneratedSources,
+        ImmutableArray<Diagnostic> Diagnostics,
+        Compilation OutputCompilation);
+}

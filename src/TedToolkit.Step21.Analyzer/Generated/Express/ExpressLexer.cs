@@ -94,7 +94,7 @@ internal partial class ExpressLexer : Lexer {
 
 
 	public ExpressLexer(ICharStream input)
-	: this(input, Console.Out, Console.Error) { }
+	: this(input, TextWriter.Null, TextWriter.Null) { }
 
 	public ExpressLexer(ICharStream input, TextWriter output, TextWriter errorOutput)
 	: base(input, output, errorOutput)

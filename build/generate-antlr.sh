@@ -66,6 +66,7 @@ for source_file in "$step_output"/*.cs "$express_output"/*.cs; do
         -e '/^\[System\.CLSCompliant(false)\][[:space:]]*$/d' \
         -e 's/^public partial class/internal partial class/' \
         -e 's/^public interface/internal interface/' \
+        -e 's/Console\.Out, Console\.Error/TextWriter.Null, TextWriter.Null/g' \
         -e 's/[[:blank:]]*$//' \
         "$source_file" > "$source_file.tmp"
     mv -- "$source_file.tmp" "$source_file"

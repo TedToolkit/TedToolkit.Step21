@@ -79,7 +79,7 @@ internal partial class STEPLexer : Lexer {
 
 
 	public STEPLexer(ICharStream input)
-	: this(input, Console.Out, Console.Error) { }
+	: this(input, TextWriter.Null, TextWriter.Null) { }
 
 	public STEPLexer(ICharStream input, TextWriter output, TextWriter errorOutput)
 	: base(input, output, errorOutput)

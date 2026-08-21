@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -84,10 +84,10 @@ The Analyzer project has no source generator or RoslynHelper dependency; the run
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and generator/package/test artifacts |
-| Behavior-case proof | Commands/results for BC-01, BC-16, and BC-18 |
-| Migration and documentation | AdditionalFiles/package quick-start update |
-| Dependent-item unlock | Stable generator/packaging contract for SBRT-010–017 |
+| Delivery-boundary check | Started from `db6a746`; added the incremental generator, structural RoslynHelper emitter, source-located diagnostic bridge, release tracking, analyzer dependency packaging, generator-driver tests, and a packed-consumer fixture. The Analyzer remains `netstandard2.0`. |
+| Behavior-case proof | BC-01: generator-driver and real local-package consumer compile `lunar_catalog`. BC-16: reordered inputs and unrelated Windows-style logical roots produce identical hint/source snapshots. BC-18: package entries and consumer `project.assets.json` prove analyzer-only dependencies remain outside `lib` and the runtime graph contains no RoslynHelper or JSON/XML packages. Release verification passed 112/112 fast tests and 3/3 enabled integration tests; the explicit external-network case remained skipped. |
+| Migration and documentation | Root README documents the `AdditionalFiles` item and build diagnostics; `docs/conformance/express-generator-host.md` records the current marker, determinism, diagnostics, structural-composition, and package boundaries. |
+| Dependent-item unlock | `ExpressIncrementalGenerator` now provides the stable AdditionalFiles, closed compilation, diagnostics, structural emission, hint naming, and packed-analyzer host used by SBRT-010–017. `dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore` passed with 0 warnings and 0 errors; analyzer-format verification passed; `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` reported `Work-item delivery boundary: valid`. |
 
 ## ⚠️ Risks and open questions
 

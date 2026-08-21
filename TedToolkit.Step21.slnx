@@ -23,7 +23,8 @@
   </Folder>
   <Folder Name="/src/grammar/">
     <File Path="src/grammar/Express.g4" />
-    <File Path="src/grammar/STEP.g4" />
+    <File Path="src/grammar/STEPLexer.g4" />
+    <File Path="src/grammar/STEPParser.g4" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TedToolkit.Step21.IntegrationTests/TedToolkit.Step21.IntegrationTests.csproj" />

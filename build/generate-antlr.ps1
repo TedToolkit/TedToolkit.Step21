@@ -80,7 +80,9 @@ try {
                 throw "ANTLR generated no public top-level type in '$($generatedFile.FullName)'."
             }
 
-            $content = $rewrittenContent -replace '[\t ]+(?=\r?\n|$)', ''
+            $content = $rewrittenContent `
+                -replace 'Console\.Out, Console\.Error', 'TextWriter.Null, TextWriter.Null' `
+                -replace '[\t ]+(?=\r?\n|$)', ''
         }
 
         $content = $content -replace "\r\n?", "`n"

@@ -128,7 +128,7 @@ internal partial class STEPParser : Parser {
 		}
 	}
 
-		public STEPParser(ITokenStream input) : this(input, Console.Out, Console.Error) { }
+		public STEPParser(ITokenStream input) : this(input, TextWriter.Null, TextWriter.Null) { }
 
 		public STEPParser(ITokenStream input, TextWriter output, TextWriter errorOutput)
 		: base(input, output, errorOutput)

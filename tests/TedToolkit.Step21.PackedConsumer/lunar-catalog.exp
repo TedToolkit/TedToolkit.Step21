@@ -1,0 +1,5 @@
+SCHEMA lunar_catalog;
+ENTITY crater;
+  diameter : REAL;
+END_ENTITY;
+END_SCHEMA;

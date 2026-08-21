@@ -230,7 +230,7 @@ internal partial class ExpressParser : Parser {
 		}
 	}
 
-		public ExpressParser(ITokenStream input) : this(input, Console.Out, Console.Error) { }
+		public ExpressParser(ITokenStream input) : this(input, TextWriter.Null, TextWriter.Null) { }
 
 		public ExpressParser(ITokenStream input, TextWriter output, TextWriter errorOutput)
 		: base(input, output, errorOutput)

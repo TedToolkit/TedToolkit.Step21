@@ -66,6 +66,8 @@ internal sealed class ArtifactsTests
                     .Because($"Generated top-level type in '{path}' must not be public.");
                 await Assert.That(Regex.IsMatch(source, "(?m)^internal (?=(?:partial class|interface)\\s)")).IsTrue()
                     .Because($"Generated top-level type in '{path}' must be internal.");
+                await Assert.That(source).DoesNotContain("Console.Out, Console.Error")
+                    .Because($"Generated parser defaults in '{path}' must be analyzer-host safe.");
             }
         }
         finally
