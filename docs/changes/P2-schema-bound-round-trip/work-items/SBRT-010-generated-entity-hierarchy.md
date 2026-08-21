@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -86,13 +86,15 @@ No schema types are generated today. Runtime `Entity` and schema binding inputs 
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and generator/runtime/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-03, BC-04, BC-06A, and BC-22 |
-| Migration and documentation | Generated API shape and mutable-validity guidance |
-| Dependent-item unlock | Entity model contract for SBRT-013–015 |
+| Delivery-boundary check | Starting SHA `c68899e`. Added structural entity projection/emission, atomic generation planning and diagnostics, generator-driver compile/runtime fixtures, analyzer release-ledger entries, and generated-entity conformance guidance. `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` returned `Work-item delivery boundary: valid`. |
+| Behavior-case proof | Red/Green generator tests cover abstract/sealed single and diamond inheritance, class-only `Entity` derivation, interface assignability, inherited storage once, renamed redeclaration aliasing, cross-schema qualification, source/type/member/keyword naming boundaries, invalid-dependency propagation, bounded unsupported narrowing, mandatory/OPTIONAL consumer diagnostics, unchecked mutation, reference equality, live direct entity occurrences, and cyclic bounded `ToString()`. Focused `EntityHierarchyTests` pass 10/10 and `GeneratorHostTests` pass 3/3. |
+| Migration and documentation | `README.md`, `docs/conformance/express-generator-host.md`, and `docs/conformance/generated-entity-hierarchy.md` document namespace/type naming, constructors, mutability/nullability, staging boundaries, direct-reference scope, diagnostics, and non-serialization `ToString()`. |
+| Regression and deployment proof | Release solution build passes with 0 warnings/errors; fast TUnit passes 122/122; integration passes 3/3 enabled tests with only the explicit opt-in external-network corpus case skipped; limited analyzer/test formatting verification reports no changes. |
+| Dependent-item unlock | Public generated entity interfaces/classes and stable mutable storage now supply the entity contract required by SBRT-013–015; full schema values and aggregates remain owned by SBRT-011/012. |
+| Actual effort and variance | Completed in one agent implementation session; the human person-month estimate is not directly comparable, and no scope-expanding variance was introduced. |
 
 ## ⚠️ Risks and open questions
 
 | Item | Impact | Owner or next decision |
 | --- | --- | --- |
-| Redeclaration flattening duplicates or hides storage | Incorrect mapping | Fail completion until normative inheritance fixtures prove the projection |
+| Redeclaration flattening duplicates or hides storage | Resolved | Renamed direct-entity redeclaration tests prove one physical slot with inherited and renamed interface aliases; unsafe target-type narrowing is withheld with `STEP21EXP005`. |

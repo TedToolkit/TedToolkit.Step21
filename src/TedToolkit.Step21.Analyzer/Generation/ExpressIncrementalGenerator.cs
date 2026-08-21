@@ -40,7 +40,16 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(expressInputs, static (productionContext, result) =>
         {
             ExpressGeneratorDiagnostics.Report(productionContext, result);
-            foreach (var schema in result.Compilation.Schemas)
+            var plan = ExpressEntityGenerationPlan.Create(result.Compilation);
+            ExpressGeneratorDiagnostics.ReportNameCollisions(productionContext, result, plan.Collisions);
+            ExpressGeneratorDiagnostics.ReportGenerationFailures(productionContext, result, plan.Failures);
+            foreach (var projection in plan.Projections
+                         .Where(projection => !plan.InvalidSchemas.Contains(projection.Schema)))
+            {
+                ExpressEntityEmitter.Emit(productionContext, projection);
+            }
+
+            foreach (var schema in result.Compilation.Schemas.Where(schema => !plan.InvalidSchemas.Contains(schema)))
             {
                 ExpressSchemaMarkerEmitter.Emit(productionContext, schema);
             }

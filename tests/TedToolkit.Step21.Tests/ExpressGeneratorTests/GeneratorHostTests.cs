@@ -20,7 +20,7 @@ namespace TedToolkit.Step21.Tests.ExpressGeneratorTests;
 /// </summary>
 public sealed class GeneratorHostTests
 {
-    private const string ValidSchema = """
+    private const string VALID_SCHEMA = """
         SCHEMA lunar_catalog;
         ENTITY crater;
           diameter : REAL;
@@ -34,17 +34,18 @@ public sealed class GeneratorHostTests
     [Test]
     public async Task Should_generate_compiled_marker_for_arbitrary_schema()
     {
-        var result = Run(("models/lunar.exp", ValidSchema));
+        var result = Run(("models/lunar.exp", VALID_SCHEMA));
 
         using (Assert.Multiple())
         {
             await Assert.That(result.Diagnostics.Where(item => item.Severity == DiagnosticSeverity.Error)).IsEmpty();
             await Assert.That(result.GeneratedSources.Select(source => source.HintName))
-                .IsEquivalentTo(["ExpressSchema_LUNAR_CATALOG.g.cs"])
+                .IsEquivalentTo(["ExpressEntity_LUNAR_CATALOG_CRATER.g.cs", "ExpressSchema_LUNAR_CATALOG.g.cs"])
                 .Because(string.Join(", ", result.GeneratedSources.Select(source => source.HintName)));
-            await Assert.That(result.GeneratedSources.Single().SourceText.ToString())
+            var marker = result.GeneratedSources.Single(source => source.HintName == "ExpressSchema_LUNAR_CATALOG.g.cs");
+            await Assert.That(marker.SourceText.ToString())
                 .Contains("internal sealed class ExpressSchema_lunar_catalog");
-            await Assert.That(result.GeneratedSources.Single().SourceText.ToString())
+            await Assert.That(marker.SourceText.ToString())
                 .Contains("const string SchemaName = \"lunar_catalog\"");
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(item => item.Severity == DiagnosticSeverity.Error)).IsEmpty();
@@ -59,11 +60,11 @@ public sealed class GeneratorHostTests
     {
         const string secondSchema = "SCHEMA orbit_data; END_SCHEMA;";
         var first = Run(
-            ("C:/agent-a/input/lunar.exp", ValidSchema),
+            ("C:/agent-a/input/lunar.exp", VALID_SCHEMA),
             ("C:/agent-a/input/orbit.exp", secondSchema));
         var second = Run(
             ("D:/agent-b/schemas/orbit.exp", secondSchema),
-            ("D:/agent-b/schemas/lunar.exp", ValidSchema));
+            ("D:/agent-b/schemas/lunar.exp", VALID_SCHEMA));
 
         await Assert.That(Snapshot(first)).IsEqualTo(Snapshot(second));
     }
@@ -85,17 +86,25 @@ public sealed class GeneratorHostTests
         }
     }
 
-    private static GeneratorResult Run(params (string Path, string Text)[] sources)
+    internal static GeneratorResult Run(params (string Path, string Text)[] sources)
     {
-        var syntaxTree = CSharpSyntaxTree.ParseText("internal sealed class Consumer { }");
+        return Run("internal sealed class Consumer { }", sources);
+    }
+
+    internal static GeneratorResult Run(string consumerSource, params (string Path, string Text)[] sources)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(consumerSource);
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path));
+            .Select(path => MetadataReference.CreateFromFile(path))
+            .Append(MetadataReference.CreateFromFile(typeof(Entity).Assembly.Location));
         var compilation = CSharpCompilation.Create(
             "Consumer",
             [syntaxTree],
             references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable));
         var additionalTexts = sources
             .Select(source => (AdditionalText)new InMemoryAdditionalText(source.Path, source.Text))
             .ToImmutableArray();
@@ -133,7 +142,7 @@ public sealed class GeneratorHostTests
         }
     }
 
-    private sealed record GeneratorResult(
+    internal sealed record GeneratorResult(
         ImmutableArray<GeneratedSourceResult> GeneratedSources,
         ImmutableArray<Diagnostic> Diagnostics,
         Compilation OutputCompilation);

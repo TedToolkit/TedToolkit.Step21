@@ -41,6 +41,22 @@ internal static class ExpressGeneratorDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor _generatedNameCollision = new(
+        "STEP21EXP004",
+        "Generated C# name collision",
+        "EXPRESS name '{0}' maps to generated C# name '{1}', which is not unique in schema '{2}'",
+        "TedToolkit.Step21.Express",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor _unsupportedEntityProjection = new(
+        "STEP21EXP005",
+        "Unsupported generated entity projection",
+        "{0}",
+        "TedToolkit.Step21.Express",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <summary>
     /// Reports every input, syntax, and binding failure in deterministic order.
     /// </summary>
@@ -71,6 +87,55 @@ internal static class ExpressGeneratorDiagnostics
                 CreateLocation(result.Inputs, diagnostic.SourceLocation),
                 diagnostic.Code,
                 diagnostic.Message));
+        }
+    }
+
+    /// <summary>
+    /// Reports generated C# name collisions in deterministic source order.
+    /// </summary>
+    /// <param name="context">The source-production context.</param>
+    /// <param name="result">The complete generator compilation.</param>
+    /// <param name="collisions">The detected name collisions.</param>
+    internal static void ReportNameCollisions(
+        in SourceProductionContext context,
+        ExpressGeneratorCompilation result,
+        IEnumerable<ExpressEntityGenerationCollision> collisions)
+    {
+        foreach (var collision in collisions
+                     .OrderBy(item => item.Location.FilePath, StringComparer.Ordinal)
+                     .ThenBy(item => item.Location.Line)
+                     .ThenBy(item => item.Location.Column)
+                     .ThenBy(item => item.GeneratedName, StringComparer.Ordinal))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                _generatedNameCollision,
+                CreateLocation(result.Inputs, collision.Location),
+                collision.SourceName,
+                collision.GeneratedName,
+                collision.Schema.Name));
+        }
+    }
+
+    /// <summary>
+    /// Reports entity shapes that cannot be represented safely by the generated C# contract.
+    /// </summary>
+    /// <param name="context">The source-production context.</param>
+    /// <param name="result">The complete generator compilation.</param>
+    /// <param name="failures">The detected generation failures.</param>
+    internal static void ReportGenerationFailures(
+        in SourceProductionContext context,
+        ExpressGeneratorCompilation result,
+        IEnumerable<ExpressEntityGenerationFailure> failures)
+    {
+        foreach (var failure in failures
+                     .OrderBy(item => item.Location.FilePath, StringComparer.Ordinal)
+                     .ThenBy(item => item.Location.Line)
+                     .ThenBy(item => item.Location.Column))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                _unsupportedEntityProjection,
+                CreateLocation(result.Inputs, failure.Location),
+                failure.Message));
         }
     }
 

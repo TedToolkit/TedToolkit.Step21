@@ -17,7 +17,7 @@ The Part 21 parser's `exchangeFile` entry rule recognizes the complete ISO 10303
 
 The Analyzer's `syntax` entry rule recognizes ISO 10303-11:2004 Edition 2 EXPRESS and transforms complete input into internal immutable, source-located IR without executing declarations. Supplied schema texts then bind as one deterministic closed universe without external lookup. See the [EXPRESS grammar boundary](docs/conformance/express-edition2-grammar.md) and [closed-set binding boundary](docs/conformance/express-closed-set-binding.md).
 
-The packaged incremental generator consumes every `.exp` MSBuild `AdditionalFiles` item without a schema-name whitelist. Each independently valid schema currently emits a deterministic internal compiled marker; later generator work items extend that structural output with schema-bound runtime types. See the [generator host boundary](docs/conformance/express-generator-host.md).
+The packaged incremental generator consumes every `.exp` MSBuild `AdditionalFiles` item without a schema-name whitelist. Each valid EXPRESS entity generates a public interface and mutable reference-identity class under `TedToolkit.Step21.Generated.<SchemaPascalCase>`; classes derive only from `Entity`, while interfaces preserve single or multiple EXPRESS inheritance. See the [generated entity boundary](docs/conformance/generated-entity-hierarchy.md) and [generator host boundary](docs/conformance/express-generator-host.md).
 
 ## Quick start
 
@@ -40,7 +40,7 @@ To supply an EXPRESS schema from a consuming project, reference the package and 
 </ItemGroup>
 ```
 
-Invalid EXPRESS syntax or binding is reported as a build diagnostic at the originating additional file. Generated sources are withheld for invalid schemas.
+Invalid EXPRESS syntax, binding, or generated C# name uniqueness is reported as a build diagnostic at the originating additional file. Generated sources are withheld atomically for invalid schemas.
 
 ## Components
 
