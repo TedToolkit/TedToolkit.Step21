@@ -5,7 +5,7 @@
 - Scope and system boundary: the long-lived boundary among ISO 10303-21 parsing/writing, EXPRESS schema compilation, generated .NET types, and schema-bound model navigation
 - Applicable product intent: [`docs/product/README.md`](../product/README.md), approved at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`
 - Governing principles: [`docs/principles/architecture.md`](../principles/architecture.md) and [`docs/principles/engineering.md`](../principles/engineering.md), active; dependent delivery records pin the applicable committed revision
-- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md), superseded by ADR-0004; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), accepted
+- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), superseded; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md) and [`ADR-0005`](../adr/ADR-0005-explicit-section-graph-registration.md), accepted
 - Last approved revision: approved by the repository maintainer on 2026-08-21; dependent delivery records pin the committed revision
 
 ## 📝 Clarification and decision log
@@ -15,7 +15,7 @@
 | AD-01 | Whether the core follows ISO 10303-21 or a domain format | Follow ISO 10303-21 | The maintainer confirmed the repository-wide ISO scope on 2026-08-21 | All boundaries and terminology | Resolved |
 | AD-02 | Which serialization contract generated objects require | ISO 10303-21 writing only | The maintainer excluded JSON/XML and their extension dependencies on 2026-08-21 | Runtime model, writer, non-goals | Resolved |
 | AD-03 | How generated C# is composed | Use TedToolkit.RoslynHelper structurally | The maintainer mandated TedToolkit.RoslynHelper on 2026-08-21; NuGet availability through version 2026.7.15 was verified the same day | Generator boundary and packaging | Resolved |
-| AD-04 | How generated declarations represent EXPRESS entities and inheritance | Generate one interface and one mutable reference-identity class for every EXPRESS entity; express all schema inheritance through interfaces; generated classes inherit only runtime `Entity` | The maintainer originally selected records, then superseded that shape with mutable classes through ADR-0004 on 2026-08-21 | Generated model shape | Resolved |
+| AD-04 | How generated declarations represent EXPRESS entities and inheritance | Generate one interface and one mutable reference-identity class for every EXPRESS entity; express all schema inheritance through interfaces; generated classes inherit only runtime `Entity` | The maintainer originally selected records, then retained mutable classes through ADR-0005 on 2026-08-21 | Generated model shape | Resolved |
 | AD-05 | Whether generated entity properties expose references or entities | Expose the generated entity interface directly and bind it in a second phase | The maintainer rejected `EntityRef<TEntity>` on 2026-08-21 and selected ordinary C# references plus property attributes when mapping metadata is useful | Reference and hydration boundary | Resolved |
 | AD-06 | Whether incomplete hydration is visible to ordinary consumers | Keep incomplete state strictly parser-internal and publish only fully bound models | The maintainer required on 2026-08-21 that users never observe a temporarily incomplete entity | Construction and public API | Resolved |
 | AD-07 | Which authority governs public concepts and C# representation choices | ISO 10303-21 and the selected EXPRESS schema define the semantics; C# idioms choose only among equivalent representations | The maintainer established the ISO-first, C#-second rule and prohibited library-invented domain concepts on 2026-08-21 | Terminology, generated API, runtime infrastructure, and review gates | Resolved |
@@ -24,6 +24,7 @@
 | AD-10 | Whether the exchange-structure root is generic | Use the non-generic standard concept `ExchangeStructure`; schema binding belongs to sections, populations, descriptors, and entity types | The maintainer accepted this correction on 2026-08-21 | Runtime root model and writing | Resolved |
 | AD-11 | Whether the Part 21 grammar targets a subset or the complete Edition 3 syntax | Target the complete ISO 10303-21 Edition 3 clear-text grammar while delivering advanced runtime semantics in declared stages | The maintainer approved this boundary on 2026-08-21 | Grammar baseline, raw model, diagnostics, testing, and estimates | Resolved |
 | AD-12 | Whether the schema-free parse graph is a public exchange-structure model | No; use internal immutable `ExchangeStructureSyntax` solely for parse/bind staging and publish only complete validated mutable `ExchangeStructure` values | The maintainer explicitly prohibited consumer access to the syntax representation on 2026-08-21 | Parser/binder boundary, public API, atomicity, and diagnostics | Resolved |
+| AD-13 | How graph registration selects a destination data section | Require an owned `DataSection` on every public Add operation and provide no section-omitting overload | The maintainer required omission of the section to be a compile-time error and approved the resulting minimal strong API on 2026-08-21 | Model ownership, registration, multi-section editing, and public API | Resolved |
 
 ## Current architecture
 
@@ -132,6 +133,7 @@ Two-phase assignment requires generated private hydration machinery or backing f
 
 - Parsed entities do not expose their entity instance names; the exchange structure retains that association.
 - New entities may be registered with an explicit valid name or through a model allocator after construction.
+- Every public graph-registration operation requires an owned `DataSection`; no overload infers a section or changes behavior from the current number of sections. A foreign section is rejected before mutation, new graph members join the selected section, and an already registered entity retains its section membership.
 - Replacement, removal, and graph mutation do not automatically run schema validation; later explicit/read/write validation reports dangling, foreign, or incompatible references.
 - Model validation detects duplicate names, unresolved references, wrong target types, foreign-model object references, invalid optionality, aggregate constraint violations, schema mismatch, and unsupported mapping cases.
 
@@ -213,6 +215,7 @@ Schema names are converted to `DataType` objects; source strings are not concate
 - Keep `ToString()` non-recursive and diagnostic-only; route ISO 10303-21 text through explicit writer operations with diagnostics.
 - Represent the document root as non-generic `ExchangeStructure`; do not assume one schema through a generic root type.
 - Bind and validate every data section under its ISO governing `SchemaName`, including valid multi-schema populations and cross-schema references by final delivery.
+- Require an owned `DataSection` on every public graph-registration operation; do not expose a section-omitting Add overload or infer a default section.
 - Generate direct validation and reference enumeration without runtime schema reflection, dynamic code, or assembly scanning; prove runtime/generated paths through Native AOT publication and execution.
 - Retain ANTLR visitors, suppress listeners, and use the visitors as the sole parse-tree transformation boundary.
 - Generate source structurally with TedToolkit.RoslynHelper 2026.7.15 or a separately reviewed compatible version, and package its analyzer-time dependency without leaking it to generated code.
@@ -223,10 +226,10 @@ Schema names are converted to `DataType` objects; source strings are not concate
 
 ## Decision links and exceptions
 
-- ADR-0001 is superseded by ADR-0004.
+- ADR-0001 is superseded by ADR-0004, which is superseded by ADR-0005.
 - ADR-0002 records the maintainer-mandated TedToolkit.RoslynHelper source-composition direction.
 - ADR-0003 selects the AOT-ready minimal validation contract and direct generated execution.
-- ADR-0004 selects mutable reference-identity entities, exchange-structure-owned occurrence names, reflection-free `DirectReferences`, and boundary validation.
+- ADR-0005 retains mutable reference-identity entities, exchange-structure-owned occurrence names, reflection-free `DirectReferences`, and boundary validation while requiring explicit data-section selection for graph registration.
 - No principle exceptions are proposed.
 
 ## Review triggers

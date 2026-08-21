@@ -1,13 +1,13 @@
 # ADR-0004: Use mutable generated entities with boundary validation
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-21
 - Decision owner: repository maintainer
 - Decision scope: generated EXPRESS entity shape, identity and relationship ownership, mutation validity, graph registration, hydration, and validation timing
 - Applicable product intent: [`../product/README.md`](../product/README.md)
 - Applicable principles: [`AP-001`, `AP-002`, and `AP-003`](../principles/architecture.md); [`EP-002` and `EP-003`](../principles/engineering.md)
 - Supersedes: ADR-0001
-- Superseded by: None
+- Superseded by: ADR-0005
 
 ## 📝 Clarification and decision log
 
