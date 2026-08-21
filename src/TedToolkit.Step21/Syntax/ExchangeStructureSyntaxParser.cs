@@ -1,0 +1,73 @@
+using Antlr4.Runtime;
+
+using TedToolkit.Step21.Grammar;
+
+namespace TedToolkit.Step21.Syntax;
+
+// Owns the atomic parse boundary: diagnostics are aggregated before any syntax graph is published.
+internal static class ExchangeStructureSyntaxParser
+{
+    internal static ExchangeStructureSyntax Parse(string source, string filePath)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(filePath);
+
+        var diagnostics = new List<Step21Diagnostic>();
+        var input = new AntlrInputStream(source);
+        var lexer = new STEPLexer(input);
+        lexer.RemoveErrorListeners();
+        lexer.AddErrorListener(new Part21SyntaxErrorListener<int>(filePath, "P21-SYNTAX-LEXER", diagnostics));
+
+        var tokens = new CommonTokenStream(lexer);
+        var parser = new STEPParser(tokens);
+        parser.RemoveErrorListeners();
+        parser.AddErrorListener(new Part21SyntaxErrorListener<IToken>(filePath, "P21-SYNTAX-PARSER", diagnostics));
+        var tree = parser.exchangeFile();
+
+        if (diagnostics.Count > 0)
+        {
+            throw new ExchangeStructureSyntaxException(
+                diagnostics
+                    .OrderBy(value => value.SourceLocation?.Line)
+                    .ThenBy(value => value.SourceLocation?.Column)
+                    .ThenBy(value => value.Code, StringComparer.Ordinal));
+        }
+
+        return new ExchangeStructureSyntaxVisitor(filePath).Create(tree);
+    }
+}
+
+// Keeps lexer and parser diagnostics distinguishable while sharing deterministic source ordering.
+internal sealed class Part21SyntaxErrorListener<TSymbol> : IAntlrErrorListener<TSymbol>
+{
+    private readonly string _filePath;
+    private readonly string _code;
+    private readonly ICollection<Step21Diagnostic> _diagnostics;
+
+    internal Part21SyntaxErrorListener(
+        string filePath,
+        string code,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        _filePath = filePath;
+        _code = code;
+        _diagnostics = diagnostics;
+    }
+
+    public void SyntaxError(
+        TextWriter output,
+        IRecognizer recognizer,
+        TSymbol offendingSymbol,
+        int line,
+        int charPositionInLine,
+        string msg,
+        RecognitionException e)
+    {
+        _diagnostics.Add(
+            new Step21Diagnostic(
+                _code,
+                Step21DiagnosticSeverity.Error,
+                msg,
+                new SourceLocation(_filePath, Math.Max(1, line), Math.Max(1, charPositionInLine + 1))));
+    }
+}

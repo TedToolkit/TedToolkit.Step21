@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Advanced anchor fixture'),'4;3');
+FILE_NAME('advanced-anchor.p21','2026-08-21T18:40:00+08:00',('TedToolkit'),('TedToolkit'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+ANCHOR;
+<root>=#1;
+ENDSEC;
+END-ISO-10303-21;

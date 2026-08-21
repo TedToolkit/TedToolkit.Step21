@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -82,10 +82,11 @@ Current tests invoke generated parser rules directly; no semantic visitor or int
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and actual visitor/syntax/test artifacts |
-| Behavior-case proof | BC-19 API audit and BC-24 fixture results |
-| Migration and documentation | Internal architecture comments or not-applicable public migration rationale |
-| Dependent-item unlock | Complete source-located syntax input for SBRT-018 |
+| Delivery-boundary check | Started from `7a45566`. Added only the internal `Syntax/` graph, parser/visitor/error collector, focused tests, and three advanced-section fixtures; no public raw model, schema binding, validation, or writer behavior was introduced. The existing split `STEPLexer.g4`/`STEPParser.g4` remains necessary because ANTLR lexer modes used for URI and signature tokenization are legal only in lexer grammars. |
+| Behavior-case proof | BC-19 passed both exported-type inspection and generated runtime XML inspection: no `TedToolkit.Step21.Syntax` type/member is public or documented in the published XML artifact. BC-24 passed one fixture for each ANCHOR, REFERENCE, and SIGNATURE family plus an aggregate-order case; parsing preserves each section and later capability checking throws exact ordered `P21-CAP-*` diagnostics at source locations. Focused syntax tests passed 13/13. |
+| Migration and documentation | No public migration applies because the handoff is internal. Focused ordinary source comments record the atomic parser boundary, physical-syntax-only responsibility, half-open span convention, and generated-tree removal boundary without publishing internal XML documentation. |
+| Dependent-item unlock | The immutable graph now preserves every recognized section, header/entity record, parameter/value kind, zero/multiple cardinality, normalized ignored controls, and one-based source locations for SBRT-018. Lexer/parser failures aggregate deterministic `ExchangeStructureSyntaxException` evidence and publish no graph. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors; fast TUnit passed 52/52; integration TUnit passed 2/2 enabled tests with the opt-in network corpus test skipped; runtime `IsAotCompatible`, trim, and AOT analyzers passed with 0 warnings/errors. Limited whitespace/style/analyzer formatting completed for all touched C# files. |
 
 ## ⚠️ Risks and open questions
 

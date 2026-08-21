@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('Advanced reference fixture'),'4;3');
+FILE_NAME('advanced-reference.p21','2026-08-21T18:40:00+08:00',('TedToolkit'),('TedToolkit'),'TedToolkit','Step21','');
+FILE_SCHEMA(('EXAMPLE_SCHEMA'));
+ENDSEC;
+REFERENCE;
+#1=<https://example.com/external.p21#root>;
+ENDSEC;
+END-ISO-10303-21;
