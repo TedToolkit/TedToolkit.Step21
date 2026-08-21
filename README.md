@@ -15,7 +15,7 @@ STEP application protocols and IFC files are useful conformance fixtures, but th
 
 The Part 21 parser's `exchangeFile` entry rule recognizes the complete ISO 10303-21:2016 Edition 3 clear-text section and token syntax, enforces the normative section order, and consumes EOF. This recognition does not yet provide operational anchor/reference resolution, signature verification, archive handling, ECMAScript execution, or schema-bound materialization. See the [production-to-clause traceability](docs/conformance/part21-edition3-grammar.md) for the exact syntax boundary and fixtures.
 
-The Analyzer's `syntax` entry rule recognizes ISO 10303-11:2004 Edition 2 EXPRESS and transforms complete input into internal immutable, source-located IR without executing declarations. See the [EXPRESS grammar boundary](docs/conformance/express-edition2-grammar.md) for production traceability and the syntax/name-binding boundary.
+The Analyzer's `syntax` entry rule recognizes ISO 10303-11:2004 Edition 2 EXPRESS and transforms complete input into internal immutable, source-located IR without executing declarations. Supplied schema texts then bind as one deterministic closed universe without external lookup. See the [EXPRESS grammar boundary](docs/conformance/express-edition2-grammar.md) and [closed-set binding boundary](docs/conformance/express-closed-set-binding.md).
 
 ## Quick start
 

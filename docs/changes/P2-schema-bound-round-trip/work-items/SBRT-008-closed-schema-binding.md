@@ -2,7 +2,9 @@
 
 ## 📌 Status
 
-Approved
+Completed
+
+- Implemented from starting SHA `dc0807f` on 2026-08-21. A separately verified grammar correction discovered during binding review was committed as `9dddbc1`; SBRT-008 itself adds only Analyzer-internal binding IR/compiler behavior, focused tests, and closed-set documentation.
 
 ## 🚦 Delivery priority
 
@@ -82,12 +84,13 @@ The Analyzer contains only the generated parser. No AdditionalFiles pipeline, cl
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Recorded result |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and Analyzer/test artifacts |
-| Behavior-case proof | Commands/results for BC-01A, BC-01B, and BC-02 |
-| Migration and documentation | AdditionalFiles/closed-set behavior documented |
-| Dependent-item unlock | Deterministic bound schema set for SBRT-009, SBRT-010–013, and SBRT-016 |
+| Delivery-boundary check | Starting SHA `dc0807f`. Added only Analyzer-internal closed-set source/compilation, immutable symbol/type/name/import/schema IR, deterministic binder diagnostics, focused TUnit cases, and the closed-set conformance document/README link. No public runtime API, generator host, source emission, external acquisition, interpreter, reflection, dynamic code, or dependency was added. The work-item validator reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-01A passed reordered explicit/full USE and REFERENCE imports, aliases, case-insensitive lookup, USE re-export/REFERENCE non-re-export, circular interfaces, inheritance, inverse/unique/qualified attributes, all declared type families, qualified expression names, lexical/query/repeat scopes, and nested algorithm declarations. BC-01B passed duplicate schemas/declarations, conflicting names, absent schemas/resources, wrong declaration kinds, invalid top-level/nested type and inheritance cycles, impossible logical paths, transitive invalid-closure suppression, and independent valid-schema publication. BC-02 passed distinct syntax/binding diagnostics plus unresolved name/type aggregation. Fast TUnit passed 109/109. |
+| Migration and documentation | `docs/conformance/express-closed-set-binding.md` documents supplied-text-only compilation, case-insensitive identity, interface/re-export rules, legal cyclic imports, deterministic failure policy, immutable bound IR, and the execution boundary. No consumer migration applies because all new contracts are Analyzer-internal. |
+| Dependent-item unlock | Valid schemas now expose deterministic imports, declarations, inheritance, attributes, complete declared types, and source-ordered resolved name targets for SBRT-009 through SBRT-013 and SBRT-016. Invalid dependency components publish no bound schema. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors; fast TUnit passed 109/109; integration TUnit passed 2/2 enabled tests with the explicit opt-in network corpus test skipped; pinned generated-artifact regeneration remained byte-stable. Production binding code contains no file/directory/environment/network/reflection/dynamic-code access and Analyzer dependencies remain unchanged. Strict read-only review found no blocking or advisory findings. |
 
 ## ⚠️ Risks and open questions
 
