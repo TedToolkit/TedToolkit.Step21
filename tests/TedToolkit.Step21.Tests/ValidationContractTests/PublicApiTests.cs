@@ -8,7 +8,7 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class PublicApiTests
 {
     /// <summary>
-    /// Verifies that the runtime exposes exactly the approved SBRT-004 evidence contract.
+    /// Verifies that the runtime exposes exactly the public contract approved through SBRT-005.
     /// </summary>
     [Test]
     public async Task Should_match_approved_surface_when_validation_contract_is_inspected()
@@ -18,7 +18,7 @@ internal sealed class PublicApiTests
             AppContext.BaseDirectory,
             "TestData",
             "PublicApi",
-            "SBRT-004.approved.txt");
+            "SBRT-005.approved.txt");
         var expected = NormalizeLineEndings(await File.ReadAllTextAsync(expectedPath));
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));
 
@@ -55,6 +55,14 @@ internal sealed class PublicApiTests
             .Append(" : ")
             .AppendLine(FormatType(type.BaseType!));
 
+        var inheritedInterfaces = type.BaseType?.GetInterfaces() ?? [];
+        foreach (var contract in type.GetInterfaces()
+                     .Except(inheritedInterfaces)
+                     .OrderBy(contract => FormatType(contract), StringComparer.Ordinal))
+        {
+            builder.Append("  interface ").AppendLine(FormatType(contract));
+        }
+
         foreach (var constructor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
                      .OrderBy(FormatConstructor, StringComparer.Ordinal))
         {
@@ -68,8 +76,31 @@ internal sealed class PublicApiTests
                 .Append(FormatType(property.PropertyType, new NullabilityInfoContext().Create(property).ReadState))
                 .Append(' ')
                 .Append(property.Name)
+                .Append(FormatIndexer(property))
                 .AppendLine(property.SetMethod is null ? " { get; }" : " { get; set; }");
         }
+
+        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                     .Where(method => !method.IsSpecialName)
+                     .OrderBy(method => method.Name, StringComparer.Ordinal)
+                     .ThenBy(FormatMethod, StringComparer.Ordinal))
+        {
+            builder.Append("  method ").AppendLine(FormatMethod(method));
+        }
+    }
+
+    private static string FormatIndexer(PropertyInfo property)
+    {
+        var indexes = property.GetIndexParameters();
+        return indexes.Length == 0
+            ? string.Empty
+            : $"[{string.Join(", ", indexes.Select(FormatParameter))}]";
+    }
+
+    private static string FormatMethod(MethodInfo method)
+    {
+        var nullability = new NullabilityInfoContext().Create(method.ReturnParameter).ReadState;
+        return $"{FormatType(method.ReturnType, nullability)} {method.Name}({string.Join(", ", method.GetParameters().Select(FormatParameter))})";
     }
 
     private static string FormatConstructor(ConstructorInfo constructor) =>
@@ -81,7 +112,11 @@ internal sealed class PublicApiTests
             ? $" = {FormatDefaultValue(parameter.DefaultValue)}"
             : string.Empty;
         var nullability = new NullabilityInfoContext().Create(parameter).ReadState;
-        return $"{FormatType(parameter.ParameterType, nullability)} {parameter.Name}{suffix}";
+        var modifier = parameter.IsOut ? "out " : parameter.ParameterType.IsByRef ? "ref " : string.Empty;
+        var parameterType = parameter.ParameterType.IsByRef
+            ? parameter.ParameterType.GetElementType()!
+            : parameter.ParameterType;
+        return $"{modifier}{FormatType(parameterType, nullability)} {parameter.Name}{suffix}";
     }
 
     private static string FormatDefaultValue(object? value) => value switch
@@ -94,8 +129,15 @@ internal sealed class PublicApiTests
     private static string FormatType(Type type, NullabilityState nullability = NullabilityState.Unknown)
     {
         var nullableSuffix = nullability == NullabilityState.Nullable ? "?" : string.Empty;
+        if (type.IsGenericParameter)
+            return $"{type.Name}{nullableSuffix}";
+        if (type.IsArray)
+            return $"{FormatType(type.GetElementType()!)}[]{nullableSuffix}";
         if (!type.IsGenericType)
             return $"{type.FullName}{nullableSuffix}";
+
+        if (type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return $"{FormatType(type.GetGenericArguments()[0])}?";
 
         var genericName = type.GetGenericTypeDefinition().FullName!;
         genericName = genericName[..genericName.IndexOf('`')];

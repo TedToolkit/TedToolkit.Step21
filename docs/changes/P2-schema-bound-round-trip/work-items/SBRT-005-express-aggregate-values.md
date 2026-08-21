@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -80,10 +80,11 @@ No aggregate runtime exists. The implementation must add only EXPRESS distinctio
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and runtime/test/docs artifacts |
-| Behavior-case proof | BC-05A focused command/results for each category |
-| Migration and documentation | XML/API guidance or explicit migration not applicable |
-| Dependent-item unlock | Stable aggregate contracts for SBRT-012 and SBRT-015 |
+| Delivery-boundary check | Started from `377b83e`. Added only the four schema-neutral runtime aggregate types, one internal validation helper, focused aggregate tests, and strengthened public API/XML audit fixtures. Generated schema mapping and element-rule execution remain outside this item. |
+| Behavior-case proof | BC-05A focused TUnit passed 11/11. LIST retains order/indexed edits and optional UNIQUE candidates; BAG retains multiplicity without order semantics; SET retains duplicate candidates and validates with the supplied equality comparer; ARRAY retains its fixed declared index domain, assigned/unset state, OPTIONAL slots, and optional UNIQUE candidates. Bounds, required-slot, and uniqueness failures are returned together in deterministic order without changing any candidate. |
+| Migration and documentation | No migration applies because no prior aggregate runtime existed. The `SBRT-005.approved.txt` snapshot locks constructors, interfaces, properties, indexers, nullability, and methods. Runtime XML documents mutation timing, cardinality bounds, order, multiplicity, uniqueness, optional slots, and explicit validation; its audit now covers indexers and every declared public method. |
+| Dependent-item unlock | `ExpressArray<T>`, `ExpressList<T>`, `ExpressBag<T>`, and `ExpressSet<T>` provide stable mutable category contracts plus `Validate(path)` results for SBRT-012 projection and SBRT-015 structural validation. No new public helper type was introduced. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors; fast TUnit passed 63/63; integration TUnit passed 2/2 enabled tests with the opt-in network corpus test skipped; runtime `IsAotCompatible`, trim, and AOT analyzers passed with 0 warnings/errors. Limited whitespace/style/analyzer verification passed for every touched C# file. |
 
 ## ⚠️ Risks and open questions
 

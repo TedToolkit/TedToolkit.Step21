@@ -43,19 +43,38 @@ internal sealed class XmlDocumentationTests
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             {
-                yield return $"P:{type.FullName}.{property.Name}";
+                var indexes = property.GetIndexParameters();
+                var suffix = indexes.Length == 0
+                    ? string.Empty
+                    : $"({string.Join(",", indexes.Select(parameter => FormatXmlType(parameter.ParameterType)))})";
+                yield return $"P:{type.FullName}.{property.Name}{suffix}";
             }
 
             foreach (var constructor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
             {
                 var parameters = string.Join(",", constructor.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
-                yield return $"M:{type.FullName}.#ctor({parameters})";
+                var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";
+                yield return $"M:{type.FullName}.#ctor{suffix}";
+            }
+
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                         .Where(method => !method.IsSpecialName))
+            {
+                var parameters = string.Join(",", method.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
+                var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";
+                yield return $"M:{type.FullName}.{method.Name}{suffix}";
             }
         }
     }
 
     private static string FormatXmlType(Type type)
     {
+        if (type.IsGenericParameter)
+            return $"`{type.GenericParameterPosition}";
+        if (type.IsByRef)
+            return $"{FormatXmlType(type.GetElementType()!)}@";
+        if (type.IsArray)
+            return $"{FormatXmlType(type.GetElementType()!)}[]";
         if (!type.IsGenericType)
             return type.FullName!;
 
