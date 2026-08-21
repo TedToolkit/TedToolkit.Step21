@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Implemented
 
 ## 🚦 Delivery priority
 
@@ -19,7 +19,7 @@ Approved
 
 ## 🧩 Explicit governing constraints
 
-The minimal non-nested public evidence ABI is exact: `Step21Diagnostic` has `Code`, `Severity`, `Message`, and optional `SourceLocation`; severity is Information/Warning/Error. `ValidationFailure` has `Code`, deterministic string `Path`, `Message`, and optional `SourceLocation`; `ValidationResult` aggregates it. Dedicated syntax/binding/read-validation/write-validation/capability exceptions retain complete diagnostics or result. No public context, accumulator, common exception base, validator DSL, reflection discovery, dynamic code, or validation package is authorized.
+The minimal non-nested public evidence ABI is exact: immutable `SourceLocation` has only `FilePath`, 1-based `Line`, and 1-based `Column`. `Step21Diagnostic` has `Code`, `Severity`, `Message`, and optional `SourceLocation`; severity is Information/Warning/Error. `ValidationFailure` has `Code`, deterministic string `Path`, `Message`, and optional `SourceLocation`; `ValidationResult` aggregates it. Dedicated syntax/binding/read-validation/write-validation/capability exceptions retain complete diagnostics or result. No end-span members, public context, accumulator, common exception base, validator DSL, reflection discovery, dynamic code, or validation package is authorized.
 
 The exact exception types are `ExchangeStructureSyntaxException`, `ExchangeStructureBindingException`, `ExchangeStructureReadValidationException`, `ExchangeStructureWriteValidationException`, and `ExchangeStructureCapabilityException`.
 
@@ -39,7 +39,7 @@ No runtime semantic types currently exist. The new ABI must stay schema-neutral 
 
 | Start condition or blocker | Evidence or owner | Effect if unmet |
 | --- | --- | --- |
-| Revised exact ABI is recorded in the parent change | CD-39 and public-boundary section in `../change.md` | Any extra public field, severity, exception, or validator API returns to change design |
+| Revised exact ABI is recorded in the parent change | CD-39, CD-45, and public-boundary section in `../change.md` | Any extra public field, severity, exception, or validator API returns to change design |
 
 <!-- work-item: behavior-cases -->
 ## 🧪 Behavior cases
@@ -82,12 +82,14 @@ No runtime semantic types currently exist. The new ABI must stay schema-neutral 
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and runtime/test/XML artifacts |
-| Behavior-case proof | Contract test commands/results and BC-06B/BC-23A ABI assertions |
-| Migration and documentation | Caller-visible XML contract and exception guidance |
-| Dependent-item unlock | Versioned validation ABI for SBRT-005, SBRT-006, SBRT-015, and SBRT-016 |
+| Delivery-boundary check | Starting SHA `9a883e5`. Added only the top-level runtime evidence values, exact severity enum, five direct `Exception` subtypes, their public XML contracts, and public-contract tests/snapshot. The approved `SourceLocation` decision was recorded as ADR-C-05, AD-14, and CD-45. No reader, writer, schema execution, context, accumulator, common exception base, nested public type, dependency, or unrelated runtime behavior was added. `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | Red 1: the focused public API snapshot failed because the runtime exported none of the approved evidence types. Green 1: the exact ten top-level types, constructors, read-only properties, nullable locations, severity values, and direct exception bases matched the approved snapshot. Red 2: 7 of 16 focused cases failed specifically on non-positive positions, required-text nulls, and mutable source collections leaking into results/exceptions. Green/Refactor: focused validation-contract TUnit passed 16/16; the full fast project passed 39/39. Tests prove 1-based three-member locations, exact severities, immutable ordered snapshots, safe valid/invalid inspection, same-result retention, no common exception base or extra public surface, and XML documentation for every public member. BC-23A's I/O non-translation branch introduces no executable boundary in this item: the production diff contains no `TextReader`, `TextWriter`, `IOException`, wrapping, or read/write implementation, so there is no I/O behavior to reclassify before the owning boundary items. |
+| Regression and dependency proof | `dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore` passed with 0 warnings and 0 errors. Integration TUnit passed 2/2 enabled cases; the opt-in network corpus case was skipped. The runtime project passed `IsAotCompatible`, trim-analyzer, and AOT-analyzer Release build with 0 warnings/errors. `dotnet list ... package --include-transitive --no-restore` reported only the existing `Antlr4.Runtime.Standard` 4.13.1 package and no validation engine. Limited whitespace, style, and analyzer verification passed for every added C# file; the repository-wide formatter remains outside this item because it reports pre-existing line-ending/style findings in unrelated and external files. |
+| Migration and documentation | All public and internal in-scope members have English XML documentation covering 1-based coordinates, optional source evidence, immutable ordered aggregation, invalidating failures, diagnostic severities, stage meaning, and retained evidence. `SourceLocation` intentionally has no end coordinates. No consumer migration exists because the runtime previously exposed none of these semantic types. |
+| Effort and variance | Approximately 0.8 elapsed implementation/verification hours, materially below the 0.3–0.5 person-month range because the approved ABI was small and the TUnit/build foundation already existed. The only material clarification was the maintainer-approved minimal `SourceLocation`; no scope or constraint deviation occurred. |
+| Dependent-item unlock | The exact versioned evidence ABI is implemented and locally proven for SBRT-003, SBRT-005, SBRT-006, SBRT-015, SBRT-016, and later read/write boundary items. |
 
 ## ⚠️ Risks and open questions
 

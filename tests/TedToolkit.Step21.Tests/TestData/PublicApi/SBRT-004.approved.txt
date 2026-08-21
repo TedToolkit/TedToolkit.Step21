@@ -1,0 +1,40 @@
+sealed class TedToolkit.Step21.ExchangeStructureBindingException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureCapabilityException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureReadValidationException : System.Exception
+  constructor (TedToolkit.Step21.ValidationResult validationResult)
+  property TedToolkit.Step21.ValidationResult ValidationResult { get; }
+sealed class TedToolkit.Step21.ExchangeStructureSyntaxException : System.Exception
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.Step21Diagnostic> diagnostics)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> Diagnostics { get; }
+sealed class TedToolkit.Step21.ExchangeStructureWriteValidationException : System.Exception
+  constructor (TedToolkit.Step21.ValidationResult validationResult)
+  property TedToolkit.Step21.ValidationResult ValidationResult { get; }
+sealed class TedToolkit.Step21.SourceLocation : System.Object
+  constructor (System.String filePath, System.Int32 line, System.Int32 column)
+  property System.Int32 Column { get; }
+  property System.String FilePath { get; }
+  property System.Int32 Line { get; }
+sealed class TedToolkit.Step21.Step21Diagnostic : System.Object
+  constructor (System.String code, TedToolkit.Step21.Step21DiagnosticSeverity severity, System.String message, TedToolkit.Step21.SourceLocation? sourceLocation = null)
+  property System.String Code { get; }
+  property System.String Message { get; }
+  property TedToolkit.Step21.Step21DiagnosticSeverity Severity { get; }
+  property TedToolkit.Step21.SourceLocation? SourceLocation { get; }
+enum TedToolkit.Step21.Step21DiagnosticSeverity
+  value Information = 0
+  value Warning = 1
+  value Error = 2
+sealed class TedToolkit.Step21.ValidationFailure : System.Object
+  constructor (System.String code, System.String path, System.String message, TedToolkit.Step21.SourceLocation? sourceLocation = null)
+  property System.String Code { get; }
+  property System.String Message { get; }
+  property System.String Path { get; }
+  property TedToolkit.Step21.SourceLocation? SourceLocation { get; }
+sealed class TedToolkit.Step21.ValidationResult : System.Object
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.ValidationFailure> failures)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ValidationFailure> Failures { get; }
+  property System.Boolean IsValid { get; }
