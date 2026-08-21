@@ -68,8 +68,11 @@ internal sealed class ExpressEntityProjection
     /// Creates projections for every entity in a valid closed schema compilation.
     /// </summary>
     /// <param name="compilation">The valid closed schema compilation.</param>
+    /// <param name="valueResolver">The closed-set generated type resolver.</param>
     /// <returns>The projections in schema and declaration order.</returns>
-    internal static IReadOnlyList<ExpressEntityProjection> Create(ExpressSchemaCompilation compilation)
+    internal static IReadOnlyList<ExpressEntityProjection> Create(
+        ExpressSchemaCompilation compilation,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var entities = compilation.Schemas
             .SelectMany(schema => schema.Declarations
@@ -79,7 +82,7 @@ internal sealed class ExpressEntityProjection
         var entityBySymbol = entities.ToDictionary(item => item.Entity.Symbol, item => item);
 
         return entities
-            .Select(item => CreateProjection(item.Schema, item.Entity, entityBySymbol))
+            .Select(item => CreateProjection(item.Schema, item.Entity, entityBySymbol, valueResolver))
             .ToArray();
     }
 
@@ -98,18 +101,21 @@ internal sealed class ExpressEntityProjection
     private static ExpressEntityProjection CreateProjection(
         ExpressBoundSchema schema,
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol)
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ExpressGeneratedTypeResolver valueResolver)
     {
-        var ownAttributes = ProjectOwnAttributes(entity).ToArray();
-        var (flattenedAttributes, effectiveAttributes) = FlattenAttributes(entity, entityBySymbol);
+        var ownAttributes = ProjectOwnAttributes(entity, valueResolver).ToArray();
+        var (flattenedAttributes, effectiveAttributes) = FlattenAttributes(entity, entityBySymbol, valueResolver);
         return new(schema, entity, ownAttributes, flattenedAttributes, effectiveAttributes);
     }
 
-    private static IEnumerable<ExpressEntityAttributeProjection> ProjectOwnAttributes(ExpressBoundEntity entity)
+    private static IEnumerable<ExpressEntityAttributeProjection> ProjectOwnAttributes(
+        ExpressBoundEntity entity,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         return entity.Attributes
             .Where(attribute => attribute.Kind == ExpressAttributeKind.Explicit)
-            .Select(attribute => CreateAttribute(entity, attribute))
+            .Select(attribute => CreateAttribute(entity, attribute, valueResolver))
             .Where(attribute => attribute is not null)
             .Select(attribute => attribute!);
     }
@@ -117,27 +123,29 @@ internal sealed class ExpressEntityProjection
     private static (List<ExpressEntityAttributeProjection> Flattened, List<ExpressEntityAttributeProjection> Effective)
         FlattenAttributes(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol)
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var result = new List<ExpressEntityAttributeProjection>();
         var effective = new List<ExpressEntityAttributeProjection>();
 
-        AddAttributes(entity, entityBySymbol, result, effective);
+        AddAttributes(entity, entityBySymbol, valueResolver, result, effective);
         return (result, effective);
     }
 
     private static void AddAttributes(
         ExpressBoundEntity entity,
         IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ExpressGeneratedTypeResolver valueResolver,
         List<ExpressEntityAttributeProjection> result,
         List<ExpressEntityAttributeProjection> effective)
     {
         foreach (var supertype in entity.DirectSupertypes)
         {
-            AddAttributes(entityBySymbol[supertype].Entity, entityBySymbol, result, effective);
+            AddAttributes(entityBySymbol[supertype].Entity, entityBySymbol, valueResolver, result, effective);
         }
 
-        foreach (var attribute in ProjectOwnAttributes(entity))
+        foreach (var attribute in ProjectOwnAttributes(entity, valueResolver))
         {
             var effectiveIndex = FindRedeclaredStorage(effective, attribute);
             if (effectiveIndex >= 0)
@@ -171,10 +179,10 @@ internal sealed class ExpressEntityProjection
 
     private static ExpressEntityAttributeProjection? CreateAttribute(
         ExpressBoundEntity declaringEntity,
-        ExpressBoundAttribute attribute)
+        ExpressBoundAttribute attribute,
+        ExpressGeneratedTypeResolver valueResolver)
     {
-        if (attribute.Type is not ExpressBoundNamedType namedType
-            || namedType.Declaration.Kind != ExpressDeclarationKind.Entity)
+        if (!valueResolver.IsSupported(attribute.Type))
         {
             return null;
         }
@@ -193,9 +201,7 @@ internal sealed class ExpressEntityProjection
             declaringEntity,
             attribute,
             ToPascalCase(attribute.Name),
-            $"I{ToPascalCase(namedType.Declaration.Name)}",
-            namedType.Declaration,
-            namedType.Declaration.DeclaringSchema,
+            attribute.Type,
             redeclaredNames?[0],
             redeclaredNames?[1]);
     }

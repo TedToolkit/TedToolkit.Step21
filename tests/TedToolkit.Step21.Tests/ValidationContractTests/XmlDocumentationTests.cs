@@ -42,7 +42,8 @@ internal sealed class XmlDocumentationTests
             }
 
             foreach (var property in type.GetProperties(
-                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                             | BindingFlags.Static | BindingFlags.DeclaredOnly)
                          .Where(property => property.GetAccessors(nonPublic: true).Any(IsApprovedVisibility)))
             {
                 var indexes = property.GetIndexParameters();
@@ -62,8 +63,10 @@ internal sealed class XmlDocumentationTests
             }
 
             foreach (var method in type.GetMethods(
-                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                         .Where(method => !method.IsSpecialName && IsApprovedVisibility(method)))
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                             | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                         .Where(method => (!method.IsSpecialName || method.Name.StartsWith("op_", StringComparison.Ordinal))
+                             && IsApprovedVisibility(method)))
             {
                 var parameters = string.Join(",", method.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
                 var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";

@@ -33,10 +33,14 @@ internal static class ExpressEntityEmitter
     /// </summary>
     /// <param name="context">The source-production context.</param>
     /// <param name="projection">The projected entity.</param>
-    internal static void Emit(in SourceProductionContext context, ExpressEntityProjection projection)
+    /// <param name="valueResolver">The closed-set generated type resolver.</param>
+    internal static void Emit(
+        in SourceProductionContext context,
+        ExpressEntityProjection projection,
+        ExpressGeneratedTypeResolver valueResolver)
     {
-        var entityInterface = CreateInterface(projection);
-        var entityClass = CreateClass(projection);
+        var entityInterface = CreateInterface(projection, valueResolver);
+        var entityClass = CreateClass(projection, valueResolver);
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
         var sourceFile = SourceComposer.File()
             .AddUsing(SourceComposer.Using("System.Linq".ToSimpleName()))
@@ -49,7 +53,9 @@ internal static class ExpressEntityEmitter
             $"ExpressEntity_{projection.Schema.Name.ToUpperInvariant()}_{projection.Entity.Name.ToUpperInvariant()}");
     }
 
-    private static TypeDeclaration CreateInterface(ExpressEntityProjection projection)
+    private static TypeDeclaration CreateInterface(
+        ExpressEntityProjection projection,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var entityInterface = SourceComposer<ExpressIncrementalGenerator>.Interface($"I{projection.Name}");
         entityInterface.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
@@ -62,13 +68,15 @@ internal static class ExpressEntityEmitter
 
         foreach (var attribute in projection.OwnAttributes)
         {
-            entityInterface.AddMember(CreateProperty(projection, attribute, isMutable: false));
+            entityInterface.AddMember(CreateProperty(projection, attribute, valueResolver, isMutable: false));
         }
 
         return entityInterface;
     }
 
-    private static TypeDeclaration CreateClass(ExpressEntityProjection projection)
+    private static TypeDeclaration CreateClass(
+        ExpressEntityProjection projection,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var entityClass = SourceComposer<ExpressIncrementalGenerator>.Class(projection.Name);
         entityClass.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
@@ -81,10 +89,10 @@ internal static class ExpressEntityEmitter
 
         foreach (var attribute in projection.FlattenedAttributes)
         {
-            entityClass.AddMember(CreateProperty(projection, attribute, isMutable: true));
+            entityClass.AddMember(CreateProperty(projection, attribute, valueResolver, isMutable: true));
         }
 
-        entityClass.AddMember(CreateConstructor(projection));
+        entityClass.AddMember(CreateConstructor(projection, valueResolver));
         entityClass.AddMember(CreateDirectReferencesProperty(projection));
         entityClass.AddMember(CreateToStringMethod(projection));
         return entityClass;
@@ -93,9 +101,10 @@ internal static class ExpressEntityEmitter
     private static Property CreateProperty(
         ExpressEntityProjection projection,
         ExpressEntityAttributeProjection attribute,
+        ExpressGeneratedTypeResolver valueResolver,
         bool isMutable)
     {
-        var dataType = AttributeDataType(projection, attribute);
+        var (dataType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
         if (attribute.Attribute.IsOptional)
         {
             dataType = dataType.Null;
@@ -103,7 +112,11 @@ internal static class ExpressEntityEmitter
 
         var property = SourceComposer<ExpressIncrementalGenerator>.Property(dataType, attribute.Name);
         property.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
-        AddNullabilityAttributes(property, attribute.Attribute.IsOptional);
+        if (isReferenceType)
+        {
+            AddNullabilityAttributes(property, attribute.Attribute.IsOptional);
+        }
+
         if (isMutable && attribute.RedirectTargetName is not null)
         {
             var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET)
@@ -131,7 +144,9 @@ internal static class ExpressEntityEmitter
         return property;
     }
 
-    private static Constructor CreateConstructor(ExpressEntityProjection projection)
+    private static Constructor CreateConstructor(
+        ExpressEntityProjection projection,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         var constructor = SourceComposer<ExpressIncrementalGenerator>.Constructor();
         constructor.Accessibility = projection.Entity.IsAbstract
@@ -143,9 +158,14 @@ internal static class ExpressEntityEmitter
         {
             var parameterName = char.ToLowerInvariant(attribute.Name[0]) + attribute.Name.Substring(1);
             var parameterIdentifier = EscapeIdentifier(parameterName);
-            var parameter = SourceComposer.Parameter(AttributeDataType(projection, attribute), parameterIdentifier)
-                .AddAttribute(SourceComposer.Attribute(new DataType(
+            var (parameterType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
+            var parameter = SourceComposer.Parameter(parameterType, parameterIdentifier);
+            if (isReferenceType)
+            {
+                parameter.AddAttribute(SourceComposer.Attribute(new DataType(
                     "global::System.Diagnostics.CodeAnalysis.DisallowNullAttribute")));
+            }
+
             constructor.AddParameter(parameter);
             constructor.AddStatement(attribute.Name.ToSimpleName().Assign(parameterIdentifier.ToSimpleName()));
             constructor.AddRootDescription(new DescriptionParam(
@@ -172,7 +192,7 @@ internal static class ExpressEntityEmitter
 
         var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET);
         var references = new CollectionExpression();
-        foreach (var attribute in projection.EffectiveAttributes)
+        foreach (var attribute in projection.EffectiveAttributes.Where(attribute => attribute.TargetEntity is not null))
         {
             references.AddElement(attribute.Name.ToSimpleName().As(_entityType.Type));
         }
@@ -202,17 +222,12 @@ internal static class ExpressEntityEmitter
         return method;
     }
 
-    private static DataType AttributeDataType(
+    private static (DataType DataType, bool IsReferenceType) AttributeDataType(
         ExpressEntityProjection projection,
-        ExpressEntityAttributeProjection attribute)
+        ExpressEntityAttributeProjection attribute,
+        ExpressGeneratedTypeResolver valueResolver)
     {
-        if (ReferenceEquals(projection.Schema.Identity, attribute.TargetSchema))
-        {
-            return new(attribute.InterfaceName);
-        }
-
-        var schemaName = ExpressEntityProjection.ToPascalCase(attribute.TargetSchema.Name);
-        return new($"global::TedToolkit.Step21.Generated.{schemaName}.{attribute.InterfaceName}");
+        return valueResolver.Resolve(projection.Schema.Identity, attribute.Type);
     }
 
     private static DataType EntityInterfaceDataType(

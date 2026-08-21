@@ -8,21 +8,52 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class PublicApiTests
 {
     /// <summary>
-    /// Verifies that the runtime exposes exactly the public contract approved through SBRT-006.
+    /// Verifies that the runtime exposes exactly the cumulative public contract approved through SBRT-011.
     /// </summary>
     [Test]
     public async Task Should_match_approved_surface_when_validation_contract_is_inspected()
     {
         var assembly = ReflectionAssembly.Load("TedToolkit.Step21");
-        var expectedPath = Path.Combine(
+        var approvedDirectory = Path.Combine(
             AppContext.BaseDirectory,
             "TestData",
-            "PublicApi",
-            "SBRT-006.approved.txt");
-        var expected = NormalizeLineEndings(await File.ReadAllTextAsync(expectedPath));
+            "PublicApi");
+        var approvedSnapshots = new[]
+        {
+            await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-006.approved.txt")),
+            await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-011.approved.txt")),
+        };
+        var expected = MergeApprovedSnapshots(approvedSnapshots);
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));
 
         await Assert.That(actual).IsEqualTo(expected);
+    }
+
+    private static string MergeApprovedSnapshots(IEnumerable<string> snapshots)
+    {
+        var blocks = snapshots
+            .SelectMany(snapshot => NormalizeLineEndings(snapshot)
+                .Split('\n')
+                .Aggregate(
+                    new List<StringBuilder>(),
+                    static (result, line) =>
+                    {
+                        if (line.Length == 0)
+                            return result;
+                        if (!line.StartsWith("  ", StringComparison.Ordinal))
+                            result.Add(new StringBuilder());
+                        _ = result[^1].AppendLine(line);
+                        return result;
+                    }))
+            .OrderBy(
+                block =>
+                {
+                    var header = block.ToString().Split('\n')[0];
+                    var typeNameStart = header.IndexOf("TedToolkit.Step21.", StringComparison.Ordinal);
+                    return header[typeNameStart..];
+                },
+                StringComparer.Ordinal);
+        return NormalizeLineEndings(string.Concat(blocks));
     }
 
     private static string RenderPublicApi(ReflectionAssembly assembly)
@@ -74,12 +105,14 @@ internal sealed class PublicApiTests
         }
 
         foreach (var property in type.GetProperties(
-                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                         | BindingFlags.Static | BindingFlags.DeclaredOnly)
                      .Where(property => property.GetAccessors(nonPublic: true).Any(IsApprovedVisibility))
                      .OrderBy(property => property.Name, StringComparer.Ordinal))
         {
             builder.Append("  property ")
                 .Append(FormatVisibility(property.GetAccessors(nonPublic: true).First(IsApprovedVisibility)))
+                .Append(property.GetAccessors(nonPublic: true).Any(accessor => accessor.IsStatic) ? "static " : string.Empty)
                 .Append(property.GetAccessors(nonPublic: true).Any(accessor => accessor.IsAbstract) ? "abstract " : string.Empty)
                 .Append(FormatType(property.PropertyType, new NullabilityInfoContext().Create(property).ReadState))
                 .Append(' ')
@@ -89,13 +122,16 @@ internal sealed class PublicApiTests
         }
 
         foreach (var method in type.GetMethods(
-                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                     .Where(method => !method.IsSpecialName && IsApprovedVisibility(method))
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                         | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                     .Where(method => (!method.IsSpecialName || method.Name.StartsWith("op_", StringComparison.Ordinal))
+                         && IsApprovedVisibility(method))
                      .OrderBy(method => method.Name, StringComparer.Ordinal)
                      .ThenBy(FormatMethod, StringComparer.Ordinal))
         {
             builder.Append("  ")
                 .Append(FormatVisibility(method))
+                .Append(method.IsStatic ? "static " : string.Empty)
                 .Append(method.IsAbstract ? "abstract " : string.Empty)
                 .Append("method ")
                 .AppendLine(FormatMethod(method));

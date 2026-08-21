@@ -189,7 +189,8 @@ The visitors are currently unconsumed generated scaffolding, but they are requir
 | Source unit and emission | `File()` / `SourceFile.Generate(context, hintName)` |
 | Namespace and imports | `NameSpace`, `Using` |
 | Entity contracts | `Interface` |
-| Entity implementations and select wrappers | `Record` |
+| Entity implementations | `Class` |
+| Select wrappers | `Record` |
 | Defined types, enumeration symbols, and standard value representations | `RecordStruct` |
 | Schema metadata and factories | `Class`, `Method`, `Constructor`, `Field`, `Property` |
 | Generic schema and aggregate constraints | `DataType`, type parameters, and constraint APIs |

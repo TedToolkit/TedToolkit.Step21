@@ -7,6 +7,7 @@
 
 using System.Collections.ObjectModel;
 
+using TedToolkit.Step21.Analyzer.Express;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -52,10 +53,14 @@ internal sealed class ExpressEntityGenerationPlan
     /// Creates and validates the entity-generation plan.
     /// </summary>
     /// <param name="compilation">The valid closed schema compilation.</param>
+    /// <param name="valueResolver">The closed-set generated type resolver.</param>
     /// <returns>The atomic generation plan.</returns>
-    internal static ExpressEntityGenerationPlan Create(ExpressSchemaCompilation compilation)
+    internal static ExpressEntityGenerationPlan Create(
+        ExpressSchemaCompilation compilation,
+        ExpressGeneratedTypeResolver valueResolver)
     {
-        var projections = ExpressEntityProjection.Create(compilation);
+        var projections = ExpressEntityProjection.Create(compilation, valueResolver);
+        var valueProjections = ExpressValueProjection.Create(compilation, valueResolver);
         var invalidSchemas = new HashSet<ExpressBoundSchema>();
         var collisions = new List<ExpressEntityGenerationCollision>();
         var failures = new List<ExpressEntityGenerationFailure>();
@@ -64,7 +69,20 @@ internal sealed class ExpressEntityGenerationPlan
         foreach (var schema in compilation.Schemas)
         {
             var schemaProjections = projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray();
-            AddTypeNameCollisions(schema, schemaProjections, invalidSchemas, collisions);
+            var schemaValueProjections = valueProjections
+                .Where(projection => ReferenceEquals(projection.Schema, schema))
+                .ToArray();
+            AddTypeNameCollisions(
+                schema,
+                schemaProjections,
+                schemaValueProjections,
+                invalidSchemas,
+                collisions);
+            AddValueMemberNameCollisions(
+                schema,
+                schemaValueProjections,
+                invalidSchemas,
+                collisions);
             AddMemberNameCollisions(schema, schemaProjections, invalidSchemas, collisions);
             AddUnsupportedRedeclarations(schema, schemaProjections, invalidSchemas, failures);
         }
@@ -98,14 +116,23 @@ internal sealed class ExpressEntityGenerationPlan
     private static void AddTypeNameCollisions(
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> projections,
+        IReadOnlyList<ExpressValueProjection> valueProjections,
         HashSet<ExpressBoundSchema> invalidSchemas,
         List<ExpressEntityGenerationCollision> collisions)
     {
         var generatedTypes = projections.SelectMany(projection => new[]
-        {
-            (Projection: projection, GeneratedName: projection.Name),
-            (Projection: projection, GeneratedName: $"I{projection.Name}"),
-        });
+            {
+                CreateGeneratedType(projection.Entity.Symbol, projection.Name),
+                CreateGeneratedType(projection.Entity.Symbol, $"I{projection.Name}"),
+            })
+            .Concat(valueProjections.SelectMany(projection => projection.Declaration.UnderlyingType
+                is ExpressBoundSelectType
+                    ? new[]
+                    {
+                        CreateGeneratedType(projection.Declaration.Symbol, projection.Name),
+                        CreateGeneratedType(projection.Declaration.Symbol, $"{projection.Name}Kind"),
+                    }
+                    : new[] { CreateGeneratedType(projection.Declaration.Symbol, projection.Name), }));
         foreach (var group in generatedTypes
                      .GroupBy(item => item.GeneratedName, StringComparer.Ordinal)
                      .Where(group => group.Count() > 1))
@@ -115,9 +142,52 @@ internal sealed class ExpressEntityGenerationPlan
             {
                 collisions.Add(new(
                     schema,
-                    item.Projection.Entity.Symbol.Span.Start,
-                    item.Projection.Entity.Name,
+                    item.Location,
+                    item.OriginalName,
                     group.Key));
+            }
+        }
+    }
+
+    private static (
+        ExpressSourceLocation Location,
+        string OriginalName,
+        string GeneratedName) CreateGeneratedType(
+            ExpressBoundSymbol symbol,
+            string generatedName)
+    {
+        return (symbol.Span.Start, symbol.Name, generatedName);
+    }
+
+    private static void AddValueMemberNameCollisions(
+        ExpressBoundSchema schema,
+        IEnumerable<ExpressValueProjection> projections,
+        HashSet<ExpressBoundSchema> invalidSchemas,
+        List<ExpressEntityGenerationCollision> collisions)
+    {
+        foreach (var projection in projections.Where(projection =>
+                     projection.Declaration.UnderlyingType is ExpressBoundEnumerationType))
+        {
+            var enumeration = (ExpressBoundEnumerationType)projection.Declaration.UnderlyingType;
+            var values = projection.Resolver.GetEnumerationValues(enumeration)
+                .Select(value => (OriginalName: value, GeneratedName: ExpressEntityProjection.ToPascalCase(value)))
+                .ToArray();
+            var groups = values
+                .GroupBy(value => value.GeneratedName, StringComparer.Ordinal)
+                .Where(group => group.Count() > 1
+                    || group.Key is "Value" or "Equals" or "GetHashCode" or "ToString" or "PrintMembers"
+                    || StringComparer.Ordinal.Equals(group.Key, projection.Name));
+            foreach (var group in groups)
+            {
+                invalidSchemas.Add(schema);
+                foreach (var value in group)
+                {
+                    collisions.Add(new(
+                        schema,
+                        projection.Declaration.Symbol.Span.Start,
+                        $"{projection.Declaration.Name}.{value.OriginalName}",
+                        group.Key));
+                }
             }
         }
     }
@@ -160,14 +230,14 @@ internal sealed class ExpressEntityGenerationPlan
         foreach (var attribute in projections
                      .SelectMany(projection => projection.EffectiveAttributes)
                      .Where(attribute =>
-                         !ReferenceEquals(attribute.TargetEntity, attribute.StorageTargetEntity)
+                         !ExpressGeneratedTypeResolver.AreEquivalent(attribute.Type, attribute.StorageType)
                          && reportedAttributes.Add(attribute.Attribute)))
         {
             invalidSchemas.Add(schema);
             failures.Add(new(
                 schema,
                 attribute.Attribute.Span.Start,
-                $"Redeclared entity attribute '{attribute.Attribute.Name}' changes its target entity type; "
+                $"Redeclared entity attribute '{attribute.Attribute.Name}' changes its generated value type; "
                 + "one C# property cannot implement both inherited interface contracts safely."));
         }
     }

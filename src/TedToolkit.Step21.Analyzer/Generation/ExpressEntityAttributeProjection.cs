@@ -10,40 +10,34 @@ using TedToolkit.Step21.Analyzer.Express.Binding;
 namespace TedToolkit.Step21.Analyzer.Generation;
 
 /// <summary>
-/// Describes one generated direct entity attribute.
+/// Describes one generated supported explicit entity attribute.
 /// </summary>
 internal sealed class ExpressEntityAttributeProjection
 {
     /// <summary>
-    /// Initializes a projected direct entity attribute.
+    /// Initializes a projected supported explicit entity attribute.
     /// </summary>
     /// <param name="declaringEntity">The entity that declares the storage occurrence.</param>
     /// <param name="attribute">The bound attribute.</param>
     /// <param name="name">The generated property name.</param>
-    /// <param name="interfaceName">The generated entity-interface type name.</param>
-    /// <param name="targetEntity">The resolved target entity.</param>
-    /// <param name="targetSchema">The schema that declares the target entity.</param>
+    /// <param name="type">The resolved supported attribute type.</param>
     /// <param name="redeclaredEntityName">The qualified redeclared entity name, when present.</param>
     /// <param name="redeclaredAttributeName">The qualified redeclared attribute name, when present.</param>
     internal ExpressEntityAttributeProjection(
         ExpressBoundEntity declaringEntity,
         ExpressBoundAttribute attribute,
         string name,
-        string interfaceName,
-        ExpressBoundSymbol targetEntity,
-        ExpressBoundSchemaIdentity targetSchema,
+        ExpressBoundType type,
         string? redeclaredEntityName,
         string? redeclaredAttributeName)
     {
         DeclaringEntity = declaringEntity;
         Attribute = attribute;
         Name = name;
-        InterfaceName = interfaceName;
-        TargetEntity = targetEntity;
-        TargetSchema = targetSchema;
+        Type = type;
         StorageEntity = declaringEntity;
         StorageAttributeName = attribute.Name;
-        StorageTargetEntity = targetEntity;
+        StorageType = type;
         RedeclaredEntityName = redeclaredEntityName;
         RedeclaredAttributeName = redeclaredAttributeName;
     }
@@ -64,19 +58,22 @@ internal sealed class ExpressEntityAttributeProjection
     internal string Name { get; }
 
     /// <summary>
-    /// Gets the generated target interface name.
+    /// Gets the resolved supported attribute type.
     /// </summary>
-    internal string InterfaceName { get; }
+    internal ExpressBoundType Type { get; }
 
     /// <summary>
-    /// Gets the resolved target entity for this declaration.
+    /// Gets the resolved target entity for this declaration, or <see langword="null"/> for another value type.
     /// </summary>
-    internal ExpressBoundSymbol TargetEntity { get; }
-
-    /// <summary>
-    /// Gets the target entity's declaring schema.
-    /// </summary>
-    internal ExpressBoundSchemaIdentity TargetSchema { get; }
+    internal ExpressBoundSymbol? TargetEntity
+    {
+        get
+        {
+            return (Type as ExpressBoundNamedType)?.Declaration is { Kind: ExpressDeclarationKind.Entity, } entity
+                ? entity
+                : null;
+        }
+    }
 
     /// <summary>
     /// Gets the entity that owns the physical storage slot.
@@ -89,9 +86,9 @@ internal sealed class ExpressEntityAttributeProjection
     internal string StorageAttributeName { get; private set; }
 
     /// <summary>
-    /// Gets the target entity originally declared for the physical storage slot.
+    /// Gets the generated type originally declared for the physical storage slot.
     /// </summary>
-    internal ExpressBoundSymbol StorageTargetEntity { get; private set; }
+    internal ExpressBoundType StorageType { get; private set; }
 
     /// <summary>
     /// Gets the qualified redeclared entity name, when present.
@@ -119,7 +116,7 @@ internal sealed class ExpressEntityAttributeProjection
     {
         StorageEntity = inheritedAttribute.StorageEntity;
         StorageAttributeName = inheritedAttribute.StorageAttributeName;
-        StorageTargetEntity = inheritedAttribute.StorageTargetEntity;
+        StorageType = inheritedAttribute.StorageType;
         RedirectTargetName = redirectTargetName;
     }
 }

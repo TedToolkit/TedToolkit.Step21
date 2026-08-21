@@ -1,0 +1,80 @@
+sealed class TedToolkit.Step21.BinaryValue : System.Object
+  interface System.IEquatable<TedToolkit.Step21.BinaryValue>
+  constructor (System.String bits)
+  property System.Boolean Item[System.Int32 index] { get; }
+  property System.Int32 Length { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.BinaryValue? other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+enum TedToolkit.Step21.LogicalValue
+  value False = 0
+  value Unknown = 1
+  value True = 2
+readonly struct TedToolkit.Step21.NumberValue : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.NumberValue>
+  property TedToolkit.Step21.NumberValueKind Kind { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.NumberValue other)
+  static method TedToolkit.Step21.NumberValue FromInteger(System.Numerics.BigInteger value)
+  static method TedToolkit.Step21.NumberValue FromReal(TedToolkit.Step21.RealValue value)
+  method System.Int32 GetHashCode()
+  method System.Boolean TryGetInteger(out System.Numerics.BigInteger value)
+  method System.Boolean TryGetReal(out TedToolkit.Step21.RealValue value)
+  static method System.Boolean op_Equality(TedToolkit.Step21.NumberValue left, TedToolkit.Step21.NumberValue right)
+  static method System.Boolean op_Inequality(TedToolkit.Step21.NumberValue left, TedToolkit.Step21.NumberValue right)
+enum TedToolkit.Step21.NumberValueKind
+  value Integer = 0
+  value Real = 1
+sealed class TedToolkit.Step21.ParameterValue : System.Object
+  interface System.IEquatable<TedToolkit.Step21.ParameterValue>
+  property static TedToolkit.Step21.ParameterValue Derived { get; }
+  property TedToolkit.Step21.ParameterValueKind Kind { get; }
+  property static TedToolkit.Step21.ParameterValue Omitted { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.ParameterValue? other)
+  static method TedToolkit.Step21.ParameterValue FromAggregate(System.Collections.Generic.IEnumerable<TedToolkit.Step21.ParameterValue> values)
+  static method TedToolkit.Step21.ParameterValue FromBinary(TedToolkit.Step21.BinaryValue value)
+  static method TedToolkit.Step21.ParameterValue FromBoolean(System.Boolean value)
+  static method TedToolkit.Step21.ParameterValue FromEntity(TedToolkit.Step21.Entity value)
+  static method TedToolkit.Step21.ParameterValue FromEnumeration(System.String symbol)
+  static method TedToolkit.Step21.ParameterValue FromInteger(System.Numerics.BigInteger value)
+  static method TedToolkit.Step21.ParameterValue FromLogical(TedToolkit.Step21.LogicalValue value)
+  static method TedToolkit.Step21.ParameterValue FromReal(TedToolkit.Step21.RealValue value)
+  static method TedToolkit.Step21.ParameterValue FromString(System.String value)
+  static method TedToolkit.Step21.ParameterValue FromTyped(System.String typeName, TedToolkit.Step21.ParameterValue value)
+  method System.Int32 GetHashCode()
+  method System.Boolean TryGetAggregate(out System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>? values)
+  method System.Boolean TryGetBinary(out TedToolkit.Step21.BinaryValue? value)
+  method System.Boolean TryGetBoolean(out System.Boolean value)
+  method System.Boolean TryGetEntity(out TedToolkit.Step21.Entity? value)
+  method System.Boolean TryGetEnumeration(out System.String? symbol)
+  method System.Boolean TryGetInteger(out System.Numerics.BigInteger value)
+  method System.Boolean TryGetLogical(out TedToolkit.Step21.LogicalValue value)
+  method System.Boolean TryGetReal(out TedToolkit.Step21.RealValue value)
+  method System.Boolean TryGetString(out System.String? value)
+  method System.Boolean TryGetTyped(out System.String? typeName, out TedToolkit.Step21.ParameterValue? value)
+enum TedToolkit.Step21.ParameterValueKind
+  value Omitted = 0
+  value Derived = 1
+  value Integer = 2
+  value Real = 3
+  value String = 4
+  value Binary = 5
+  value Boolean = 6
+  value Logical = 7
+  value Enumeration = 8
+  value Entity = 9
+  value Aggregate = 10
+  value Typed = 11
+readonly struct TedToolkit.Step21.RealValue : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.RealValue>
+  constructor (System.Numerics.BigInteger significand, System.Numerics.BigInteger exponent)
+  property System.Numerics.BigInteger Exponent { get; }
+  property System.Numerics.BigInteger Significand { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.RealValue other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  static method System.Boolean op_Equality(TedToolkit.Step21.RealValue left, TedToolkit.Step21.RealValue right)
+  static method System.Boolean op_Inequality(TedToolkit.Step21.RealValue left, TedToolkit.Step21.RealValue right)

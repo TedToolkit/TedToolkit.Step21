@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -84,14 +84,16 @@ No public schema scalar/parameter value system is implemented. Internal Part 21 
 
 | Evidence | Required record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and generated/test/XML artifacts |
-| Behavior-case proof | BC-05 and BC-05B focused compile/runtime/read-write results |
-| Migration and documentation | Generated value usage documentation |
-| Dependent-item unlock | Complete scalar/parameter/union contracts for SBRT-013, SBRT-014, SBRT-016, SBRT-018, and SBRT-022 |
+| Delivery-boundary check | Started from `d466ec1`. Added only schema-neutral scalar/physical-parameter values, internal canonical parameter formatting, non-aggregate generated value projection, supported scalar entity properties, generated-name collision coverage, focused tests, public API/XML audits, and generated-value documentation. Schema aggregates, descriptors, hydration, validation execution, and public writing remain in their later work items. The architecture syntax-object table was corrected from the stale combined entity/SELECT `Record` row to the already-approved ordinary entity `Class` and SELECT `Record` mapping; no governing decision changed. |
+| Behavior-case proof | BC-05 generated-consumer tests compile and execute nominal nested defined values, closed/extensible enumerations, closed-set extension symbols, sealed record SELECT unions, exhaustive matching, value equality, cross-schema qualification, entity scalar properties, atomic transformed-name collisions, and safe deferral when a SELECT extension still depends on SBRT-012. BC-05B runtime tests distinguish arbitrary INTEGER, exact REAL/NUMBER, decoded/empty/escaped STRING, exact/empty/leading-zero BINARY, both BOOLEAN states, all three LOGICAL states, enumeration, typed/untyped, recursive aggregate, resolved entity-reference, `$`, and `*` values; canonical forms reparse through the Part 21 grammar. Negative tests reject null/invalid union payloads, invalid extensible symbols, inaccessible closed-enumeration construction, syntax/object/nested-public leakage, and lossy/default-value conflation. |
+| Migration and documentation | `README.md` links the generated-value capability. `docs/conformance/generated-schema-values.md` documents exact scalar mappings, nominal/enumeration/SELECT construction and equality, closed-set extension behavior, `ParameterValue`, collision/AOT rules, and the SBRT-012/descriptor/read/validation/write staging boundary. Runtime and generated caller-facing contracts have XML documentation; `SBRT-011.approved.txt` pins the exact added runtime public API. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors. Fast TUnit passed 137/137. Integration TUnit passed 3/3 enabled cases; only the explicit opt-in external-network corpus case was skipped. Runtime `IsAotCompatible`, trim, and AOT analyzer build passed with 0 warnings/errors. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Limited whitespace/analyzer verification passed after normalizing the final test-file newline. The final strict read-only implementation review found no blocking, important, suggestion, or design-deviation findings and concluded Ready to merge. |
+| Dependent-item unlock | Complete scalar/parameter/defined/enumeration/SELECT contracts and strong generated entity properties now supply the non-schema-aggregate values required by SBRT-013, SBRT-014, SBRT-016, SBRT-018, and SBRT-022. |
+| Actual effort and variance | Completed in one agent implementation session; the human person-month estimate is not directly comparable, and no scope-expanding variance was introduced. |
 
 ## ⚠️ Risks and open questions
 
 | Item | Impact | Owner or next decision |
 | --- | --- | --- |
-| Numeric/binary representation narrows ISO/EXPRESS values | Round-trip loss | Boundary fixtures must prove supported ranges or diagnose unsupported values before publication |
-| Extensible enumeration semantics exceed a fixed representation | Loss of valid symbols | Preserve EXPRESS semantics; do not fall back to C# enum |
+| Numeric/binary representation narrows ISO/EXPRESS values | Resolved | `BigInteger`, exact decimal `RealValue`, and bit-accurate `BinaryValue` plus boundary emit/reparse fixtures avoid narrowing |
+| Extensible enumeration semantics exceed a fixed representation | Resolved | Nominal record structs accept canonical extensible symbols and publish every known closed-set extension symbol without using a C# enum |
