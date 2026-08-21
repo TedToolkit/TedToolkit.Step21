@@ -65,7 +65,7 @@ internal sealed class ExpressGeneratedTypeResolver
     }
 
     /// <summary>
-    /// Determines whether a bound attribute type is supported by the current non-aggregate value stage.
+    /// Determines whether a bound attribute type has a supported generated value projection.
     /// </summary>
     /// <param name="type">The bound type.</param>
     /// <returns><see langword="true"/> when a generated or runtime C# type exists.</returns>
@@ -74,6 +74,9 @@ internal sealed class ExpressGeneratedTypeResolver
         return type switch
         {
             ExpressBoundScalarType => true,
+            ExpressBoundAggregateType aggregate => IsSupported(
+                aggregate,
+                new HashSet<ExpressBoundSymbol>()),
             ExpressBoundNamedType named when named.Declaration.Kind == ExpressDeclarationKind.Entity => true,
             ExpressBoundNamedType named => _supportedDefinedTypes.Contains(named.Declaration),
             _ => false,
@@ -94,8 +97,10 @@ internal sealed class ExpressGeneratedTypeResolver
         return type switch
         {
             ExpressBoundScalarType scalar => ResolveScalar(scalar.Kind),
+            ExpressBoundAggregateType aggregate => ResolveAggregate(currentSchema, aggregate),
             ExpressBoundNamedType named => Resolve(currentSchema, named.Declaration),
-            _ => throw new InvalidOperationException($"Bound type '{type.GetType().Name}' is not supported in SBRT-011."),
+            _ => throw new InvalidOperationException(
+                $"Bound type '{type.GetType().Name}' has no supported generated value projection."),
         };
     }
 
@@ -198,9 +203,16 @@ internal sealed class ExpressGeneratedTypeResolver
     /// <returns><see langword="true"/> when both map to one identical generated type.</returns>
     internal static bool AreEquivalent(ExpressBoundType first, ExpressBoundType second)
     {
+        if (ReferenceEquals(first, second))
+        {
+            return true;
+        }
+
         return (first, second) switch
         {
             (ExpressBoundScalarType left, ExpressBoundScalarType right) => left.Kind == right.Kind,
+            (ExpressBoundAggregateType left, ExpressBoundAggregateType right) =>
+                left.Kind == right.Kind && AreEquivalent(left.ElementType, right.ElementType),
             (ExpressBoundNamedType left, ExpressBoundNamedType right) =>
                 ReferenceEquals(left.Declaration, right.Declaration),
             _ => false,
@@ -214,6 +226,13 @@ internal sealed class ExpressGeneratedTypeResolver
             case ExpressBoundScalarType:
             case ExpressBoundEnumerationType:
                 return true;
+
+            case ExpressBoundAggregateType aggregate:
+                return aggregate.Kind is ExpressAggregateKind.Array
+                    or ExpressAggregateKind.Bag
+                    or ExpressAggregateKind.List
+                    or ExpressAggregateKind.Set
+                    && IsSupported(aggregate.ElementType, path);
 
             case ExpressBoundSelectType select:
                 return GetSelectAlternatives(select).All(alternative =>
@@ -287,5 +306,22 @@ internal sealed class ExpressGeneratedTypeResolver
             ExpressScalarKind.String => (DataType.String, true),
             _ => throw new InvalidOperationException($"Unsupported EXPRESS scalar kind '{kind.ToString()}'."),
         };
+    }
+
+    private (DataType DataType, bool IsReferenceType) ResolveAggregate(
+        ExpressBoundSchemaIdentity currentSchema,
+        ExpressBoundAggregateType aggregate)
+    {
+        var runtimeTypeName = aggregate.Kind switch
+        {
+            ExpressAggregateKind.Array => "ExpressArray",
+            ExpressAggregateKind.Bag => "ExpressBag",
+            ExpressAggregateKind.List => "ExpressList",
+            ExpressAggregateKind.Set => "ExpressSet",
+            _ => throw new InvalidOperationException(
+                $"Unsupported generated aggregate kind '{aggregate.Kind.ToString()}'."),
+        };
+        var elementType = Resolve(currentSchema, aggregate.ElementType).DataType;
+        return (new DataType($"global::TedToolkit.Step21.{runtimeTypeName}").Generic(elementType), true);
     }
 }

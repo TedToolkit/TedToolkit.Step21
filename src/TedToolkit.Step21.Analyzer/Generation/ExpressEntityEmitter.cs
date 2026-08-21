@@ -117,6 +117,7 @@ internal static class ExpressEntityEmitter
             AddNullabilityAttributes(property, attribute.Attribute.IsOptional);
         }
 
+        string summary;
         if (isMutable && attribute.RedirectTargetName is not null)
         {
             var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET)
@@ -125,7 +126,7 @@ internal static class ExpressEntityEmitter
                 .AddStatement(attribute.RedirectTargetName.ToSimpleName().Assign("value".ToSimpleName()));
             property.AddAccessor(getter)
                 .AddAccessor(setter);
-            AddSummary(property, $"Gets or sets the {attribute.Attribute.Name} attribute.");
+            summary = $"Gets or sets the {attribute.Attribute.Name} attribute.";
         }
         else
         {
@@ -133,13 +134,21 @@ internal static class ExpressEntityEmitter
             if (isMutable)
             {
                 property.AddAccessor(SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.SET));
-                AddSummary(property, $"Gets or sets the {attribute.Attribute.Name} attribute.");
+                summary = $"Gets or sets the {attribute.Attribute.Name} attribute.";
             }
             else
             {
-                AddSummary(property, $"Gets the {attribute.Attribute.Name} attribute.");
+                summary = $"Gets the {attribute.Attribute.Name} attribute.";
             }
         }
+
+        if (attribute.Type is ExpressBoundAggregateType aggregate)
+        {
+            summary += $" Its exact aggregate form is {ExpressTypeDocumentation.Format(aggregate)}."
+                + " Mutations do not run schema validation; explicit and boundary validation observe the current candidate.";
+        }
+
+        AddSummary(property, summary);
 
         return property;
     }

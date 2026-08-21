@@ -16,7 +16,7 @@ This delivery slice projects explicit attributes whose resolved type is an entit
 - `OPTIONAL` attributes use nullable property types and accept `null`; and
 - abstract-class constructors are protected, while concrete-class constructors are public.
 
-Scalar, defined, select, and aggregate attributes are intentionally deferred to SBRT-011 and SBRT-012. Their absence does not reinterpret their EXPRESS syntax.
+Scalar, defined, SELECT, and aggregate attributes are projected by the generated-value stages. Schema descriptors, hydration, rule execution, and physical writing remain later boundaries and do not reinterpret the retained EXPRESS syntax.
 
 Because generated files are treated specially by Roslyn's nullable analysis, the structural output pairs `T`/`T?` syntax with standard `System.Diagnostics.CodeAnalysis` nullability attributes. This preserves mandatory/OPTIONAL behavior for consuming C# compilations without setter guards.
 

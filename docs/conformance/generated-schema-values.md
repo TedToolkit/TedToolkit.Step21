@@ -1,6 +1,6 @@
 # Generated schema values
 
-The incremental generator maps the non-aggregate value declarations in the supplied closed EXPRESS schema set to strong C# values. These declarations are generated under `TedToolkit.Step21.Generated.<SchemaPascalCase>` and do not require runtime reflection, dynamic code, or a runtime reference to `TedToolkit.RoslynHelper`.
+The incremental generator maps scalar and nominal value declarations in the supplied closed EXPRESS schema set to strong C# values. These declarations are generated under `TedToolkit.Step21.Generated.<SchemaPascalCase>` and do not require runtime reflection, dynamic code, or a runtime reference to `TedToolkit.RoslynHelper`. Aggregate projection is documented separately in [generated schema aggregates](generated-schema-aggregates.md).
 
 ## Scalar mapping
 
@@ -60,4 +60,4 @@ The union exposes typed factories and `TryGet` methods. It has no `object` paylo
 
 ## Current boundary
 
-This stage generates only non-aggregate schema value types and corresponding explicit entity properties. EXPRESS aggregate type projection is delivered by SBRT-012. Schema-bound hydration, validation, and public ISO 10303-21 writing are also later stages. Generated values therefore permit editable temporary states where the CLR representation allows them; later boundary validation is responsible for reporting all remaining schema violations before output.
+Schema-bound hydration, schema-rule validation, and public ISO 10303-21 writing remain later stages. Generated values therefore permit editable temporary states where the CLR representation allows them; later boundary validation is responsible for reporting all remaining schema violations before output.

@@ -55,7 +55,14 @@ internal static class ExpressValueEmitter
         var record = SourceComposer<ExpressIncrementalGenerator>.RecordStruct(projection.Name);
         record.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         record.IsReadonly = true;
-        AddSummary(record, $"Represents the EXPRESS defined type {projection.Declaration.Name}.");
+        var summary = $"Represents the EXPRESS defined type {projection.Declaration.Name}.";
+        if (projection.Declaration.UnderlyingType is ExpressBoundAggregateType aggregate)
+        {
+            summary += $" Its exact aggregate form is {ExpressTypeDocumentation.Format(aggregate)}."
+                + " Mutations do not run schema validation; explicit and boundary validation observe the current candidate.";
+        }
+
+        AddSummary(record, summary);
         record.AddMember(CreateValueProperty(valueType, isReferenceType));
         record.AddMember(CreateValueConstructor(projection.Name, valueType, isReferenceType, isPublic: true));
         return record;

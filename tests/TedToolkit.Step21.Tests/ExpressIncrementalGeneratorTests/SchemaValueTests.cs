@@ -390,23 +390,26 @@ public sealed class SchemaValueTests
     }
 
     /// <summary>
-    /// Verifies an extensible SELECT family is deferred together when one closed-set alternative belongs to SBRT-012.
+    /// Verifies an extensible SELECT family includes aggregate alternatives after aggregate projection is available.
     /// </summary>
     [Test]
-    public async Task Should_defer_select_family_with_an_unsupported_extension_alternative()
+    public async Task Should_include_aggregate_select_extension_after_projection_is_available()
     {
         var result = GeneratorHostTests.Run(
             ("schemas/deferred-select-extension.exp", DEFERRED_SELECT_EXTENSION_SCHEMA));
+        var baseChoice = RequiredType(
+            result.OutputCompilation,
+            "TedToolkit.Step21.Generated.DeferredSelectExtension.BaseChoice");
 
         using (Assert.Multiple())
         {
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
+            await Assert.That(baseChoice.GetMembers().OfType<IMethodSymbol>().Select(method => method.Name))
+                .Contains("FromIntegerList");
             await Assert.That(result.OutputCompilation.GetTypeByMetadataName(
-                "TedToolkit.Step21.Generated.DeferredSelectExtension.BaseChoice")).IsNull();
-            await Assert.That(result.OutputCompilation.GetTypeByMetadataName(
-                "TedToolkit.Step21.Generated.DeferredSelectExtension.ExtendedChoice")).IsNull();
+                "TedToolkit.Step21.Generated.DeferredSelectExtension.ExtendedChoice")).IsNotNull();
         }
     }
 
