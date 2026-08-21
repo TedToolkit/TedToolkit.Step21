@@ -55,6 +55,7 @@ Approved
 | CD-43 | What repeated Add does when the root is already registered but its live references changed | Preserve the root's existing name and section, but re-enumerate the live graph on every Add and register every newly reachable object according to the normal deterministic rules | The maintainer authorized resolving the review's repeated-Add ambiguity on 2026-08-21; this preserves the purpose of live `DirectReferences` during mutable editing | Graph registration, idempotence, allocation, and SBRT-006/014 | Resolved |
 | CD-44 | How small the public runtime surface must remain | Keep strong ISO/EXPRESS values, `DataSection`, identity, validation evidence, diagnostics, and dedicated exceptions public where consumers must construct, inspect, or catch them; expose no nested public types and no public syntax graph, reader/writer facade, binding/hydration context, descriptor registry, resolver, or schema facade | The maintainer clarified on 2026-08-21 that the goal is few concepts rather than exactly three types, explicitly permitting `DataSection` and validation types while requiring strong typing and no nesting | Public API provenance, documentation, package audit, and SBRT-004/006/011/013/018/022/025/026 | Resolved |
 | CD-45 | Which members belong to the shared diagnostic and constraint source location | Use only `FilePath`, 1-based `Line`, and 1-based `Column`; do not add `EndLine` or `EndColumn` | The maintainer selected the minimal three-member `SourceLocation` contract on 2026-08-21 | Public diagnostics/validation ABI, XML documentation, and SBRT-004 | Resolved |
+| CD-46 | How a generated descriptor in a consumer assembly receives the registered entities that belong to its schema without reflection or a public registry | Runtime dispatch supplies an ordered `IReadOnlyList<KeyValuePair<string, Entity>>` whose key is the complete deterministic structure path and whose value is the registered entity; `ExchangeStructure` alone derives this list from its private registration index, and generated validation never discovers model state | The maintainer approved correcting the descriptor ABI before SBRT-015 implementation on 2026-08-22 after the cross-assembly accessibility contradiction was identified | Exact descriptor ABI, validation traversal/path ownership, public-surface minimization, and SBRT-013/015 | Resolved |
 
 ## 🚦 Change priority
 
@@ -182,7 +183,10 @@ public abstract class SchemaDescriptor
         Entity value,
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) =>
         HydrateEntityCore(structure, value, components);
-    internal ValidationResult Validate(ExchangeStructure structure) => ValidateCore(structure);
+    internal ValidationResult Validate(
+        ExchangeStructure structure,
+        IReadOnlyList<KeyValuePair<string, Entity>> entities) =>
+        ValidateCore(structure, entities);
     internal IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnostics(
         ExchangeStructure structure) => GetCapabilityDiagnosticsCore(structure);
     internal IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntity(
@@ -192,7 +196,9 @@ public abstract class SchemaDescriptor
         ExchangeStructure structure,
         Entity value,
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components);
-    protected abstract ValidationResult ValidateCore(ExchangeStructure structure);
+    protected abstract ValidationResult ValidateCore(
+        ExchangeStructure structure,
+        IReadOnlyList<KeyValuePair<string, Entity>> entities);
     protected abstract IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
         ExchangeStructure structure);
     protected abstract IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>

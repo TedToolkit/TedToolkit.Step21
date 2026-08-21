@@ -19,7 +19,9 @@ internal sealed class TestSchemaDescriptor(string name) : SchemaDescriptor
         Entity value,
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) => [];
 
-    protected override ValidationResult ValidateCore(ExchangeStructure structure) => new([]);
+    protected override ValidationResult ValidateCore(
+        ExchangeStructure structure,
+        IReadOnlyList<KeyValuePair<string, Entity>> entities) => new([]);
 
     protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
         ExchangeStructure structure) => [];

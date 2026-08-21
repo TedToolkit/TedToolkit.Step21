@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -19,7 +19,7 @@ Approved
 
 ## 🧩 Explicit governing constraints
 
-Generate validation directly from bound EXPRESS IR. `ExchangeStructure.Validate()` is side-effect-free, aggregates all detected failures, and does not throw for invalidity. Stable constraint IDs in failures and deterministic English XML must match.
+Generate validation directly from bound EXPRESS IR. `ExchangeStructure.Validate()` is side-effect-free, aggregates all detected failures, and does not throw for invalidity. Stable constraint IDs in failures and deterministic English XML must match. Per CD-46, the runtime owns registration traversal and passes each generated descriptor an ordered `IReadOnlyList<KeyValuePair<string, Entity>>`; keys are complete paths such as `DataSections[0].#1`, values retain entity identity, and no public context, registry, resolver, reflection, or ambient state is introduced.
 
 <!-- work-item: scope -->
 ## 🎯 Outcome, scope, and non-goals
@@ -82,15 +82,17 @@ Validation values and structural schema metadata exist after prerequisites, but 
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and generated validation/runtime/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-06A, BC-06B, and BC-16A |
-| Migration and documentation | Explicit validation and XML constraint guidance |
-| Dependent-item unlock | Structural validation/publication gate for SBRT-017/018/024 |
+| Delivery-boundary check | Started from `81bd022`. Added the public side-effect-free `ExchangeStructure.Validate()` boundary, corrected the generated-consumer descriptor ABI through CD-46, emitted direct structural checks and XML from one bound projection, added type/declaration traceability, focused runtime/generated tests, one public API snapshot, and conformance guidance. No expression evaluator, named `WHERE`/entity `UNIQUE` execution, mutation-time validation, reflection, dynamic code, public context/registry/DSL, read/write implementation, or dependency was added. The work-item validator reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-06A/06B construct deliberately invalid mutable generated graphs and prove that setters, aggregate edits, Add, and Remove remain unchecked; two explicit validations return the same ordered result, visit each registered object once by reference identity, retain complete section/occurrence/property paths, report detached/null/unregistered relationships, and do not mutate sections, registrations, or aggregates. BC-16A executes mandatory/optional, entity, nominal, closed-enumeration, SELECT, all four aggregate categories, wrong ARRAY shape, required slots, uniqueness, nested elements, literal and symbolic-bound cases, and unknown schema entities. Generated-source failure literals and XML constraint terms are compared as equal sets, every XML fragment parses, relocated sources generate identical output, and every source location is a leaf path with 1-based line/column. Complete fast TUnit passed 160/160. |
+| Migration and documentation | `README.md` links `docs/conformance/structural-validation.md`; descriptor, aggregate, value, and architecture guidance now states the explicit validation lifecycle, staged symbolic-expression boundary, deterministic evidence/XML contract, and C# representation rule. Mutable entities and singleton descriptors are ordinary classes; only immutable SELECT discriminated values use sealed record reference types for value equality. Generated entity/defined-value remarks identify schema/declaration, properties publish `<value>` plus normalized constraint tables, and descriptors link the generated entity values they validate. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors. Integration TUnit passed all 3 enabled cases; only the explicit opt-in external-network corpus case was skipped. Runtime `IsAotCompatible`, trim, and AOT analyzer build passed with 0 warnings/errors. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Limited formatting and `git diff --check` passed. Strict read-only review corrected the cross-assembly registration-access contradiction, partial symbolic-bound validation gap, XML/executable set-parity proof, ARRAY wrong-shape safety, and descriptor/entity documentation links; the final pass found no remaining blocking, important, suggestion, or design-deviation findings. |
+| Dependent-item unlock | Structural validation and its deterministic path/code/source/XML contract now gate SBRT-016 expression execution, SBRT-017 complete rule closure, SBRT-018 atomic typed publication, and SBRT-024 atomic pre-write validation. |
+| Actual effort and variance | Completed in one continuing agent implementation session; the human person-month estimate is not directly comparable. The protected validation hook gained the smallest approved ordered BCL path/entity input because generated overrides live in consumer assemblies and cannot inspect runtime-internal registrations. |
 
 ## ⚠️ Risks and open questions
 
 | Item | Impact | Owner or next decision |
 | --- | --- | --- |
-| Graph/path traversal repeats cycles or changes state | Nontermination or corrupt edits | Reference-identity and immutability-of-validation assertions gate completion |
+| Graph/path traversal repeats cycles or changes state | Resolved | Reference-identity dispatch and before/after immutability assertions pass for shared, repeated, cyclic-capable registrations |

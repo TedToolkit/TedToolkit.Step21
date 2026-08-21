@@ -56,6 +56,10 @@ internal static class ExpressEntityEmitter
         var entityInterface = SourceComposer<ExpressIncrementalGenerator>.Interface($"I{projection.Name}");
         entityInterface.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         AddSummary(entityInterface, $"Represents the EXPRESS entity {projection.Entity.Name}.");
+        ExpressStructuralValidationEmitter.AddTypeDocumentation(
+            entityInterface,
+            projection.Schema.Name,
+            $"ENTITY {projection.Entity.Name}");
 
         foreach (var supertype in projection.Entity.DirectSupertypes)
         {
@@ -82,6 +86,10 @@ internal static class ExpressEntityEmitter
         entityClass.AddBaseType(_entityType)
             .AddBaseType(new DataType($"I{projection.Name}"));
         AddSummary(entityClass, $"Provides mutable storage for the EXPRESS entity {projection.Entity.Name}.");
+        ExpressStructuralValidationEmitter.AddTypeDocumentation(
+            entityClass,
+            projection.Schema.Name,
+            $"ENTITY {projection.Entity.Name}");
 
         foreach (var attribute in projection.FlattenedAttributes)
         {
@@ -145,6 +153,12 @@ internal static class ExpressEntityEmitter
         }
 
         AddSummary(property, summary);
+        ExpressStructuralValidationEmitter.AddPropertyDocumentation(
+            property,
+            projection,
+            attribute,
+            valueResolver,
+            isMutable);
 
         return property;
     }

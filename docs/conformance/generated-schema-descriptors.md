@@ -2,7 +2,7 @@
 
 Every valid supplied EXPRESS schema emits one reflection-free descriptor in `TedToolkit.Step21.Generated.<SchemaPascalCase>`. The descriptor is an ordinary public sealed `class`, not a `record`, because it represents singleton behavior and identity rather than a structurally comparable ISO value. Its private constructor and public static `Instance` property expose the only instance; `Name` preserves the nominal schema name.
 
-The runtime `SchemaDescriptor` base is an abstract `class`. Its public surface contains only `SchemaName Name`; runtime-internal non-virtual dispatch forwards to protected allocation, hydration, validation, capability-diagnostic, and projection hooks. The hooks exchange only `Entity`, `ExchangeStructure`, diagnostics/results, and ordered BCL component-name/`ParameterValue` lists. They expose no parser syntax, context, resolver, registry, writer callback, nested public type, reflection, or dynamic dispatch.
+The runtime `SchemaDescriptor` base is an abstract `class`. Its public surface contains only `SchemaName Name`; runtime-internal non-virtual dispatch forwards to protected allocation, hydration, validation, capability-diagnostic, and projection hooks. The hooks exchange only `Entity`, `ExchangeStructure`, diagnostics/results, ordered BCL component-name/`ParameterValue` lists, and an ordered BCL path/entity list for validation. `ExchangeStructure` derives that validation list from its private registration index, so generated consumer-assembly overrides need neither internal access nor a public registry. The hooks expose no parser syntax, context, resolver, writer callback, nested public type, reflection, or dynamic dispatch.
 
 ## Simple physical mapping
 
@@ -18,8 +18,12 @@ For inherited-free entities whose physical attributes are supported by this stag
 
 Component, count, entity, and parameter mismatches return stable `P21-BIND-*` diagnostics. A structure lookup with no exact descriptor name returns `P21-BIND-SCHEMA`; lookup is nominal and case-sensitive. Descriptors supplied to manual structure construction are snapshotted by unique schema name, and duplicate names fail before construction completes.
 
+## Structural validation
+
+The generated descriptor dispatches each registered entity governed by its schema to directly generated structural checks. The checks cover mandatory/`OPTIONAL` presence, generated entity assignability, literal aggregate shape and bounds, required array slots, uniqueness, nested elements, nominal wrappers, enumerations, and SELECT alternatives. See the [structural validation boundary](structural-validation.md) for ordering, paths, constraint IDs, XML traceability, and staged exclusions.
+
 ## Current boundary
 
-This stage does not execute schema rules, map complex inherited/redeclared physical components, evaluate symbolic aggregate bounds, discover descriptors, bind parsed instance references, or write an exchange file. Those responsibilities remain with the validation, complex-mapping, typed-read, reference, and writer work items. Unsupported entities are not guessed through reflection or property names.
+This stage does not execute general EXPRESS expressions or named `WHERE`/`UNIQUE` rules, map complex inherited/redeclared physical components, evaluate symbolic aggregate bounds, discover descriptors, bind parsed instance references, or write an exchange file. Those responsibilities remain with the expression/rule, complex-mapping, typed-read, reference, and writer work items. Unsupported entities are not guessed through reflection or property names.
 
 Fast tests execute every scalar alternative and supported simple parameter form in both directions, including absence, invalid derived markers, nominal/enumeration/SELECT values, entity identity, and all four aggregate categories. Runtime API snapshots fix the abstract-class hook contract. The packed-consumer integration test compiles the generated sealed descriptor from the real package without a runtime dependency on analyzer implementation libraries.

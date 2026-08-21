@@ -26,7 +26,10 @@ public abstract class SchemaDescriptor
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) =>
         HydrateEntityCore(structure, value, components);
 
-    internal ValidationResult Validate(ExchangeStructure structure) => ValidateCore(structure);
+    internal ValidationResult Validate(
+        ExchangeStructure structure,
+        IReadOnlyList<KeyValuePair<string, Entity>> entities) =>
+        ValidateCore(structure, entities);
 
     internal IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnostics(ExchangeStructure structure) =>
         GetCapabilityDiagnosticsCore(structure);
@@ -49,10 +52,13 @@ public abstract class SchemaDescriptor
         Entity value,
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components);
 
-    /// <summary>Validates the schema-owned portion of an exchange structure.</summary>
+    /// <summary>Validates one ordered schema-owned entity set in an exchange structure.</summary>
     /// <param name="structure">The exchange structure to validate.</param>
+    /// <param name="entities">The complete structure paths and registered entities to validate in path order.</param>
     /// <returns>Every detected schema validation failure in deterministic order.</returns>
-    protected abstract ValidationResult ValidateCore(ExchangeStructure structure);
+    protected abstract ValidationResult ValidateCore(
+        ExchangeStructure structure,
+        IReadOnlyList<KeyValuePair<string, Entity>> entities);
 
     /// <summary>Reports unsupported schema operations before a public boundary starts producing output.</summary>
     /// <param name="structure">The exchange structure to inspect.</param>

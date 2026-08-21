@@ -63,6 +63,10 @@ internal static class ExpressValueEmitter
         }
 
         AddSummary(record, summary);
+        ExpressStructuralValidationEmitter.AddTypeDocumentation(
+            record,
+            projection.Schema.Name,
+            $"TYPE {projection.Declaration.Name}");
         record.AddMember(CreateValueProperty(valueType, isReferenceType));
         record.AddMember(CreateValueConstructor(projection.Name, valueType, isReferenceType, isPublic: true));
         return record;
@@ -76,6 +80,10 @@ internal static class ExpressValueEmitter
         record.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         record.IsReadonly = true;
         AddSummary(record, $"Represents the EXPRESS enumeration {projection.Declaration.Name}.");
+        ExpressStructuralValidationEmitter.AddTypeDocumentation(
+            record,
+            projection.Schema.Name,
+            $"TYPE {projection.Declaration.Name}");
         record.AddMember(CreateValueProperty(DataType.String, isReferenceType: true));
         record.AddMember(CreateEnumerationConstructor(projection, enumeration.IsExtensible));
 
@@ -122,6 +130,10 @@ internal static class ExpressValueEmitter
         record.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         record.Polymorphism = Polymorphism.SEALED;
         AddSummary(record, $"Represents the EXPRESS select {projection.Declaration.Name}.");
+        ExpressStructuralValidationEmitter.AddTypeDocumentation(
+            record,
+            projection.Schema.Name,
+            $"TYPE {projection.Declaration.Name}");
         record.AddMember(CreateKindProperty(kindName));
         foreach (var alternative in alternatives)
         {

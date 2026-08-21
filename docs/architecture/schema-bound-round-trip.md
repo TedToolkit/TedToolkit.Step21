@@ -190,13 +190,15 @@ The visitors are currently unconsumed generated scaffolding, but they are requir
 | Namespace and imports | `NameSpace`, `Using` |
 | Entity contracts | `Interface` |
 | Entity implementations | `Class` |
-| Select wrappers | `Record` |
+| Select wrappers | Sealed `Record` reference type |
 | Defined types, enumeration symbols, and standard value representations | `RecordStruct` |
 | Schema metadata and factories | `Class`, `Method`, `Constructor`, `Field`, `Property` |
 | Generic schema and aggregate constraints | `DataType`, type parameters, and constraint APIs |
 | Attributes and generated markers | `SourceComposer<TGenerator>` factories and `Attribute` conversion/composition |
 | Construction, validation, and dispatch | object-creation, invocation, return, conditional, loop, and switch syntax objects |
 | Caller-facing XML documentation | description syntax objects |
+
+`Record` in this table is deliberately limited to an immutable SELECT discriminated value. In C#, that declaration is still a reference type, but its structural equality matches value semantics. Generated EXPRESS entities and schema descriptors instead remain ordinary `Class` declarations because they carry mutable/reference or singleton/behavior identity and must not acquire record equality.
 
 Schema names are converted to `DataType` objects; source strings are not concatenated to form declarations, generic types, statements, punctuation, indentation, or directives. Source remains structural until one final `Generate` call per stable, collision-free hint name. No custom source fragment is currently expected. If a required C# construct is unsupported by the pinned helper version, the design must be revised or the smallest fragment explicitly approved before generator code is edited.
 

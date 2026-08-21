@@ -5,7 +5,7 @@ namespace TedToolkit.Step21.Tests.ExchangeStructureTests;
 internal sealed class PublicContractTests
 {
     /// <summary>
-    /// Verifies the exact section-required Add/Remove and construction surface with no Replace operation.
+    /// Verifies the exact section-required Add/Remove, validation, and construction surface with no Replace operation.
     /// </summary>
     [Test]
     public async Task Should_expose_only_approved_exchange_structure_operations()
@@ -29,6 +29,7 @@ internal sealed class PublicContractTests
                 "Add(DataSection, EntityInstanceName, Entity) -> Void",
                 "Remove(Entity) -> Boolean",
                 "Remove(EntityInstanceName) -> Boolean",
+                "Validate() -> ValidationResult",
             ]);
             await Assert.That(type.GetMethod("Replace")).IsNull();
         }

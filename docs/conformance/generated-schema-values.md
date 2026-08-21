@@ -19,7 +19,7 @@ Every EXPRESS defined type produces a nominal `readonly record struct` whose `Va
 
 An EXPRESS enumeration produces a nominal `readonly record struct` with a string `Value` and generated static properties for every known symbol. A closed enumeration has no public value-taking constructor. An extensible enumeration has a public constructor that accepts canonical EXPRESS identifiers. In the closed supplied schema set, an extensible base also exposes symbols declared by its bound extensions.
 
-An EXPRESS SELECT produces a sealed record and a companion `<Name>Kind` enum. The record exposes one typed `From<Alternative>` factory and `TryGet<Alternative>` method per alternative plus an exhaustive `Match<TResult>` method. Inherited alternatives and the bound extensions of an extensible base participate in this generated closed-set union.
+An EXPRESS SELECT produces a sealed record reference type and a companion `<Name>Kind` enum. The record exposes one typed `From<Alternative>` factory and `TryGet<Alternative>` method per alternative plus an exhaustive `Match<TResult>` method. Record syntax is intentional only here: SELECT is an immutable discriminated value whose equality is structural. It is not the representation used for mutable reference-identity entities or singleton schema descriptors; those remain ordinary classes. Inherited alternatives and the bound extensions of an extensible base participate in this generated closed-set union.
 
 For example:
 

@@ -129,6 +129,120 @@ public sealed class ExchangeStructure
     public bool Remove(EntityInstanceName name) =>
         _registrationsByName.TryGetValue(name, out var registration) && Remove(registration);
 
+    /// <summary>
+    /// Validates the current registered graph and every applicable generated schema rule without changing the model.
+    /// </summary>
+    /// <returns>Every detected failure in deterministic data-section, entity, and rule order.</returns>
+    /// <remarks>
+    /// Invalidity is returned as evidence and does not throw. Property assignment, aggregate mutation, registration,
+    /// and removal remain unchecked; call this method whenever explicit feedback is required.
+    /// </remarks>
+    public ValidationResult Validate()
+    {
+        var failures = new List<ValidationFailure>();
+        var relationshipFailures = new List<ValidationFailure>();
+        var dataSections = DataSections.ToArray();
+        var sectionFailures = new ValidationFailure?[dataSections.Length];
+        var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
+        var descriptorsBySection = new Dictionary<DataSection, SchemaDescriptor>(ReferenceEqualityComparer.Instance);
+        var entitiesBySection = new Dictionary<DataSection, List<KeyValuePair<string, Entity>>>(
+            ReferenceEqualityComparer.Instance);
+        for (var index = 0; index < dataSections.Length; index++)
+        {
+            var sectionPath = $"DataSections[{index}]";
+            var dataSection = dataSections[index];
+            if (dataSection is null)
+            {
+                sectionFailures[index] = new ValidationFailure(
+                    "P21.STRUCTURE.DATA_SECTION.REQUIRED",
+                    sectionPath,
+                    "The data-section entry is null.");
+                continue;
+            }
+
+            if (!sectionIndexes.TryAdd(dataSection, index))
+            {
+                sectionFailures[index] = new ValidationFailure(
+                    "P21.STRUCTURE.DATA_SECTION.DUPLICATE",
+                    sectionPath,
+                    "The same data-section object occurs more than once.");
+                continue;
+            }
+
+            if (!_schemaDescriptorsByName.TryGetValue(dataSection.SchemaName, out var descriptor))
+            {
+                sectionFailures[index] = new ValidationFailure(
+                    "P21.STRUCTURE.SCHEMA_DESCRIPTOR",
+                    $"{sectionPath}.SchemaName",
+                    $"No supplied schema descriptor matches '{dataSection.SchemaName}'.");
+                continue;
+            }
+
+            descriptorsBySection.Add(dataSection, descriptor);
+            entitiesBySection.Add(dataSection, []);
+        }
+
+        var visited = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        foreach (var registration in _registrations)
+        {
+            if (!visited.Add(registration.Entity))
+                continue;
+
+            var entityPath = sectionIndexes.TryGetValue(registration.DataSection, out var sectionIndex)
+                ? $"DataSections[{sectionIndex}].{registration.Name}"
+                : $"Registrations[{registration.Name}]";
+            if (entitiesBySection.TryGetValue(registration.DataSection, out var entities))
+            {
+                entities.Add(new KeyValuePair<string, Entity>(entityPath, registration.Entity));
+            }
+            else if (!sectionIndexes.ContainsKey(registration.DataSection))
+            {
+                relationshipFailures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.DATA_SECTION.MEMBERSHIP",
+                    $"{entityPath}.DataSection",
+                    "The registered entity belongs to a data section that is no longer in the structure."));
+            }
+
+            var referenceIndex = 0;
+            foreach (var reference in registration.Entity.DirectReferences)
+            {
+                var referencePath = $"{entityPath}.DirectReferences[{referenceIndex}]";
+                if (reference is null)
+                {
+                    relationshipFailures.Add(new ValidationFailure(
+                        "P21.STRUCTURE.REFERENCE.REQUIRED",
+                        referencePath,
+                        "A direct entity-reference occurrence is null."));
+                }
+                else if (!_registrationsByEntity.ContainsKey(reference))
+                {
+                    relationshipFailures.Add(new ValidationFailure(
+                        "P21.STRUCTURE.REFERENCE.REGISTRATION",
+                        referencePath,
+                        "The referenced entity is not registered in this exchange structure."));
+                }
+
+                referenceIndex++;
+            }
+        }
+
+        for (var index = 0; index < dataSections.Length; index++)
+        {
+            if (sectionFailures[index] is { } sectionFailure)
+            {
+                failures.Add(sectionFailure);
+                continue;
+            }
+
+            var dataSection = dataSections[index]!;
+            var descriptor = descriptorsBySection[dataSection];
+            failures.AddRange(descriptor.Validate(this, entitiesBySection[dataSection]).Failures);
+        }
+
+        failures.AddRange(relationshipFailures);
+        return new ValidationResult(failures);
+    }
+
     internal IReadOnlyList<SchemaDescriptor> SchemaDescriptors => _schemaDescriptors;
 
     internal IReadOnlyList<EntityRegistration> Registrations => _registrationView;

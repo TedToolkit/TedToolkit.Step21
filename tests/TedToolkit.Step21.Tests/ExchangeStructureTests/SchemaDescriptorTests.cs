@@ -35,14 +35,14 @@ internal sealed class SchemaDescriptorTests
                 "GetCapabilityDiagnosticsCore(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntityCore(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
                 "ProjectEntityCore(Entity) -> IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>",
-                "ValidateCore(ExchangeStructure) -> ValidationResult",
+                "ValidateCore(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
             ]);
             await Assert.That(internalMethods).IsEquivalentTo([
                 "AllocateEntity(IReadOnlyList<String>) -> Entity",
                 "GetCapabilityDiagnostics(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntity(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
                 "ProjectEntity(Entity) -> IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>",
-                "Validate(ExchangeStructure) -> ValidationResult",
+                "Validate(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
             ]);
             await Assert.That(type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic)).IsEmpty();
         }
@@ -67,7 +67,8 @@ internal sealed class SchemaDescriptorTests
             await Assert.That(descriptor.AllocateEntity(["TEST_ENTITY"])).IsSameReferenceAs(entity);
             await Assert.That(descriptor.HydrateEntity(structure, entity, projected).Single().Code)
                 .IsEqualTo("TEST-HYDRATE");
-            await Assert.That(descriptor.Validate(structure).Failures.Single().Code)
+            var entities = new KeyValuePair<string, Entity>[] { new("DataSections[0].#1", entity), };
+            await Assert.That(descriptor.Validate(structure, entities).Failures.Single().Code)
                 .IsEqualTo("TEST-VALIDATE");
             await Assert.That(descriptor.GetCapabilityDiagnostics(structure).Single().Code)
                 .IsEqualTo("TEST-CAPABILITY");
@@ -106,7 +107,9 @@ internal sealed class SchemaDescriptorTests
             IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) =>
             [new("TEST-HYDRATE", Step21DiagnosticSeverity.Information, "Hydration dispatch reached.")];
 
-        protected override ValidationResult ValidateCore(ExchangeStructure structure) =>
+        protected override ValidationResult ValidateCore(
+            ExchangeStructure structure,
+            IReadOnlyList<KeyValuePair<string, Entity>> entities) =>
             new([new("TEST-VALIDATE", "$", "Validation dispatch reached.")]);
 
         protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(

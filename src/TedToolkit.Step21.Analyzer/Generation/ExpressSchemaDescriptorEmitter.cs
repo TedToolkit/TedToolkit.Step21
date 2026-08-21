@@ -37,13 +37,19 @@ internal static class ExpressSchemaDescriptorEmitter
         descriptor.Polymorphism = Polymorphism.SEALED;
         descriptor.AddBaseType(new DataType("global::TedToolkit.Step21.SchemaDescriptor"));
         AddSummary(descriptor, $"Provides reflection-free mapping infrastructure for the {schema.Name} EXPRESS schema.");
+        ExpressStructuralValidationEmitter.AddDescriptorDocumentation(descriptor, schema, entities);
 
         descriptor.AddMember(CreateConstructor());
         descriptor.AddMember(CreateInstanceProperty());
         descriptor.AddMember(CreateNameProperty(schema));
         descriptor.AddMember(CreateAllocateMethod(entities));
         descriptor.AddMember(CreateHydrateMethod(entities, resolver));
-        descriptor.AddMember(CreateValidateMethod());
+        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateDispatchMethod(schema, entities));
+        foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
+        {
+            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver));
+        }
+
         descriptor.AddMember(CreateCapabilityMethod());
         descriptor.AddMember(CreateProjectMethod(entities, resolver));
 
@@ -141,19 +147,6 @@ internal static class ExpressSchemaDescriptorEmitter
             + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
             + "\"The entity is not supported by this schema descriptor.\")]").Return);
         AddSummary(method, "Hydrates one supported simple entity from strong physical parameters.");
-        return method;
-    }
-
-    private static Method CreateValidateMethod()
-    {
-        var method = CreateOverrideMethod(
-            "ValidateCore",
-            new DataType("global::TedToolkit.Step21.ValidationResult"));
-        method.AddParameter(SourceComposer.Parameter(
-            new DataType("global::TedToolkit.Step21.ExchangeStructure"),
-            "structure"));
-        method.AddStatement(new CustomExpression("new global::TedToolkit.Step21.ValidationResult([])").Return);
-        AddSummary(method, "Returns schema validation evidence for the current delivery stage.");
         return method;
     }
 
