@@ -56,3 +56,32 @@ Direct C# entity references are the most natural generated API, but ISO 10303-21
 ### Exception route
 
 Any proxy/lazy-resolution or alternate-serialization contract requires an accepted ADR covering identity, cycles, equality, model lifetime, and ISO write-back behavior.
+
+## EP-003: Prefer static contracts and keep runtime paths Native AOT-ready
+
+- Status: Active
+- Strength: Required
+- Scope: runtime libraries, generated schema code, runtime discovery and activation, runtime package dependencies, trimming, single-file deployment, and Native AOT consumer behavior; build-time Analyzer execution is excluded
+- Owner: repository maintainer
+- Review trigger: a runtime path or dependency introduces unbounded reflection, assembly scanning, runtime code generation, linker preservation configuration, or an AOT warning
+
+### Default
+
+Core runtime behavior and generated schema behavior shall be statically reachable or source-generated and shall remain usable from a trimmed Native AOT application without runtime discovery, dynamic code generation, or reflection-only fallback behavior.
+
+### Rationale
+
+Runtime reflection and dynamic discovery hide dependency edges from the compiler and linker, making trimming and Native AOT behavior fragile or environment-dependent. The repository already owns a compile-time schema generator, so it can emit direct mappings, reference enumeration, validator wiring, and writer dispatch rather than rediscovering them at runtime.
+
+### Practical implications
+
+- Source generation emits direct schema descriptors, physical mappings, validator construction, and one-level entity-reference enumeration; runtime code does not scan assemblies or inspect generated properties to recover this information.
+- Reflection is not categorically forbidden, but any retained use must be statically analyzable, trimming-safe, Native AOT-safe, and unnecessary for core schema discovery or execution.
+- Runtime code does not depend on `Reflection.Emit`, runtime source compilation, unbounded `MakeGenericType`, convention-based `Activator.CreateInstance`, or automatic assembly scanning.
+- The runtime project declares `IsAotCompatible` when its target framework supports the SDK contract, and AOT, trimming, and single-file analyzer warnings are treated as defects rather than suppressed by default.
+- A representative generated-schema consumer is published and executed with Native AOT in Release; read, validation, graph registration, and write paths must succeed without trimming/AOT warnings attributable to the delivered runtime or generated code.
+- Every runtime dependency must have documented Native AOT evidence for the exercised paths. An analyzer-only dependency does not become a consumer runtime dependency merely to satisfy generator implementation convenience.
+
+### Exception route
+
+A runtime dependency or behavior that cannot satisfy the Native AOT proof requires an accepted ADR identifying the affected public paths, why no static/source-generated alternative is viable, the warning or runtime consequences, and an objective removal trigger. Warning suppression or linker-root configuration alone is not proof of compatibility.

@@ -41,7 +41,7 @@ The runtime defines schema-independent ISO 10303-21 values, identity, model, res
 
 ### Rationale
 
-This direction permits any EXPRESS schema to use one runtime, keeps Roslyn and ANTLR generation details out of consumer objects, and allows raw exchange structures to be processed without compile-time schema generation.
+This direction permits any EXPRESS schema to use one runtime, keeps Roslyn and ANTLR generation details out of consumer objects, and allows standard physical syntax to be recognized in internal parser infrastructure before explicit generated-schema binding.
 
 ### Practical implications
 
@@ -54,29 +54,30 @@ This direction permits any EXPRESS schema to use one runtime, keeps Roslyn and A
 
 A reversed or cyclic dependency requires an accepted ADR demonstrating why a schema-neutral contract cannot represent the requirement.
 
-## AP-003: ISO semantics first, idiomatic C# second
+## AP-003: Do not add domain concepts beyond ISO 10303-21 and EXPRESS
 
 - Status: Active
 - Strength: Required
 - Scope: public domain model, generated schema types, naming, nullability, inheritance, collections, identity, reading, and writing
 - Owner: repository maintainer
-- Review trigger: a public domain type or behavior cannot cite its ISO 10303-21 or EXPRESS source, or a C# convention would alter that source semantics
+- Review trigger: a public domain type or behavior cannot cite its ISO 10303-21 or supplied EXPRESS source, implementation infrastructure is presented as domain semantics, or a C# convention would alter source semantics
 
 ### Default
 
-Preserve ISO 10303-21 and EXPRESS semantics without addition or reinterpretation; only after semantic equivalence is established may the implementation choose the most idiomatic C# representation.
+The public domain model shall contain only concepts and relationships defined by ISO 10303-21 or the supplied EXPRESS schemas. The library shall not add convenience domain types, ownership relationships, identities, states, or behaviors beyond those sources. Clearly named parsing, binding, validation, diagnostic, generation, and writing infrastructure is permitted only when required to implement the standard and shall not be presented as ISO/EXPRESS domain semantics. Only after semantic equivalence is established may the implementation choose the most idiomatic C# representation.
 
 ### Rationale
 
-Standard fidelity is the library's interoperability contract. C# design quality makes that contract usable, but convenience cannot justify a wrapper, state, relationship, or behavior that the exchange structure or schema does not contain. Conversely, literal syntax-shaped APIs should not be retained when C# can express the same semantics more naturally and completely.
+Standard fidelity is the library's interoperability contract. An invented domain concept would change how consumers reason about identity, ownership, validity, navigation, or serialization and could make one application protocol appear to govern the schema-neutral runtime. C# design quality makes the standard contract usable, but convenience cannot justify a wrapper, state, relationship, or behavior that the exchange structure or schema does not contain. Conversely, literal syntax-shaped APIs should not be retained when C# can express exactly the same semantics more naturally and completely.
 
 ### Practical implications
 
-- Every public domain type and member traces to an ISO 10303-21 concept or a declaration in the selected EXPRESS schema.
+- Every public domain type, member, relationship, and state has a documented trace to an ISO 10303-21 concept or a declaration in the supplied EXPRESS schema.
+- A code review rejects a proposed public domain concept when that trace is absent; similarity to one STEP application protocol, a corpus, or another library is not sufficient evidence.
 - Direct entity properties express the EXPRESS entity-valued attribute in ordinary C#; model-owned instance-name bookkeeping remains implementation infrastructure required for ISO writing.
 - `OPTIONAL` may map to C# nullability only when absence remains distinct from EXPRESS values such as LOGICAL unknown.
 - Interfaces and records are C# representations of EXPRESS entity assignability and data; they do not add another domain type system.
-- Parser, diagnostic, schema-mapping, and writer contracts are clearly named infrastructure. They do not appear as additional values or relationships in generated entities.
+- Parser, binder, validation-result, diagnostic, schema-mapping, source-generator, and writer contracts are clearly named infrastructure. They do not appear as additional values or relationships in generated entities and do not claim to be standard concepts.
 - Working API names such as `P21Model<TSchema>` are not accepted merely for implementation convenience; final public names must use standard concepts such as exchange structure, section, entity instance, parameter, or schema declaration where applicable.
 
 ### Exception route

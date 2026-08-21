@@ -1,13 +1,13 @@
 # ADR-0001: Represent schema-bound relationships as direct entity references
 
-- Status: Proposed
+- Status: Superseded
 - Date: 2026-08-21
 - Decision owner: repository maintainer
 - Decision scope: generated EXPRESS entity APIs, parse-time construction, runtime identity ownership, and ISO 10303-21 write-back
 - Applicable product intent: [`../product/README.md`](../product/README.md)
 - Applicable principles: [`AP-001`](../principles/architecture.md), [`AP-002`](../principles/architecture.md), [`AP-003`](../principles/architecture.md), and [`EP-002`](../principles/engineering.md)
 - Supersedes: None
-- Superseded by: None
+- Superseded by: ADR-0004
 
 ## 📝 Clarification and decision log
 
@@ -41,7 +41,7 @@ The decision is how to expose ordinary direct C# references without losing parse
 | Hard constraint | Represent EXPRESS multiple inheritance without false assignability | ISO 10303-11 entity model and current EXPRESS grammar | Must |
 | Hard constraint | Generated objects use interfaces or records, sealing where valid | Maintainer direction, 2026-08-21 | Must |
 | Driver | Ordinary navigation is a property access with no resolution API | Maintainer ergonomics requirement, 2026-08-21 | High |
-| Driver | Invalid incomplete state should not leak from parsing | Recommended safety boundary; approval pending | High |
+| Driver | Invalid incomplete state must not leak from parsing | Maintainer direction and ADR approval, 2026-08-21 | High |
 
 ## 🔎 Options and evidence
 
