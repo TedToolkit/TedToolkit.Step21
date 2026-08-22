@@ -30,6 +30,8 @@ internal sealed class PublicContractTests
                 "Remove(Entity) -> Boolean",
                 "Remove(EntityInstanceName) -> Boolean",
                 "Validate() -> ValidationResult",
+                "Write(TextWriter) -> Void",
+                "WriteEntity(TextWriter, Entity) -> Void",
             ]);
             await Assert.That(type.GetMethod("Replace")).IsNull();
         }

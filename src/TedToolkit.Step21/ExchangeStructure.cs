@@ -105,6 +105,40 @@ public sealed class ExchangeStructure
         return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors);
     }
 
+    /// <summary>Writes this complete structure as deterministic ISO 10303-21 clear text.</summary>
+    /// <param name="destination">The destination that receives the complete canonical structure.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="destination"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ExchangeStructureWriteValidationException">
+    /// The current registered graph is invalid. No output is produced.
+    /// </exception>
+    /// <exception cref="ExchangeStructureCapabilityException">
+    /// The current structure requires an unsupported write operation. No output is produced.
+    /// </exception>
+    /// <remarks>Exceptions raised by <paramref name="destination"/> are not caught or translated.</remarks>
+    public void Write(TextWriter destination)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ExchangeStructureWriter.Write(this, destination);
+    }
+
+    /// <summary>Writes one registered entity-instance record using this structure's occurrence-name context.</summary>
+    /// <param name="destination">The destination that receives the canonical entity-instance record.</param>
+    /// <param name="entity">The registered entity to write.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ExchangeStructureWriteValidationException">
+    /// The current graph is invalid or <paramref name="entity"/> is not registered. No output is produced.
+    /// </exception>
+    /// <exception cref="ExchangeStructureCapabilityException">
+    /// The entity requires an unsupported write operation. No output is produced.
+    /// </exception>
+    /// <remarks>Exceptions raised by <paramref name="destination"/> are not caught or translated.</remarks>
+    public void WriteEntity(TextWriter destination, Entity entity)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(entity);
+        ExchangeStructureWriter.WriteEntity(this, destination, entity);
+    }
+
     /// <summary>
     /// Registers an entity graph in an owned data section using the smallest unused positive root name.
     /// </summary>

@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -87,12 +87,15 @@ Descriptors can project simple parameters and identity maps hold names, but no p
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and writer/test/docs artifacts |
-| Behavior-case proof | Commands/results for BC-05B, BC-09, BC-11, BC-23, and BC-23A writer assertions |
-| Migration and documentation | Explicit writer/canonical formatting guidance |
-| Dependent-item unlock | Simple writer for SBRT-023 and SBRT-024 |
+| Delivery-boundary check | Started from `79953ed`. Added only the exact instance `Write(TextWriter)` and `WriteEntity(TextWriter, Entity)` methods, one runtime-internal buffered writer, focused generated/custom descriptor fixtures, API approval, and canonical-writing documentation. No public writer/context/facade/nested type, complex physical mapping, byte-preservation claim, JSON/XML contract, branch, remote, reflection, dynamic code, or new dependency was added. |
+| Behavior-case proof | Red: `CanonicalSimpleWriterTests` failed to compile because both approved instance methods were absent. Green/refactor: focused writer tests pass 4/4 and the complete fast Release project passes 222/222. BC-05B/BC-09 read, edit, write, and re-read every generated simple scalar/typed/aggregate/OPTIONAL family with canonical `$`, exact LOGICAL UNKNOWN, character directives, binary padding, and stable parameter order. A strong custom projection proves `*`, recursive values, and reference-name formatting. BC-11 proves one graph writes under independent names in two structures without entity mutation. BC-23/BC-23A prove exact complete/record output, named multi-schema sections and `FILE_POPULATION`, parser acceptance, unregistered target validation, invalid graph/capability/projection/unnamed-section zero-output failures, original `IOException`, exact public surface, and serialization-free `ToString()`. |
+| Normative and regression proof | ISO 10303-21:2016 Edition 3 Table 3 and clauses 7.1, 8, 11, and 12 govern header, parameter, data-section, and simple-record structure; Table 2 and clauses 6.4.1–6.4.6 govern canonical value tokens. Release solution and runtime AOT/trim analyzer builds passed with 0 warnings/errors. Integration TUnit passed 3/3 enabled cases including local packed consumption; the explicit opt-in external corpus case was skipped. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Production scanning found no reflection, dynamic dispatch, or expression compilation. Public API/XML tests pass, `git diff --check` passes, and the work-item validator reports `Work-item delivery boundary: valid`. |
+| Migration and documentation | `docs/conformance/canonical-simple-writing.md` defines deterministic header/section/record order, fixed line separators, every simple parameter spelling, structure-local identity, preflight buffering, exact exceptions, and the I/O/non-byte-preservation boundary. README, generated-value, and multi-schema guidance now link the delivered writer. `SBRT-022.approved.txt` pins the two-method public expansion. |
+| Independent review | Final read-only trace review covered the approved work item, clause evidence, writer/API/exception design, complete and per-entity request scoping, structure and entity buffering, projection/reference lookup, independent identity contexts, empty/header descriptor capability, multi-schema named sections and both population section forms, tests, public metadata, and documentation. It tightened descriptor preflight to use the header schema set for complete writing while keeping `WriteEntity` request-specific, and added explicit missing-descriptor, unprojectable-entity, unnamed-multi-section, and zero-registration capability evidence. No blocking or advisory findings remain. |
+| Effort and variance | Existing descriptor projection, parameter formatter, header values, section context, and bidirectional identity maps made the simple writer substantially smaller than the planning range. The remaining complexity is intentionally staged to complex mapping and final aggregate preflight. |
+| Dependent-item unlock | Canonical simple projection and atomic buffered emission are available for SBRT-023 complex mapping and SBRT-024 final pre-write aggregation. |
 
 ## ⚠️ Risks and open questions
 

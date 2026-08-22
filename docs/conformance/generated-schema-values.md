@@ -56,8 +56,8 @@ The non-nested public `ParameterValue` union is the schema-neutral bridge used b
 - resolved `Entity` instances by reference identity; and
 - recursively nested aggregate parameters as an immutable snapshot.
 
-The union exposes typed factories and `TryGet` methods. It has no `object` payload, public nested type, syntax node, parser context, resolver, or writer state. Its internal canonical formatter is covered by emit-and-reparse fixtures for every physical alternative, but canonical exchange-file writing remains a later work item.
+The union exposes typed factories and `TryGet` methods. It has no `object` payload, public nested type, syntax node, parser context, resolver, or writer state. Its internal canonical formatter and the [canonical simple writer](canonical-simple-writing.md) are covered by emit-and-reparse fixtures for every physical alternative.
 
 ## Current boundary
 
-Schema-bound hydration, schema-rule validation, and public ISO 10303-21 writing remain later stages. Generated values therefore permit editable temporary states where the CLR representation allows them; later boundary validation is responsible for reporting all remaining schema violations before output.
+Schema-bound hydration, schema-rule validation, and simple public ISO 10303-21 writing now consume these values. Generated values still permit editable temporary states where the CLR representation allows them; explicit validation and write preflight report remaining schema violations. Complex physical mapping and the final complete pre-write aggregation gate remain staged.

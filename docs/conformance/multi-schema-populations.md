@@ -61,3 +61,5 @@ equivalence by entity name, shape, or CLR coincidence.
 
 For manually constructed graphs, register a referenced entity in its governing `DataSection` before adding a root in
 another section. Graph traversal skips existing registrations, so the referenced entity retains its original section.
+The [canonical simple writer](canonical-simple-writing.md) retains these named section associations and standard
+`FILE_POPULATION` declarations in deterministic output.
