@@ -34,23 +34,23 @@ OPTIONAL, and aggregate semantics. A syntactically valid physical value that can
 `P21-BIND-VALUE`; descriptor entity/component/count/type failures retain their `P21-BIND-*` codes and receive the
 originating record location when the generated diagnostic has no EXPRESS source location.
 
-## Atomic failures and staged capability
+## Atomic failures and capability boundary
 
 - invalid clear-text syntax throws `ExchangeStructureSyntaxException` with all syntax diagnostics;
 - schema/header/entity/value/hydration mismatches throw `ExchangeStructureBindingException` with all binding
   diagnostics;
 - an invalid hydrated population throws `ExchangeStructureReadValidationException` with the complete
   `ValidationResult`; and
-- anchor/signature operations, external value occurrences, complex instances, multiple governing schemas, and
-  additional header entities throw `ExchangeStructureCapabilityException`.
+- anchor/signature operations, external value occurrences, and operational external-resource resolution throw
+  `ExchangeStructureCapabilityException`. Supported flat-`ANDOR` complex instances and multiple governing schemas
+  are handled by their dedicated mapping/population contracts.
 
 Local entity references are allocated and hydrated atomically; missing, declared external, and incompatible targets
 instead produce the dedicated aggregate read-validation evidence documented by the
 [reference-hydration boundary](reference-hydration.md).
 
 No exception exposes syntax nodes, a binding/hydration context, or a partially hydrated entity. There is no public
-reader facade, result wrapper, raw model, registry, or nested public processing type. Multi-schema and complex
-populations remain later work items.
+reader facade, result wrapper, raw model, registry, or nested public processing type.
 
 ## Verification
 

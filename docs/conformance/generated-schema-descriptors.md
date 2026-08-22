@@ -2,7 +2,7 @@
 
 Every valid supplied EXPRESS schema emits one reflection-free descriptor in `TedToolkit.Step21.Generated.<SchemaPascalCase>`. The descriptor is an ordinary public sealed `class`, not a `record`, because it represents singleton behavior and identity rather than a structurally comparable ISO value. Its private constructor and public static `Instance` property expose the only instance; `Name` preserves the nominal schema name.
 
-The runtime `SchemaDescriptor` base is an abstract `class`. Its public surface contains only `SchemaName Name`; runtime-internal non-virtual dispatch forwards to protected allocation, hydration, validation, capability-diagnostic, and projection hooks. The hooks exchange only `Entity`, `ExchangeStructure`, diagnostics/results, ordered BCL component-name/`ParameterValue` lists, and an ordered BCL path/entity list for validation. `ExchangeStructure` derives that validation list from its private registration index, so generated consumer-assembly overrides need neither internal access nor a public registry. The hooks expose no parser syntax, context, resolver, writer callback, nested public type, reflection, or dynamic dispatch.
+The runtime `SchemaDescriptor` base is an abstract `class`. Its public surface contains only `SchemaName Name`; runtime-internal non-virtual dispatch forwards to protected allocation, hydration, validation, capability-diagnostic, and projection hooks. The hooks exchange only `Entity`, `ExchangeStructure`, diagnostics/results, ordered BCL component-name/`ParameterValue` lists, and an ordered BCL path/entity list for validation. `ExchangeStructure` derives that validation list from its private registration index, so generated consumer-assembly overrides need neither internal access nor a public registry. The hooks expose no parser syntax, context, resolver, writer callback, nested public type, reflection, or dynamic code.
 
 ## Simple physical mapping
 
@@ -25,17 +25,16 @@ human-readable messages.
 
 ## Structural validation
 
-The generated descriptor dispatches each registered entity governed by its schema to directly generated structural checks. The checks cover mandatory/`OPTIONAL` presence, generated entity assignability, literal aggregate shape and bounds, required array slots, uniqueness, nested elements, nominal wrappers, enumerations, and SELECT alternatives. See the [structural validation boundary](structural-validation.md) for ordering, paths, constraint IDs, XML traceability, and staged exclusions.
+The generated descriptor dispatches each registered entity governed by its schema to directly generated structural checks. The checks cover mandatory/`OPTIONAL` presence, generated entity assignability, literal aggregate shape and bounds, required array slots, uniqueness, nested elements, nominal wrappers, enumerations, and SELECT alternatives. See the [structural validation boundary](structural-validation.md) for ordering, paths, constraint IDs, XML traceability, and explicit unsupported cases.
 
 ## Current boundary
 
-Generated descriptors now execute the accepted validation-reachable expression/rule closure and support the atomic
-[simple typed-read boundary](atomic-simple-read.md). They do not map complex inherited/redeclared physical components,
-discover descriptors, acquire external resources, or write an exchange file. The runtime reader binds named sections
-and populations only through the explicitly supplied closed descriptor set.
+Generated descriptors execute the accepted validation-reachable expression/rule closure and support atomic simple and
+flat-`ANDOR` complex read/write mapping, including inherited and redeclared physical components. They do not discover
+descriptors or acquire external resources. The runtime binds and writes named sections and populations only through
+the explicitly supplied closed descriptor set.
 Structure-local parsed occurrences now hydrate through the atomic
-[reference boundary](reference-hydration.md). The remaining responsibilities belong to the population,
-complex-mapping, and writer work items.
+[reference boundary](reference-hydration.md), including governed multi-schema populations and supported complex mappings.
 Unsupported entities are not guessed through reflection or property names.
 
 Fast tests execute every scalar alternative and supported simple parameter form in both directions, including absence, invalid derived markers, nominal/enumeration/SELECT values, entity identity, and all four aggregate categories. Runtime API snapshots fix the abstract-class hook contract. The packed-consumer integration test compiles the generated sealed descriptor from the real package without a runtime dependency on analyzer implementation libraries.

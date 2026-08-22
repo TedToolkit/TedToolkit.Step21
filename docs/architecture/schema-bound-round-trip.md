@@ -31,7 +31,7 @@
 
 ### Baseline and standards
 
-The runtime project currently hosts an ANTLR parser for a subset of ISO 10303-21 exchange structures. The Analyzer project hosts an ANTLR EXPRESS parser and is packaged beside the runtime. Tests currently prove parser completion against small repository fixtures and opt-in NIST/buildingSMART corpora; they do not yet prove a public semantic model, generated types, or writing.
+The runtime project hosts the complete ISO 10303-21:2016 Edition 3 clear-text syntax parser and the public schema-bound exchange-structure model. The packaged Analyzer hosts the ISO 10303-11:2004 Edition 2 EXPRESS parser, closed-set compiler, and incremental generator. Repository fixtures and a packed consumer prove generated types, atomic read/edit/validate/write/read semantics, while opt-in pinned NIST/buildingSMART corpora independently regress the declared syntax boundary.
 
 The governing standards are:
 
@@ -153,7 +153,7 @@ Writing is a model operation driven by generated schema metadata, not general ob
 
 The standard permits references before definitions and does not require entity instances to be ordered. The default canonical writer orders local entity instances by canonical instance name for reproducibility; this is an output policy, not a semantic requirement.
 
-The first schema-bound delivery may state a narrower implemented conformance set than the full Edition 3 document structure. Anchor resolution, external resource retrieval, signatures, archive handling, and full EXPRESS constraint execution remain separate capabilities until implemented; their absence must be visible in capability metadata and diagnostics.
+The delivered operational set is intentionally narrower than the complete Edition 3 document syntax. Anchor resolution, external resource retrieval, and signature verification remain explicit capability failures. Validation executes the supported statically generated validation-reachable EXPRESS closure; it does not expose a general EXPRESS interpreter.
 
 ### Grammar governance
 
@@ -167,7 +167,7 @@ Grammar is limited to standard syntax. Each behavior-changing grammar proposal m
 
 Examples of semantic requirements that must not be solved only in `.g4` include `#001 == #1`, uniqueness of occurrence names, type compatibility of a referenced entity, ordering of inherited attributes, aggregate bounds, and schema constraints. Current grammar changes in the working tree, including generic EXPRESS schema names, form part of the baseline but require the same evidence before acceptance.
 
-The current `STEP.g4` is a prototype subset rather than the normative grammar baseline: its root currently requires one header and one data section, omits Edition 3 section forms, and contains token rules whose accepted languages do not exactly match the ISO WSN. Delivery therefore begins with a production-by-production audit against ISO 10303-21 Table 2, Table 3, and the relevant semantic clauses. The resulting grammar targets the complete Edition 3 clear-text syntax, and its start rule consumes the complete exchange structure and end of input. Compatibility fixtures cannot justify syntax that conflicts with the standard.
+The split `STEPLexer.g4`/`STEPParser.g4` pair is the audited normative grammar baseline. Its `exchangeFile` start rule recognizes the complete Edition 3 clear-text syntax and consumes EOF. The split is required because context-bound URI and signature tokenization uses ANTLR lexer modes, which are available only in a lexer grammar. Compatibility fixtures cannot justify syntax that conflicts with the standard.
 
 Complete syntactic recognition does not imply that every optional facility has complete operational semantics in the first release. The raw model and visitor retain all recognized standard section/value forms. External resource retrieval, signature validation, archive transport, ECMAScript execution, and comparable facilities may return explicit unsupported-capability diagnostics until implemented; they are not made syntactically invalid merely because their runtime behavior is staged.
 
@@ -180,7 +180,7 @@ Parser generation retains `-visitor -no-listener` for both grammars:
 - application behavior remains outside `.g4` actions, keeping the grammars standard-focused and target-independent;
 - generated parser, lexer, visitor, and base-visitor types remain internal implementation details.
 
-The visitors are currently unconsumed generated scaffolding, but they are required by the approved transformation pipeline. Listener generation would duplicate traversal infrastructure without a planned consumer, so it remains disabled. The generation scripts already select the correct artifacts; implementation adds reproducibility assertions rather than changing to listener generation.
+Both generated base visitors are consumed by the immutable syntax/IR transformations. Listener generation would duplicate traversal infrastructure without a consumer, so it remains disabled. Generation scripts reproduce and internalize the selected artifacts deterministically.
 
 ### TedToolkit.RoslynHelper syntax-object map
 

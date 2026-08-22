@@ -188,6 +188,34 @@ internal sealed class DiagnosticTests
     }
 
     /// <summary>
+    /// Verifies that empty parentheses bind only as an entity constructor, never as a function call.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_empty_function_application_as_an_entity_constructor()
+    {
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("empty-function.exp", """
+                SCHEMA empty_function;
+                FUNCTION ping : INTEGER;
+                  RETURN(1);
+                END_FUNCTION;
+                FUNCTION broken : INTEGER;
+                  RETURN(ping());
+                END_FUNCTION;
+                END_SCHEMA;
+                """),
+        ]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.Schemas).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics.Select(diagnostic => diagnostic.Code))
+                .IsEquivalentTo(["EXPRESS-BIND-EXPECTED-ENTITY-CONSTRUCTOR"]);
+        }
+    }
+
+    /// <summary>
     /// Verifies that illegal cycles in nested declarations are checked with their shared bound identities.
     /// </summary>
     [Test]

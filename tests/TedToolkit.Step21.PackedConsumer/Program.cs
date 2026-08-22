@@ -71,7 +71,19 @@ internal static class Program
         }
 
         var reread = ExchangeStructure.Read(new StringReader(text), descriptors);
-        if (!reread.Validate().IsValid || reread.Entities.Count() != 3)
+        var rereadComplex = reread.Entities.Single(entity => entity is ILeft && entity is IRight);
+        var rereadTarget = reread.Entities.OfType<Target>().Single();
+        var rereadSimple = reread.Entities.OfType<Simple>().Single();
+        if (!reread.Validate().IsValid
+            || reread.Entities.Count() != 3
+            || rereadComplex is not ILeft { Enabled: true, }
+            || rereadComplex is not IRight { Rank: var rereadRank }
+            || rereadComplex is not IRoot { Label: "complex", Peer: var rereadPeer, Values: var rereadValues }
+            || rereadRank != 7
+            || !rereadValues.SequenceEqual([1, 2])
+            || !ReferenceEquals(rereadPeer, rereadTarget)
+            || rereadTarget.Code != "peer-edited"
+            || rereadSimple.Name != "after")
         {
             return 13;
         }

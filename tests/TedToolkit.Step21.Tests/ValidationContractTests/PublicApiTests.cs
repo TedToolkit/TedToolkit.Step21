@@ -8,7 +8,7 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class PublicApiTests
 {
     /// <summary>
-    /// Verifies that the runtime exposes exactly the cumulative public contract approved through SBRT-018.
+    /// Verifies that the runtime exposes exactly the cumulative approved public contract.
     /// </summary>
     [Test]
     public async Task Should_match_approved_surface_when_validation_contract_is_inspected()

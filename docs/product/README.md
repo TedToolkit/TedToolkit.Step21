@@ -29,7 +29,7 @@ The current repository targets .NET 10 for the runtime and .NET Standard 2.0 for
 
 ## ⚠️ Problem and evidence
 
-ISO 10303-21 defines syntax and EXPRESS-to-exchange-structure mappings, while concrete schemas define entity types, inheritance, attributes, selects, and aggregates. A grammar-only parser can recognize text but cannot provide schema-bound reference safety, generated .NET types, or schema-aware writing. The repository currently contains generated parsers and parser conformance fixtures, but no public semantic model or typed round-trip API.
+ISO 10303-21 defines syntax and EXPRESS-to-exchange-structure mappings, while concrete schemas define entity types, inheritance, attributes, selects, and aggregates. A grammar-only parser cannot provide schema-bound reference safety, generated .NET types, or schema-aware writing. The delivered library closes that gap through a public mutable `ExchangeStructure`, compile-time-generated schema types and descriptors, atomic schema-bound reading, explicit validation, and canonical semantic round-trip writing.
 
 ## ✨ Intended value
 

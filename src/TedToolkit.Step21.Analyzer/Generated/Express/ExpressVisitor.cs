@@ -674,6 +674,12 @@ internal interface IExpressVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitNamedApplication([NotNull] ExpressParser.NamedApplicationContext context);
 	/// <summary>
+	/// Visit a parse tree produced by <see cref="ExpressParser.emptyEntityConstructorList"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitEmptyEntityConstructorList([NotNull] ExpressParser.EmptyEntityConstructorListContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="ExpressParser.namedReference"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>

@@ -2,7 +2,7 @@
 
 ## Status and authority
 
-This inventory records the completed SBRT-016 expression compiler. ISO 10303-11:2004, clauses 12 and 15, is the semantic authority; the grammar families are traced to `src/grammar/Express.g4`. “Complete” means immutable typed binding, static C# generation, generated-code compilation, positive behavior, and applicable UNKNOWN/indeterminate/error behavior pass. Attaching these leaves to reachable rules remains SBRT-017.
+This inventory records the completed expression compiler. ISO 10303-11:2004, clauses 12 and 15, is the semantic authority; the grammar families are traced to `src/grammar/Express.g4`. “Complete” means immutable typed binding, static C# generation, generated-code compilation, positive behavior, and applicable UNKNOWN/indeterminate/error behavior pass. The supported validation-reachable closure attaches these leaves directly to generated descriptor validation.
 
 ## Expression-family inventory
 

@@ -42,5 +42,5 @@ context.
 Generated-consumer tests compile an arbitrary schema and prove named-section preservation, per-registration section
 membership, cross-section forward/cyclic reference identity, complete malformed-context and duplicate-occurrence
 binding evidence, reference paths from multiple sections, and generated rule failures from every section. Single
-unnamed-section behavior remains covered by the original atomic-read suite. Complex entity instances and operational
-external-resource acquisition remain staged.
+unnamed-section behavior remains covered by the original atomic-read suite. Supported flat-`ANDOR` complex entity
+instances share the same section and identity rules; operational external-resource acquisition remains unsupported.

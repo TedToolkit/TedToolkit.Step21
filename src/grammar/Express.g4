@@ -488,7 +488,15 @@ primary
 // or attribute vs constant vs variable vs population vs enumeration.
 namedApplication
     : builtInFunction actualParameterList
-    | SimpleId actualParameterList
+    | SimpleId (actualParameterList | emptyEntityConstructorList)
+    ;
+
+// ISO 10303-11 distinguishes the non-empty actual_parameter_list used by
+// function/procedure calls from an entity constructor whose expression list is
+// optional. The empty form is retained separately so binding can require an
+// entity name without admitting empty function calls.
+emptyEntityConstructorList
+    : '(' ')'
     ;
 
 namedReference

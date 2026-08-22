@@ -95,4 +95,31 @@ internal sealed class SyntaxErrorTests
             await Assert.That(result.Diagnostics).IsNotEmpty();
         }
     }
+
+    /// <summary>
+    /// Verifies that an entity with no explicit attributes retains its required empty constructor list.
+    /// </summary>
+    [Test]
+    public async Task Should_accept_empty_entity_constructor_list()
+    {
+        const string text = """
+            SCHEMA constructors;
+            ENTITY marker;
+            END_ENTITY;
+            FUNCTION create_marker : marker;
+              RETURN (marker());
+            END_FUNCTION;
+            END_SCHEMA;
+            """;
+
+        var result = ExpressSyntaxParser.Parse("constructors.exp", text);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics).IsEmpty();
+            await Assert.That(result.Root).IsNotNull();
+            await Assert.That(result.Root!.DescendantsAndSelf()
+                .Count(node => node.Production == "emptyEntityConstructorList")).IsEqualTo(1);
+        }
+    }
 }

@@ -1338,6 +1338,18 @@ internal static class ExpressSchemaCompiler
                 return null;
             }
 
+            if (syntax.ChildRules("emptyEntityConstructorList").Any()
+                && target.Kind is not ExpressBoundNameKind.Entity)
+            {
+                schema.IsInvalid = true;
+                AddDiagnostic(
+                    _diagnostics,
+                    "EXPRESS-BIND-EXPECTED-ENTITY-CONSTRUCTOR",
+                    $"Name '{token.Text}' does not identify an entity constructor.",
+                    token.Span.Start);
+                return null;
+            }
+
             if (isApplication
                 && target.Kind is not ExpressBoundNameKind.Entity and not ExpressBoundNameKind.Function)
             {

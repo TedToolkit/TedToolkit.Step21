@@ -60,4 +60,4 @@ The union exposes typed factories and `TryGet` methods. It has no `object` paylo
 
 ## Current boundary
 
-Schema-bound hydration, schema-rule validation, and simple public ISO 10303-21 writing now consume these values. Generated values still permit editable temporary states where the CLR representation allows them; explicit validation and write preflight report remaining schema violations. Complex physical mapping and the final complete pre-write aggregation gate remain staged.
+Schema-bound hydration, schema-rule validation, and public ISO 10303-21 writing consume these values in simple and supported flat-`ANDOR` complex mappings. Generated values still permit editable temporary states where the CLR representation allows them; explicit validation and the complete atomic pre-write gate report final schema violations.

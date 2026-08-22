@@ -477,10 +477,12 @@ internal sealed class ExpressExpressionBinder
         ExpressRuleSyntax syntax,
         IReadOnlyDictionary<string, ExpressExpressionType> lexicalTypes)
     {
-        var parameters = syntax.RequiredChild("actualParameterList")
-            .ChildRules("parameter")
-            .Select(parameter => BindExpression(parameter.RequiredChild("expression"), lexicalTypes))
-            .ToArray();
+        var parameterList = syntax.ChildRules("actualParameterList").SingleOrDefault();
+        var parameters = parameterList is null
+            ? []
+            : parameterList.ChildRules("parameter")
+                .Select(parameter => BindExpression(parameter.RequiredChild("expression"), lexicalTypes))
+                .ToArray();
         var builtin = syntax.ChildRules("builtInFunction").SingleOrDefault();
         var reference = builtin is null ? FindReference(syntax.Span) : null;
         var operation = builtin?.TokenText() ?? reference?.Target.Name ?? syntax.IdentifierToken().Text;

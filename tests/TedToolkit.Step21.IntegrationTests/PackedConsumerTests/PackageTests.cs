@@ -72,6 +72,12 @@ internal sealed class PackageTests
             var runtimeLibraries = ReadRuntimeLibraries(
                 Path.Combine(first.IntermediateDirectory, "project.assets.json"));
             var packageEntries = ReadPackageEntries(packagePath);
+            var packagedReadme = ReadPackageText(packagePath, "README.md");
+            var projectReadme = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "src",
+                "TedToolkit.Step21",
+                "README.md"));
             var runOutput = await RunDotNet(
                 repositoryRoot,
                 Path.Combine(first.OutputDirectory, "TedToolkit.Step21.PackedConsumer.dll"));
@@ -99,6 +105,7 @@ internal sealed class PackageTests
                 await Assert.That(packageEntries).Contains("analyzers/dotnet/cs/ZString.dll");
                 await Assert.That(packageEntries).Contains("analyzers/dotnet/cs/System.Memory.dll");
                 await Assert.That(packageEntries).Contains("README.md");
+                await Assert.That(packagedReadme).IsEqualTo(projectReadme);
                 await Assert.That(packageEntries.Any(path => path.StartsWith(
                     "lib/",
                     StringComparison.OrdinalIgnoreCase) && path.EndsWith(
@@ -237,6 +244,15 @@ internal sealed class PackageTests
     {
         using var archive = ZipFile.OpenRead(packagePath);
         return archive.Entries.Select(entry => entry.FullName).ToArray();
+    }
+
+    private static string ReadPackageText(string packagePath, string entryPath)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        var entry = archive.GetEntry(entryPath)
+            ?? throw new InvalidOperationException($"Package entry '{entryPath}' is missing.");
+        using var reader = new StreamReader(entry.Open());
+        return reader.ReadToEnd();
     }
 
     private sealed record ConsumerBuild(string IntermediateDirectory, string OutputDirectory);

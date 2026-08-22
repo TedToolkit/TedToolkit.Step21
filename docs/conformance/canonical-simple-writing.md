@@ -45,7 +45,7 @@ These detectable domain/capability failures therefore produce no partial output.
 is a write-validation failure. Once the buffered text is handed to the supplied `TextWriter`, its I/O exception is
 allowed to propagate unchanged; the runtime does not catch, translate, or claim rollback of external I/O.
 
-This item does not claim byte preservation. The later
-[complex-mapping round-trip](complex-mapping-round-trip.md) extends the same buffered writer with ordered external
-mapping, and [atomic pre-write validation](atomic-prewrite-validation.md) defines the final complete failure gate shared
+This item does not claim byte preservation. The delivered
+[complex-mapping round trip](complex-mapping-round-trip.md) extends the same buffered writer with ordered external
+mapping, and [atomic pre-write validation](atomic-prewrite-validation.md) defines the complete failure gate shared
 by both public writer entry points.

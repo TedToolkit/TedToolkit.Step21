@@ -39,10 +39,10 @@ physical parameter for descriptor-reported target incompatibility). Missing and 
 distinct even when both occur in one recursive parameter.
 
 No failed attempt exposes its private structure, generated entities, syntax graph, resolver, or hydration state.
-External resource acquisition remains a non-goal: the `REFERENCE` section is consumed only to distinguish declared
+External resource acquisition remains unsupported: the `REFERENCE` section is consumed only to distinguish declared
 external occurrences from missing local names. External value occurrences (`@n`), anchors, and signatures remain
-explicit capability failures. Multiple governing schemas and complex entity mappings remain later delivery stages;
-structure-local occurrence identity already spans all same-schema data sections.
+explicit capability failures. Multiple governing schemas and supported flat-`ANDOR` complex entity mappings use the
+same structure-local identity space across all data sections.
 
 ## Verification
 

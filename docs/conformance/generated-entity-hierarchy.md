@@ -16,7 +16,7 @@ Generated entities project every supported explicit entity, scalar, defined, SEL
 - `OPTIONAL` attributes use nullable property types and accept `null`; and
 - abstract-class constructors are protected, while concrete-class constructors are public.
 
-Schema descriptors hydrate and project supported simple physical parameters. Rule execution and physical writing remain later boundaries and do not reinterpret the retained EXPRESS syntax.
+Schema descriptors hydrate and project supported simple and flat-`ANDOR` complex physical mappings, execute the supported validation-reachable rule closure, and project canonical physical records for writing without reinterpreting the retained EXPRESS syntax.
 
 Because generated files are treated specially by Roslyn's nullable analysis, the structural output pairs `T`/`T?` syntax with standard `System.Diagnostics.CodeAnalysis` nullability attributes. This preserves mandatory/OPTIONAL behavior for consuming C# compilations without setter guards.
 

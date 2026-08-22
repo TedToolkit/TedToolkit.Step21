@@ -38,6 +38,28 @@ internal sealed class CapabilityTests
     }
 
     /// <summary>
+    /// Verifies that the public read boundary preserves valid advanced syntax and returns its exact capability code.
+    /// </summary>
+    [Test]
+    [Arguments("Part21/Valid/advanced-anchor.p21", "P21-CAP-ANCHOR")]
+    [Arguments("Part21/Valid/advanced-signature.p21", "P21-CAP-SIGNATURE")]
+    public async Task Should_report_exact_capability_through_public_read(
+        string relativePath,
+        string expectedCode)
+    {
+        var source = File.ReadAllText(GetPath(relativePath));
+        var exception = Assert.Throws<ExchangeStructureCapabilityException>(() =>
+            ExchangeStructure.Read(new StringReader(source), []));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(exception.Diagnostics.Count).IsEqualTo(1);
+            await Assert.That(exception.Diagnostics[0].Code).IsEqualTo(expectedCode);
+            await Assert.That(exception.Diagnostics[0].Severity).IsEqualTo(Step21DiagnosticSeverity.Error);
+        }
+    }
+
+    /// <summary>
     /// Verifies that a graph containing all advanced section families reports every capability in file order.
     /// </summary>
     [Test]

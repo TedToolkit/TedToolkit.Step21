@@ -1,119 +1,58 @@
 # TedToolkit.Step21
 
-TedToolkit.Step21 is a .NET library focused on ISO 10303-21 exchange structures and their EXPRESS-defined schemas. The current repository provides the parser and generator foundation; its product boundary is ISO 10303-21 itself, not a particular application protocol or domain-specific format such as IFC.
+TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and writing ISO 10303-21 exchange structures against compile-time-generated EXPRESS schema types. It is schema-neutral: STEP application protocols and IFC are interoperability evidence, not alternate public models.
 
 [![Build](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml/badge.svg)](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml)
 
-## What it provides
+## Start here
 
-- ANTLR grammars for ISO 10303-21 exchange structures and EXPRESS schemas.
-- Generated C# lexers, parsers, and visitors built with ANTLR 4.13.1.
-- A Roslyn analyzer project packaged with the main library.
-- A shared TedToolkit build pipeline and GitHub Actions workflow.
+- [Package and API guide](src/TedToolkit.Step21/README.md) — install, add an EXPRESS schema, read or construct a model, validate, and write it.
+- [Conformance and capability matrix](docs/conformance/README.md) — delivered syntax/operations, syntax-only facilities, exclusions, and their evidence.
+- [Product intent](docs/product/README.md) — consumers, value, and non-goals.
+- [Architecture](docs/architecture/schema-bound-round-trip.md) and [design principles](docs/principles/README.md) — dependency and governance decisions.
 
-STEP application protocols and IFC files are useful conformance fixtures, but they do not define the library's public model or supported scope. See the [product intent](docs/product/README.md), [design principles](docs/principles/README.md), and [current architecture draft](docs/architecture/schema-bound-round-trip.md).
+## Repository map
 
-The Part 21 parser's `exchangeFile` entry rule recognizes the complete ISO 10303-21:2016 Edition 3 clear-text section and token syntax, enforces the normative section order, and consumes EOF. `ExchangeStructure.Read` atomically binds and validates named data sections under an explicitly supplied closed descriptor set, including forward/shared/cyclic cross-schema references, all three standard schema-population determination methods, and supported simple/subtype external mappings. `ExchangeStructure.Write` and `WriteEntity` validate the final graph once, aggregate detectable write failures, and emit deterministic simple or complex structures/records through that same identity context without domain-controlled partial output. External resource acquisition, SDAI domain-equivalence metadata, complex mappings outside the documented flat-`ANDOR` boundary, and operational anchor/signature behavior remain staged capabilities. See the [production-to-clause traceability](docs/conformance/part21-edition3-grammar.md), [atomic simple-read boundary](docs/conformance/atomic-simple-read.md), [reference-hydration boundary](docs/conformance/reference-hydration.md), [same-schema data-section boundary](docs/conformance/same-schema-data-sections.md), [multi-schema population boundary](docs/conformance/multi-schema-populations.md), [canonical simple-writing boundary](docs/conformance/canonical-simple-writing.md), [complex-mapping round-trip boundary](docs/conformance/complex-mapping-round-trip.md), and [atomic pre-write validation boundary](docs/conformance/atomic-prewrite-validation.md).
+| Path | Responsibility |
+| --- | --- |
+| `src/TedToolkit.Step21` | Public runtime, generated ISO 10303-21 parser, and packaged analyzer. |
+| `src/TedToolkit.Step21.Analyzer` | EXPRESS parser, closed-set binder, and incremental generator. |
+| `src/grammar` | Normative grammar sources. Part 21 uses separate lexer/parser grammars because lexer modes are lexer-grammar-only ANTLR features. |
+| `tests/TedToolkit.Step21.Tests` | Fast, repository-owned TUnit conformance tests. |
+| `tests/TedToolkit.Step21.IntegrationTests` | Package, documentation, and opt-in pinned-corpus tests. |
+| `docs/conformance` | Evidence-backed capability records. |
 
-The Analyzer's `syntax` entry rule recognizes ISO 10303-11:2004 Edition 2 EXPRESS and transforms complete input into internal immutable, source-located IR without executing declarations. Supplied schema texts then bind as one deterministic closed universe without external lookup. See the [EXPRESS grammar boundary](docs/conformance/express-edition2-grammar.md) and [closed-set binding boundary](docs/conformance/express-closed-set-binding.md).
+## Build and verify
 
-The packaged incremental generator consumes every `.exp` MSBuild `AdditionalFiles` item without a schema-name whitelist. Each valid EXPRESS entity generates a public interface and mutable reference-identity class under `TedToolkit.Step21.Generated.<SchemaPascalCase>`; classes derive only from `Entity`, while interfaces preserve single or multiple EXPRESS inheritance. Their live one-level `DirectReferences` views preserve physical order and repetitions through nested aggregate/SELECT containers without reflection. Scalars, nominal defined types, enumeration symbols, SELECT unions, and all four EXPRESS aggregate categories are generated as strong AOT-ready values. Each schema also receives one ordinary sealed singleton descriptor class for reflection-free identity, simple/complex physical mapping, structural validation, and accepted validation-reachable EXPRESS rule execution. `ExchangeStructure.Validate()` inspects the current graph without mutation and returns all detected failures with deterministic paths, codes, and optional EXPRESS source locations; a reachable dependency outside the documented static execution boundary rejects schema generation instead of publishing a validation gap. See the [generated entity boundary](docs/conformance/generated-entity-hierarchy.md), [generated value boundary](docs/conformance/generated-schema-values.md), [generated aggregate boundary](docs/conformance/generated-schema-aggregates.md), [generated descriptor boundary](docs/conformance/generated-schema-descriptors.md), [structural validation boundary](docs/conformance/structural-validation.md), [reachable EXPRESS rule boundary](docs/conformance/reachable-express-rules.md), and [generator host boundary](docs/conformance/express-generator-host.md).
-
-## Quick start
-
-Clone the repository with its TedToolkit submodule, then build the solution in Release mode:
+Clone with the TedToolkit submodule and build Release:
 
 ```shell
 git clone --recurse-submodules https://github.com/TedToolkit/TedToolkit.Step21.git
 cd TedToolkit.Step21
 dotnet build TedToolkit.Step21.slnx --configuration Release
-```
-
-The projects currently target .NET 10 and .NET Standard 2.0, so the .NET 10 SDK is required to build the complete solution.
-
-To supply an EXPRESS schema from a consuming project, reference the package and mark the schema as an additional file:
-
-```xml
-<ItemGroup>
-  <PackageReference Include="TedToolkit.Step21" Version="1.0.0" />
-  <AdditionalFiles Include="Schemas/my-schema.exp" />
-</ItemGroup>
-```
-
-Invalid EXPRESS syntax, binding, or generated C# name uniqueness is reported as a build diagnostic at the originating additional file. Generated sources are withheld atomically for invalid schemas.
-
-The packed generated model is compatible with Native AOT without reflection or dynamic-code fallback. The repository's executable deployment gate proves `win-x64`; this proof target is not an exclusive platform-support list. See the [Native AOT package proof](docs/conformance/native-aot-package-proof.md).
-
-## Components
-
-| Component | Responsibility |
-| --- | --- |
-| `src/TedToolkit.Step21` | Hosts the generated ISO 10303-21 parser and packages the analyzer. |
-| `src/TedToolkit.Step21.Analyzer` | Hosts the generated EXPRESS parser and Roslyn analyzer foundation. |
-| `src/grammar` | Contains the source grammars used to generate the parsers; Part 21 uses a split lexer/parser so signature Base64 is context-bound without target-language actions. |
-| `build/TedToolkit.Step21.Build` | Runs the repository build pipeline. |
-
-## Development
-
-### Regenerate the parsers
-
-Parser generation requires the .NET SDK and Java 11 or newer. The shell script also requires `curl`; the PowerShell script downloads ANTLR through `Invoke-WebRequest`.
-
-```powershell
-.\build\generate-antlr.ps1
-```
-
-```shell
-./build/generate-antlr.sh
-```
-
-Both scripts read the centrally managed ANTLR version from `Directory.Packages.props` and replace the generated parser directories.
-They normalize generated files to UTF-8 with LF line endings, retain visitors, omit listeners, and
-internalize generated top-level types. For isolated verification, pass an output root with
-`-OutputRoot <path>` to the PowerShell script or as the first argument to the shell script.
-Generated lexer and parser defaults use null writers so analyzer-host execution never reads or writes the process console.
-
-### Run the parser tests
-
-Fast TUnit tests use small repository-owned STEP, IFC, and EXPRESS fixtures and require no network access:
-
-```powershell
 dotnet run --project tests/TedToolkit.Step21.Tests --configuration Release
+dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release
 ```
 
-The integration project always validates the external-corpus manifest and cache policy. Its network test is skipped unless explicitly enabled:
+External NIST/buildingSMART corpus downloads are explicit opt-in. Their HTTPS source, license, byte size, and SHA-256 are pinned in `tests/TedToolkit.Step21.IntegrationTests/ExternalCorpus/manifest.json`; the verified cache is ignored under `artifacts/test-corpus/`.
 
 ```powershell
 $env:TEDTOOLKIT_STEP21_EXTERNAL_CORPUS = '1'
 dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release
 ```
 
-```shell
-TEDTOOLKIT_STEP21_EXTERNAL_CORPUS=1 \
-  dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release
-```
+The packed consumer and Native AOT deployment proof are documented in [the AOT/package record](docs/conformance/native-aot-package-proof.md). The executable proof target is `win-x64`; it is evidence, not an exclusive platform-support list.
 
-External NIST and buildingSMART artifacts are declared in
-`tests/TedToolkit.Step21.IntegrationTests/ExternalCorpus/manifest.json`. The manifest pins each
-download by byte size and SHA-256 and records its source and license. Verified files are cached in
-the Git-ignored `artifacts/test-corpus/` directory; they are never committed to the repository.
+## Regenerate parsers
 
-### Run the build pipeline
-
-Create the ignored local settings file before using the repository build wrapper:
+Parser generation requires the .NET SDK and Java 11 or newer:
 
 ```powershell
-Copy-Item build/TedToolkit.Step21.Build/appsettings.example.json build/TedToolkit.Step21.Build/appsettings.json
-.\build.ps1
+.\build\generate-antlr.ps1
 ```
 
-On Unix-like systems:
-
-```shell
-cp build/TedToolkit.Step21.Build/appsettings.example.json build/TedToolkit.Step21.Build/appsettings.json
-./build.sh
-```
+The script reads the central ANTLR version, replaces generated parser directories, retains visitors, omits listeners, internalizes generated types, and normalizes deterministic UTF-8/LF output.
 
 ## License
 
-This project is licensed under the [GNU Lesser General Public License v3.0](COPYING.LESSER). See [COPYING](COPYING) for the full license text.
+Licensed under the [GNU Lesser General Public License v3.0](COPYING.LESSER). See [COPYING](COPYING) for the full text.

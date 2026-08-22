@@ -308,6 +308,8 @@ internal sealed class GenerationTests
           left_value : INTEGER;
           right_value : INTEGER;
         END_ENTITY;
+        ENTITY marker;
+        END_ENTITY;
         FUNCTION add(left_value : INTEGER; right_value : INTEGER) : INTEGER;
           RETURN(left_value + right_value);
         END_FUNCTION;
@@ -317,6 +319,9 @@ internal sealed class GenerationTests
           END_LOCAL;
           result_pair := pair(input_number, add(input_number, 1));
           RETURN(result_pair.left_value + result_pair.right_value);
+        END_FUNCTION;
+        FUNCTION create_marker : marker;
+          RETURN(marker());
         END_FUNCTION;
         END_SCHEMA;
         """;
@@ -1718,6 +1723,7 @@ internal sealed class GenerationTests
         var constructor = ExpressExpressionEmitter.Emit(
             Find(schema, "pair(input_number,add(input_number,1))"),
             Resolve);
+        var emptyConstructor = ExpressExpressionEmitter.Emit(Find(schema, "marker()"), Resolve);
         var consumer = $$"""
             #nullable enable
             using System.Collections.Generic;
@@ -1729,6 +1735,7 @@ internal sealed class GenerationTests
             {
                 internal static BigInteger Function(BigInteger input_number) => {{function.Code}};
                 internal static Pair Constructor(BigInteger input_number) => {{constructor.Code}};
+                internal static Marker EmptyConstructor() => {{emptyConstructor.Code}};
 
                 private static BigInteger add(BigInteger left_value, BigInteger right_value) =>
                     left_value + right_value;
@@ -1763,6 +1770,8 @@ internal sealed class GenerationTests
             var pair = probe.GetMethod("Constructor", flags)!.Invoke(null, [new BigInteger(4)])!;
             await Assert.That(pair.GetType().GetProperty("LeftValue")!.GetValue(pair)).IsEqualTo(new BigInteger(4));
             await Assert.That(pair.GetType().GetProperty("RightValue")!.GetValue(pair)).IsEqualTo(new BigInteger(5));
+            await Assert.That(probe.GetMethod("EmptyConstructor", flags)!.Invoke(null, null)!.GetType().Name)
+                .IsEqualTo("Marker");
         }
     }
 
