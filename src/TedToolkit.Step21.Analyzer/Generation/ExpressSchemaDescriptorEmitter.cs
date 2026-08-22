@@ -319,12 +319,40 @@ internal static class ExpressSchemaDescriptorEmitter
                 .AddStatement(invalid);
         }
 
+        if (kind == ExpressScalarKind.Boolean)
+        {
+            return new IfStatement(new CustomExpression($"{parameter}.TryGetBoolean(out var {parameterName})"))
+                .AddStatement(new CustomExpression(createAssignment(parameterName)))
+                .ElseIf(new CustomExpression(
+                    $"{parameter}.TryGetEnumeration(out var {parameterName}Symbol) "
+                    + $"&& ({parameterName}Symbol == \"T\" || {parameterName}Symbol == \"F\")"))
+                .AddStatement(new CustomExpression(createAssignment($"{parameterName}Symbol == \"T\"")))
+                .Else()
+                .AddStatement(invalid);
+        }
+
+        if (kind == ExpressScalarKind.Logical)
+        {
+            return new IfStatement(new CustomExpression($"{parameter}.TryGetLogical(out var {parameterName})"))
+                .AddStatement(new CustomExpression(createAssignment(parameterName)))
+                .ElseIf(new CustomExpression(
+                    $"{parameter}.TryGetEnumeration(out var {parameterName}Symbol) "
+                    + $"&& ({parameterName}Symbol == \"T\" || {parameterName}Symbol == \"F\" "
+                    + $"|| {parameterName}Symbol == \"U\")"))
+                .AddStatement(new CustomExpression(createAssignment(
+                    $"{parameterName}Symbol == \"T\" "
+                    + "? global::TedToolkit.Step21.LogicalValue.True "
+                    + $": {parameterName}Symbol == \"F\" "
+                    + "? global::TedToolkit.Step21.LogicalValue.False "
+                    + ": global::TedToolkit.Step21.LogicalValue.Unknown")))
+                .Else()
+                .AddStatement(invalid);
+        }
+
         var tryGetMethod = kind switch
         {
             ExpressScalarKind.Binary => "TryGetBinary",
-            ExpressScalarKind.Boolean => "TryGetBoolean",
             ExpressScalarKind.Integer => "TryGetInteger",
-            ExpressScalarKind.Logical => "TryGetLogical",
             ExpressScalarKind.Real => "TryGetReal",
             ExpressScalarKind.String => "TryGetString",
             _ => throw new InvalidOperationException($"Unsupported scalar hydration kind '{kind.ToString()}'."),
@@ -709,6 +737,18 @@ internal static class ExpressSchemaDescriptorEmitter
             return $"({parameter}.TryGetInteger(out _) || {parameter}.TryGetReal(out _))";
         }
 
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, })
+        {
+            return $"({parameter}.TryGetBoolean(out _) || ({parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                + $"&& ({rawName}Symbol is \"T\" or \"F\")))";
+        }
+
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, })
+        {
+            return $"({parameter}.TryGetLogical(out _) || ({parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                + $"&& ({rawName}Symbol is \"T\" or \"F\" or \"U\")))";
+        }
+
         return CreateReadCondition(type, parameter, rawName, resolver);
     }
 
@@ -736,6 +776,25 @@ internal static class ExpressSchemaDescriptorEmitter
                 + $"? global::TedToolkit.Step21.NumberValue.FromReal({rawName}Real) "
                 + ": throw new global::System.InvalidOperationException()";
             return CreateReadValueExpression(currentSchema, type, number, resolver);
+        }
+
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, })
+        {
+            var boolean = $"{parameter}.TryGetBoolean(out var {rawName}Boolean) "
+                + $"? {rawName}Boolean : {parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                + $"? {rawName}Symbol == \"T\" : throw new global::System.InvalidOperationException()";
+            return CreateReadValueExpression(currentSchema, type, boolean, resolver);
+        }
+
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, })
+        {
+            var logical = $"{parameter}.TryGetLogical(out var {rawName}Logical) "
+                + $"? {rawName}Logical : {parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                + $"? {rawName}Symbol == \"T\" ? global::TedToolkit.Step21.LogicalValue.True "
+                + $": {rawName}Symbol == \"F\" ? global::TedToolkit.Step21.LogicalValue.False "
+                + ": global::TedToolkit.Step21.LogicalValue.Unknown "
+                + ": throw new global::System.InvalidOperationException()";
+            return CreateReadValueExpression(currentSchema, type, logical, resolver);
         }
 
         var condition = CreateReadCondition(type, parameter, rawName, resolver);
@@ -983,12 +1042,31 @@ internal static class ExpressSchemaDescriptorEmitter
         var terminal = GetTerminalType(type, resolver);
         if (terminal is ExpressBoundScalarType scalar)
         {
+            if (scalar.Kind == ExpressScalarKind.Boolean)
+            {
+                return $"({parameter}.TryGetBoolean(out var {rawName}) "
+                    + $"|| ({parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                    + $"&& ({rawName}Symbol is \"T\" or \"F\") "
+                    + $"&& (({rawName} = {rawName}Symbol == \"T\") || !{rawName})))";
+            }
+
+            if (scalar.Kind == ExpressScalarKind.Logical)
+            {
+                return $"({parameter}.TryGetLogical(out var {rawName}) "
+                    + $"|| ({parameter}.TryGetEnumeration(out var {rawName}Symbol) "
+                    + $"&& ({rawName}Symbol is \"T\" or \"F\" or \"U\") "
+                    + $"&& (({rawName} = {rawName}Symbol == \"T\" "
+                    + "? global::TedToolkit.Step21.LogicalValue.True "
+                    + $": {rawName}Symbol == \"F\" ? global::TedToolkit.Step21.LogicalValue.False "
+                    + ": global::TedToolkit.Step21.LogicalValue.Unknown) "
+                    + "== global::TedToolkit.Step21.LogicalValue.Unknown "
+                    + $"|| {rawName} != global::TedToolkit.Step21.LogicalValue.Unknown)))";
+            }
+
             var method = scalar.Kind switch
             {
                 ExpressScalarKind.Binary => "TryGetBinary",
-                ExpressScalarKind.Boolean => "TryGetBoolean",
                 ExpressScalarKind.Integer => "TryGetInteger",
-                ExpressScalarKind.Logical => "TryGetLogical",
                 ExpressScalarKind.Real => "TryGetReal",
                 ExpressScalarKind.String => "TryGetString",
                 _ => throw new InvalidOperationException("NUMBER SELECT alternatives require a later mapping branch."),

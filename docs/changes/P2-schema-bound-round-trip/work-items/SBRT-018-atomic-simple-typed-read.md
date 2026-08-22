@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -82,12 +82,15 @@ Parser tests return parser diagnostics only. Prerequisites supply internal synta
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and reader/binder/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-09, BC-13, and BC-23A read assertions |
-| Migration and documentation | Public read/descriptor/exception usage documented |
-| Dependent-item unlock | Atomic typed-read boundary for SBRT-019 and SBRT-020 |
+| Delivery-boundary check | Started from `7e72a0f`. Added only the exact static `ExchangeStructure.Read(TextReader, IReadOnlyCollection<SchemaDescriptor>)` method, runtime-internal atomic parse/bind/hydrate orchestration and lexical value decoding, the generated BOOLEAN/LOGICAL physical-symbol mapping needed by that boundary, focused tests/API snapshot, and conformance/README updates. No public reader, syntax/raw/result/context/registry type, nested public type, reference hydration, multi-section/schema population, complex mapping, writer, reflection, dynamic code, branch, remote, or new package was added. `validate-work-items.sh docs/changes/P2-schema-bound-round-trip` reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | Red: the focused test compilation failed because `ExchangeStructure.Read` did not exist. Green/refactor: `AtomicSimpleReadTests` passed 4/4 and the complete fast TUnit project passed 206/206. BC-09 reads and projects arbitrary-precision integer/real/number, full Part 21 STRING directives and ISO 8859 pages, bit-accurate binary, BOOLEAN/LOGICAL, enumeration, typed SELECT alternatives, recursive aggregates, present/absent OPTIONAL values in physical order, canonical occurrence identity, post-publication mutation, and a valid result. BC-13 proves exact `FILE_SCHEMA` mismatch evidence. BC-23A proves descriptor duplicates fail before a probe reader is consumed; syntax, aggregated binding, invalid physical value/name, read-validation, and capability failures use their exact evidence-bearing exceptions; reader I/O remains `IOException`; diagnostics use `<reader>` with positive coordinates; and no processing API leaks. |
+| Regression and dependency proof | Isolated Release solution build passed with 0 warnings and 0 errors. Integration TUnit passed 3/3 enabled cases with the explicit opt-in external corpus case skipped. Runtime `IsAotCompatible`, trim-analyzer, and AOT-analyzer build passed with 0 warnings/errors. Runtime dependency inspection reports only `Antlr4.Runtime.Standard` 4.13.1. Production scanning found no reflection, dynamic dispatch, expression compilation, assembly scanning, or reader/writer facade. |
+| Migration and documentation | Public XML documentation records atomic publication, duplicate preflight, `<reader>` diagnostics, exact exceptions, capability staging, and unchanged reader failures. `docs/conformance/atomic-simple-read.md` supplies the public usage example, supported value/mapping boundary, failure matrix, staged exclusions, and proof; README and descriptor conformance text now link the delivered boundary. The cumulative public API snapshot contains only the one approved static method addition. |
+| Independent review | Final read-only trace review compared the work item, architecture constraints, production diff, generated dispatch, tests, public metadata, documentation, and verification evidence. No blocking or advisory findings remain. During review, binding was corrected to continue aggregating hydration diagnostics after allocation failures, invalid occurrence and lexical edge cases were translated to dedicated binding evidence, and BC-09 was strengthened to prove both present/absent OPTIONAL state and mutability after publication. |
+| Effort and variance | Approximately 1.2 elapsed implementation/review hours, materially below the 0.6–1.1 person-month planning range because the parser syntax graph, descriptor dispatch, validation closure, test host, and evidence ABI were already complete. The only local contract choice was the deterministic `<reader>` logical source name required by a pathless `TextReader` signature; it was fixed in XML, tests, and conformance documentation. |
+| Dependent-item unlock | The atomic private staging/publication boundary, complete simple parameter conversion, allocation-before-hydration structure, source-located aggregate binding evidence, exact public entry point, and exception matrix are implemented and locally proven for SBRT-019 reference hydration and SBRT-020 same-schema multi-section binding. |
 
 ## ⚠️ Risks and open questions
 

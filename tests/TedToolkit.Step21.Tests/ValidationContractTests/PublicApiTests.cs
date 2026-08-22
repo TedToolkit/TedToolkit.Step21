@@ -8,7 +8,7 @@ namespace TedToolkit.Step21.Tests.ValidationContractTests;
 internal sealed class PublicApiTests
 {
     /// <summary>
-    /// Verifies that the runtime exposes exactly the cumulative public contract approved through SBRT-011.
+    /// Verifies that the runtime exposes exactly the cumulative public contract approved through SBRT-018.
     /// </summary>
     [Test]
     public async Task Should_match_approved_surface_when_validation_contract_is_inspected()
@@ -25,6 +25,7 @@ internal sealed class PublicApiTests
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-013.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-015.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-016.approved.txt")),
+            await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-018.approved.txt")),
         };
         var expected = MergeApprovedSnapshots(approvedSnapshots);
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));

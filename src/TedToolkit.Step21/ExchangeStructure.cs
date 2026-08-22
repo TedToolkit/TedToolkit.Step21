@@ -69,6 +69,40 @@ public sealed class ExchangeStructure
     public IList<DataSection> DataSections { get; }
 
     /// <summary>
+    /// Reads, schema-binds, validates, and atomically publishes one simple ISO 10303-21 data section.
+    /// </summary>
+    /// <param name="source">The character source. Diagnostics identify it by the stable logical name <c>&lt;reader&gt;</c>.</param>
+    /// <param name="schemaDescriptors">The generated schema descriptors available to the closed read operation.</param>
+    /// <returns>A complete validated mutable exchange structure.</returns>
+    /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A descriptor name is invalid or occurs more than once. This is detected before <paramref name="source"/> is
+    /// consumed.
+    /// </exception>
+    /// <exception cref="ExchangeStructureSyntaxException">The source is not valid ISO 10303-21 syntax.</exception>
+    /// <exception cref="ExchangeStructureBindingException">
+    /// The parsed simple population cannot be bound completely to the supplied descriptor.
+    /// </exception>
+    /// <exception cref="ExchangeStructureReadValidationException">
+    /// The bound structure fails structural or reachable EXPRESS validation.
+    /// </exception>
+    /// <exception cref="ExchangeStructureCapabilityException">
+    /// The valid source requires a Part 21 operation outside the simple-read capability.
+    /// </exception>
+    /// <remarks>
+    /// Duplicate descriptor validation precedes the first source read. Exceptions raised by the underlying
+    /// <see cref="TextReader"/> are not caught or translated.
+    /// </remarks>
+    public static ExchangeStructure Read(
+        TextReader source,
+        IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
+        return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors);
+    }
+
+    /// <summary>
     /// Registers an entity graph in an owned data section using the smallest unused positive root name.
     /// </summary>
     /// <param name="dataSection">An existing member of <see cref="DataSections"/>.</param>

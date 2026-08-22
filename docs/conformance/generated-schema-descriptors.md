@@ -24,6 +24,10 @@ The generated descriptor dispatches each registered entity governed by its schem
 
 ## Current boundary
 
-This stage does not execute general EXPRESS expressions or named `WHERE`/`UNIQUE` rules, map complex inherited/redeclared physical components, evaluate symbolic aggregate bounds, discover descriptors, bind parsed instance references, or write an exchange file. Those responsibilities remain with the expression/rule, complex-mapping, typed-read, reference, and writer work items. Unsupported entities are not guessed through reflection or property names.
+Generated descriptors now execute the accepted validation-reachable expression/rule closure and support the atomic
+[simple typed-read boundary](atomic-simple-read.md). They do not map complex inherited/redeclared physical components,
+discover descriptors, resolve parsed occurrence references, bind named or multiple data sections, or write an exchange
+file. Those responsibilities remain with the reference, population, complex-mapping, and writer work items.
+Unsupported entities are not guessed through reflection or property names.
 
 Fast tests execute every scalar alternative and supported simple parameter form in both directions, including absence, invalid derived markers, nominal/enumeration/SELECT values, entity identity, and all four aggregate categories. Runtime API snapshots fix the abstract-class hook contract. The packed-consumer integration test compiles the generated sealed descriptor from the real package without a runtime dependency on analyzer implementation libraries.
