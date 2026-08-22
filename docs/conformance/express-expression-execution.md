@@ -29,7 +29,7 @@ This inventory records the completed SBRT-016 expression compiler. ISO 10303-11:
 | `EXISTS`, `NVL`, `ODD` | Nullable present/missing matrix and QUERY predicate execution | Complete |
 | `HIBOUND`, `HIINDEX`, `LOBOUND`, `LOINDEX`, `SIZEOF` | ARRAY/BAG/LIST/SET declared-bound/current-index table, including unbounded HIBOUND | Complete |
 | `FORMAT` | ISO symbolic, picture, and default examples; rounding, signs, grouping, and invalid runtime format | Complete |
-| `ROLESOF`, `TYPEOF`, `USEDIN` | Strong result types and generated static model-operation calls with source-located missing-context errors | Complete — SBRT-017 supplies the model traversal callbacks |
+| `ROLESOF`, `TYPEOF`, `USEDIN` | Strong result types and generated static model-operation calls with source-located missing-context errors | Complete expression leaves; a reachable schema without a generated model callback is rejected atomically by SBRT-017 |
 | `VALUE` | Exact INTEGER/REAL and invalid-to-indeterminate generated execution | Complete |
 | `VALUE_IN`, `VALUE_UNIQUE` | Present/absent values, duplicates, and optional ARRAY unresolved-slot truth table | Complete |
 
@@ -41,7 +41,7 @@ This inventory records the completed SBRT-016 expression compiler. ISO 10303-11:
 - Aggregate indexing accepts a second index only as the same single position; only STRING and BINARY use true slices.
 - `HIBOUND` reads the declared upper bound, while `HIINDEX` reads the ARRAY upper index or current BAG/LIST/SET cardinality. `LOBOUND` reads the declared lower bound and `LOINDEX` is the ARRAY lower index or one for BAG/LIST/SET.
 - ARRAY `QUERY` preserves its declared index domain and represents rejected or absent positions as unset optional slots. Variable-size query results use lower bound zero and preserve the source upper bound.
-- Generated model callbacks are static C# spellings, not runtime registration or interpretation APIs. SBRT-017 owns reachable-rule/model attachment; SBRT-023 owns material complex-entity composition.
+- Generated model callbacks are static C# spellings, not runtime registration or interpretation APIs. SBRT-017 owns reachable-rule attachment and rejects a model-dependent reachable expression when that attachment cannot be generated; SBRT-023 owns material complex-entity composition.
 
 ## Execution boundary
 

@@ -21,16 +21,19 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="selfExpression">The static C# expression for SELF, when available.</param>
     /// <param name="resolveModelFunction">Maps a model-context function and its emitted arguments to static C#.</param>
     /// <param name="resolveValueEquality">Maps schema-dependent value equality to static C#.</param>
+    /// <param name="resolveAttribute">Maps a qualified entity attribute access to static C#.</param>
     internal ExpressExpressionEmissionContext(
         Func<ExpressBoundName, string> resolveReference,
         string? selfExpression = null,
         Func<string, IReadOnlyList<string>, string>? resolveModelFunction = null,
-        Func<ExpressExpressionType, string, string, string>? resolveValueEquality = null)
+        Func<ExpressExpressionType, string, string, string>? resolveValueEquality = null,
+        Func<ExpressBoundName, string, string>? resolveAttribute = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
         ResolveModelFunction = resolveModelFunction;
         ResolveValueEquality = resolveValueEquality;
+        ResolveAttribute = resolveAttribute;
     }
 
     /// <summary>
@@ -54,12 +57,17 @@ internal sealed class ExpressExpressionEmissionContext
     internal Func<ExpressExpressionType, string, string, string>? ResolveValueEquality { get; }
 
     /// <summary>
+    /// Gets the generated qualified-attribute resolver, when the enclosing operation supplies one.
+    /// </summary>
+    internal Func<ExpressBoundName, string, string>? ResolveAttribute { get; }
+
+    /// <summary>
     /// Creates an equivalent context with a scoped declaration-reference resolver.
     /// </summary>
     /// <param name="resolveReference">The scoped resolver.</param>
     /// <returns>The scoped immutable context.</returns>
     internal ExpressExpressionEmissionContext WithReferenceResolver(Func<ExpressBoundName, string> resolveReference)
     {
-        return new(resolveReference, SelfExpression, ResolveModelFunction, ResolveValueEquality);
+        return new(resolveReference, SelfExpression, ResolveModelFunction, ResolveValueEquality, ResolveAttribute);
     }
 }

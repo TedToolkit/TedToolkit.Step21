@@ -21,13 +21,15 @@ internal sealed class ExpressBoundName
     /// <param name="schemaDeclaration">The schema declaration, if this is a schema name.</param>
     /// <param name="span">The declaration span.</param>
     /// <param name="isOptional">Whether this value name can denote the EXPRESS indeterminate value.</param>
+    /// <param name="attribute">The exact entity attribute declaration, when applicable.</param>
     internal ExpressBoundName(
         string name,
         ExpressBoundNameKind kind,
         ExpressBoundType? type,
         ExpressBoundSymbol? schemaDeclaration,
         ExpressSourceSpan span,
-        bool isOptional = false)
+        bool isOptional = false,
+        ExpressBoundAttribute? attribute = null)
     {
         Name = name;
         Kind = kind;
@@ -35,6 +37,7 @@ internal sealed class ExpressBoundName
         SchemaDeclaration = schemaDeclaration;
         Span = span;
         IsOptional = isOptional;
+        Attribute = attribute;
     }
 
     /// <summary>
@@ -66,4 +69,9 @@ internal sealed class ExpressBoundName
     /// Gets a value indicating whether this value name can denote the EXPRESS indeterminate value.
     /// </summary>
     internal bool IsOptional { get; }
+
+    /// <summary>
+    /// Gets the exact entity attribute declaration, when this name identifies an attribute.
+    /// </summary>
+    internal ExpressBoundAttribute? Attribute { get; }
 }

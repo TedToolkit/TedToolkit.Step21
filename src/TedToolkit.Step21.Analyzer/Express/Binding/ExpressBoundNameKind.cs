@@ -71,4 +71,9 @@ internal enum ExpressBoundNameKind
     /// An enumeration item.
     /// </summary>
     Enumeration = 11,
+
+    /// <summary>
+    /// A typed entity population supplied to a global RULE.
+    /// </summary>
+    Population = 12,
 }

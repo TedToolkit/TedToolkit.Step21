@@ -26,28 +26,39 @@ internal static class ExpressSchemaDescriptorEmitter
     /// <param name="schema">The valid bound schema.</param>
     /// <param name="entities">The generated entities owned by the schema.</param>
     /// <param name="resolver">The closed-set generated value resolver.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
     internal static void Emit(
         in SourceProductionContext context,
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
     {
         var descriptor = SourceComposer<ExpressIncrementalGenerator>.Class("SchemaDescriptor");
         descriptor.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         descriptor.Polymorphism = Polymorphism.SEALED;
         descriptor.AddBaseType(new DataType("global::TedToolkit.Step21.SchemaDescriptor"));
         AddSummary(descriptor, $"Provides reflection-free mapping infrastructure for the {schema.Name} EXPRESS schema.");
-        ExpressStructuralValidationEmitter.AddDescriptorDocumentation(descriptor, schema, entities);
+        ExpressStructuralValidationEmitter.AddDescriptorDocumentation(descriptor, schema, entities, rulePlan);
 
         descriptor.AddMember(CreateConstructor());
         descriptor.AddMember(CreateInstanceProperty());
         descriptor.AddMember(CreateNameProperty(schema));
         descriptor.AddMember(CreateAllocateMethod(entities));
         descriptor.AddMember(CreateHydrateMethod(entities, resolver));
-        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateDispatchMethod(schema, entities));
+        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateDispatchMethod(
+            schema,
+            entities,
+            resolver,
+            rulePlan));
         foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
         {
-            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver));
+            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver, rulePlan));
+        }
+
+        foreach (var method in ExpressReachableRuleEmitter.CreateDependencyMethods(rulePlan, resolver))
+        {
+            descriptor.AddMember(method);
         }
 
         descriptor.AddMember(CreateCapabilityMethod());
@@ -802,9 +813,11 @@ internal static class ExpressSchemaDescriptorEmitter
     {
         lowerBound = 0;
         upperBound = null;
-        if (aggregate.LowerBoundText is not null
+        var lowerText = aggregate.ResolvedLowerBoundText ?? aggregate.LowerBoundText;
+        var upperText = aggregate.ResolvedUpperBoundText ?? aggregate.UpperBoundText;
+        if (lowerText is not null
             && !int.TryParse(
-                aggregate.LowerBoundText,
+                lowerText,
                 System.Globalization.NumberStyles.Integer,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out lowerBound))
@@ -812,10 +825,10 @@ internal static class ExpressSchemaDescriptorEmitter
             return false;
         }
 
-        if (aggregate.UpperBoundText is not null && aggregate.UpperBoundText != "?")
+        if (upperText is not null && upperText != "?")
         {
             if (!int.TryParse(
-                aggregate.UpperBoundText,
+                upperText,
                 System.Globalization.NumberStyles.Integer,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var parsedUpperBound))

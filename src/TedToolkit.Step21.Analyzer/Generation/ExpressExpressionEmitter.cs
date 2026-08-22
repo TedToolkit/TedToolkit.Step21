@@ -328,7 +328,9 @@ internal static class ExpressExpressionEmitter
         {
             "E" => EmitReal("2.718281828459045"),
             "PI" => EmitReal("3.141592653589793"),
-            "SELF" when context.SelfExpression is not null => context.SelfExpression,
+            "SELF" when context.SelfExpression is not null => UnwrapDefined(
+                expression.Type,
+                context.SelfExpression),
             "SELF" => throw GenerationError(expression, "SELF requires an enclosing generated entity operation."),
             _ => throw new InvalidOperationException(
                 $"Reference '{expression.SourceText}' has no resolved static target."),
@@ -388,6 +390,13 @@ internal static class ExpressExpressionEmitter
         }
 
         var source = EmitCode(expression.Children.Single(), context);
+        string Access(string candidate)
+        {
+            return context.ResolveAttribute is null
+                ? $"({candidate}).{ExpressEntityProjection.ToPascalCase(reference.Name)}"
+                : context.ResolveAttribute(reference, candidate);
+        }
+
         if (expression.Children[0].Type.CanBeIndeterminate)
         {
             return GuardIndeterminate(
@@ -396,12 +405,12 @@ internal static class ExpressExpressionEmitter
                 [source,],
                 codes => UnwrapDefined(
                     expression.Type,
-                    $"({codes[0]}).{ExpressEntityProjection.ToPascalCase(reference.Name)}"));
+                    Access(codes[0])));
         }
 
         return UnwrapDefined(
             expression.Type,
-            $"({source}).{ExpressEntityProjection.ToPascalCase(reference.Name)}");
+            Access(source));
     }
 
     private static string EmitGroup(
@@ -591,8 +600,10 @@ internal static class ExpressExpressionEmitter
         ExpressExpressionEmissionContext context,
         (ExpressBoundExpression Child, string Code, string RawVariable, string Variable)[] dynamicRepetitions)
     {
-        if (!int.TryParse(aggregate.LowerBoundText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lower)
-            || !int.TryParse(aggregate.UpperBoundText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var upper))
+        var lowerText = aggregate.ResolvedLowerBoundText ?? aggregate.LowerBoundText;
+        var upperText = aggregate.ResolvedUpperBoundText ?? aggregate.UpperBoundText;
+        if (!int.TryParse(lowerText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lower)
+            || !int.TryParse(upperText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var upper))
         {
             throw GenerationError(
                 expression,

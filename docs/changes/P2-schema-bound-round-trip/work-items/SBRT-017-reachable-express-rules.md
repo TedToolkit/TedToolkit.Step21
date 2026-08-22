@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -82,15 +82,17 @@ Structural rules and individual expressions can execute after prerequisites, but
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and analysis/generator/test/XML artifacts |
-| Behavior-case proof | Commands/results for BC-02A, BC-02B, and BC-16A |
-| Migration and documentation | Exact executable-semantics boundary documented |
-| Dependent-item unlock | Complete reachable rule guarantee for SBRT-021, SBRT-023, and SBRT-024 |
+| Delivery-boundary check | Started from `795fb8e`. Added Analyzer-internal validation-root reachability planning, private static dependency emission, contextual entity/type/global-rule binding, normalized static aggregate bounds, direct generated rule aggregation, `STEP21EXP006`, focused generated-consumer tests, and conformance documentation. The existing public runtime and descriptor ABI did not change; no public evaluator/function/procedure/context/registry, interpreter, reflection, dynamic code, second validator, or dependency was added. Cross-schema executable dependencies are source-located atomic failures until SBRT-021 owns that population boundary. The work-item validator reported `Work-item delivery boundary: valid`. |
+| Behavior-case proof | BC-02A executes named/unnamed entity and defined-type `WHERE`, inherited rules, global RULE typed populations, `UNIQUE`, derived/function/constant/query closure, symbolic and arithmetic static bounds, and aggregates every violated code/path/source. `UNIQUE` covers scalar/derived, LIST/ARRAY order, BAG/SET multiplicity, SELECT payload, entity reference identity, and indeterminate optional-key semantics. Cycles, algorithmic function bodies, model-context operations without callbacks, non-static bounds, and cross-schema executable dependencies report source-located `STEP21EXP006` and suppress the affected schema atomically. BC-02B proves unreachable function/type dependencies emit neither helpers, public facade, executable XML, nor diagnostics. BC-16A compares executable and XML code sets and relocation snapshots. Focused TUnit passed 14/14; complete fast TUnit passed 202/202. |
+| Migration and documentation | `README.md` links `docs/conformance/reachable-express-rules.md`; the expression and structural conformance pages now state the same executed-versus-atomic-failure boundary. Generated dependency helpers remain private. Named codes use governing labels, unnamed rules use deterministic one-based labels, source locations retain file leaf plus 1-based line/column, and XML requirements/boundaries match failures. No consumer migration is required because no public API changed. |
+| Regression and deployment proof | Release solution build passed with 0 warnings/errors. Integration TUnit passed all 3 enabled cases; only the explicit opt-in external-network corpus case was skipped. Runtime `IsAotCompatible`, trim, and AOT analyzer build passed with 0 warnings/errors. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. Static audit found no reflection, `dynamic`, `System.Linq.Expressions`, compilation, activation, or type lookup path in the reachable-rule generator. `git diff --check` passed. Strict final read-only review found no blocking, important, suggestion, or design-deviation findings. |
+| Dependent-item unlock | Every accepted validation-root closure now executes, while every unsupported reachable dependency prevents schema publication with source evidence. This supplies the deterministic rule/failure/XML guarantee consumed by SBRT-021 multi-schema binding, SBRT-023 complex mapping, and SBRT-024 atomic pre-write validation. |
+| Actual effort and variance | Completed in one continuing agent implementation session; the human person-month estimate is not directly comparable. Review-driven corrections narrowed type-rule reachability to entity values, replaced CLR grouping with recursive EXPRESS UNIQUE value semantics, expanded statically evaluable bounds, and converted imported executable dependencies from generator exceptions to source diagnostics. |
 
 ## ⚠️ Risks and open questions
 
 | Item | Impact | Owner or next decision |
 | --- | --- | --- |
-| Recursive dependencies or evaluation cycles | Incorrect/nonterminating validation | EXPRESS semantics and focused cycle fixtures govern completion |
+| Recursive dependencies or evaluation cycles | Resolved | Deterministic DFS cycle detection reports source-located `STEP21EXP006`; focused cycle fixtures pass |

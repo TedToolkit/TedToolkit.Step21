@@ -28,10 +28,14 @@ internal static class ExpressStructuralValidationEmitter
     /// </summary>
     /// <param name="schema">The owning schema.</param>
     /// <param name="entities">The generated entity projections.</param>
+    /// <param name="resolver">The closed-set generated type resolver.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
     /// <returns>The protected descriptor override.</returns>
     internal static Method CreateDispatchMethod(
         ExpressBoundSchema schema,
-        IReadOnlyList<ExpressEntityProjection> entities)
+        IReadOnlyList<ExpressEntityProjection> entities,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
     {
         var method = CreateMethod(
             "ValidateCore",
@@ -68,10 +72,402 @@ internal static class ExpressStructuralValidationEmitter
                 schema.Identity.Span));
         loop.AddStatement(unknown);
         method.AddStatement(loop);
+        AddUniqueValidation(method, entities, resolver, rulePlan);
+        AddGlobalRuleValidation(method, rulePlan);
         method.AddStatement(new CustomExpression(
             "new global::TedToolkit.Step21.ValidationResult(failures)").Return);
         AddSummary(method, "Validates the ordered registered entities owned by this EXPRESS schema.");
         return method;
+    }
+
+    private static void AddGlobalRuleValidation(
+        IStatementOwner owner,
+        ExpressReachableRulePlan rulePlan)
+    {
+        var ruleIndex = 0;
+        foreach (var declaration in rulePlan.Schema.Declarations
+                     .Where(candidate => candidate.Kind == ExpressDeclarationKind.Rule))
+        {
+            var head = declaration.Syntax.RequiredChild("ruleHead");
+            var lexicalNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entityReference in head.ChildRules("entityRef"))
+            {
+                var entityName = entityReference.IdentifierToken().Text;
+                var entity = rulePlan.Schema.Declarations.OfType<ExpressBoundEntity>()
+                    .Single(candidate => string.Equals(
+                        candidate.Name,
+                        entityName,
+                        StringComparison.OrdinalIgnoreCase));
+                var generatedEntityName = ExpressEntityProjection.ToPascalCase(entity.Name);
+                var populationName = $"rulePopulation{Invariant(ruleIndex++)}";
+                lexicalNames.Add(entityName, populationName);
+                owner.AddStatement(new CustomExpression(
+                    $"var {populationName} = new global::TedToolkit.Step21.ExpressSet<I{generatedEntityName}>(0)"));
+                var entryName = $"rulePopulationEntry{Invariant(ruleIndex)}";
+                var valueName = $"rulePopulationValue{Invariant(ruleIndex)}";
+                var loop = new ForEachStatement(DataType.Var, entryName, new CustomExpression("entities"));
+                loop.AddStatement(new IfStatement(new CustomExpression(
+                        $"{entryName}.Value is I{generatedEntityName} {valueName}"))
+                    .AddStatement(new CustomExpression($"{populationName}.Add({valueName})")));
+                owner.AddStatement(loop);
+            }
+
+            var rules = declaration.Syntax.RequiredChild("whereClause")
+                .ChildRules("domainRule")
+                .ToArray();
+            for (var index = 0; index < rules.Length; index++)
+            {
+                var rule = rules[index];
+                var expression = rulePlan.GetExpression(rule.RequiredChild("expression"));
+                var generated = ExpressExpressionEmitter.Emit(
+                    expression,
+                    ExpressReachableRuleEmitter.CreateContext(
+                        rulePlan,
+                        selfExpression: null,
+                        lexicalNames));
+                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                    ?? $"RULE_{Invariant(index + 1)}";
+                var code = $"{rulePlan.Schema.Name}.RULE.{declaration.Name}.WHERE.{label}"
+                    .ToUpperInvariant();
+                owner.AddStatement(new IfStatement(new CustomExpression(
+                        RuleFailureCondition(expression, generated.Code)))
+                    .AddStatement(AddFailure(
+                        code,
+                        Literal($"Schema[{rulePlan.Schema.Name}].{declaration.Name}"),
+                        $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
+                        rule.Span)));
+            }
+        }
+    }
+
+    private static void AddUniqueValidation(
+        IStatementOwner owner,
+        IReadOnlyList<ExpressEntityProjection> entities,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
+    {
+        var ruleIndex = 0;
+        foreach (var entity in entities)
+        {
+            var uniqueClause = entity.Entity.Syntax.RequiredChild("entityBody")
+                .ChildRules("uniqueClause")
+                .SingleOrDefault();
+            if (uniqueClause is null)
+            {
+                continue;
+            }
+
+            var rules = uniqueClause.ChildRules("uniqueRule").ToArray();
+            for (var index = 0; index < rules.Length; index++)
+            {
+                var rule = rules[index];
+                var attributes = rule.ChildRules("referencedAttribute")
+                    .Select(rulePlan.GetReferencedAttribute)
+                    .ToArray();
+                var populationName = $"uniquePopulation{Invariant(ruleIndex)}";
+                var duplicatesName = $"uniqueDuplicates{Invariant(ruleIndex)}";
+                var duplicateName = $"uniqueDuplicate{Invariant(ruleIndex)}";
+                var interfaceName = $"I{entity.Name}";
+                owner.AddStatement(new CustomExpression(
+                    $"var {populationName} = global::System.Linq.Enumerable.Select("
+                    + "global::System.Linq.Enumerable.Where(entities, "
+                    + $"entry => entry.Value is {interfaceName}), "
+                    + "entry => new global::System.Collections.Generic.KeyValuePair<"
+                    + $"global::System.String, {interfaceName}>(entry.Key, ({interfaceName})entry.Value))"));
+                var rawKeyParts = attributes.Select(attribute => UniqueKeyExpression(
+                    rulePlan,
+                    attribute,
+                    "item.Value")).ToArray();
+                var rawPreviousKeyParts = attributes.Select(attribute => UniqueKeyExpression(
+                    rulePlan,
+                    attribute,
+                    "previous.Value")).ToArray();
+                var keyParts = rawKeyParts.ToArray();
+                var previousKeyParts = rawPreviousKeyParts.ToArray();
+                for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
+                {
+                    if (attributes[attributeIndex].IsOptional
+                        && !resolver.Resolve(rulePlan.Schema.Identity, attributes[attributeIndex].Type).IsReferenceType)
+                    {
+                        keyParts[attributeIndex] = $"({keyParts[attributeIndex]}).Value";
+                        previousKeyParts[attributeIndex] = $"({previousKeyParts[attributeIndex]}).Value";
+                    }
+                }
+
+                var equalityVariable = 0;
+                var equality = string.Join(
+                    " && ",
+                    attributes.Select((attribute, attributeIndex) => UniqueKeyEquals(
+                        attribute.Type,
+                        keyParts[attributeIndex],
+                        previousKeyParts[attributeIndex],
+                        resolver,
+                        rulePlan,
+                        ref equalityVariable)));
+                var determinate = string.Join(
+                    " && ",
+                    attributes.Select((attribute, attributeIndex) => UniqueKeyIsDeterminate(
+                        attribute,
+                        rawKeyParts[attributeIndex],
+                        resolver,
+                        rulePlan,
+                        ref equalityVariable)));
+                var previousDeterminate = string.Join(
+                    " && ",
+                    attributes.Select((attribute, attributeIndex) => UniqueKeyIsDeterminate(
+                        attribute,
+                        rawPreviousKeyParts[attributeIndex],
+                        resolver,
+                        rulePlan,
+                        ref equalityVariable)));
+                owner.AddStatement(new CustomExpression(
+                    $"var {duplicatesName} = global::System.Linq.Enumerable.Where({populationName}, "
+                    + $"(item, itemIndex) => ({determinate}) && global::System.Linq.Enumerable.Any("
+                    + $"global::System.Linq.Enumerable.Take({populationName}, itemIndex), "
+                    + $"previous => ({previousDeterminate}) && ({equality})))"));
+                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                    ?? $"RULE_{Invariant(index + 1)}";
+                var code = $"{rulePlan.Schema.Name}.{entity.Entity.Name}.UNIQUE.{label}"
+                    .ToUpperInvariant();
+                var firstProperty = ExpressEntityProjection.ToPascalCase(attributes[0].Name);
+                var loop = new ForEachStatement(DataType.Var, duplicateName, new CustomExpression(duplicatesName));
+                loop.AddStatement(AddFailure(
+                    code,
+                    $"{duplicateName}.Key + {Literal($".{firstProperty}")}",
+                    "The EXPRESS UNIQUE key must identify at most one entity candidate.",
+                    rule.Span));
+                owner.AddStatement(loop);
+                ruleIndex++;
+            }
+        }
+    }
+
+    private static string UniqueKeyExpression(
+        ExpressReachableRulePlan rulePlan,
+        ExpressBoundAttribute attribute,
+        string valueExpression)
+    {
+        if (attribute.Kind == ExpressAttributeKind.Derived)
+        {
+            var owner = rulePlan.GetAttributeOwner(attribute);
+            return "__ExpressDerived_"
+                + ExpressEntityProjection.ToPascalCase(owner.Name)
+                + "_"
+                + ExpressEntityProjection.ToPascalCase(attribute.Name)
+                + $"({valueExpression})";
+        }
+
+        return $"{valueExpression}.{ExpressEntityProjection.ToPascalCase(attribute.Name)}";
+    }
+
+    private static string UniqueKeyIsDeterminate(
+        ExpressBoundAttribute attribute,
+        string valueExpression,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        ref int variable)
+    {
+        if (attribute.IsOptional)
+        {
+            return $"({valueExpression}) is not null";
+        }
+
+        return UniqueValueIsDeterminate(attribute.Type, valueExpression, resolver, rulePlan, ref variable);
+    }
+
+    private static string UniqueValueIsDeterminate(
+        ExpressBoundType type,
+        string valueExpression,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        ref int variable)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            var conditions = new List<string>();
+            if (aggregate.Kind == ExpressAggregateKind.Array && aggregate.IsOptional)
+            {
+                var indexName = $"uniqueIndex{Invariant(variable++)}";
+                conditions.Add(
+                    "global::System.Linq.Enumerable.All(global::System.Linq.Enumerable.Range("
+                    + $"({valueExpression}).LowerIndex, ({valueExpression}).Count), "
+                    + $"{indexName} => ({valueExpression}).IsSet({indexName}))");
+            }
+
+            var elementName = $"uniqueElement{Invariant(variable++)}";
+            var elementCondition = UniqueValueIsDeterminate(
+                aggregate.ElementType,
+                elementName,
+                resolver,
+                rulePlan,
+                ref variable);
+            if (elementCondition != "true")
+            {
+                conditions.Add(
+                    $"global::System.Linq.Enumerable.All(({valueExpression}), "
+                    + $"{elementName} => {elementCondition})");
+            }
+
+            return conditions.Count == 0
+                ? "true"
+                : string.Join(" && ", conditions);
+        }
+
+        if (type is ExpressBoundNamedType named
+            && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            var declaration = resolver.GetDefinedType(named.Declaration);
+            if (declaration is ExpressBoundDefinedType defined
+                && defined.UnderlyingType is ExpressBoundSelectType select)
+            {
+                var alternatives = resolver.GetSelectAlternatives(select);
+                var branches = new List<string>();
+                foreach (var alternative in alternatives)
+                {
+                    var selected = $"uniqueSelected{Invariant(variable++)}";
+                    var selectedCondition = UniqueValueIsDeterminate(
+                        new ExpressBoundNamedType(alternative, named.Span),
+                        selected,
+                        resolver,
+                        rulePlan,
+                        ref variable);
+                    branches.Add(
+                        $"({valueExpression}).TryGet{ExpressEntityProjection.ToPascalCase(alternative.Name)}("
+                        + $"out var {selected}) && ({selectedCondition})");
+                }
+
+                return $"({string.Join(" || ", branches)})";
+            }
+
+            if (declaration is ExpressBoundDefinedType
+                { UnderlyingType: not ExpressBoundEnumerationType, } definedValue)
+            {
+                return UniqueValueIsDeterminate(
+                    definedValue.UnderlyingType,
+                    $"({valueExpression}).Value",
+                    resolver,
+                    rulePlan,
+                    ref variable);
+            }
+        }
+
+        return "true";
+    }
+
+    private static string UniqueKeyEquals(
+        ExpressBoundType type,
+        string left,
+        string right,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        ref int variable)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            var leftElement = $"uniqueLeft{Invariant(variable++)}";
+            var rightElement = $"uniqueRight{Invariant(variable++)}";
+            var elementEquals = UniqueKeyEquals(
+                aggregate.ElementType,
+                leftElement,
+                rightElement,
+                resolver,
+                rulePlan,
+                ref variable);
+            if (aggregate.Kind is ExpressAggregateKind.Array or ExpressAggregateKind.List)
+            {
+                return $"({left}).Count == ({right}).Count && global::System.Linq.Enumerable.All("
+                    + $"global::System.Linq.Enumerable.Zip(({left}), ({right}), "
+                    + $"({leftElement}, {rightElement}) => {elementEquals}), equal => equal)";
+            }
+
+            var candidate = $"uniqueCandidate{Invariant(variable++)}";
+            var leftCountEquality = UniqueKeyEquals(
+                aggregate.ElementType,
+                leftElement,
+                candidate,
+                resolver,
+                rulePlan,
+                ref variable);
+            var rightCountEquality = UniqueKeyEquals(
+                aggregate.ElementType,
+                rightElement,
+                candidate,
+                resolver,
+                rulePlan,
+                ref variable);
+            return $"({left}).Count == ({right}).Count && global::System.Linq.Enumerable.All(({left}), "
+                + $"{candidate} => global::System.Linq.Enumerable.Count(({left}), {leftElement} => {leftCountEquality}) "
+                + $"== global::System.Linq.Enumerable.Count(({right}), {rightElement} => {rightCountEquality}))";
+        }
+
+        if (type is ExpressBoundNamedType named)
+        {
+            if (named.Declaration.Kind == ExpressDeclarationKind.Entity)
+            {
+                return $"global::System.Object.ReferenceEquals(({left}), ({right}))";
+            }
+
+            var declaration = resolver.GetDefinedType(named.Declaration);
+            if (declaration is ExpressBoundDefinedType defined
+                && defined.UnderlyingType is ExpressBoundSelectType select)
+            {
+                var branches = new List<string>();
+                foreach (var alternative in resolver.GetSelectAlternatives(select))
+                {
+                    var leftSelected = $"uniqueLeftSelected{Invariant(variable++)}";
+                    var rightSelected = $"uniqueRightSelected{Invariant(variable++)}";
+                    var selectedEquality = UniqueKeyEquals(
+                        new ExpressBoundNamedType(alternative, named.Span),
+                        leftSelected,
+                        rightSelected,
+                        resolver,
+                        rulePlan,
+                        ref variable);
+                    var method = $"TryGet{ExpressEntityProjection.ToPascalCase(alternative.Name)}";
+                    branches.Add(
+                        $"({left}).{method}(out var {leftSelected}) && "
+                        + $"({right}).{method}(out var {rightSelected}) && ({selectedEquality})");
+                }
+
+                return $"({string.Join(" || ", branches)})";
+            }
+
+            if (declaration is ExpressBoundDefinedType
+                { UnderlyingType: not ExpressBoundEnumerationType, } definedValue)
+            {
+                return UniqueKeyEquals(
+                    definedValue.UnderlyingType,
+                    $"({left}).Value",
+                    $"({right}).Value",
+                    resolver,
+                    rulePlan,
+                    ref variable);
+            }
+        }
+
+        return "global::System.Collections.Generic.EqualityComparer<"
+            + $"{UniqueValueTypeName(type, rulePlan)}>.Default.Equals(({left}), ({right}))";
+    }
+
+    private static string UniqueValueTypeName(
+        ExpressBoundType type,
+        ExpressReachableRulePlan rulePlan)
+    {
+        return type switch
+        {
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Integer, } => "global::System.Numerics.BigInteger",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Real or ExpressScalarKind.Number, } =>
+                "global::TedToolkit.Step21.ExpressReal",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, } =>
+                "global::TedToolkit.Step21.LogicalValue",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Binary, } =>
+                "global::TedToolkit.Step21.BinaryValue",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, } => "global::System.Boolean",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.String, } => "global::System.String",
+            ExpressBoundNamedType named => ExpressEntityProjection.ToPascalCase(named.Declaration.Name),
+            _ => throw new InvalidOperationException(
+                $"UNIQUE key type '{type.GetType().Name}' has no generated equality type in schema '{rulePlan.Schema.Name}'."),
+        };
     }
 
     /// <summary>
@@ -80,10 +476,12 @@ internal static class ExpressStructuralValidationEmitter
     /// <param name="descriptor">The generated descriptor declaration.</param>
     /// <param name="schema">The owning schema.</param>
     /// <param name="entities">The generated entities validated by the descriptor.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
     internal static void AddDescriptorDocumentation(
         TypeDeclaration descriptor,
         ExpressBoundSchema schema,
-        IReadOnlyList<ExpressEntityProjection> entities)
+        IReadOnlyList<ExpressEntityProjection> entities,
+        ExpressReachableRulePlan rulePlan)
     {
         var table = new DescriptionTable(
             new DescriptionText("Constraint ID"),
@@ -92,6 +490,7 @@ internal static class ExpressStructuralValidationEmitter
             new DescriptionText($"{schema.Name.ToUpperInvariant()}.STRUCTURE.ENTITY_ASSIGNABILITY"),
             new DescriptionText(
                 "Every registered value governed by this schema must be a concrete entity generated for the schema."));
+        AddRuleDocumentationRows(table, schema, rulePlan);
         var remarks = new List<IDescriptionItem>()
         {
             Paragraph($"Schema: {schema.Name}. Declaration: SCHEMA {schema.Name}."),
@@ -125,6 +524,103 @@ internal static class ExpressStructuralValidationEmitter
         descriptor.AddRootDescription(new DescriptionRemarks(remarks));
     }
 
+    private static void AddRuleDocumentationRows(
+        DescriptionTable table,
+        ExpressBoundSchema schema,
+        ExpressReachableRulePlan rulePlan)
+    {
+        foreach (var declaration in schema.Declarations)
+        {
+            if (declaration is ExpressBoundEntity entity)
+            {
+                AddWhereDocumentationRows(
+                    table,
+                    schema.Name,
+                    entity.Name,
+                    entity.Syntax.RequiredChild("entityBody")
+                        .ChildRules("whereClause")
+                        .SingleOrDefault(),
+                    rulePlan);
+                var uniqueClause = entity.Syntax.RequiredChild("entityBody")
+                    .ChildRules("uniqueClause")
+                    .SingleOrDefault();
+                if (uniqueClause is not null)
+                {
+                    var rules = uniqueClause.ChildRules("uniqueRule").ToArray();
+                    for (var index = 0; index < rules.Length; index++)
+                    {
+                        var rule = rules[index];
+                        var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                            ?? $"RULE_{Invariant(index + 1)}";
+                        table.AddItem(
+                            new DescriptionText(
+                                $"{schema.Name}.{entity.Name}.UNIQUE.{label}".ToUpperInvariant()),
+                            new DescriptionText(
+                                "Normalized requirement: the EXPRESS UNIQUE key "
+                                + $"'{rule.TokenText()}' must identify at most one entity candidate. "
+                                + "Validation boundary: complete typed entity population validation."));
+                    }
+                }
+
+                continue;
+            }
+
+            if (declaration is ExpressBoundDefinedType definedType)
+            {
+                AddWhereDocumentationRows(
+                    table,
+                    schema.Name,
+                    definedType.Name,
+                    definedType.Syntax.ChildRules("whereClause").SingleOrDefault(),
+                    rulePlan);
+                continue;
+            }
+
+            if (declaration.Kind == ExpressDeclarationKind.Rule)
+            {
+                AddWhereDocumentationRows(
+                    table,
+                    schema.Name,
+                    $"RULE.{declaration.Name}",
+                    declaration.Syntax.RequiredChild("whereClause"),
+                    rulePlan);
+            }
+        }
+    }
+
+    private static void AddWhereDocumentationRows(
+        DescriptionTable table,
+        string schemaName,
+        string declarationName,
+        ExpressRuleSyntax? whereClause,
+        ExpressReachableRulePlan rulePlan)
+    {
+        if (whereClause is null)
+        {
+            return;
+        }
+
+        var rules = whereClause.ChildRules("domainRule").ToArray();
+        for (var index = 0; index < rules.Length; index++)
+        {
+            var rule = rules[index];
+            if (!rulePlan.ReachableRules.Contains(rule))
+            {
+                continue;
+            }
+
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                ?? $"RULE_{Invariant(index + 1)}";
+            var requirement = rule.RequiredChild("expression").TokenText();
+            table.AddItem(
+                new DescriptionText(
+                    $"{schemaName}.{declarationName}.WHERE.{label}".ToUpperInvariant()),
+                new DescriptionText(
+                    $"Normalized requirement: '{requirement}' must evaluate to TRUE. "
+                    + "Validation boundary: explicit structure validation and Part 21 read/write boundaries."));
+        }
+    }
+
     /// <summary>
     /// Adds deterministic source-schema and EXPRESS-declaration traceability to a generated type.
     /// </summary>
@@ -143,10 +639,12 @@ internal static class ExpressStructuralValidationEmitter
     /// </summary>
     /// <param name="entity">The generated entity projection.</param>
     /// <param name="resolver">The generated type resolver.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
     /// <returns>The private validation method.</returns>
     internal static Method CreateEntityMethod(
         ExpressEntityProjection entity,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
     {
         var method = CreateMethod(
             $"Validate{entity.Name}",
@@ -167,10 +665,315 @@ internal static class ExpressStructuralValidationEmitter
                 index,
                 resolver,
                 ref variable);
+            AddAttributeTypeWhereValidation(
+                method,
+                entity,
+                entity.EffectiveAttributes[index],
+                index,
+                resolver,
+                rulePlan,
+                ref variable);
         }
+
+        AddEntityWhereValidation(method, entity, rulePlan);
 
         AddSummary(method, $"Validates one {entity.Entity.Name} candidate without mutation.");
         return method;
+    }
+
+    private static void AddAttributeTypeWhereValidation(
+        IStatementOwner owner,
+        ExpressEntityProjection entity,
+        ExpressEntityAttributeProjection attribute,
+        int attributeIndex,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        ref int variable)
+    {
+        if (!ContainsDefinedTypeWhere(attribute.Type, resolver, new HashSet<ExpressBoundSymbol>()))
+        {
+            return;
+        }
+
+        var valueName = $"ruleAttribute{Invariant(attributeIndex)}";
+        var pathName = $"ruleAttributePath{Invariant(attributeIndex)}";
+        owner.AddStatement(new CustomExpression($"var {valueName} = value.{attribute.Name}"));
+        owner.AddStatement(new CustomExpression(
+            $"var {pathName} = path + {Literal($".{attribute.Name}")}"));
+        var isReference = resolver.Resolve(entity.Schema.Identity, attribute.Type).IsReferenceType;
+        if (isReference || attribute.Attribute.IsOptional)
+        {
+            var present = new IfStatement(new CustomExpression($"{valueName} is not null"));
+            var candidate = attribute.Attribute.IsOptional && !isReference
+                ? $"{valueName}.Value"
+                : valueName;
+            AddTypeWhereValidation(
+                present,
+                attribute.Type,
+                candidate,
+                pathName,
+                resolver,
+                rulePlan,
+                ref variable);
+            owner.AddStatement(present);
+            return;
+        }
+
+        AddTypeWhereValidation(
+            owner,
+            attribute.Type,
+            valueName,
+            pathName,
+            resolver,
+            rulePlan,
+            ref variable);
+    }
+
+    private static void AddTypeWhereValidation(
+        IStatementOwner owner,
+        ExpressBoundType type,
+        string valueExpression,
+        string pathExpression,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        ref int variable)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            if (!ContainsDefinedTypeWhere(aggregate.ElementType, resolver, new HashSet<ExpressBoundSymbol>()))
+            {
+                return;
+            }
+
+            var itemName = $"ruleAggregateItem{Invariant(variable++)}";
+            var indexName = $"ruleAggregateIndex{Invariant(variable++)}";
+            owner.AddStatement(new CustomExpression($"var {indexName} = 0"));
+            var loop = new ForEachStatement(DataType.Var, itemName, new CustomExpression(valueExpression));
+            AddTypeWhereValidation(
+                loop,
+                aggregate.ElementType,
+                itemName,
+                $"{pathExpression} + \"[\" + {indexName} + \"]\"",
+                resolver,
+                rulePlan,
+                ref variable);
+            loop.AddStatement(new CustomExpression($"{indexName}++"));
+            owner.AddStatement(loop);
+            return;
+        }
+
+        if (type is not ExpressBoundNamedType named
+            || named.Declaration.Kind == ExpressDeclarationKind.Entity)
+        {
+            return;
+        }
+
+        var declaration = resolver.GetDefinedType(named.Declaration);
+        AddDefinedTypeWhereRules(owner, declaration, valueExpression, pathExpression, rulePlan);
+        switch (declaration.UnderlyingType)
+        {
+            case ExpressBoundEnumerationType:
+                return;
+
+            case ExpressBoundSelectType select:
+                foreach (var alternative in resolver.GetSelectAlternatives(select))
+                {
+                    var alternativeType = new ExpressBoundNamedType(alternative, named.Span);
+                    if (!ContainsDefinedTypeWhere(
+                            alternativeType,
+                            resolver,
+                            new HashSet<ExpressBoundSymbol>()))
+                    {
+                        continue;
+                    }
+
+                    var selectedName = $"ruleSelected{Invariant(variable++)}";
+                    var branch = new IfStatement(new CustomExpression(
+                        $"{valueExpression}.TryGet{ExpressEntityProjection.ToPascalCase(alternative.Name)}(out var {selectedName})"));
+                    AddTypeWhereValidation(
+                        branch,
+                        alternativeType,
+                        selectedName,
+                        pathExpression,
+                        resolver,
+                        rulePlan,
+                        ref variable);
+                    owner.AddStatement(branch);
+                }
+
+                return;
+
+            default:
+                AddTypeWhereValidation(
+                    owner,
+                    declaration.UnderlyingType,
+                    $"{valueExpression}.Value",
+                    pathExpression,
+                    resolver,
+                    rulePlan,
+                    ref variable);
+                return;
+        }
+    }
+
+    private static void AddDefinedTypeWhereRules(
+        IStatementOwner owner,
+        ExpressBoundDefinedType declaration,
+        string valueExpression,
+        string pathExpression,
+        ExpressReachableRulePlan rulePlan)
+    {
+        var whereClause = declaration.Syntax.ChildRules("whereClause").SingleOrDefault();
+        if (whereClause is null)
+        {
+            return;
+        }
+
+        var rules = whereClause.ChildRules("domainRule").ToArray();
+        for (var index = 0; index < rules.Length; index++)
+        {
+            var rule = rules[index];
+            var expression = rulePlan.GetExpression(rule.RequiredChild("expression"));
+            var generated = ExpressExpressionEmitter.Emit(
+                expression,
+                ExpressReachableRuleEmitter.CreateContext(rulePlan, valueExpression));
+            var failed = RuleFailureCondition(expression, generated.Code);
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                ?? $"RULE_{Invariant(index + 1)}";
+            var code = $"{rulePlan.Schema.Name}.{declaration.Name}.WHERE.{label}".ToUpperInvariant();
+            owner.AddStatement(new IfStatement(new CustomExpression(failed))
+                .AddStatement(AddFailure(
+                    code,
+                    pathExpression,
+                    $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
+                    rule.Span)));
+        }
+    }
+
+    private static bool ContainsDefinedTypeWhere(
+        ExpressBoundType type,
+        ExpressGeneratedTypeResolver resolver,
+        ISet<ExpressBoundSymbol> visited)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            return ContainsDefinedTypeWhere(aggregate.ElementType, resolver, visited);
+        }
+
+        if (type is not ExpressBoundNamedType named
+            || named.Declaration.Kind == ExpressDeclarationKind.Entity
+            || !visited.Add(named.Declaration))
+        {
+            return false;
+        }
+
+        var declaration = resolver.GetDefinedType(named.Declaration);
+        if (declaration.Syntax.ChildRules("whereClause").Any())
+        {
+            return true;
+        }
+
+        return declaration.UnderlyingType switch
+        {
+            ExpressBoundSelectType select => resolver.GetSelectAlternatives(select).Any(alternative =>
+                ContainsDefinedTypeWhere(new ExpressBoundNamedType(alternative, named.Span), resolver, visited)),
+            ExpressBoundEnumerationType => false,
+            _ => ContainsDefinedTypeWhere(declaration.UnderlyingType, resolver, visited),
+        };
+    }
+
+    private static void AddEntityWhereValidation(
+        IStatementOwner owner,
+        ExpressEntityProjection entity,
+        ExpressReachableRulePlan rulePlan)
+    {
+        foreach (var governingEntity in EntityRuleOwners(
+                     entity.Schema,
+                     entity.Entity,
+                     new HashSet<ExpressBoundSymbol>()))
+        {
+            AddEntityWhereValidation(owner, entity, governingEntity, rulePlan);
+        }
+    }
+
+    private static void AddEntityWhereValidation(
+        IStatementOwner owner,
+        ExpressEntityProjection candidateEntity,
+        ExpressBoundEntity governingEntity,
+        ExpressReachableRulePlan rulePlan)
+    {
+        var whereClause = governingEntity.Syntax.RequiredChild("entityBody")
+            .ChildRules("whereClause")
+            .SingleOrDefault();
+        if (whereClause is null)
+        {
+            return;
+        }
+
+        var rules = whereClause.ChildRules("domainRule").ToArray();
+        for (var index = 0; index < rules.Length; index++)
+        {
+            var rule = rules[index];
+            var expressionSyntax = rule.RequiredChild("expression");
+            var expression = rulePlan.GetExpression(expressionSyntax);
+            var generated = ExpressExpressionEmitter.Emit(
+                expression,
+                ExpressReachableRuleEmitter.CreateContext(rulePlan, "value"));
+            var failed = RuleFailureCondition(expression, generated.Code);
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                ?? $"RULE_{Invariant(index + 1)}";
+            var code = $"{candidateEntity.Schema.Name}.{governingEntity.Name}.WHERE.{label}"
+                .ToUpperInvariant();
+            owner.AddStatement(new IfStatement(new CustomExpression(failed))
+                .AddStatement(AddFailure(
+                    code,
+                    "path",
+                    $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
+                    rule.Span)));
+        }
+    }
+
+    private static IEnumerable<ExpressBoundEntity> EntityRuleOwners(
+        ExpressBoundSchema schema,
+        ExpressBoundEntity entity,
+        ISet<ExpressBoundSymbol> visited)
+    {
+        if (!visited.Add(entity.Symbol))
+        {
+            yield break;
+        }
+
+        foreach (var supertype in entity.DirectSupertypes)
+        {
+            var parent = schema.Declarations.OfType<ExpressBoundEntity>()
+                .SingleOrDefault(candidate => ReferenceEquals(candidate.Symbol, supertype));
+            if (parent is null)
+            {
+                continue;
+            }
+
+            foreach (var ancestor in EntityRuleOwners(schema, parent, visited))
+            {
+                yield return ancestor;
+            }
+        }
+
+        yield return entity;
+    }
+
+    private static string RuleFailureCondition(
+        ExpressBoundExpression expression,
+        string generatedCode)
+    {
+        return expression.Type.Kind switch
+        {
+            ExpressExpressionTypeKind.Boolean => $"!({generatedCode})",
+            ExpressExpressionTypeKind.Logical =>
+                $"({generatedCode}) != global::TedToolkit.Step21.LogicalValue.True",
+            ExpressExpressionTypeKind.Indeterminate => "true",
+            _ => throw new InvalidOperationException(
+                $"WHERE expression '{expression.SourceText}' does not produce BOOLEAN or LOGICAL."),
+        };
     }
 
     /// <summary>
@@ -947,9 +1750,10 @@ internal static class ExpressStructuralValidationEmitter
     private static bool TryGetLowerBound(ExpressBoundAggregateType aggregate, out int lowerBound)
     {
         lowerBound = 0;
-        return aggregate.LowerBoundText is null
+        var text = aggregate.ResolvedLowerBoundText ?? aggregate.LowerBoundText;
+        return text is null
             || int.TryParse(
-                aggregate.LowerBoundText,
+                text,
                 System.Globalization.NumberStyles.Integer,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out lowerBound);
@@ -958,13 +1762,14 @@ internal static class ExpressStructuralValidationEmitter
     private static bool TryGetUpperBound(ExpressBoundAggregateType aggregate, out int? upperBound)
     {
         upperBound = null;
-        if (aggregate.UpperBoundText is null || aggregate.UpperBoundText == "?")
+        var text = aggregate.ResolvedUpperBoundText ?? aggregate.UpperBoundText;
+        if (text is null || text == "?")
         {
             return true;
         }
 
         if (!int.TryParse(
-            aggregate.UpperBoundText,
+            text,
             System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture,
             out var parsedUpperBound))

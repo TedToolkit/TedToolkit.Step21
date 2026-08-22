@@ -21,7 +21,7 @@ The generator derives executable checks and their XML documentation from the sam
 
 Every failure contains a complete deterministic path, a stable code, a caller-facing message, and the originating EXPRESS file leaf name plus 1-based line and column. Source file roots do not enter generated output, so relocating the same additional file does not alter emitted C#.
 
-When a bound is symbolic, this stage still checks every independently known literal bound, metadata modifier, required slot, uniqueness condition, and nested element rule; only evaluation of the symbolic expression is deferred. General EXPRESS expressions, named `WHERE`/`UNIQUE` rules, derived evaluation, population rules, and subtype constraints are retained in the bound IR but are not claimed here. SBRT-016 and SBRT-017 own that executable closure.
+SBRT-017 normalizes literal and statically evaluable integer constant bounds before this stage emits metadata and checks. A validation-reachable bound that cannot be represented statically now rejects the schema with source-located `STEP21EXP006`; no generated descriptor retains a deferred bound. General expression leaves come from SBRT-016, while reachable named `WHERE`/`UNIQUE`, derived, function, constant, query, and population-rule attachment is documented in the [reachable rule boundary](reachable-express-rules.md).
 
 ## XML contract
 

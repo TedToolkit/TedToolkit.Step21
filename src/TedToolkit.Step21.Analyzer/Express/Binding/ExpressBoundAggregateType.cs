@@ -23,6 +23,8 @@ internal sealed class ExpressBoundAggregateType : ExpressBoundType
     /// <param name="isUnique">Whether ARRAY or LIST elements are unique.</param>
     /// <param name="typeLabel">The optional general AGGREGATE type label.</param>
     /// <param name="span">The complete aggregate span.</param>
+    /// <param name="resolvedLowerBoundText">The statically evaluated lower bound, when available.</param>
+    /// <param name="resolvedUpperBoundText">The statically evaluated upper bound, when available.</param>
     internal ExpressBoundAggregateType(
         ExpressAggregateKind kind,
         ExpressBoundType elementType,
@@ -31,7 +33,9 @@ internal sealed class ExpressBoundAggregateType : ExpressBoundType
         bool isOptional,
         bool isUnique,
         string? typeLabel,
-        ExpressSourceSpan span)
+        ExpressSourceSpan span,
+        string? resolvedLowerBoundText = null,
+        string? resolvedUpperBoundText = null)
         : base(span)
     {
         Kind = kind;
@@ -41,6 +45,8 @@ internal sealed class ExpressBoundAggregateType : ExpressBoundType
         IsOptional = isOptional;
         IsUnique = isUnique;
         TypeLabel = typeLabel;
+        ResolvedLowerBoundText = resolvedLowerBoundText;
+        ResolvedUpperBoundText = resolvedUpperBoundText;
     }
 
     /// <summary>
@@ -62,6 +68,16 @@ internal sealed class ExpressBoundAggregateType : ExpressBoundType
     /// Gets the optional upper-bound source text.
     /// </summary>
     internal string? UpperBoundText { get; }
+
+    /// <summary>
+    /// Gets the statically evaluated lower-bound text used by generated execution, when available.
+    /// </summary>
+    internal string? ResolvedLowerBoundText { get; }
+
+    /// <summary>
+    /// Gets the statically evaluated upper-bound text used by generated execution, when available.
+    /// </summary>
+    internal string? ResolvedUpperBoundText { get; }
 
     /// <summary>
     /// Gets a value indicating whether ARRAY elements are optional.

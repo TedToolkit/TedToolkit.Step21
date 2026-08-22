@@ -57,6 +57,14 @@ internal static class ExpressGeneratorDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor _unsupportedReachableRule = new(
+        "STEP21EXP006",
+        "Unsupported reachable EXPRESS rule",
+        "{0}",
+        "TedToolkit.Step21.Express",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <summary>
     /// Reports every input, syntax, and binding failure in deterministic order.
     /// </summary>
@@ -134,6 +142,29 @@ internal static class ExpressGeneratorDiagnostics
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 _unsupportedEntityProjection,
+                CreateLocation(result.Inputs, failure.Location),
+                failure.Message));
+        }
+    }
+
+    /// <summary>
+    /// Reports reachable rule closures that cannot be generated without a validation gap.
+    /// </summary>
+    /// <param name="context">The source-production context.</param>
+    /// <param name="result">The complete generator compilation.</param>
+    /// <param name="failures">The source-located reachable-rule failures.</param>
+    internal static void ReportReachableRuleFailures(
+        in SourceProductionContext context,
+        ExpressGeneratorCompilation result,
+        IEnumerable<ExpressEntityGenerationFailure> failures)
+    {
+        foreach (var failure in failures
+                     .OrderBy(item => item.Location.FilePath, StringComparer.Ordinal)
+                     .ThenBy(item => item.Location.Line)
+                     .ThenBy(item => item.Location.Column))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                _unsupportedReachableRule,
                 CreateLocation(result.Inputs, failure.Location),
                 failure.Message));
         }

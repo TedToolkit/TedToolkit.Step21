@@ -798,7 +798,8 @@ internal static class ExpressSchemaCompiler
                         attribute.Type,
                         schemaDeclaration: null,
                         attribute.Span,
-                        attribute.IsOptional));
+                        attribute.IsOptional,
+                        attribute));
             }
 
             VisitNames(schema, declaration.RequiredChild("entityBody"), scope);
@@ -847,6 +848,11 @@ internal static class ExpressSchemaCompiler
         {
             var scope = new NameScope(parentScope);
             var head = declaration.ChildRules().First();
+            if (declaration.Production == "ruleDecl")
+            {
+                AddRulePopulationNames(schema, head, scope);
+            }
+
             var algorithmHead = declaration.RequiredChild("algorithmHead");
             AddAlgorithmDeclarations(schema, algorithmHead, scope);
             foreach (var formal in head.ChildRules("formalParameter"))
@@ -883,6 +889,41 @@ internal static class ExpressSchemaCompiler
                          .Where(child => !ReferenceEquals(child, head) && !ReferenceEquals(child, algorithmHead)))
             {
                 VisitNames(schema, child, scope);
+            }
+        }
+
+        private void AddRulePopulationNames(
+            SchemaDraft schema,
+            ExpressRuleSyntax ruleHead,
+            NameScope scope)
+        {
+            foreach (var entityReference in ruleHead.ChildRules("entityRef"))
+            {
+                var token = entityReference.IdentifierToken();
+                var symbol = ResolveVisible(schema, token.Text);
+                if (symbol?.Kind != ExpressDeclarationKind.Entity)
+                {
+                    continue;
+                }
+
+                var entityType = new ExpressBoundNamedType(symbol, entityReference.Span);
+                AddLexicalName(
+                    schema,
+                    scope,
+                    new ExpressBoundName(
+                        token.Text,
+                        ExpressBoundNameKind.Population,
+                        new ExpressBoundAggregateType(
+                            ExpressAggregateKind.Set,
+                            entityType,
+                            lowerBoundText: "0",
+                            upperBoundText: "?",
+                            isOptional: false,
+                            isUnique: true,
+                            typeLabel: null,
+                            entityReference.Span),
+                        symbol,
+                        entityReference.Span));
             }
         }
 
@@ -1152,7 +1193,8 @@ internal static class ExpressSchemaCompiler
                         attribute.Type,
                         schemaDeclaration: null,
                         attribute.Span,
-                        attribute.IsOptional);
+                        attribute.IsOptional,
+                        attribute);
                 }
             }
             else if (draft?.BoundType is ExpressBoundEnumerationType)
@@ -1564,7 +1606,15 @@ internal static class ExpressSchemaCompiler
                     isOptional: false,
                     isUnique: false,
                     typeLabel: null,
-                    syntax.Span);
+                    syntax.Span,
+                    NormalizeBoundText(
+                        schema,
+                        bound?.RequiredChild("bound1").TokenText(),
+                        scope),
+                    NormalizeBoundText(
+                        schema,
+                        bound?.RequiredChild("bound2").TokenText(),
+                        scope));
             }
 
             AddAttribute(
@@ -1813,7 +1863,271 @@ internal static class ExpressSchemaCompiler
                 syntax.HasDirectToken("OPTIONAL"),
                 syntax.HasDirectToken("UNIQUE"),
                 syntax.ChildRules("typeLabel").SingleOrDefault()?.IdentifierToken().Text,
-                syntax.Span);
+                syntax.Span,
+                NormalizeBoundText(
+                    schema,
+                    bound?.RequiredChild("bound1").TokenText(),
+                    scope),
+                NormalizeBoundText(
+                    schema,
+                    bound?.RequiredChild("bound2").TokenText(),
+                    scope));
+        }
+
+        private string? NormalizeBoundText(
+            SchemaDraft schema,
+            string? text,
+            NameScope? scope,
+            ISet<ExpressBoundSymbol>? visited = null)
+        {
+            if (text is null || text == "?")
+            {
+                return text;
+            }
+
+            visited ??= new HashSet<ExpressBoundSymbol>();
+            if (!TryEvaluateIntegerBound(schema, text, scope, visited, out var value)
+                || value < int.MinValue
+                || value > int.MaxValue)
+            {
+                return text;
+            }
+
+            return ((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private bool TryEvaluateIntegerBound(
+            SchemaDraft schema,
+            string text,
+            NameScope? scope,
+            ISet<ExpressBoundSymbol> visited,
+            out System.Numerics.BigInteger value)
+        {
+            text = TrimOuterParentheses(text);
+            if (System.Numerics.BigInteger.TryParse(
+                    text,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out value))
+            {
+                return true;
+            }
+
+            if (TrySplitIntegerBound(
+                    text,
+                    ["+", "-",],
+                    out var left,
+                    out var operation,
+                    out var right)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    left,
+                    scope,
+                    visited,
+                    out var leftValue)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    right,
+                    scope,
+                    visited,
+                    out var rightValue))
+            {
+                value = operation == "+"
+                    ? leftValue + rightValue
+                    : leftValue - rightValue;
+                return true;
+            }
+
+            if (TrySplitIntegerBound(
+                    text,
+                    ["*",],
+                    out left,
+                    out operation,
+                    out right)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    left,
+                    scope,
+                    visited,
+                    out leftValue)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    right,
+                    scope,
+                    visited,
+                    out rightValue))
+            {
+                value = leftValue * rightValue;
+                return true;
+            }
+
+            if (TrySplitIntegerBound(
+                    text,
+                    ["**",],
+                    out left,
+                    out operation,
+                    out right,
+                    scanFromRight: false)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    left,
+                    scope,
+                    visited,
+                    out leftValue)
+                && TryEvaluateIntegerBound(
+                    schema,
+                    right,
+                    scope,
+                    visited,
+                    out rightValue)
+                && rightValue >= System.Numerics.BigInteger.Zero
+                && rightValue <= int.MaxValue)
+            {
+                value = System.Numerics.BigInteger.Pow(leftValue, (int)rightValue);
+                return true;
+            }
+
+            if (text.Length > 0 && text[0] == '+')
+            {
+                return TryEvaluateIntegerBound(schema, text.Substring(1), scope, visited, out value);
+            }
+
+            if (text.Length > 0
+                && text[0] == '-'
+                && TryEvaluateIntegerBound(schema, text.Substring(1), scope, visited, out var operand))
+            {
+                value = -operand;
+                return true;
+            }
+
+            ExpressBoundSymbol? symbol = null;
+            if (scope is not null
+                && scope.TryResolve(text, out var scoped)
+                && scoped.Kind == ExpressBoundNameKind.Constant)
+            {
+                symbol = scoped.SchemaDeclaration;
+            }
+
+            symbol ??= ResolveVisible(schema, text);
+            if (symbol?.Kind != ExpressDeclarationKind.Constant)
+            {
+                value = default;
+                return false;
+            }
+
+            if (!visited.Add(symbol))
+            {
+                value = default;
+                return false;
+            }
+
+            var declaration = FindSymbol(symbol);
+            var initializer = declaration?.Syntax.ChildRules("expression").SingleOrDefault();
+            var evaluated = initializer is not null
+                && TryEvaluateIntegerBound(schema, initializer.TokenText(), scope, visited, out value);
+            visited.Remove(symbol);
+            return evaluated;
+        }
+
+        private static string TrimOuterParentheses(string text)
+        {
+            while (text.Length >= 2 && text[0] == '(' && text[text.Length - 1] == ')')
+            {
+                var depth = 0;
+                var enclosesAll = true;
+                for (var index = 0; index < text.Length - 1; index++)
+                {
+                    if (text[index] == '(')
+                    {
+                        depth++;
+                    }
+                    else if (text[index] == ')')
+                    {
+                        depth--;
+                    }
+
+                    if (depth == 0)
+                    {
+                        enclosesAll = false;
+                        break;
+                    }
+                }
+
+                if (!enclosesAll)
+                {
+                    break;
+                }
+
+                text = text.Substring(1, text.Length - 2);
+            }
+
+            return text;
+        }
+
+        private static bool TrySplitIntegerBound(
+            string text,
+            IReadOnlyList<string> operators,
+            out string left,
+            out string operation,
+            out string right,
+            bool scanFromRight = true)
+        {
+            var depth = 0;
+            var index = scanFromRight ? text.Length - 1 : 0;
+            while (index >= 0 && index < text.Length)
+            {
+                if (text[index] == ')')
+                {
+                    depth++;
+                }
+                else if (text[index] == '(')
+                {
+                    depth--;
+                }
+
+                if (depth == 0)
+                {
+                    foreach (var candidate in operators)
+                    {
+                        var isPowerCharacter = candidate == "*"
+                            && ((index > 0 && text[index - 1] == '*')
+                                || (index + 1 < text.Length && text[index + 1] == '*'));
+                        var isUnarySign = candidate is "+" or "-"
+                            && (index == 0
+                                || text[index - 1] is '+' or '-' or '*' or '/' or '(');
+                        var isIdentifierFragment = char.IsLetter(candidate[0])
+                            && ((index > 0 && IsIdentifierCharacter(text[index - 1]))
+                                || (index + candidate.Length < text.Length
+                                    && IsIdentifierCharacter(text[index + candidate.Length])));
+                        if (!isPowerCharacter
+                            && !isUnarySign
+                            && !isIdentifierFragment
+                            && index + candidate.Length <= text.Length
+                            && string.Equals(
+                                text.Substring(index, candidate.Length),
+                                candidate,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            left = text.Substring(0, index);
+                            operation = candidate;
+                            right = text.Substring(index + candidate.Length);
+                            return left.Length > 0 && right.Length > 0;
+                        }
+                    }
+                }
+
+                index += scanFromRight ? -1 : 1;
+            }
+
+            left = "";
+            operation = "";
+            right = "";
+            return false;
+        }
+
+        private static bool IsIdentifierCharacter(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
         }
 
         private ExpressBoundEnumerationType BindEnumeration(

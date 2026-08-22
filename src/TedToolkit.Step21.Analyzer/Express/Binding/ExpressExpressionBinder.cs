@@ -38,6 +38,8 @@ internal sealed class ExpressExpressionBinder
 
     private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
 
+    private ExpressExpressionType? _selfType;
+
     private ExpressExpressionBinder(
         IReadOnlyList<ExpressBoundNameReference> references,
         IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations)
@@ -59,13 +61,26 @@ internal sealed class ExpressExpressionBinder
         var bySymbol = declarations.ToDictionary(declaration => declaration.Symbol);
         var binder = new ExpressExpressionBinder(references, bySymbol);
         var expectedTypes = binder.FindExpectedTypes(declarations);
-        return declarations
-            .SelectMany(declaration => ExpressionRoots(declaration.Syntax))
-            .Select(expression => binder.BindExpression(
-                expression,
-                EmptyLexicalTypes.Instance,
-                expectedTypes.TryGetValue(expression, out var expected) ? expected : null))
-            .ToArray();
+        var result = new List<ExpressBoundExpression>();
+        foreach (var declaration in declarations)
+        {
+            binder._selfType = declaration switch
+            {
+                ExpressBoundEntity entity => binder.TypeOf(new ExpressBoundNamedType(entity.Symbol, entity.Syntax.Span)),
+                ExpressBoundDefinedType type => binder.TypeOf(new ExpressBoundNamedType(type.Symbol, type.Syntax.Span)),
+                _ => null,
+            };
+            foreach (var expression in ExpressionRoots(declaration.Syntax))
+            {
+                result.Add(binder.BindExpression(
+                    expression,
+                    EmptyLexicalTypes.Instance,
+                    expectedTypes.TryGetValue(expression, out var expected) ? expected : null));
+            }
+        }
+
+        binder._selfType = null;
+        return result;
     }
 
     private Dictionary<ExpressRuleSyntax, ExpressExpressionType> FindExpectedTypes(
@@ -436,7 +451,7 @@ internal sealed class ExpressExpressionBinder
         {
             return Create(
                 ExpressExpressionKind.Reference,
-                new ExpressExpressionType(ExpressExpressionTypeKind.Entity),
+                _selfType ?? new(ExpressExpressionTypeKind.Entity),
                 syntax,
                 text,
                 reference: null,
@@ -497,15 +512,16 @@ internal sealed class ExpressExpressionBinder
         var qualifier = syntax.ChildRules().Single();
         if (qualifier.Production == "attributeQualifier")
         {
-            var reference = FindReference(qualifier.Span);
+            var target = FindReference(qualifier.Span)?.Target
+                ?? ResolveAttribute(source.Type, qualifier);
             return Create(
                 ExpressExpressionKind.AttributeQualifier,
-                TypeOf(reference?.Target.Type)
-                    .WithIndeterminate(source.Type.CanBeIndeterminate || reference?.Target.IsOptional == true),
+                TypeOf(target?.Type)
+                    .WithIndeterminate(source.Type.CanBeIndeterminate || target?.IsOptional == true),
                 SliceSpan(source.Span, syntax.Span),
                 string.Concat(source.SourceText, qualifier.TokenText()),
                 qualifier.TokenText(),
-                reference?.Target,
+                target,
                 [source,]);
         }
 
@@ -540,6 +556,66 @@ internal sealed class ExpressExpressionBinder
             qualifier.TokenText(),
             reference: null,
             [source, .. indices,]);
+    }
+
+    private ExpressBoundName? ResolveAttribute(
+        ExpressExpressionType source,
+        ExpressRuleSyntax qualifier)
+    {
+        if (source.DeclaredType is not ExpressBoundNamedType named
+            || named.Declaration.Kind != ExpressDeclarationKind.Entity
+            || !_declarations.TryGetValue(named.Declaration, out var declaration)
+            || declaration is not ExpressBoundEntity entity)
+        {
+            return null;
+        }
+
+        var name = qualifier.RequiredChild("attributeRef").IdentifierToken().Text;
+        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+            .Where(attribute => string.Equals(attribute.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Distinct()
+            .ToArray();
+        if (attributes.Length != 1)
+        {
+            return null;
+        }
+
+        var attribute = attributes[0];
+        return new(
+            attribute.Name,
+            ExpressBoundNameKind.Attribute,
+            attribute.Type,
+            schemaDeclaration: null,
+            attribute.Span,
+            attribute.IsOptional,
+            attribute);
+    }
+
+    private IEnumerable<ExpressBoundAttribute> EnumerateAttributes(
+        ExpressBoundEntity entity,
+        ISet<ExpressBoundSymbol> visited)
+    {
+        if (!visited.Add(entity.Symbol))
+        {
+            yield break;
+        }
+
+        foreach (var attribute in entity.Attributes)
+        {
+            yield return attribute;
+        }
+
+        foreach (var supertype in entity.DirectSupertypes)
+        {
+            if (_declarations.TryGetValue(supertype, out var declaration)
+                && declaration is ExpressBoundEntity baseEntity)
+            {
+                foreach (var attribute in EnumerateAttributes(baseEntity, visited))
+                {
+                    yield return attribute;
+                }
+            }
+        }
     }
 
     private ExpressBoundExpression BindAggregateInitializer(

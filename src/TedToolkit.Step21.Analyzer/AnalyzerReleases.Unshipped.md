@@ -11,3 +11,4 @@ STEP21EXP002 | TedToolkit.Step21.Express | Error | Invalid EXPRESS schema bindin
 STEP21EXP003 | TedToolkit.Step21.Express | Error | Unreadable EXPRESS additional file
 STEP21EXP004 | TedToolkit.Step21.Express | Error | Generated C# name collision
 STEP21EXP005 | TedToolkit.Step21.Express | Error | Unsupported generated entity projection
+STEP21EXP006 | TedToolkit.Step21.Express | Error | Unsupported reachable EXPRESS rule
