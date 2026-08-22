@@ -40,7 +40,7 @@ internal static class ExchangeStructureReader
     {
         var syntax = ExchangeStructureSyntaxParser.Parse(source, SOURCE_NAME);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
-        ThrowIfSimpleReadCapabilityIsExceeded(syntax);
+        ThrowIfReadCapabilityIsExceeded(syntax);
 
         var bindingDiagnostics = new List<Step21Diagnostic>();
         var referenceFailures = new List<ValidationFailure>();
@@ -97,15 +97,22 @@ internal static class ExchangeStructureReader
 
         foreach (var allocation in allocations)
         {
-            var record = allocation.Syntax.Records[0];
-            var parameters = new List<ParameterValue>(record.Parameters.Count);
-            var unresolvedParameters = new HashSet<int>();
-            for (var parameterIndex = 0; parameterIndex < record.Parameters.Count; parameterIndex++)
+            var components = new List<KeyValuePair<string, IReadOnlyList<ParameterValue>>>(
+                allocation.Syntax.Records.Count);
+            var unresolvedParameters = new HashSet<(string EntityName, int ParameterIndex)>();
+            for (var componentIndex = 0; componentIndex < allocation.Syntax.Records.Count; componentIndex++)
             {
-                var parameter = record.Parameters[parameterIndex];
-                var parameterPath = $"DataSections[{allocation.SectionIndex.ToString(CultureInfo.InvariantCulture)}]."
-                    + $"{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]";
-                var convertedSuccessfully = TryConvertParameter(
+                var record = allocation.Syntax.Records[componentIndex];
+                var parameters = new List<ParameterValue>(record.Parameters.Count);
+                for (var parameterIndex = 0; parameterIndex < record.Parameters.Count; parameterIndex++)
+                {
+                    var parameter = record.Parameters[parameterIndex];
+                    var mappingPath = allocation.Syntax.Records.Count == 1
+                        ? string.Empty
+                        : $"Components[{componentIndex.ToString(CultureInfo.InvariantCulture)}].";
+                    var parameterPath = $"DataSections[{allocation.SectionIndex.ToString(CultureInfo.InvariantCulture)}]."
+                        + $"{allocation.Name}.{mappingPath}Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]";
+                    var convertedSuccessfully = TryConvertParameter(
                         parameter,
                         parameterPath,
                         entitiesByName,
@@ -113,20 +120,24 @@ internal static class ExchangeStructureReader
                         referenceFailures,
                         bindingDiagnostics,
                         out var converted);
-                parameters.Add(converted);
-                if (!convertedSuccessfully)
-                    unresolvedParameters.Add(parameterIndex);
+                    parameters.Add(converted);
+                    if (!convertedSuccessfully)
+                        unresolvedParameters.Add((record.Name, parameterIndex));
+                }
+
+                components.Add(new(record.Name, parameters.AsReadOnly()));
             }
 
-            var components = new KeyValuePair<string, IReadOnlyList<ParameterValue>>[]
+            foreach (var diagnostic in allocation.Descriptor.HydrateEntity(
+                         structure,
+                         allocation.Entity,
+                         components.AsReadOnly()))
             {
-                new(record.Name, parameters.AsReadOnly()),
-            };
-            foreach (var diagnostic in allocation.Descriptor.HydrateEntity(structure, allocation.Entity, components))
-            {
+                var diagnosticRecord = FindDiagnosticRecord(allocation.Syntax, diagnostic.Message);
                 if (diagnostic.Code == "P21-BIND-PARAMETER"
                     && TryGetParameterIndex(diagnostic.Message, out var unresolvedIndex)
-                    && unresolvedParameters.Contains(unresolvedIndex))
+                    && diagnosticRecord is not null
+                    && unresolvedParameters.Contains((diagnosticRecord.Name, unresolvedIndex)))
                 {
                     continue;
                 }
@@ -134,7 +145,7 @@ internal static class ExchangeStructureReader
                 if (TryTranslateIncompatibleReference(
                         diagnostic,
                         allocation,
-                        record,
+                        diagnosticRecord ?? allocation.Syntax.Records[0],
                         out var failure))
                 {
                     referenceFailures.Add(failure);
@@ -155,7 +166,7 @@ internal static class ExchangeStructureReader
                             bindingDiagnostic.Code,
                             bindingDiagnostic.Severity,
                             bindingDiagnostic.Message,
-                            record.Span.Start)
+                            (diagnosticRecord ?? allocation.Syntax.Records[0]).Span.Start)
                         : bindingDiagnostic);
                 }
             }
@@ -180,7 +191,7 @@ internal static class ExchangeStructureReader
         return structure;
     }
 
-    private static void ThrowIfSimpleReadCapabilityIsExceeded(ExchangeStructureSyntax syntax)
+    private static void ThrowIfReadCapabilityIsExceeded(ExchangeStructureSyntax syntax)
     {
         var diagnostics = new List<Step21Diagnostic>();
         foreach (var additionalHeader in syntax.Header.AdditionalEntities)
@@ -245,15 +256,6 @@ internal static class ExchangeStructureReader
         {
             foreach (var instance in section.EntityInstances)
             {
-                if (instance.Kind == EntityInstanceSyntaxKind.Complex)
-                {
-                    diagnostics.Add(new Step21Diagnostic(
-                        "P21-CAP-COMPLEX-ENTITY",
-                        Step21DiagnosticSeverity.Error,
-                        "Complex entity-instance binding is not implemented by simple typed reading.",
-                        instance.Span.Start));
-                }
-
                 foreach (var value in instance.Records.SelectMany(record => record.Parameters))
                     CollectUnsupportedValueDiagnostics(value, diagnostics);
             }
@@ -293,7 +295,7 @@ internal static class ExchangeStructureReader
             diagnostics.Add(new Step21Diagnostic(
                 "P21-CAP-OCCURRENCE-REFERENCE",
                 Step21DiagnosticSeverity.Error,
-                "Occurrence-reference binding is not implemented by simple typed reading.",
+                "Occurrence-reference binding is not implemented by typed reading.",
                 value.Span.Start));
         }
 
@@ -771,15 +773,16 @@ internal static class ExchangeStructureReader
             if (descriptor is null)
                 continue;
 
-            var record = instance.Records[0];
-            var entity = descriptor.AllocateEntity([record.Name]);
+            var entityNames = instance.Records.Select(record => record.Name).ToArray();
+            var entity = descriptor.AllocateEntity(entityNames);
             if (entity is null)
             {
                 diagnostics.Add(new Step21Diagnostic(
                     "P21-BIND-ENTITY",
                     Step21DiagnosticSeverity.Error,
-                    $"Schema '{descriptor.Name}' does not define simple entity '{record.Name}'.",
-                    record.Span.Start));
+                    $"Schema '{descriptor.Name}' does not support entity mapping "
+                        + $"'{string.Join("|", entityNames)}'.",
+                    instance.Records[0].Span.Start));
                 continue;
             }
 
@@ -949,10 +952,17 @@ internal static class ExchangeStructureReader
             && parameterIndex < record.Parameters.Count
             && ContainsEntityReference(record.Parameters[parameterIndex]))
         {
+            var componentIndex = allocation.Syntax.Records
+                .Select((candidate, index) => (candidate, index))
+                .Single(item => ReferenceEquals(item.candidate, record))
+                .index;
+            var mappingPath = allocation.Syntax.Records.Count == 1
+                ? string.Empty
+                : $"Components[{componentIndex.ToString(CultureInfo.InvariantCulture)}].";
             failure = new ValidationFailure(
                 "P21.READ.REFERENCE.TYPE",
                 $"DataSections[{allocation.SectionIndex.ToString(CultureInfo.InvariantCulture)}]."
-                    + $"{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
+                    + $"{allocation.Name}.{mappingPath}Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
                 $"The resolved reference target is not assignable to the generated parameter type. {diagnostic.Message}",
                 record.Parameters[parameterIndex].Span.Start);
             return true;
@@ -996,7 +1006,14 @@ internal static class ExchangeStructureReader
                 message.AsSpan(start, end - start),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
-                out parameterIndex);
+            out parameterIndex);
+    }
+
+    private static EntityRecordSyntax? FindDiagnosticRecord(EntityInstanceSyntax instance, string message)
+    {
+        return instance.Records.FirstOrDefault(record =>
+            message.StartsWith(record.Name + " ", StringComparison.Ordinal)
+            || message.Contains("for " + record.Name + ".", StringComparison.Ordinal));
     }
 
     private static bool ContainsEntityReference(ValueSyntax value) =>

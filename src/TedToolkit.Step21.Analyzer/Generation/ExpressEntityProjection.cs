@@ -24,7 +24,9 @@ internal sealed class ExpressEntityProjection
         ExpressBoundEntity entity,
         IEnumerable<ExpressEntityAttributeProjection> ownAttributes,
         IEnumerable<ExpressEntityAttributeProjection> flattenedAttributes,
-        IEnumerable<ExpressEntityAttributeProjection> effectiveAttributes)
+        IEnumerable<ExpressEntityAttributeProjection> effectiveAttributes,
+        IEnumerable<ExpressBoundEntity> physicalComponents,
+        bool hasDerivedRedeclaration)
     {
         Schema = schema;
         Entity = entity;
@@ -32,6 +34,8 @@ internal sealed class ExpressEntityProjection
         OwnAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(ownAttributes.ToArray());
         FlattenedAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(flattenedAttributes.ToArray());
         EffectiveAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(effectiveAttributes.ToArray());
+        PhysicalComponents = new ReadOnlyCollection<ExpressBoundEntity>(physicalComponents.ToArray());
+        HasDerivedRedeclaration = hasDerivedRedeclaration;
     }
 
     /// <summary>
@@ -63,6 +67,16 @@ internal sealed class ExpressEntityProjection
     /// Gets the latest projected attribute for each physical storage slot.
     /// </summary>
     internal IReadOnlyList<ExpressEntityAttributeProjection> EffectiveAttributes { get; }
+
+    /// <summary>
+    /// Gets the complete inheritance closure in the ascending entity-name order required by external mapping.
+    /// </summary>
+    internal IReadOnlyList<ExpressBoundEntity> PhysicalComponents { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this entity closure contains a derived redeclaration of an explicit slot.
+    /// </summary>
+    internal bool HasDerivedRedeclaration { get; }
 
     /// <summary>
     /// Creates projections for every entity in a valid closed schema compilation.
@@ -106,7 +120,69 @@ internal sealed class ExpressEntityProjection
     {
         var ownAttributes = ProjectOwnAttributes(entity, valueResolver).ToArray();
         var (flattenedAttributes, effectiveAttributes) = FlattenAttributes(entity, entityBySymbol, valueResolver);
-        return new(schema, entity, ownAttributes, flattenedAttributes, effectiveAttributes);
+        var components = CreatePhysicalComponents(entity, entityBySymbol);
+        var hasDerivedRedeclaration = ComputeHasDerivedRedeclaration(
+            entity,
+            entityBySymbol,
+            new HashSet<ExpressBoundSymbol>());
+        return new(
+            schema,
+            entity,
+            ownAttributes,
+            flattenedAttributes,
+            effectiveAttributes,
+            components,
+            hasDerivedRedeclaration);
+    }
+
+    private static bool ComputeHasDerivedRedeclaration(
+        ExpressBoundEntity entity,
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ISet<ExpressBoundSymbol> visited)
+    {
+        if (!visited.Add(entity.Symbol))
+        {
+            return false;
+        }
+
+        if (entity.Syntax.DescendantsAndSelf().Any(rule =>
+                rule.Production == "derivedAttr"
+                && rule.DescendantsAndSelf()
+                .Any(descendant => descendant.Production == "redeclaredAttribute")))
+        {
+            return true;
+        }
+
+        return entity.DirectSupertypes.Any(supertype =>
+            ComputeHasDerivedRedeclaration(entityBySymbol[supertype].Entity, entityBySymbol, visited));
+    }
+
+    private static ExpressBoundEntity[] CreatePhysicalComponents(
+        ExpressBoundEntity entity,
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol)
+    {
+        var closure = new HashSet<ExpressBoundSymbol>();
+        AddEntityAndSupertypes(entity, entityBySymbol, closure);
+        return closure
+            .Select(symbol => entityBySymbol[symbol].Entity)
+            .OrderBy(candidate => candidate.Name.ToUpperInvariant(), StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static void AddEntityAndSupertypes(
+        ExpressBoundEntity entity,
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ISet<ExpressBoundSymbol> closure)
+    {
+        if (!closure.Add(entity.Symbol))
+        {
+            return;
+        }
+
+        foreach (var supertype in entity.DirectSupertypes)
+        {
+            AddEntityAndSupertypes(entityBySymbol[supertype].Entity, entityBySymbol, closure);
+        }
     }
 
     private static IEnumerable<ExpressEntityAttributeProjection> ProjectOwnAttributes(

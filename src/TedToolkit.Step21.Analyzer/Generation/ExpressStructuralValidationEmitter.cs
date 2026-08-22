@@ -28,12 +28,14 @@ internal static class ExpressStructuralValidationEmitter
     /// </summary>
     /// <param name="schema">The owning schema.</param>
     /// <param name="entities">The generated entity projections.</param>
+    /// <param name="complexEntities">The generated multi-leaf entity projections.</param>
     /// <param name="resolver">The closed-set generated type resolver.</param>
     /// <param name="rulePlan">The validated reachable rule closure.</param>
     /// <returns>The protected descriptor override.</returns>
     internal static Method CreateDispatchMethod(
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan)
     {
@@ -41,6 +43,7 @@ internal static class ExpressStructuralValidationEmitter
             "ValidateCore",
             schema,
             entities,
+            complexEntities,
             resolver,
             rulePlan,
             recognizeImportedEntities: true,
@@ -52,12 +55,14 @@ internal static class ExpressStructuralValidationEmitter
     /// </summary>
     /// <param name="schema">The owning schema.</param>
     /// <param name="entities">The generated entity projections.</param>
+    /// <param name="complexEntities">The generated multi-leaf entity projections.</param>
     /// <param name="resolver">The closed-set generated type resolver.</param>
     /// <param name="rulePlan">The validated reachable rule closure.</param>
     /// <returns>The protected entity-population descriptor override.</returns>
     internal static Method CreateEntityPopulationDispatchMethod(
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan)
     {
@@ -65,6 +70,7 @@ internal static class ExpressStructuralValidationEmitter
             "ValidateEntityPopulationCore",
             schema,
             entities,
+            complexEntities,
             resolver,
             rulePlan,
             recognizeImportedEntities: false,
@@ -75,6 +81,7 @@ internal static class ExpressStructuralValidationEmitter
         string methodName,
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
         bool recognizeImportedEntities,
@@ -97,6 +104,16 @@ internal static class ExpressStructuralValidationEmitter
         var loop = new ForEachStatement(DataType.Var, "entry", new CustomExpression("entities"));
         loop.AddStatement(new CustomExpression("var recognized = false"));
         foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
+        {
+            var localName = $"typed{entity.Name}";
+            var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
+                .AddStatement(new CustomExpression("recognized = true"))
+                .AddStatement(new CustomExpression(
+                    $"Validate{entity.Name}({localName}, entry.Key, failures)"));
+            loop.AddStatement(branch);
+        }
+
+        foreach (var entity in complexEntities)
         {
             var localName = $"typed{entity.Name}";
             var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
@@ -724,7 +741,7 @@ internal static class ExpressStructuralValidationEmitter
             DataType.Void,
             TedToolkit.RoslynHelper.Accessibility.PRIVATE);
         method.IsStatic = true;
-        method.AddParameter(SourceComposer.Parameter(new DataType(entity.Name), "value"));
+        method.AddParameter(SourceComposer.Parameter(new DataType($"I{entity.Name}"), "value"));
         method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
         method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
 
@@ -751,6 +768,56 @@ internal static class ExpressStructuralValidationEmitter
         AddEntityWhereValidation(method, entity, rulePlan);
 
         AddSummary(method, $"Validates one {entity.Entity.Name} candidate without mutation.");
+        return method;
+    }
+
+    /// <summary>
+    /// Creates one private generated multi-leaf entity-validation method.
+    /// </summary>
+    /// <param name="entity">The synthetic multi-leaf entity projection.</param>
+    /// <param name="resolver">The generated type resolver.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
+    /// <returns>The private validation method.</returns>
+    internal static Method CreateComplexEntityMethod(
+        ExpressComplexEntityProjection entity,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
+    {
+        var method = CreateMethod(
+            $"Validate{entity.Name}",
+            DataType.Void,
+            TedToolkit.RoslynHelper.Accessibility.PRIVATE);
+        method.IsStatic = true;
+        method.AddParameter(SourceComposer.Parameter(new DataType(entity.Name), "value"));
+        method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
+
+        var context = entity.Leaves[0];
+        var attributes = entity.Components
+            .SelectMany(ExpressComplexEntityProjection.GetComponentAttributes)
+            .ToArray();
+        var variable = 0;
+        for (var index = 0; index < attributes.Length; index++)
+        {
+            AddAttributeValidation(method, context, attributes[index], index, resolver, ref variable);
+            AddAttributeTypeWhereValidation(
+                method,
+                context,
+                attributes[index],
+                index,
+                resolver,
+                rulePlan,
+                ref variable);
+        }
+
+        var visited = new HashSet<ExpressBoundSymbol>();
+        foreach (var governingEntity in entity.Leaves.SelectMany(leaf =>
+                     EntityRuleOwners(entity.Schema, leaf.Entity, visited)))
+        {
+            AddEntityWhereValidation(method, context, governingEntity, rulePlan);
+        }
+
+        AddSummary(method, "Validates one supported multi-leaf candidate without duplicate inherited checks.");
         return method;
     }
 

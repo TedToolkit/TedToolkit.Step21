@@ -45,5 +45,6 @@ These detectable domain/capability failures therefore produce no partial output.
 is a write-validation failure. Once the buffered text is handed to the supplied `TextWriter`, its I/O exception is
 allowed to propagate unchanged; the runtime does not catch, translate, or claim rollback of external I/O.
 
-This item does not claim byte preservation. Complex physical entity mapping is added by SBRT-023, and SBRT-024 owns
-the final complete pre-write aggregation gate across every delivered writer capability.
+This item does not claim byte preservation. The later
+[complex-mapping round-trip](complex-mapping-round-trip.md) extends the same buffered writer with ordered external
+mapping; SBRT-024 owns the final complete pre-write aggregation gate across every delivered writer capability.

@@ -79,16 +79,26 @@ internal static class ExchangeStructureWriter
         {
             _ = structure.TryGetSchemaDescriptor(item.DataSection.SchemaName, out var descriptor);
             var components = descriptor!.ProjectEntity(item.Entity);
-            if (components.Count != 1)
+            if (components.Count == 0)
             {
                 capabilityDiagnostics.Add(new Step21Diagnostic(
                     "P21-CAP-COMPLEX-ENTITY",
                     Step21DiagnosticSeverity.Error,
-                    $"Entity '{item.Name}' does not have exactly one writable simple physical component."));
+                    $"Entity '{item.Name}' does not have a writable physical component."));
                 continue;
             }
 
-            result.Add(item, new ProjectedEntity(components[0].Key, components[0].Value));
+            if (components.Count > 1 && components.Zip(components.Skip(1), (left, right) =>
+                    StringComparer.Ordinal.Compare(left.Key, right.Key) < 0).Any(ascending => !ascending))
+            {
+                capabilityDiagnostics.Add(new Step21Diagnostic(
+                    "P21-CAP-COMPLEX-ENTITY",
+                    Step21DiagnosticSeverity.Error,
+                    $"Entity '{item.Name}' does not have a strictly ascending complex component sequence."));
+                continue;
+            }
+
+            result.Add(item, new ProjectedEntity(components));
         }
 
         if (capabilityDiagnostics.Count > 0)
@@ -190,9 +200,20 @@ internal static class ExchangeStructureWriter
         EntityRegistration registration,
         ProjectedEntity projected)
     {
-        var parameters = string.Join(',', projected.Parameters.Select(parameter =>
+        var records = projected.Components.Select(component => FormatComponent(structure, component));
+        var mappedValue = projected.Components.Count == 1
+            ? records.Single()
+            : $"({string.Concat(records)})";
+        return $"{registration.Name}={mappedValue};";
+    }
+
+    private static string FormatComponent(
+        ExchangeStructure structure,
+        KeyValuePair<string, IReadOnlyList<ParameterValue>> component)
+    {
+        var parameters = string.Join(',', component.Value.Select(parameter =>
             ParameterValueFormatter.Format(parameter, entity => ResolveName(structure, entity))));
-        return $"{registration.Name}={projected.ComponentName}({parameters});";
+        return $"{component.Key}({parameters})";
     }
 
     private static EntityInstanceName ResolveName(ExchangeStructure structure, Entity entity)
@@ -216,5 +237,6 @@ internal static class ExchangeStructureWriter
         _ => throw new InvalidOperationException($"Unsupported schema-population determination '{determination}'."),
     };
 
-    private sealed record ProjectedEntity(string ComponentName, IReadOnlyList<ParameterValue> Parameters);
+    private sealed record ProjectedEntity(
+        IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> Components);
 }

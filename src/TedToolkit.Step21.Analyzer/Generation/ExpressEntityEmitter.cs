@@ -102,11 +102,21 @@ internal static class ExpressEntityEmitter
         return entityClass;
     }
 
-    private static Property CreateProperty(
+    /// <summary>
+    /// Creates one generated entity property.
+    /// </summary>
+    /// <param name="projection">The owning entity projection.</param>
+    /// <param name="attribute">The projected attribute.</param>
+    /// <param name="valueResolver">The closed-set generated value resolver.</param>
+    /// <param name="isMutable">Whether the property is mutable.</param>
+    /// <param name="initializeDefault">Whether a mandatory property receives a null-forgiving default initializer.</param>
+    /// <returns>The composed property.</returns>
+    internal static Property CreateProperty(
         ExpressEntityProjection projection,
         ExpressEntityAttributeProjection attribute,
         ExpressGeneratedTypeResolver valueResolver,
-        bool isMutable)
+        bool isMutable,
+        bool initializeDefault = false)
     {
         var (dataType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
         if (attribute.Attribute.IsOptional)
@@ -159,6 +169,13 @@ internal static class ExpressEntityEmitter
             attribute,
             valueResolver,
             isMutable);
+
+        if (initializeDefault
+            && !attribute.Attribute.IsOptional
+            && attribute.RedirectTargetName is null)
+        {
+            property.AddDefault(new CustomExpression("default!"));
+        }
 
         return property;
     }
@@ -243,7 +260,13 @@ internal static class ExpressEntityEmitter
         return valueResolver.Resolve(projection.Schema.Identity, attribute.Type);
     }
 
-    private static DataType EntityInterfaceDataType(
+    /// <summary>
+    /// Resolves the generated interface type for an entity symbol.
+    /// </summary>
+    /// <param name="projection">The consuming entity projection.</param>
+    /// <param name="entity">The entity symbol.</param>
+    /// <returns>The generated interface type.</returns>
+    internal static DataType EntityInterfaceDataType(
         ExpressEntityProjection projection,
         ExpressBoundSymbol entity)
     {

@@ -43,6 +43,7 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
             var valueResolver = ExpressGeneratedTypeResolver.Create(result.Compilation);
             var valueProjections = ExpressValueProjection.Create(result.Compilation, valueResolver);
             var plan = ExpressEntityGenerationPlan.Create(result.Compilation, valueResolver);
+            var complexProjections = ExpressComplexEntityProjection.Create(plan.Projections);
             var rulePlans = result.Compilation.Schemas.ToDictionary(
                 schema => schema,
                 schema => ExpressReachableRulePlan.Create(schema, valueResolver));
@@ -64,12 +65,19 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
                 ExpressEntityEmitter.Emit(productionContext, projection, valueResolver);
             }
 
+            foreach (var projection in complexProjections
+                         .Where(projection => !invalidSchemas.Contains(projection.Schema)))
+            {
+                ExpressComplexEntityEmitter.Emit(productionContext, projection, valueResolver);
+            }
+
             foreach (var schema in result.Compilation.Schemas.Where(schema => !invalidSchemas.Contains(schema)))
             {
                 ExpressSchemaDescriptorEmitter.Emit(
                     productionContext,
                     schema,
                     plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
+                    complexProjections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
                     valueResolver,
                     rulePlans[schema]);
             }

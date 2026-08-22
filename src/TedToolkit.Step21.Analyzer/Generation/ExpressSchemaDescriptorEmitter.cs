@@ -25,12 +25,14 @@ internal static class ExpressSchemaDescriptorEmitter
     /// <param name="context">The source-production context.</param>
     /// <param name="schema">The valid bound schema.</param>
     /// <param name="entities">The generated entities owned by the schema.</param>
+    /// <param name="complexEntities">The generated multi-leaf entities owned by the schema.</param>
     /// <param name="resolver">The closed-set generated value resolver.</param>
     /// <param name="rulePlan">The validated reachable rule closure.</param>
     internal static void Emit(
         in SourceProductionContext context,
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan)
     {
@@ -44,21 +46,31 @@ internal static class ExpressSchemaDescriptorEmitter
         descriptor.AddMember(CreateConstructor());
         descriptor.AddMember(CreateInstanceProperty());
         descriptor.AddMember(CreateNameProperty(schema));
-        descriptor.AddMember(CreateAllocateMethod(entities));
-        descriptor.AddMember(CreateHydrateMethod(entities, resolver));
+        descriptor.AddMember(CreateAllocateMethod(entities, complexEntities));
+        descriptor.AddMember(CreateHydrateMethod(entities, complexEntities, resolver));
         descriptor.AddMember(ExpressStructuralValidationEmitter.CreateDispatchMethod(
             schema,
             entities,
+            complexEntities,
             resolver,
             rulePlan));
         descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityPopulationDispatchMethod(
             schema,
             entities,
+            complexEntities,
             resolver,
             rulePlan));
         foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
         {
             descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver, rulePlan));
+        }
+
+        foreach (var entity in complexEntities)
+        {
+            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateComplexEntityMethod(
+                entity,
+                resolver,
+                rulePlan));
         }
 
         foreach (var method in ExpressReachableRuleEmitter.CreateDependencyMethods(rulePlan, resolver))
@@ -67,7 +79,7 @@ internal static class ExpressSchemaDescriptorEmitter
         }
 
         descriptor.AddMember(CreateCapabilityMethod());
-        descriptor.AddMember(CreateProjectMethod(entities, resolver));
+        descriptor.AddMember(CreateProjectMethod(entities, complexEntities, resolver));
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
 
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
@@ -111,7 +123,9 @@ internal static class ExpressSchemaDescriptorEmitter
         return property;
     }
 
-    private static Method CreateAllocateMethod(IReadOnlyList<ExpressEntityProjection> entities)
+    private static Method CreateAllocateMethod(
+        IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities)
     {
         var method = CreateOverrideMethod(
             "AllocateEntityCore",
@@ -121,14 +135,41 @@ internal static class ExpressSchemaDescriptorEmitter
             "entityNames"));
         var alternatives = entities
             .Where(entity => !entity.Entity.IsAbstract)
-            .Select(entity => $"\"{entity.Entity.Name.ToUpperInvariant()}\" => {CreateEntity(entity)}")
+            .Select(entity => $"{CreateMappingCondition(entity)} ? {CreateEntity(entity)} : ")
+            .Concat(complexEntities.Select(entity =>
+                $"{CreateComplexMappingCondition(entity, "entityNames", hasKey: false)} ? new {entity.Name}() : "))
             .ToArray();
         var expression = alternatives.Length == 0
             ? "null"
-            : $"entityNames.Count == 1 ? entityNames[0] switch {{ {string.Join(", ", alternatives)}, _ => null }} : null";
+            : string.Concat(alternatives) + "null";
         method.AddStatement(new CustomExpression(expression).Return);
         AddSummary(method, "Allocates a supported generated entity from its ordered physical name group.");
         return method;
+    }
+
+    private static string CreateMappingCondition(ExpressEntityProjection entity)
+    {
+        var entityName = entity.Entity.Name.ToUpperInvariant();
+        return $"(entityNames.Count == 1 && entityNames[0] == \"{entityName}\")";
+    }
+
+    private static string CreateComplexMappingCondition(
+        ExpressComplexEntityProjection entity,
+        string components,
+        bool hasKey)
+    {
+        return $"({components}.Count == {entity.Components.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            + string.Concat(entity.Components.Select((component, index) =>
+            {
+                var access = $"{components}[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}]";
+                if (hasKey)
+                {
+                    access += ".Key";
+                }
+
+                return $" && {access} == \"{component.Entity.Name.ToUpperInvariant()}\"";
+            }))
+            + ")";
     }
 
     private static string CreateEntity(ExpressEntityProjection entity)
@@ -141,6 +182,7 @@ internal static class ExpressSchemaDescriptorEmitter
 
     private static Method CreateHydrateMethod(
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver)
     {
         var diagnosticsType = new DataType(
@@ -154,16 +196,21 @@ internal static class ExpressSchemaDescriptorEmitter
             new DataType(
                 "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>>"),
             "components"));
-        foreach (var entity in entities.Where(entity => CanMapSimpleEntity(entity, resolver)))
+        foreach (var entity in entities.Where(entity => CanMapEntity(entity, resolver)))
         {
             method.AddStatement(CreateHydrateEntityBranch(entity, resolver));
+        }
+
+        foreach (var entity in complexEntities)
+        {
+            method.AddStatement(CreateHydrateComplexEntityBranch(entity, resolver));
         }
 
         method.AddStatement(new CustomExpression(
             "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-ENTITY\", "
             + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
             + "\"The entity is not supported by this schema descriptor.\")]").Return);
-        AddSummary(method, "Hydrates one supported simple entity from strong physical parameters.");
+        AddSummary(method, "Hydrates one supported entity from strong physical components and parameters.");
         return method;
     }
 
@@ -183,19 +230,25 @@ internal static class ExpressSchemaDescriptorEmitter
 
     private static Method CreateProjectMethod(
         IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver)
     {
         var componentType = new DataType(
             "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>>");
         var method = CreateOverrideMethod("ProjectEntityCore", componentType);
         method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
-        foreach (var entity in entities.Where(entity => CanMapSimpleEntity(entity, resolver)))
+        foreach (var entity in entities.Where(entity => CanMapEntity(entity, resolver)))
         {
             method.AddStatement(CreateProjectEntityBranch(entity, resolver));
         }
 
+        foreach (var entity in complexEntities)
+        {
+            method.AddStatement(CreateProjectComplexEntityBranch(entity, resolver));
+        }
+
         method.AddStatement(new CustomExpression("[]").Return);
-        AddSummary(method, "Projects one supported simple entity to strong physical parameters.");
+        AddSummary(method, "Projects one supported entity to strong physical components and parameters.");
         return method;
     }
 
@@ -243,17 +296,11 @@ internal static class ExpressSchemaDescriptorEmitter
             .AddStatement(new CustomExpression(
                 "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-COMPONENT\", "
                 + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
-                + $"\"Expected the single {entity.Entity.Name.ToUpperInvariant()} component.\")]").Return))
-            .AddStatement(new Statement(new CustomExpression("var parameters = components[0].Value")))
-            .AddStatement(new IfStatement(new CustomExpression(
-                $"parameters.Count != {entity.EffectiveAttributes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)}"))
-            .AddStatement(new CustomExpression(
-                "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-PARAMETER-COUNT\", "
-                + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
-                + $"\"Expected {entity.EffectiveAttributes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} "
-                + $"parameters for {entity.Entity.Name.ToUpperInvariant()}.\")]").Return))
+                + $"\"The component sequence is not a supported mapping of {entity.Entity.Name.ToUpperInvariant()}.\")]").Return))
             .AddStatement(new Statement(new CustomExpression(
-                "var diagnostics = new global::System.Collections.Generic.List<global::TedToolkit.Step21.Step21Diagnostic>()")));
+                "var diagnostics = new global::System.Collections.Generic.List<global::TedToolkit.Step21.Step21Diagnostic>()")))
+            .AddStatement(new Statement(new CustomExpression("var parameters = components[0].Value")))
+            .AddStatement(CreateParameterCountCheck(entity.Entity.Name, entity.EffectiveAttributes.Count));
         for (var index = 0; index < entity.EffectiveAttributes.Count; index++)
         {
             branch.AddStatement(CreateHydrateAttribute(
@@ -261,11 +308,64 @@ internal static class ExpressSchemaDescriptorEmitter
                 entity.EffectiveAttributes[index],
                 index,
                 typedName,
-                resolver));
+                resolver,
+                entity.Entity.Name));
         }
 
         branch.AddStatement(new CustomExpression("diagnostics").Return);
         return branch;
+    }
+
+    private static IfStatement CreateHydrateComplexEntityBranch(
+        ExpressComplexEntityProjection entity,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        var typedName = $"typed{entity.Name}";
+        var branch = new IfStatement(new CustomExpression($"value is {entity.Name} {typedName}"))
+            .AddStatement(new IfStatement(new CustomExpression(
+                $"!{CreateComplexMappingCondition(entity, "components", hasKey: true)}"))
+            .AddStatement(new CustomExpression(
+                "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-COMPONENT\", "
+                + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
+                + "\"The complex component sequence is not supported.\")]").Return))
+            .AddStatement(new Statement(new CustomExpression(
+                "var diagnostics = new global::System.Collections.Generic.List<global::TedToolkit.Step21.Step21Diagnostic>()")));
+        var context = entity.Leaves[0];
+        for (var componentIndex = 0; componentIndex < entity.Components.Count; componentIndex++)
+        {
+            var component = entity.Components[componentIndex];
+            var attributes = ExpressComplexEntityProjection.GetComponentAttributes(component);
+            var componentBranch = new IfStatement(new CustomExpression("true"))
+                .AddStatement(new Statement(new CustomExpression(
+                    $"var parameters = components[{componentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}].Value")))
+                .AddStatement(CreateParameterCountCheck(component.Entity.Name, attributes.Count));
+            for (var attributeIndex = 0; attributeIndex < attributes.Count; attributeIndex++)
+            {
+                componentBranch.AddStatement(CreateHydrateAttribute(
+                    context,
+                    attributes[attributeIndex],
+                    attributeIndex,
+                    typedName,
+                    resolver,
+                    component.Entity.Name));
+            }
+
+            branch.AddStatement(componentBranch);
+        }
+
+        branch.AddStatement(new CustomExpression("diagnostics").Return);
+        return branch;
+    }
+
+    private static IfStatement CreateParameterCountCheck(string entityName, int count)
+    {
+        return new IfStatement(new CustomExpression(
+                $"parameters.Count != {count.ToString(System.Globalization.CultureInfo.InvariantCulture)}"))
+            .AddStatement(new CustomExpression(
+                "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-PARAMETER-COUNT\", "
+                + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
+                + $"\"Expected {count.ToString(System.Globalization.CultureInfo.InvariantCulture)} "
+                + $"parameters for {entityName.ToUpperInvariant()}.\")]").Return);
     }
 
     private static IfStatement CreateHydrateAttribute(
@@ -273,14 +373,15 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressEntityAttributeProjection attribute,
         int index,
         string typedName,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        string physicalEntityName)
     {
         var parameterName = $"parameter{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var expectedType = ExpressTypeDocumentation.Format(attribute.Type);
         var invalid = new CustomExpression(
             "diagnostics.Add(new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-PARAMETER\", "
             + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
-            + $"\"{entity.Entity.Name.ToUpperInvariant()} parameter "
+            + $"\"{physicalEntityName.ToUpperInvariant()} parameter "
             + $"{index.ToString(System.Globalization.CultureInfo.InvariantCulture)} ({attribute.Attribute.Name}) "
             + $"is not {expectedType}.\"))");
         var valueBranch = CreateValueHydrationBranch(
@@ -322,7 +423,7 @@ internal static class ExpressSchemaDescriptorEmitter
             "diagnostics.Add(new global::TedToolkit.Step21.Step21Diagnostic("
             + $"\"P21-BIND-REFERENCE-TYPE-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}\", "
             + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
-            + $"\"{entity.Entity.Name.ToUpperInvariant()} parameter "
+            + $"\"{physicalEntityName.ToUpperInvariant()} parameter "
             + $"{index.ToString(System.Globalization.CultureInfo.InvariantCulture)} ({attribute.Attribute.Name}) "
             + $"contains a reference target that is not assignable to {expectedType}.\"))");
         return new IfStatement(new CustomExpression(incompatibleReference))
@@ -336,21 +437,65 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressGeneratedTypeResolver resolver)
     {
         var typedName = $"typed{entity.Name}";
-        var parameters = entity.EffectiveAttributes.Select((attribute, index) =>
-            CreateProjectedAttribute(entity, attribute, typedName, index, resolver));
-        var expression =
-            "[new global::System.Collections.Generic.KeyValuePair<global::System.String, "
-            + "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>("
-            + $"\"{entity.Entity.Name.ToUpperInvariant()}\", [{string.Join(", ", parameters)}])]";
+        string[] components =
+        [
+            CreateProjectedComponent(entity, entity.Entity.Name, entity.EffectiveAttributes, typedName, resolver),
+        ];
+        var expression = $"[{string.Join(", ", components)}]";
         return new IfStatement(new CustomExpression($"value is {entity.Name} {typedName}"))
             .AddStatement(new CustomExpression(expression).Return);
     }
 
-    private static bool CanMapSimpleEntity(
+    private static IfStatement CreateProjectComplexEntityBranch(
+        ExpressComplexEntityProjection entity,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        var typedName = $"typed{entity.Name}";
+        var context = entity.Leaves[0];
+        var components = new List<string>();
+        var indexOffset = 0;
+        foreach (var component in entity.Components)
+        {
+            var attributes = ExpressComplexEntityProjection.GetComponentAttributes(component);
+            components.Add(CreateProjectedComponent(
+                context,
+                component.Entity.Name,
+                attributes,
+                typedName,
+                resolver,
+                indexOffset));
+            indexOffset += attributes.Count;
+        }
+
+        return new IfStatement(new CustomExpression($"value is {entity.Name} {typedName}"))
+            .AddStatement(new CustomExpression($"[{string.Join(", ", components)}]").Return);
+    }
+
+    private static string CreateProjectedComponent(
+        ExpressEntityProjection entity,
+        string componentName,
+        IReadOnlyList<ExpressEntityAttributeProjection> attributes,
+        string typedName,
+        ExpressGeneratedTypeResolver resolver,
+        int indexOffset = 0)
+    {
+        var parameters = attributes.Select((attribute, index) => CreateProjectedAttribute(
+            entity,
+            attribute,
+            typedName,
+            indexOffset + index,
+            resolver));
+        return "new global::System.Collections.Generic.KeyValuePair<global::System.String, "
+            + "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>("
+            + $"\"{componentName.ToUpperInvariant()}\", [{string.Join(", ", parameters)}])";
+    }
+
+    private static bool CanMapEntity(
         ExpressEntityProjection entity,
         ExpressGeneratedTypeResolver resolver)
     {
-        return entity.EffectiveAttributes.All(attribute => CanMapType(attribute.Type, resolver));
+        return !entity.HasDerivedRedeclaration
+            && entity.EffectiveAttributes.All(attribute => CanMapType(attribute.Type, resolver));
     }
 
     private static IfStatement CreateScalarHydrationBranch(

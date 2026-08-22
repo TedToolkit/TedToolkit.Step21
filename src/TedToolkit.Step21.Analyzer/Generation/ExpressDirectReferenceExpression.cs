@@ -27,9 +27,22 @@ internal static class ExpressDirectReferenceExpression
         ExpressEntityProjection projection,
         ExpressGeneratedTypeResolver resolver)
     {
+        return Create(projection.EffectiveAttributes, resolver);
+    }
+
+    /// <summary>
+    /// Creates a deferred expression for an explicit ordered physical attribute set.
+    /// </summary>
+    /// <param name="attributes">The physical attributes.</param>
+    /// <param name="resolver">The closed-set generated value resolver.</param>
+    /// <returns>The generated expression.</returns>
+    internal static string Create(
+        IEnumerable<ExpressEntityAttributeProjection> attributes,
+        ExpressGeneratedTypeResolver resolver)
+    {
         var nextName = 0;
         var attributeExpressions = new List<string>();
-        foreach (var attribute in projection.EffectiveAttributes.Where(
+        foreach (var attribute in attributes.Where(
                      attribute => ContainsEntityReference(attribute.Type, resolver)))
         {
             attributeExpressions.Add(CreateValue(
