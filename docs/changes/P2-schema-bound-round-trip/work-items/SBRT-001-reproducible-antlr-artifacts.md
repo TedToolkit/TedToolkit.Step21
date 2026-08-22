@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Completed
+Implemented
 
 - Implemented from starting SHA `c1c0b32` on 2026-08-21. The repository maintainer required local per-work-item commits and prohibited creating a branch; because this repository has no remote, hosted-runner execution remains a future CI regression gate rather than current completion evidence.
 

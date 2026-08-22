@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Completed
+Implemented
 
 - Implemented from starting SHA `dc0807f` on 2026-08-21. A separately verified grammar correction discovered during binding review was committed as `9dddbc1`; SBRT-008 itself adds only Analyzer-internal binding IR/compiler behavior, focused tests, and closed-set documentation.
 

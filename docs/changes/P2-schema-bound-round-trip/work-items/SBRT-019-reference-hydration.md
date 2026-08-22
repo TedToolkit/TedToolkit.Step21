@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Completed
+Implemented
 
 ## 🚦 Delivery priority
 
