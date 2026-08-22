@@ -18,6 +18,11 @@ For inherited-free entities whose physical attributes are supported by this stag
 
 Component, count, entity, and parameter mismatches return stable `P21-BIND-*` diagnostics. A structure lookup with no exact descriptor name returns `P21-BIND-SCHEMA`; lookup is nominal and case-sensitive. Descriptors supplied to manual structure construction are snapshotted by unique schema name, and duplicate names fail before construction completes.
 
+Entity-capable physical parameters use an internal indexed `P21-BIND-REFERENCE-TYPE-*` mismatch code. The atomic
+reader consumes that machine evidence and publishes `P21.READ.REFERENCE.TYPE` with the original occurrence location;
+non-reference mismatches retain the public `P21-BIND-PARAMETER` behavior. Target-type classification never parses
+human-readable messages.
+
 ## Structural validation
 
 The generated descriptor dispatches each registered entity governed by its schema to directly generated structural checks. The checks cover mandatory/`OPTIONAL` presence, generated entity assignability, literal aggregate shape and bounds, required array slots, uniqueness, nested elements, nominal wrappers, enumerations, and SELECT alternatives. See the [structural validation boundary](structural-validation.md) for ordering, paths, constraint IDs, XML traceability, and staged exclusions.
@@ -26,8 +31,10 @@ The generated descriptor dispatches each registered entity governed by its schem
 
 Generated descriptors now execute the accepted validation-reachable expression/rule closure and support the atomic
 [simple typed-read boundary](atomic-simple-read.md). They do not map complex inherited/redeclared physical components,
-discover descriptors, resolve parsed occurrence references, bind named or multiple data sections, or write an exchange
-file. Those responsibilities remain with the reference, population, complex-mapping, and writer work items.
+discover descriptors, acquire external resources, bind named or multiple data sections, or write an exchange file.
+Structure-local parsed occurrences now hydrate through the atomic
+[reference boundary](reference-hydration.md). The remaining responsibilities belong to the population,
+complex-mapping, and writer work items.
 Unsupported entities are not guessed through reflection or property names.
 
 Fast tests execute every scalar alternative and supported simple parameter form in both directions, including absence, invalid derived markers, nominal/enumeration/SELECT values, entity identity, and all four aggregate categories. Runtime API snapshots fix the abstract-class hook contract. The packed-consumer integration test compiles the generated sealed descriptor from the real package without a runtime dependency on analyzer implementation libraries.

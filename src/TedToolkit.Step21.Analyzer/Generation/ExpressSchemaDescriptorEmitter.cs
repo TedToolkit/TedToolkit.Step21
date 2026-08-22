@@ -262,17 +262,44 @@ internal static class ExpressSchemaDescriptorEmitter
             typedName,
             invalid,
             resolver);
+        IfStatement hydration;
         if (attribute.Attribute.IsOptional)
         {
-            return new IfStatement(new CustomExpression(
+            hydration = new IfStatement(new CustomExpression(
                     $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}].Kind "
                     + "== global::TedToolkit.Step21.ParameterValueKind.Omitted"))
                 .AddStatement(new CustomExpression($"{typedName}.{attribute.Name} = null"))
                 .Else()
                 .AddStatement(valueBranch);
         }
+        else
+        {
+            hydration = valueBranch;
+        }
 
-        return valueBranch;
+        var parameter = $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}]";
+        var incompatibleReference = CreateIncompatibleReferenceCondition(
+            entity.Schema.Identity,
+            attribute.Type,
+            parameter,
+            $"reference{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            resolver);
+        if (incompatibleReference is null)
+        {
+            return hydration;
+        }
+
+        var referenceInvalid = new CustomExpression(
+            "diagnostics.Add(new global::TedToolkit.Step21.Step21Diagnostic("
+            + $"\"P21-BIND-REFERENCE-TYPE-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}\", "
+            + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
+            + $"\"{entity.Entity.Name.ToUpperInvariant()} parameter "
+            + $"{index.ToString(System.Globalization.CultureInfo.InvariantCulture)} ({attribute.Attribute.Name}) "
+            + $"contains a reference target that is not assignable to {expectedType}.\"))");
+        return new IfStatement(new CustomExpression(incompatibleReference))
+            .AddStatement(referenceInvalid)
+            .Else()
+            .AddStatement(hydration);
     }
 
     private static IfStatement CreateProjectEntityBranch(
@@ -964,6 +991,59 @@ internal static class ExpressSchemaDescriptorEmitter
                 && named.Declaration.Kind == ExpressDeclarationKind.Entity)
             || (terminal is ExpressBoundAggregateType aggregate
                 && CanMapAggregate(aggregate, resolver));
+    }
+
+    private static string? CreateIncompatibleReferenceCondition(
+        ExpressBoundSchemaIdentity currentSchema,
+        ExpressBoundType type,
+        string parameter,
+        string rawName,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            var element = $"{rawName}Element";
+            var elementCondition = CreateIncompatibleReferenceCondition(
+                currentSchema,
+                aggregate.ElementType,
+                element,
+                $"{rawName}Nested",
+                resolver);
+            return elementCondition is null
+                ? null
+                : $"{parameter}.TryGetAggregate(out var {rawName}Values) "
+                    + $"&& global::System.Linq.Enumerable.Any({rawName}Values, {element} => {elementCondition})";
+        }
+
+        if (type is ExpressBoundSelectType select)
+        {
+            var entityTypes = resolver.GetSelectAlternatives(select)
+                .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
+                .Select(alternative => GetGeneratedTypeName(currentSchema, alternative))
+                .ToArray();
+            return entityTypes.Length == 0
+                ? null
+                : $"{parameter}.TryGetEntity(out var {rawName}Entity) "
+                    + $"&& !({string.Join(" || ", entityTypes.Select(entityType => $"{rawName}Entity is {entityType}"))})";
+        }
+
+        if (type is not ExpressBoundNamedType named)
+        {
+            return null;
+        }
+
+        if (named.Declaration.Kind == ExpressDeclarationKind.Entity)
+        {
+            var entityType = GetGeneratedTypeName(currentSchema, named.Declaration);
+            return $"{parameter}.TryGetEntity(out var {rawName}Entity) && {rawName}Entity is not {entityType}";
+        }
+
+        return CreateIncompatibleReferenceCondition(
+            currentSchema,
+            resolver.GetDefinedType(named.Declaration).UnderlyingType,
+            parameter,
+            rawName,
+            resolver);
     }
 
     private static bool CanMapSelectAlternative(

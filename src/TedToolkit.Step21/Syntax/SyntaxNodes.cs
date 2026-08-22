@@ -62,7 +62,7 @@ internal sealed class ExchangeStructureSyntax : Part21SyntaxNode
 
     internal IReadOnlyList<SignatureSectionSyntax> SignatureSections { get; }
 
-    internal void ThrowIfUnsupportedOperationsRequired()
+    internal void ThrowIfUnsupportedOperationsRequired(bool retainExternalReferenceEvidence = false)
     {
         var diagnostics = new List<Step21Diagnostic>();
         if (Anchor is not null)
@@ -75,7 +75,7 @@ internal sealed class ExchangeStructureSyntax : Part21SyntaxNode
                     Anchor.Span.Start));
         }
 
-        if (Reference is not null)
+        if (Reference is not null && !retainExternalReferenceEvidence)
         {
             diagnostics.Add(
                 new Step21Diagnostic(

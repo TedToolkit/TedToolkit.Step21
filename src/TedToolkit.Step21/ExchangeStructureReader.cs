@@ -39,10 +39,11 @@ internal static class ExchangeStructureReader
     internal static ExchangeStructure Read(string source, IReadOnlyCollection<SchemaDescriptor> descriptors)
     {
         var syntax = ExchangeStructureSyntaxParser.Parse(source, SOURCE_NAME);
-        syntax.ThrowIfUnsupportedOperationsRequired();
+        syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
         ThrowIfSimpleReadCapabilityIsExceeded(syntax);
 
         var bindingDiagnostics = new List<Step21Diagnostic>();
+        var referenceFailures = new List<ValidationFailure>();
         var header = BindHeader(syntax.Header, bindingDiagnostics);
         if (header is null)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
@@ -63,6 +64,17 @@ internal static class ExchangeStructureReader
         var section = new DataSection(schemaName);
         structure.DataSections.Add(section);
         var allocations = AllocateEntities(sectionSyntax, descriptor, bindingDiagnostics);
+        var entitiesByName = allocations.ToDictionary(allocation => allocation.Name, allocation => allocation.Entity);
+        var externalNames = BindExternalReferenceNames(syntax.Reference, bindingDiagnostics);
+        foreach (var externalName in externalNames.Keys.Where(entitiesByName.ContainsKey))
+        {
+            bindingDiagnostics.Add(new Step21Diagnostic(
+                "P21-BIND-OCCURRENCE",
+                Step21DiagnosticSeverity.Error,
+                $"Entity occurrence '{externalName}' is defined both externally and in the data section.",
+                externalNames[externalName]));
+        }
+
         foreach (var allocation in allocations)
             structure.Add(section, allocation.Name, allocation.Entity);
 
@@ -70,14 +82,23 @@ internal static class ExchangeStructureReader
         {
             var record = allocation.Syntax.Records[0];
             var parameters = new List<ParameterValue>(record.Parameters.Count);
-            foreach (var parameter in record.Parameters)
+            var unresolvedParameters = new HashSet<int>();
+            for (var parameterIndex = 0; parameterIndex < record.Parameters.Count; parameterIndex++)
             {
-                if (TryConvertParameter(parameter, bindingDiagnostics, out var converted))
-                    parameters.Add(converted);
+                var parameter = record.Parameters[parameterIndex];
+                var parameterPath = $"DataSections[0].{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]";
+                var convertedSuccessfully = TryConvertParameter(
+                        parameter,
+                        parameterPath,
+                        entitiesByName,
+                        externalNames,
+                        referenceFailures,
+                        bindingDiagnostics,
+                        out var converted);
+                parameters.Add(converted);
+                if (!convertedSuccessfully)
+                    unresolvedParameters.Add(parameterIndex);
             }
-
-            if (parameters.Count != record.Parameters.Count)
-                continue;
 
             var components = new KeyValuePair<string, IReadOnlyList<ParameterValue>>[]
             {
@@ -85,18 +106,54 @@ internal static class ExchangeStructureReader
             };
             foreach (var diagnostic in descriptor.HydrateEntity(structure, allocation.Entity, components))
             {
-                bindingDiagnostics.Add(diagnostic.SourceLocation is null
-                    ? new Step21Diagnostic(
-                        diagnostic.Code,
-                        diagnostic.Severity,
-                        diagnostic.Message,
-                        record.Span.Start)
-                    : diagnostic);
+                if (diagnostic.Code == "P21-BIND-PARAMETER"
+                    && TryGetParameterIndex(diagnostic.Message, out var unresolvedIndex)
+                    && unresolvedParameters.Contains(unresolvedIndex))
+                {
+                    continue;
+                }
+
+                if (TryTranslateIncompatibleReference(
+                        diagnostic,
+                        allocation,
+                        record,
+                        out var failure))
+                {
+                    referenceFailures.Add(failure);
+                }
+                else
+                {
+                    var bindingDiagnostic = diagnostic.Code.StartsWith(
+                        "P21-BIND-REFERENCE-TYPE-",
+                        StringComparison.Ordinal)
+                        ? new Step21Diagnostic(
+                            "P21-BIND-PARAMETER",
+                            diagnostic.Severity,
+                            diagnostic.Message,
+                            diagnostic.SourceLocation)
+                        : diagnostic;
+                    bindingDiagnostics.Add(bindingDiagnostic.SourceLocation is null
+                        ? new Step21Diagnostic(
+                            bindingDiagnostic.Code,
+                            bindingDiagnostic.Severity,
+                            bindingDiagnostic.Message,
+                            record.Span.Start)
+                        : bindingDiagnostic);
+                }
             }
         }
 
         if (bindingDiagnostics.Count > 0)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
+        if (referenceFailures.Count > 0)
+        {
+            throw new ExchangeStructureReadValidationException(new ValidationResult(
+                referenceFailures
+                    .OrderBy(failure => failure.SourceLocation?.Line)
+                    .ThenBy(failure => failure.SourceLocation?.Column)
+                    .ThenBy(failure => failure.Path, StringComparer.Ordinal)
+                    .ThenBy(failure => failure.Code, StringComparer.Ordinal)));
+        }
 
         var validationResult = structure.Validate();
         if (!validationResult.IsValid)
@@ -125,6 +182,19 @@ internal static class ExchangeStructureReader
                  }.SelectMany(entity => entity.Parameters))
         {
             CollectUnsupportedValueDiagnostics(headerValue, diagnostics);
+        }
+
+        if (syntax.Reference is not null)
+        {
+            foreach (var reference in syntax.Reference.References.Where(reference =>
+                         reference.Name.Kind != Part21ValueKind.EntityInstanceName))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-CAP-VALUE-REFERENCE",
+                    Step21DiagnosticSeverity.Error,
+                    "External value-occurrence resolution is not implemented.",
+                    reference.Name.Span.Start));
+            }
         }
 
         if (syntax.DataSections.Count != 1)
@@ -183,8 +253,7 @@ internal static class ExchangeStructureReader
         ValueSyntax value,
         ICollection<Step21Diagnostic> diagnostics)
     {
-        if (value.Kind is Part21ValueKind.EntityInstanceName
-            or Part21ValueKind.ValueInstanceName
+        if (value.Kind is Part21ValueKind.ValueInstanceName
             or Part21ValueKind.ConstantEntityName
             or Part21ValueKind.ConstantValueName
             or Part21ValueKind.AnchorName
@@ -394,14 +463,113 @@ internal static class ExchangeStructureReader
         return allocations;
     }
 
+    private static IReadOnlyDictionary<EntityInstanceName, SourceLocation> BindExternalReferenceNames(
+        ReferenceSectionSyntax? referenceSection,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var names = new Dictionary<EntityInstanceName, SourceLocation>();
+        if (referenceSection is null)
+            return names;
+
+        foreach (var reference in referenceSection.References)
+        {
+            if (reference.Name.Kind != Part21ValueKind.EntityInstanceName)
+                continue;
+
+            EntityInstanceName name;
+            try
+            {
+                name = new EntityInstanceName(reference.Name.Text[1..]);
+            }
+            catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-OCCURRENCE",
+                    Step21DiagnosticSeverity.Error,
+                    $"External entity occurrence '{reference.Name.Text}' is not a positive occurrence name.",
+                    reference.Name.Span.Start));
+                continue;
+            }
+
+            if (!names.TryAdd(name, reference.Name.Span.Start))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-OCCURRENCE",
+                    Step21DiagnosticSeverity.Error,
+                    $"External entity occurrence '{name}' is declared more than once.",
+                    reference.Name.Span.Start));
+            }
+        }
+
+        return names;
+    }
+
     private static bool TryConvertParameter(
         ValueSyntax value,
+        string path,
+        IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
+        IReadOnlyDictionary<EntityInstanceName, SourceLocation> externalNames,
+        ICollection<ValidationFailure> referenceFailures,
         ICollection<Step21Diagnostic> diagnostics,
         out ParameterValue converted)
     {
+        if (value.Kind == Part21ValueKind.EntityInstanceName)
+        {
+            var parsed = TryParseEntityInstanceName(value, out var name);
+            if (parsed && entitiesByName.TryGetValue(name, out var entity))
+            {
+                converted = ParameterValue.FromEntity(entity);
+                return true;
+            }
+
+            var isExternal = parsed && externalNames.ContainsKey(name);
+            referenceFailures.Add(new ValidationFailure(
+                isExternal ? "P21.READ.REFERENCE.EXTERNAL" : "P21.READ.REFERENCE.MISSING",
+                path,
+                isExternal
+                    ? $"Entity reference '{value.Text}' denotes an external resource that is not resolved."
+                    : $"Entity reference '{value.Text}' is not defined in this exchange structure.",
+                value.Span.Start));
+            converted = ParameterValue.Omitted;
+            return false;
+        }
+
+        if (value.Kind is Part21ValueKind.List or Part21ValueKind.Typed)
+        {
+            var values = new List<ParameterValue>(value.Values.Count);
+            var valid = true;
+            for (var index = 0; index < value.Values.Count; index++)
+            {
+                var childPath = value.Kind == Part21ValueKind.List
+                    ? $"{path}[{index.ToString(CultureInfo.InvariantCulture)}]"
+                    : $"{path}.Value";
+                if (TryConvertParameter(
+                        value.Values[index],
+                        childPath,
+                        entitiesByName,
+                        externalNames,
+                        referenceFailures,
+                        diagnostics,
+                        out var child))
+                {
+                    values.Add(child);
+                }
+                else
+                {
+                    values.Add(child);
+                    valid = false;
+                }
+            }
+
+            converted = value.Kind == Part21ValueKind.List
+                ? ParameterValue.FromAggregate(values)
+                : ParameterValue.FromTyped(value.TypeName!, values[0]);
+            return valid;
+        }
+
         try
         {
-            converted = ConvertParameter(value);
+            converted = ConvertNonReferenceParameter(value);
             return true;
         }
         catch (Exception exception) when (exception is FormatException
@@ -418,7 +586,7 @@ internal static class ExchangeStructureReader
         }
     }
 
-    private static ParameterValue ConvertParameter(ValueSyntax value) => value.Kind switch
+    private static ParameterValue ConvertNonReferenceParameter(ValueSyntax value) => value.Kind switch
     {
         Part21ValueKind.Omitted => ParameterValue.Omitted,
         Part21ValueKind.Derived => ParameterValue.Derived,
@@ -427,10 +595,85 @@ internal static class ExchangeStructureReader
         Part21ValueKind.String => ParameterValue.FromString(Part21LexicalValueDecoder.DecodeString(value.Text)),
         Part21ValueKind.Enumeration => ParameterValue.FromEnumeration(value.Text[1..^1]),
         Part21ValueKind.Binary => ParameterValue.FromBinary(Part21LexicalValueDecoder.DecodeBinary(value.Text)),
-        Part21ValueKind.List => ParameterValue.FromAggregate(value.Values.Select(ConvertParameter)),
-        Part21ValueKind.Typed => ParameterValue.FromTyped(value.TypeName!, ConvertParameter(value.Values[0])),
         _ => throw new InvalidOperationException($"Unsupported simple parameter kind '{value.Kind}'."),
     };
+
+    private static bool TryParseEntityInstanceName(ValueSyntax value, out EntityInstanceName name)
+    {
+        try
+        {
+            name = new EntityInstanceName(value.Text[1..]);
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
+        {
+            name = default;
+            return false;
+        }
+    }
+
+    private static bool TryTranslateIncompatibleReference(
+        Step21Diagnostic diagnostic,
+        EntityAllocation allocation,
+        EntityRecordSyntax record,
+        out ValidationFailure failure)
+    {
+        if (TryGetReferenceParameterIndex(diagnostic.Code, out var parameterIndex)
+            && parameterIndex >= 0
+            && parameterIndex < record.Parameters.Count
+            && ContainsEntityReference(record.Parameters[parameterIndex]))
+        {
+            failure = new ValidationFailure(
+                "P21.READ.REFERENCE.TYPE",
+                $"DataSections[0].{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
+                $"The resolved reference target is not assignable to the generated parameter type. {diagnostic.Message}",
+                record.Parameters[parameterIndex].Span.Start);
+            return true;
+        }
+
+        failure = null!;
+        return false;
+    }
+
+    private static bool TryGetReferenceParameterIndex(string code, out int parameterIndex)
+    {
+        const string prefix = "P21-BIND-REFERENCE-TYPE-";
+        if (!code.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            parameterIndex = -1;
+            return false;
+        }
+
+        return int.TryParse(
+            code.AsSpan(prefix.Length),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out parameterIndex);
+    }
+
+    private static bool TryGetParameterIndex(string message, out int parameterIndex)
+    {
+        const string marker = " parameter ";
+        var start = message.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            parameterIndex = -1;
+            return false;
+        }
+
+        start += marker.Length;
+        var end = message.IndexOf(' ', start);
+        parameterIndex = -1;
+        return end > start
+            && int.TryParse(
+                message.AsSpan(start, end - start),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out parameterIndex);
+    }
+
+    private static bool ContainsEntityReference(ValueSyntax value) =>
+        value.Kind == Part21ValueKind.EntityInstanceName || value.Values.Any(ContainsEntityReference);
 
     private static RealValue ParseReal(string text)
     {

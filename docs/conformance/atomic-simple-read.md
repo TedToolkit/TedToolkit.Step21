@@ -25,7 +25,7 @@ physical parameters retain descriptor order.
 
 The binder decodes arbitrary-precision INTEGER, exact REAL/NUMBER, ISO 10303-21 STRING directives (including ISO
 8859 pages and `X2`/`X4` Unicode forms), bit-accurate BINARY, BOOLEAN/LOGICAL symbols, enumerations, typed values,
-recursive aggregates, `$`, and `*`. Generated descriptor mapping then applies nominal defined, enumeration, SELECT,
+recursive aggregates, local entity occurrences, `$`, and `*`. Generated descriptor mapping then applies nominal defined, enumeration, SELECT,
 OPTIONAL, and aggregate semantics. A syntactically valid physical value that cannot denote a runtime value produces
 `P21-BIND-VALUE`; descriptor entity/component/count/type failures retain their `P21-BIND-*` codes and receive the
 originating record location when the generated diagnostic has no EXPRESS source location.
@@ -37,12 +37,16 @@ originating record location when the generated diagnostic has no EXPRESS source 
   diagnostics;
 - an invalid hydrated population throws `ExchangeStructureReadValidationException` with the complete
   `ValidationResult`; and
-- anchor/reference/signature operations, occurrence references, complex instances, named or multiple data sections,
+- anchor/signature operations, external value occurrences, complex instances, named or multiple data sections,
   multiple schemas, and additional header entities throw `ExchangeStructureCapabilityException`.
 
+Local entity references are allocated and hydrated atomically; missing, declared external, and incompatible targets
+instead produce the dedicated aggregate read-validation evidence documented by the
+[reference-hydration boundary](reference-hydration.md).
+
 No exception exposes syntax nodes, a binding/hydration context, or a partially hydrated entity. There is no public
-reader facade, result wrapper, raw model, registry, or nested public processing type. Entity-reference resolution is
-the next staged read capability; multi-section and complex populations remain later work items.
+reader facade, result wrapper, raw model, registry, or nested public processing type. Multi-section and complex
+populations remain later work items.
 
 ## Verification
 
