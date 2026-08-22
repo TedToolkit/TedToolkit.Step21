@@ -51,6 +51,11 @@ internal static class ExpressSchemaDescriptorEmitter
             entities,
             resolver,
             rulePlan));
+        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityPopulationDispatchMethod(
+            schema,
+            entities,
+            resolver,
+            rulePlan));
         foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
         {
             descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver, rulePlan));
@@ -63,6 +68,7 @@ internal static class ExpressSchemaDescriptorEmitter
 
         descriptor.AddMember(CreateCapabilityMethod());
         descriptor.AddMember(CreateProjectMethod(entities, resolver));
+        descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
 
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
         SourceComposer.File()
@@ -190,6 +196,29 @@ internal static class ExpressSchemaDescriptorEmitter
 
         method.AddStatement(new CustomExpression("[]").Return);
         AddSummary(method, "Projects one supported simple entity to strong physical parameters.");
+        return method;
+    }
+
+    private static Method CreateReferenceCompatibilityMethod(ExpressBoundSchema schema)
+    {
+        var method = CreateOverrideMethod(
+            "IsEntityReferenceCompatibleCore",
+            new DataType("global::System.Boolean"));
+        method.AddParameter(SourceComposer.Parameter(
+            new DataType("global::TedToolkit.Step21.Entity"),
+            "value"));
+        var entityTypes = schema.Declarations
+            .Select(declaration => declaration.Symbol)
+            .Concat(schema.Imports.Select(import => import.Declaration))
+            .Where(symbol => symbol.Kind == ExpressDeclarationKind.Entity)
+            .Distinct()
+            .Select(symbol => GetGeneratedTypeName(schema.Identity, symbol))
+            .ToArray();
+        var expression = entityTypes.Length == 0
+            ? "false"
+            : string.Join(" || ", entityTypes.Select(type => $"value is {type}"));
+        method.AddStatement(new CustomExpression(expression).Return);
+        AddSummary(method, "Determines EXPRESS interface compatibility for schema-population inclusion.");
         return method;
     }
 

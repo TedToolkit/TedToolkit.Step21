@@ -2,7 +2,8 @@
 
 `ExchangeStructure.Read(TextReader, IReadOnlyCollection<SchemaDescriptor>)` is the only public Part 21 read entry
 point. It consumes a closed descriptor set, parses into private immutable syntax, binds one named or unnamed `DATA`
-section or multiple named same-schema sections, hydrates generated entities through direct descriptor dispatch, runs
+section or multiple named sections governed by explicitly supplied schemas, hydrates generated entities through direct
+descriptor dispatch, runs
 `ExchangeStructure.Validate()`, and returns only the complete validated mutable structure.
 
 ```csharp
@@ -23,7 +24,8 @@ may be unnamed; a named section and every section in a multi-section structure c
 single-schema parameter pair. Every governing schema name must equal the header identifier and supplied descriptor.
 Every simple instance across every section is allocated before hydration, occurrence names are unique in the complete
 exchange structure and canonicalized without CLR integer narrowing, and physical parameters retain descriptor order.
-See the [same-schema data-section boundary](same-schema-data-sections.md) for section context and failure rules.
+See the [same-schema data-section boundary](same-schema-data-sections.md) and
+[multi-schema population boundary](multi-schema-populations.md) for section context and population failure rules.
 
 The binder decodes arbitrary-precision INTEGER, exact REAL/NUMBER, ISO 10303-21 STRING directives (including ISO
 8859 pages and `X2`/`X4` Unicode forms), bit-accurate BINARY, BOOLEAN/LOGICAL symbols, enumerations, typed values,

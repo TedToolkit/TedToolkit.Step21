@@ -37,8 +37,51 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan)
     {
-        var method = CreateMethod(
+        return CreateDispatchMethod(
             "ValidateCore",
+            schema,
+            entities,
+            resolver,
+            rulePlan,
+            recognizeImportedEntities: true,
+            executeGlobalRules: true);
+    }
+
+    /// <summary>
+    /// Creates entity-local validation used when this schema's entities enter another schema population.
+    /// </summary>
+    /// <param name="schema">The owning schema.</param>
+    /// <param name="entities">The generated entity projections.</param>
+    /// <param name="resolver">The closed-set generated type resolver.</param>
+    /// <param name="rulePlan">The validated reachable rule closure.</param>
+    /// <returns>The protected entity-population descriptor override.</returns>
+    internal static Method CreateEntityPopulationDispatchMethod(
+        ExpressBoundSchema schema,
+        IReadOnlyList<ExpressEntityProjection> entities,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan)
+    {
+        return CreateDispatchMethod(
+            "ValidateEntityPopulationCore",
+            schema,
+            entities,
+            resolver,
+            rulePlan,
+            recognizeImportedEntities: false,
+            executeGlobalRules: false);
+    }
+
+    private static Method CreateDispatchMethod(
+        string methodName,
+        ExpressBoundSchema schema,
+        IReadOnlyList<ExpressEntityProjection> entities,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
+        bool recognizeImportedEntities,
+        bool executeGlobalRules)
+    {
+        var method = CreateMethod(
+            methodName,
             new DataType("global::TedToolkit.Step21.ValidationResult"),
             TedToolkit.RoslynHelper.Accessibility.PROTECTED);
         method.Polymorphism = Polymorphism.OVERRIDE;
@@ -63,6 +106,19 @@ internal static class ExpressStructuralValidationEmitter
             loop.AddStatement(branch);
         }
 
+        if (recognizeImportedEntities)
+        {
+            foreach (var importedEntity in schema.Imports
+                         .Select(import => import.Declaration)
+                         .Where(symbol => symbol.Kind == ExpressDeclarationKind.Entity)
+                         .Distinct())
+            {
+                var interfaceName = GetGeneratedEntityInterface(schema.Identity, importedEntity);
+                loop.AddStatement(new IfStatement(new CustomExpression($"entry.Value is {interfaceName}"))
+                    .AddStatement(new CustomExpression("recognized = true")));
+            }
+        }
+
         var schemaCode = $"{schema.Name.ToUpperInvariant()}.STRUCTURE.ENTITY_ASSIGNABILITY";
         var unknown = new IfStatement(new CustomExpression("!recognized"))
             .AddStatement(AddFailure(
@@ -73,10 +129,16 @@ internal static class ExpressStructuralValidationEmitter
         loop.AddStatement(unknown);
         method.AddStatement(loop);
         AddUniqueValidation(method, entities, resolver, rulePlan);
-        AddGlobalRuleValidation(method, rulePlan);
+        if (executeGlobalRules)
+        {
+            AddGlobalRuleValidation(method, rulePlan);
+        }
+
         method.AddStatement(new CustomExpression(
             "new global::TedToolkit.Step21.ValidationResult(failures)").Return);
-        AddSummary(method, "Validates the ordered registered entities owned by this EXPRESS schema.");
+        AddSummary(method, executeGlobalRules
+            ? "Validates the ordered registered entities in a population governed by this EXPRESS schema."
+            : "Validates entity-local and UNIQUE rules when schema-owned entities enter another population.");
         return method;
     }
 
@@ -93,21 +155,21 @@ internal static class ExpressStructuralValidationEmitter
             foreach (var entityReference in head.ChildRules("entityRef"))
             {
                 var entityName = entityReference.IdentifierToken().Text;
-                var entity = rulePlan.Schema.Declarations.OfType<ExpressBoundEntity>()
-                    .Single(candidate => string.Equals(
-                        candidate.Name,
-                        entityName,
-                        StringComparison.OrdinalIgnoreCase));
-                var generatedEntityName = ExpressEntityProjection.ToPascalCase(entity.Name);
+                var entity = rulePlan.Schema.Declarations
+                    .Select(candidate => candidate.Symbol)
+                    .Concat(rulePlan.Schema.Imports.Select(import => import.Declaration))
+                    .Single(candidate => candidate.Kind == ExpressDeclarationKind.Entity
+                        && string.Equals(candidate.Name, entityName, StringComparison.OrdinalIgnoreCase));
+                var generatedEntityName = GetGeneratedEntityInterface(rulePlan.Schema.Identity, entity);
                 var populationName = $"rulePopulation{Invariant(ruleIndex++)}";
                 lexicalNames.Add(entityName, populationName);
                 owner.AddStatement(new CustomExpression(
-                    $"var {populationName} = new global::TedToolkit.Step21.ExpressSet<I{generatedEntityName}>(0)"));
+                    $"var {populationName} = new global::TedToolkit.Step21.ExpressSet<{generatedEntityName}>(0)"));
                 var entryName = $"rulePopulationEntry{Invariant(ruleIndex)}";
                 var valueName = $"rulePopulationValue{Invariant(ruleIndex)}";
                 var loop = new ForEachStatement(DataType.Var, entryName, new CustomExpression("entities"));
                 loop.AddStatement(new IfStatement(new CustomExpression(
-                        $"{entryName}.Value is I{generatedEntityName} {valueName}"))
+                        $"{entryName}.Value is {generatedEntityName} {valueName}"))
                     .AddStatement(new CustomExpression($"{populationName}.Add({valueName})")));
                 owner.AddStatement(loop);
             }
@@ -138,6 +200,17 @@ internal static class ExpressStructuralValidationEmitter
                         rule.Span)));
             }
         }
+    }
+
+    private static string GetGeneratedEntityInterface(
+        ExpressBoundSchemaIdentity currentSchema,
+        ExpressBoundSymbol entity)
+    {
+        var name = $"I{ExpressEntityProjection.ToPascalCase(entity.Name)}";
+        return ReferenceEquals(currentSchema, entity.DeclaringSchema)
+            ? name
+            : "global::TedToolkit.Step21.Generated."
+                + $"{ExpressEntityProjection.ToPascalCase(entity.DeclaringSchema.Name)}.{name}";
     }
 
     private static void AddUniqueValidation(

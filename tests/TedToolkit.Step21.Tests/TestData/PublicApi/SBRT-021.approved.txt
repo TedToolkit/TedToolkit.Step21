@@ -1,0 +1,10 @@
+abstract class TedToolkit.Step21.SchemaDescriptor : System.Object
+  protected constructor ()
+  property abstract TedToolkit.Step21.SchemaName Name { get; }
+  protected abstract method TedToolkit.Step21.Entity? AllocateEntityCore(System.Collections.Generic.IReadOnlyList<System.String> entityNames)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> GetCapabilityDiagnosticsCore(TedToolkit.Step21.ExchangeStructure structure)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> HydrateEntityCore(TedToolkit.Step21.ExchangeStructure structure, TedToolkit.Step21.Entity value, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> components)
+  protected method System.Boolean IsEntityReferenceCompatibleCore(TedToolkit.Step21.Entity value)
+  protected abstract method System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> ProjectEntityCore(TedToolkit.Step21.Entity value)
+  protected abstract method TedToolkit.Step21.ValidationResult ValidateCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)
+  protected method TedToolkit.Step21.ValidationResult ValidateEntityPopulationCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)

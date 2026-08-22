@@ -31,7 +31,8 @@ The generated descriptor dispatches each registered entity governed by its schem
 
 Generated descriptors now execute the accepted validation-reachable expression/rule closure and support the atomic
 [simple typed-read boundary](atomic-simple-read.md). They do not map complex inherited/redeclared physical components,
-discover descriptors, acquire external resources, bind named or multiple data sections, or write an exchange file.
+discover descriptors, acquire external resources, or write an exchange file. The runtime reader binds named sections
+and populations only through the explicitly supplied closed descriptor set.
 Structure-local parsed occurrences now hydrate through the atomic
 [reference boundary](reference-hydration.md). The remaining responsibilities belong to the population,
 complex-mapping, and writer work items.

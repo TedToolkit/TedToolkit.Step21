@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 
 namespace TedToolkit.Step21;
 
@@ -17,6 +18,7 @@ public sealed class ExchangeStructure
     private readonly ReadOnlyCollection<EntityRegistration> _registrationView;
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
     private readonly ReadOnlyDictionary<SchemaName, SchemaDescriptor> _schemaDescriptorsByName;
+    private IReadOnlyList<SchemaPopulationDefinition> _schemaPopulations = Array.Empty<SchemaPopulationDefinition>();
 
     /// <summary>Initializes a temporarily unbound exchange structure.</summary>
     /// <param name="header">The required ISO header.</param>
@@ -69,8 +71,8 @@ public sealed class ExchangeStructure
     public IList<DataSection> DataSections { get; }
 
     /// <summary>
-    /// Reads, schema-binds, validates, and atomically publishes one or more simple same-schema ISO 10303-21 data
-    /// sections, including structure-local entity references across section boundaries.
+    /// Reads, schema-binds, validates, and atomically publishes simple ISO 10303-21 data sections under one or more
+    /// explicitly supplied generated schemas, including standard schema populations and cross-section references.
     /// </summary>
     /// <param name="source">The character source. Diagnostics identify it by the stable logical name <c>&lt;reader&gt;</c>.</param>
     /// <param name="schemaDescriptors">The generated schema descriptors available to the closed read operation.</param>
@@ -264,15 +266,14 @@ public sealed class ExchangeStructure
         for (var index = 0; index < dataSections.Length; index++)
         {
             if (sectionFailures[index] is { } sectionFailure)
-            {
                 failures.Add(sectionFailure);
-                continue;
-            }
-
-            var dataSection = dataSections[index]!;
-            var descriptor = descriptorsBySection[dataSection];
-            failures.AddRange(descriptor.Validate(this, entitiesBySection[dataSection]).Failures);
         }
+
+        failures.AddRange(ValidateSchemaPopulations(
+            dataSections,
+            sectionIndexes,
+            descriptorsBySection,
+            entitiesBySection));
 
         failures.AddRange(relationshipFailures);
         return new ValidationResult(failures);
@@ -280,10 +281,18 @@ public sealed class ExchangeStructure
 
     internal IReadOnlyList<SchemaDescriptor> SchemaDescriptors => _schemaDescriptors;
 
+    internal IReadOnlyList<SchemaPopulationDefinition> SchemaPopulations => _schemaPopulations;
+
     internal IReadOnlyList<EntityRegistration> Registrations => _registrationView;
 
     internal bool TryGetSchemaDescriptor(SchemaName name, out SchemaDescriptor? descriptor) =>
         _schemaDescriptorsByName.TryGetValue(name, out descriptor);
+
+    internal void SetSchemaPopulations(IReadOnlyList<SchemaPopulationDefinition> populations)
+    {
+        ArgumentNullException.ThrowIfNull(populations);
+        _schemaPopulations = Array.AsReadOnly(populations.ToArray());
+    }
 
     internal IReadOnlyList<Step21Diagnostic> GetSchemaDescriptorDiagnostics(SchemaName name)
     {
@@ -332,6 +341,292 @@ public sealed class ExchangeStructure
 
         dataSection = null;
         return false;
+    }
+
+    private IReadOnlyList<ValidationFailure> ValidateSchemaPopulations(
+        IReadOnlyList<DataSection?> dataSections,
+        IReadOnlyDictionary<DataSection, int> sectionIndexes,
+        IReadOnlyDictionary<DataSection, SchemaDescriptor> descriptorsBySection,
+        IReadOnlyDictionary<DataSection, List<KeyValuePair<string, Entity>>> entitiesBySection)
+    {
+        var failures = new List<ValidationFailure>();
+        var validSections = dataSections
+            .Select((section, index) => new { Section = section, Index = index, })
+            .Where(item => item.Section is not null
+                && sectionIndexes.TryGetValue(item.Section, out var firstIndex)
+                && firstIndex == item.Index
+                && descriptorsBySection.ContainsKey(item.Section))
+            .Select(item => item.Section!)
+            .ToArray();
+        var allEntries = validSections
+            .SelectMany(section => entitiesBySection[section]
+                .Select(entry => new PopulationEntry(entry.Key, entry.Value, section)))
+            .ToArray();
+        var claimedSections = new HashSet<DataSection>(ReferenceEqualityComparer.Instance);
+        foreach (var definition in _schemaPopulations)
+        {
+            var inputSections = definition.InputSections
+                .Where(section => sectionIndexes.ContainsKey(section) && descriptorsBySection.ContainsKey(section))
+                .ToArray();
+            foreach (var section in definition.InputSections.Where(section => !sectionIndexes.ContainsKey(section)))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.SCHEMA_POPULATION.SECTION",
+                    $"SchemaPopulations[{definition.SchemaName}]",
+                    $"Input data section '{section.Name}' is no longer present in the structure."));
+            }
+
+            foreach (var section in inputSections)
+                claimedSections.Add(section);
+            if (!_schemaDescriptorsByName.TryGetValue(definition.SchemaName, out var descriptor))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.SCHEMA_POPULATION.DESCRIPTOR",
+                    $"SchemaPopulations[{definition.SchemaName}]",
+                    $"No supplied schema descriptor matches '{definition.SchemaName}'."));
+                continue;
+            }
+
+            var selected = SelectPopulationEntries(definition.Determination, inputSections, allEntries, descriptor);
+            failures.AddRange(ValidatePopulation(descriptor, selected, descriptorsBySection));
+        }
+
+        foreach (var section in validSections.Where(section => !claimedSections.Contains(section)))
+        {
+            failures.AddRange(ValidatePopulation(
+                descriptorsBySection[section],
+                entitiesBySection[section]
+                    .Select(entry => new PopulationEntry(entry.Key, entry.Value, section))
+                    .ToArray(),
+                descriptorsBySection));
+        }
+
+        return failures;
+    }
+
+    private PopulationEntry[] SelectPopulationEntries(
+        SchemaPopulationDetermination determination,
+        IReadOnlyCollection<DataSection> inputSections,
+        IReadOnlyList<PopulationEntry> allEntries,
+        SchemaDescriptor descriptor)
+    {
+        var inputSet = new HashSet<DataSection>(inputSections, ReferenceEqualityComparer.Instance);
+        var selected = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in allEntries.Where(entry => inputSet.Contains(entry.DataSection)))
+            selected.Add(entry.Entity);
+
+        if (determination == SchemaPopulationDetermination.IncludeReferenced)
+        {
+            foreach (var entry in allEntries.Where(entry => inputSet.Contains(entry.DataSection)))
+            {
+                foreach (var reference in entry.Entity.DirectReferences)
+                {
+                    if (reference is not null && _registrationsByEntity.ContainsKey(reference))
+                        selected.Add(reference);
+                }
+            }
+        }
+        else if (determination == SchemaPopulationDetermination.IncludeAllCompatible)
+        {
+            foreach (var entry in allEntries.Where(entry => !inputSet.Contains(entry.DataSection)
+                         && descriptor.IsEntityReferenceCompatible(entry.Entity)))
+            {
+                selected.Add(entry.Entity);
+            }
+        }
+
+        return allEntries.Where(entry => selected.Contains(entry.Entity)).ToArray();
+    }
+
+    private IReadOnlyList<ValidationFailure> ValidatePopulation(
+        SchemaDescriptor governingDescriptor,
+        IReadOnlyList<PopulationEntry> entries,
+        IReadOnlyDictionary<DataSection, SchemaDescriptor> descriptorsBySection)
+    {
+        var selected = new HashSet<Entity>(entries.Select(entry => entry.Entity), ReferenceEqualityComparer.Instance);
+        var hasOutsideReference = entries.Any(entry => entry.Entity.DirectReferences.Any(reference =>
+            reference is not null
+            && _registrationsByEntity.ContainsKey(reference)
+            && !selected.Contains(reference)));
+        if (!hasOutsideReference)
+        {
+            var failures = governingDescriptor.Validate(
+                this,
+                entries.Select(entry => new KeyValuePair<string, Entity>(entry.Path, entry.Entity)).ToArray()).Failures.ToList();
+            failures.AddRange(ValidateImportedEntityConstraints(
+                this,
+                governingDescriptor,
+                entries,
+                descriptorsBySection,
+                entry => entry.Entity));
+            return failures;
+        }
+
+        return ValidateDetachedPopulation(governingDescriptor, entries, descriptorsBySection);
+    }
+
+    private IReadOnlyList<ValidationFailure> ValidateDetachedPopulation(
+        SchemaDescriptor governingDescriptor,
+        IReadOnlyList<PopulationEntry> entries,
+        IReadOnlyDictionary<DataSection, SchemaDescriptor> descriptorsBySection)
+    {
+        var failures = new List<ValidationFailure>();
+        var detached = new ExchangeStructure(Header, _schemaDescriptors);
+        var detachedSections = new Dictionary<DataSection, DataSection>(ReferenceEqualityComparer.Instance);
+        foreach (var section in entries.Select(entry => entry.DataSection))
+        {
+            if (detachedSections.ContainsKey(section))
+                continue;
+            var clone = new DataSection(section.SchemaName, section.Name);
+            detached.DataSections.Add(clone);
+            detachedSections.Add(section, clone);
+        }
+
+        var clones = new Dictionary<Entity, Entity>(ReferenceEqualityComparer.Instance);
+        var projections = new Dictionary<Entity, IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(
+            ReferenceEqualityComparer.Instance);
+        foreach (var entry in entries)
+        {
+            try
+            {
+                var owner = descriptorsBySection[entry.DataSection];
+                var components = owner.ProjectEntity(entry.Entity);
+                var clone = owner.AllocateEntity(components.Select(component => component.Key).ToArray());
+                if (components.Count == 0 || clone is null)
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.POPULATION.PROJECTION",
+                        entry.Path,
+                        "The governing data-section descriptor cannot project and allocate the population entity."));
+                    continue;
+                }
+
+                clones.Add(entry.Entity, clone);
+                projections.Add(entry.Entity, components);
+                detached.Add(
+                    detachedSections[entry.DataSection],
+                    _registrationsByEntity[entry.Entity].Name,
+                    clone);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.POPULATION.PROJECTION",
+                    entry.Path,
+                    $"The entity cannot be projected into a schema-population view: {exception.Message}"));
+            }
+        }
+
+        foreach (var entry in entries.Where(entry => clones.ContainsKey(entry.Entity)))
+        {
+            var owner = descriptorsBySection[entry.DataSection];
+            var components = projections[entry.Entity]
+                .Select(component => new KeyValuePair<string, IReadOnlyList<ParameterValue>>(
+                    component.Key,
+                    component.Value.Select((parameter, index) => RewritePopulationParameter(
+                            parameter,
+                            clones,
+                            $"{entry.Path}.Parameters[{index}]"))
+                        .ToArray()))
+                .ToArray();
+            foreach (var diagnostic in owner.HydrateEntity(detached, clones[entry.Entity], components))
+            {
+                if (diagnostic.Code == "P21-BIND-PARAMETER"
+                    && TryGetHydrationParameterIndex(diagnostic.Message, out var parameterIndex))
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.POPULATION.REFERENCE.UNSET",
+                        $"{entry.Path}.Parameters[{parameterIndex}]",
+                        "A required reference is outside the schema instance population and therefore behaves as unset."));
+                }
+                else
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.POPULATION.HYDRATION",
+                        entry.Path,
+                        diagnostic.Message));
+                }
+            }
+        }
+
+        failures.AddRange(governingDescriptor.Validate(
+            detached,
+            entries.Where(entry => clones.ContainsKey(entry.Entity))
+                .Select(entry => new KeyValuePair<string, Entity>(entry.Path, clones[entry.Entity]))
+                .ToArray()).Failures);
+        failures.AddRange(ValidateImportedEntityConstraints(
+            detached,
+            governingDescriptor,
+            entries.Where(entry => clones.ContainsKey(entry.Entity)).ToArray(),
+            descriptorsBySection,
+            entry => clones[entry.Entity]));
+        return failures;
+    }
+
+    private static IReadOnlyList<ValidationFailure> ValidateImportedEntityConstraints(
+        ExchangeStructure populationStructure,
+        SchemaDescriptor governingDescriptor,
+        IReadOnlyList<PopulationEntry> entries,
+        IReadOnlyDictionary<DataSection, SchemaDescriptor> descriptorsBySection,
+        Func<PopulationEntry, Entity> selectEntity)
+    {
+        var failures = new List<ValidationFailure>();
+        foreach (var group in entries
+                     .Where(entry => !descriptorsBySection[entry.DataSection].Name.Equals(governingDescriptor.Name))
+                     .GroupBy(entry => descriptorsBySection[entry.DataSection]))
+        {
+            failures.AddRange(group.Key.ValidateEntityPopulation(
+                populationStructure,
+                group.Select(entry => new KeyValuePair<string, Entity>(entry.Path, selectEntity(entry))).ToArray()).Failures);
+        }
+
+        return failures;
+    }
+
+    private static ParameterValue RewritePopulationParameter(
+        ParameterValue value,
+        IReadOnlyDictionary<Entity, Entity> clones,
+        string path)
+    {
+        if (value.TryGetEntity(out var entity))
+        {
+            if (clones.TryGetValue(entity, out var clone))
+                return ParameterValue.FromEntity(clone);
+
+            return ParameterValue.Omitted;
+        }
+
+        if (value.TryGetAggregate(out var values))
+        {
+            return ParameterValue.FromAggregate(values.Select((item, index) => RewritePopulationParameter(
+                item,
+                clones,
+                $"{path}[{index}]")));
+        }
+
+        if (value.TryGetTyped(out var typeName, out var inner))
+            return ParameterValue.FromTyped(typeName, RewritePopulationParameter(inner, clones, path));
+        return value;
+    }
+
+    private static bool TryGetHydrationParameterIndex(string message, out int parameterIndex)
+    {
+        const string marker = " parameter ";
+        var start = message.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            parameterIndex = -1;
+            return false;
+        }
+
+        start += marker.Length;
+        var end = message.IndexOf(' ', start);
+        parameterIndex = -1;
+        return end > start && int.TryParse(
+            message.AsSpan(start, end - start),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out parameterIndex);
     }
 
     private void PrepareAdd(DataSection dataSection, Entity entity)
@@ -450,6 +745,8 @@ public sealed class ExchangeStructure
     }
 
     private sealed record PlannedRegistration(EntityInstanceName Name, Entity Entity);
+
+    private sealed record PopulationEntry(string Path, Entity Entity, DataSection DataSection);
 }
 
 internal sealed class EntityRegistration(EntityInstanceName name, Entity entity, DataSection dataSection)

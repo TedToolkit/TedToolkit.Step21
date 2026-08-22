@@ -48,29 +48,36 @@ internal static class ExchangeStructureReader
         if (header is null)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
 
-        var schemaName = new SchemaName(header.FileSchema.SchemaIdentifiers[0]);
         var structure = new ExchangeStructure(header, descriptors);
-        if (!structure.TryGetSchemaDescriptor(schemaName, out var descriptor) || descriptor is null)
+        foreach (var identifier in header.FileSchema.SchemaIdentifiers)
         {
-            bindingDiagnostics.Add(new Step21Diagnostic(
-                "P21-BIND-SCHEMA",
-                Step21DiagnosticSeverity.Error,
-                $"No supplied schema descriptor matches '{schemaName}'.",
-                syntax.Header.FileSchema.Span.Start));
-            throw new ExchangeStructureBindingException(bindingDiagnostics);
+            var schemaName = new SchemaName(identifier);
+            if (!structure.TryGetSchemaDescriptor(schemaName, out _))
+            {
+                bindingDiagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-SCHEMA",
+                    Step21DiagnosticSeverity.Error,
+                    $"No supplied schema descriptor matches '{schemaName}'.",
+                    syntax.Header.FileSchema.Span.Start));
+            }
         }
 
         var sectionBindings = BindDataSections(
             syntax.DataSections,
-            schemaName,
+            header.FileSchema.SchemaIdentifiers,
             structure,
             bindingDiagnostics);
+        structure.SetSchemaPopulations(BindSchemaPopulations(
+            syntax.Header.AdditionalEntities,
+            header.FileSchema.SchemaIdentifiers,
+            structure.DataSections.ToArray(),
+            bindingDiagnostics));
         var occurrenceNames = new HashSet<EntityInstanceName>();
         var allocations = sectionBindings.SelectMany(binding => AllocateEntities(
                 binding.Syntax,
                 binding.DataSection,
                 binding.Index,
-                descriptor,
+                binding.Descriptor,
                 occurrenceNames,
                 bindingDiagnostics))
             .ToArray();
@@ -115,7 +122,7 @@ internal static class ExchangeStructureReader
             {
                 new(record.Name, parameters.AsReadOnly()),
             };
-            foreach (var diagnostic in descriptor.HydrateEntity(structure, allocation.Entity, components))
+            foreach (var diagnostic in allocation.Descriptor.HydrateEntity(structure, allocation.Entity, components))
             {
                 if (diagnostic.Code == "P21-BIND-PARAMETER"
                     && TryGetParameterIndex(diagnostic.Message, out var unresolvedIndex)
@@ -178,6 +185,23 @@ internal static class ExchangeStructureReader
         var diagnostics = new List<Step21Diagnostic>();
         foreach (var additionalHeader in syntax.Header.AdditionalEntities)
         {
+            if (string.Equals(additionalHeader.Name, "FILE_POPULATION", StringComparison.OrdinalIgnoreCase))
+            {
+                if (additionalHeader.Parameters.Count > 1
+                    && additionalHeader.Parameters[1].Kind == Part21ValueKind.String
+                    && TryDecodeString(additionalHeader.Parameters[1], out var method)
+                    && method is not ("SECTION_BOUNDARY" or "INCLUDE_ALL_COMPATIBLE" or "INCLUDE_REFERENCED"))
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-CAP-SCHEMA-POPULATION",
+                        Step21DiagnosticSeverity.Error,
+                        $"Schema-population determination method '{method}' is not supported.",
+                        additionalHeader.Parameters[1].Span.Start));
+                }
+
+                continue;
+            }
+
             diagnostics.Add(new Step21Diagnostic(
                 "P21-CAP-HEADER-ENTITY",
                 Step21DiagnosticSeverity.Error,
@@ -235,20 +259,24 @@ internal static class ExchangeStructureReader
             }
         }
 
-        var schemaParameters = syntax.Header.FileSchema.Parameters;
-        if (schemaParameters.Count == 1
-            && schemaParameters[0].Kind == Part21ValueKind.List
-            && schemaParameters[0].Values.Count > 1)
-        {
-            diagnostics.Add(new Step21Diagnostic(
-                "P21-CAP-SCHEMA-POPULATION",
-                Step21DiagnosticSeverity.Error,
-                "Simple typed reading requires exactly one FILE_SCHEMA identifier.",
-                syntax.Header.FileSchema.Span.Start));
-        }
-
         if (diagnostics.Count > 0)
             throw new ExchangeStructureCapabilityException(diagnostics);
+    }
+
+    private static bool TryDecodeString(ValueSyntax value, out string decoded)
+    {
+        try
+        {
+            decoded = Part21LexicalValueDecoder.DecodeString(value.Text);
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException
+            or ArgumentOutOfRangeException
+            or OverflowException)
+        {
+            decoded = string.Empty;
+            return false;
+        }
     }
 
     private static void CollectUnsupportedValueDiagnostics(
@@ -296,7 +324,17 @@ internal static class ExchangeStructureReader
         {
             diagnostics.Add(HeaderDiagnostic(
                 syntax.FileSchema,
-                "FILE_SCHEMA must contain exactly one schema identifier."));
+                "FILE_SCHEMA must contain at least one schema identifier."));
+        }
+        else if (schemaIdentifiers is not null)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var identifier in schemaIdentifiers.Where(identifier => !names.Add(identifier)))
+            {
+                diagnostics.Add(HeaderDiagnostic(
+                    syntax.FileSchema,
+                    $"FILE_SCHEMA repeats schema identifier '{identifier}'."));
+            }
         }
 
         if (diagnostics.Count > 0
@@ -310,7 +348,7 @@ internal static class ExchangeStructureReader
             || originatingSystem is null
             || authorization is null
             || schemaIdentifiers is null
-            || schemaIdentifiers.Count != 1)
+            || schemaIdentifiers.Count == 0)
         {
             return null;
         }
@@ -413,9 +451,150 @@ internal static class ExchangeStructureReader
     private static Step21Diagnostic HeaderDiagnostic(HeaderEntitySyntax entity, string message) =>
         new("P21-BIND-HEADER", Step21DiagnosticSeverity.Error, message, entity.Span.Start);
 
+    private static IReadOnlyList<SchemaPopulationDefinition> BindSchemaPopulations(
+        IReadOnlyList<HeaderEntitySyntax> additionalEntities,
+        IReadOnlyList<string> headerSchemaNames,
+        IReadOnlyList<DataSection> dataSections,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var definitions = new List<SchemaPopulationDefinition>();
+        var sectionsByName = dataSections
+            .Where(section => section.Name is not null)
+            .ToDictionary(section => section.Name!, StringComparer.Ordinal);
+        foreach (var syntax in additionalEntities.Where(entity => string.Equals(
+                     entity.Name,
+                     "FILE_POPULATION",
+                     StringComparison.OrdinalIgnoreCase)))
+        {
+            var valid = true;
+            if (syntax.Parameters.Count != 3)
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    syntax,
+                    $"FILE_POPULATION requires 3 parameters, but received {syntax.Parameters.Count.ToString(CultureInfo.InvariantCulture)}."));
+                continue;
+            }
+
+            var schemaText = BindPopulationString(syntax.Parameters[0], 0, diagnostics);
+            SchemaName schemaName = default;
+            if (schemaText is null)
+            {
+                valid = false;
+            }
+            else if (!headerSchemaNames.Contains(schemaText, StringComparer.Ordinal))
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    syntax.Parameters[0],
+                    $"FILE_POPULATION governing schema '{schemaText}' does not occur in FILE_SCHEMA."));
+                valid = false;
+            }
+            else
+            {
+                schemaName = new SchemaName(schemaText);
+            }
+
+            var methodText = BindPopulationString(syntax.Parameters[1], 1, diagnostics);
+            var method = methodText switch
+            {
+                "SECTION_BOUNDARY" => SchemaPopulationDetermination.SectionBoundary,
+                "INCLUDE_ALL_COMPATIBLE" => SchemaPopulationDetermination.IncludeAllCompatible,
+                "INCLUDE_REFERENCED" => SchemaPopulationDetermination.IncludeReferenced,
+                _ => default,
+            };
+            if (methodText is null)
+            {
+                valid = false;
+            }
+            else if (methodText is not ("SECTION_BOUNDARY" or "INCLUDE_ALL_COMPATIBLE" or "INCLUDE_REFERENCED"))
+            {
+                // A well-formed unknown method is rejected by the capability preflight.
+                valid = false;
+            }
+
+            var inputs = new List<DataSection>();
+            var inputNames = new List<string>();
+            var sectionParameter = syntax.Parameters[2];
+            if (sectionParameter.Kind == Part21ValueKind.Omitted)
+            {
+                inputs.AddRange(dataSections);
+            }
+            else if (sectionParameter.Kind != Part21ValueKind.List)
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    sectionParameter,
+                    "FILE_POPULATION parameter 2 must be $ or a list of STRING data-section names."));
+                valid = false;
+            }
+            else
+            {
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var value in sectionParameter.Values)
+                {
+                    if (value.Kind != Part21ValueKind.String || !TryDecodeString(value, out var sectionName))
+                    {
+                        diagnostics.Add(PopulationDiagnostic(
+                            value,
+                            "FILE_POPULATION parameter 2 must contain only valid STRING data-section names."));
+                        valid = false;
+                        continue;
+                    }
+
+                    if (!seen.Add(sectionName))
+                    {
+                        diagnostics.Add(PopulationDiagnostic(
+                            value,
+                            $"FILE_POPULATION repeats data-section name '{sectionName}'."));
+                        valid = false;
+                        continue;
+                    }
+
+                    inputNames.Add(sectionName);
+                    if (!sectionsByName.TryGetValue(sectionName, out var section))
+                    {
+                        diagnostics.Add(PopulationDiagnostic(
+                            value,
+                            $"FILE_POPULATION names absent data section '{sectionName}'."));
+                        valid = false;
+                        continue;
+                    }
+
+                    inputs.Add(section);
+                }
+            }
+
+            if (valid)
+            {
+                definitions.Add(new SchemaPopulationDefinition(
+                    schemaName,
+                    method,
+                    inputs,
+                    sectionParameter.Kind == Part21ValueKind.Omitted ? null : inputNames));
+            }
+        }
+
+        return definitions.AsReadOnly();
+    }
+
+    private static string? BindPopulationString(
+        ValueSyntax value,
+        int parameterIndex,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (value.Kind == Part21ValueKind.String && TryDecodeString(value, out var decoded))
+            return decoded;
+
+        diagnostics.Add(PopulationDiagnostic(
+            value,
+            $"FILE_POPULATION parameter {parameterIndex.ToString(CultureInfo.InvariantCulture)} must be a valid STRING."));
+        return null;
+    }
+
+    private static Step21Diagnostic PopulationDiagnostic(Part21SyntaxNode syntax, string message) =>
+        new("P21-BIND-SCHEMA-POPULATION", Step21DiagnosticSeverity.Error, message, syntax.Span.Start);
+
     private static IReadOnlyList<DataSectionBinding> BindDataSections(
         IReadOnlyList<DataSectionSyntax> sections,
-        SchemaName headerSchemaName,
+        IReadOnlyList<string> headerSchemaNames,
         ExchangeStructure structure,
         ICollection<Step21Diagnostic> diagnostics)
     {
@@ -426,9 +605,19 @@ internal static class ExchangeStructureReader
             var syntax = sections[index];
             if (sections.Count == 1 && syntax.Parameters.Count == 0)
             {
-                var unnamed = new DataSection(headerSchemaName);
+                if (headerSchemaNames.Count != 1)
+                {
+                    diagnostics.Add(DataSectionDiagnostic(
+                        syntax,
+                        "An unnamed data section requires exactly one FILE_SCHEMA identifier."));
+                    continue;
+                }
+
+                var unnamedSchemaName = new SchemaName(headerSchemaNames[0]);
+                var unnamed = new DataSection(unnamedSchemaName);
                 structure.DataSections.Add(unnamed);
-                bindings.Add(new DataSectionBinding(index, syntax, unnamed));
+                _ = structure.TryGetSchemaDescriptor(unnamedSchemaName, out var unnamedDescriptor);
+                bindings.Add(new DataSectionBinding(index, syntax, unnamed, unnamedDescriptor));
                 continue;
             }
 
@@ -460,7 +649,7 @@ internal static class ExchangeStructureReader
             {
                 valid = false;
             }
-            else if (!string.Equals(schemaName, headerSchemaName.Value, StringComparison.Ordinal))
+            else if (!headerSchemaNames.Contains(schemaName, StringComparer.Ordinal))
             {
                 diagnostics.Add(DataSectionDiagnostic(
                     syntax.Parameters[1],
@@ -474,7 +663,8 @@ internal static class ExchangeStructureReader
 
             var dataSection = new DataSection(new SchemaName(schemaName!), name);
             structure.DataSections.Add(dataSection);
-            bindings.Add(new DataSectionBinding(index, syntax, dataSection));
+            _ = structure.TryGetSchemaDescriptor(dataSection.SchemaName, out var descriptor);
+            bindings.Add(new DataSectionBinding(index, syntax, dataSection, descriptor));
         }
 
         return bindings;
@@ -546,7 +736,7 @@ internal static class ExchangeStructureReader
         DataSectionSyntax section,
         DataSection dataSection,
         int sectionIndex,
-        SchemaDescriptor descriptor,
+        SchemaDescriptor? descriptor,
         ISet<EntityInstanceName> names,
         ICollection<Step21Diagnostic> diagnostics)
     {
@@ -578,6 +768,9 @@ internal static class ExchangeStructureReader
                 continue;
             }
 
+            if (descriptor is null)
+                continue;
+
             var record = instance.Records[0];
             var entity = descriptor.AllocateEntity([record.Name]);
             if (entity is null)
@@ -590,7 +783,7 @@ internal static class ExchangeStructureReader
                 continue;
             }
 
-            allocations.Add(new EntityAllocation(name, entity, instance, dataSection, sectionIndex));
+            allocations.Add(new EntityAllocation(name, entity, instance, dataSection, sectionIndex, descriptor));
         }
 
         return allocations;
@@ -821,7 +1014,8 @@ internal static class ExchangeStructureReader
         Entity entity,
         EntityInstanceSyntax syntax,
         DataSection dataSection,
-        int sectionIndex)
+        int sectionIndex,
+        SchemaDescriptor descriptor)
     {
         internal EntityInstanceName Name { get; } = name;
 
@@ -832,15 +1026,23 @@ internal static class ExchangeStructureReader
         internal DataSection DataSection { get; } = dataSection;
 
         internal int SectionIndex { get; } = sectionIndex;
+
+        internal SchemaDescriptor Descriptor { get; } = descriptor;
     }
 
-    private sealed class DataSectionBinding(int index, DataSectionSyntax syntax, DataSection dataSection)
+    private sealed class DataSectionBinding(
+        int index,
+        DataSectionSyntax syntax,
+        DataSection dataSection,
+        SchemaDescriptor? descriptor)
     {
         internal int Index { get; } = index;
 
         internal DataSectionSyntax Syntax { get; } = syntax;
 
         internal DataSection DataSection { get; } = dataSection;
+
+        internal SchemaDescriptor? Descriptor { get; } = descriptor;
     }
 }
 

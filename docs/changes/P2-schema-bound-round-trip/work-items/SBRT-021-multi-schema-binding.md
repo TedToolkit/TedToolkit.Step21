@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -78,12 +78,15 @@ Multi-section binding after SBRT-020 accepts only one descriptor. This item expa
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and binder/validation/test/docs artifacts |
-| Behavior-case proof | BC-13B positive/negative commands/results |
-| Migration and documentation | Descriptor-set and multi-schema capability contract |
-| Dependent-item unlock | Representative final binding scenario for SBRT-025 and SBRT-026 |
+| Delivery-boundary check | Started from `2174615`. Extended the closed descriptor-set reader, per-section dispatch, internal population metadata, validation population views, generated descriptor compatibility, imported global-RULE population dispatch, focused tests, API approval, and conformance guidance. No branch, remote, implicit lookup, external acquisition, entity/container descriptor state, reflection, or dynamic code was added. |
+| Behavior-case proof | Red: five new generated-consumer cases initially hit the former additional-header and multiple-`FILE_SCHEMA` capability boundaries. Green/refactor: valid three-schema binding preserves exact section descriptors, cross-schema reference identity, and manual pre-registration context; all three standard population methods are exercised; population-external OPTIONAL and required references follow unset semantics; unrelated lookalike targets fail TYPE; descriptor/population faults aggregate atomically; unknown algorithms fail at the capability boundary. Focused SBRT-021 and SBRT-020 regression suites pass. |
+| Normative and regression proof | ISO 10303-21:2016 Edition 3 Annex E.1 and E.2 were checked against the pinned public final text. EXPRESS `USE`/`REFERENCE` is the closed-set cross-schema proof method; all three standard population determination methods are implemented. SDAI domain equivalence is explicitly excluded because it requires external ISO 10303-22 metadata. The complete fast Release test project passes 218/218; final Release/AOT/integration/package verification is recorded before commit. |
+| Migration and documentation | `docs/conformance/multi-schema-populations.md` defines explicit descriptor supply, per-section binding, `FILE_POPULATION`, default section boundaries, outside-reference behavior, EXPRESS-interface validity, manual registration, diagnostics, and the domain-equivalence exclusion. Same-schema and public Read guidance now point at the expanded contract. The two protected ABI additions are the strongly typed, reflection-free descriptor compatibility and imported entity-constraint hooks approved in `SBRT-021.approved.txt`. |
+| Independent review | Final read-only trace review covered the approved work item, Annex E evidence, reader/model/generator changes, population selection and detached unset projection, imported entity dispatch, diagnostics, focused/full tests, public API, and documentation. It found and corrected one important gap: imported entities were initially recognized by the governing descriptor but did not execute their declaring schema's entity-local WHERE/UNIQUE constraints. A dedicated generated entity-population dispatch now runs those constraints without executing unrelated foreign global RULE declarations; a negative imported-WHERE fixture proves it. No blocking or advisory findings remain. |
+| Effort and variance | Implementation reused SBRT-019 two-phase identity and SBRT-020 section context. The main added complexity is non-mutating population visibility plus generated EXPRESS interface compatibility; actual elapsed effort remains below the original person-month estimate. |
+| Dependent-item unlock | Multi-schema typed context and retained `FILE_POPULATION` metadata are available for canonical writing in SBRT-022 and representative closure in SBRT-025/SBRT-026. |
 
 ## ⚠️ Risks and open questions
 

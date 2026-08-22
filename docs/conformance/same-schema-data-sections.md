@@ -1,7 +1,7 @@
 # Same-schema data-section binding
 
-`ExchangeStructure.Read` binds one or more simple data sections into one atomic structure when exactly one schema name
-appears in `FILE_SCHEMA` and every section is governed by that same supplied generated descriptor. This boundary
+`ExchangeStructure.Read` binds one or more simple data sections into one atomic structure when every section is
+governed by the same supplied generated descriptor. This focused boundary
 implements the data-section context and structure-wide occurrence rules in ISO 10303-21:2016 Edition 3 clauses 11.1
 and 11.2; the repository's [normative source](https://www.steptools.com/stds/step/IS_final_p21e3.html) supplies the
 clause text.
@@ -16,13 +16,13 @@ DATA('section-name',('schema_name'));
 ```
 
 The first value is a unique decoded STRING section name. The second is a list containing exactly one decoded STRING,
-which must occur in `FILE_SCHEMA`; this same-schema stage therefore requires it to equal the one header schema name.
+which must occur in `FILE_SCHEMA`; in a same-schema structure every section selects that same descriptor.
 The reader preserves each valid name as runtime-internal write context while public `DataSection` continues to expose
 only its ISO governing `SchemaName`, never a generated descriptor relationship.
 
 Malformed parameter counts/types, duplicate section names, and a section schema absent from `FILE_SCHEMA` aggregate as
-source-located `P21-BIND-DATA-SECTION` diagnostics. Multiple header schema identifiers remain the explicit
-`P21-CAP-SCHEMA-POPULATION` capability boundary owned by the multi-schema work item.
+source-located `P21-BIND-DATA-SECTION` diagnostics. Structures with different governing descriptors and explicit
+schema populations use the [multi-schema population contract](multi-schema-populations.md).
 
 ## One identity space and atomic publication
 
@@ -42,5 +42,5 @@ context.
 Generated-consumer tests compile an arbitrary schema and prove named-section preservation, per-registration section
 membership, cross-section forward/cyclic reference identity, complete malformed-context and duplicate-occurrence
 binding evidence, reference paths from multiple sections, and generated rule failures from every section. Single
-unnamed-section behavior remains covered by the original atomic-read suite. Multiple descriptors, cross-schema
-population rules, complex entity instances, and operational external-resource acquisition remain staged.
+unnamed-section behavior remains covered by the original atomic-read suite. Complex entity instances and operational
+external-resource acquisition remain staged.

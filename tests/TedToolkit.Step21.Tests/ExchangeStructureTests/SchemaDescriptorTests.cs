@@ -34,15 +34,19 @@ internal sealed class SchemaDescriptorTests
                 "AllocateEntityCore(IReadOnlyList<String>) -> Entity",
                 "GetCapabilityDiagnosticsCore(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntityCore(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
+                "IsEntityReferenceCompatibleCore(Entity) -> Boolean",
                 "ProjectEntityCore(Entity) -> IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>",
                 "ValidateCore(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
+                "ValidateEntityPopulationCore(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
             ]);
             await Assert.That(internalMethods).IsEquivalentTo([
                 "AllocateEntity(IReadOnlyList<String>) -> Entity",
                 "GetCapabilityDiagnostics(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntity(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
+                "IsEntityReferenceCompatible(Entity) -> Boolean",
                 "ProjectEntity(Entity) -> IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>",
                 "Validate(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
+                "ValidateEntityPopulation(ExchangeStructure, IReadOnlyList<KeyValuePair<String, Entity>>) -> ValidationResult",
             ]);
             await Assert.That(type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic)).IsEmpty();
         }
@@ -73,6 +77,9 @@ internal sealed class SchemaDescriptorTests
             await Assert.That(descriptor.GetCapabilityDiagnostics(structure).Single().Code)
                 .IsEqualTo("TEST-CAPABILITY");
             await Assert.That(descriptor.ProjectEntity(entity)).IsSameReferenceAs(projected);
+            await Assert.That(descriptor.IsEntityReferenceCompatible(entity)).IsFalse();
+            await Assert.That(descriptor.ValidateEntityPopulation(structure, entities).Failures.Single().Code)
+                .IsEqualTo("TEST-VALIDATE");
         }
     }
 

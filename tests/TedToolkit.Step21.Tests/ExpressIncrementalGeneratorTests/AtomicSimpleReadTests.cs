@@ -175,7 +175,7 @@ public sealed class AtomicSimpleReadTests
                 [simple]));
         var invalid = Assert.Throws<ExchangeStructureReadValidationException>(() =>
             ExchangeStructure.Read(new StringReader(CreateExchange("validating_read", "#1=POSITIVE_VALUE(-1);")), [validating]));
-        var unsupported = Assert.Throws<ExchangeStructureCapabilityException>(() =>
+        var missingDescriptor = Assert.Throws<ExchangeStructureBindingException>(() =>
             ExchangeStructure.Read(
                 new StringReader(CreateExchange("simple_read", string.Empty).Replace(
                     "FILE_SCHEMA(('simple_read'));",
@@ -197,15 +197,15 @@ public sealed class AtomicSimpleReadTests
             await Assert.That(unknownEntity.Diagnostics.All(diagnostic => diagnostic.SourceLocation?.FilePath == "<reader>"))
                 .IsTrue();
             await Assert.That(unknownEntity.Diagnostics.All(diagnostic => diagnostic.SourceLocation is
-                { Line: > 0, Column: > 0, })).IsTrue();
+            { Line: > 0, Column: > 0, })).IsTrue();
             await Assert.That(invalidValue.Diagnostics.Select(diagnostic => diagnostic.Code)).Contains("P21-BIND-VALUE");
             await Assert.That(invalidOccurrence.Diagnostics.Select(diagnostic => diagnostic.Code))
                 .Contains("P21-BIND-OCCURRENCE");
             await Assert.That(invalid.ValidationResult.IsValid).IsFalse();
             await Assert.That(invalid.ValidationResult.Failures.Select(failure => failure.Code))
                 .Contains("VALIDATING_READ.POSITIVE_VALUE.WHERE.POSITIVE");
-            await Assert.That(unsupported.Diagnostics.Select(diagnostic => diagnostic.Code))
-                .Contains("P21-CAP-SCHEMA-POPULATION");
+            await Assert.That(missingDescriptor.Diagnostics.Select(diagnostic => diagnostic.Code))
+                .Contains("P21-BIND-SCHEMA");
             await Assert.That(io.Message).IsEqualTo("probe I/O failure");
         }
     }
