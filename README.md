@@ -42,6 +42,8 @@ To supply an EXPRESS schema from a consuming project, reference the package and 
 
 Invalid EXPRESS syntax, binding, or generated C# name uniqueness is reported as a build diagnostic at the originating additional file. Generated sources are withheld atomically for invalid schemas.
 
+The packed generated model is compatible with Native AOT without reflection or dynamic-code fallback. The repository's executable deployment gate proves `win-x64`; this proof target is not an exclusive platform-support list. See the [Native AOT package proof](docs/conformance/native-aot-package-proof.md).
+
 ## Components
 
 | Component | Responsibility |

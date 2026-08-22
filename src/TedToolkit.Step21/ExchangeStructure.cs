@@ -71,6 +71,15 @@ public sealed class ExchangeStructure
     public IList<DataSection> DataSections { get; }
 
     /// <summary>
+    /// Gets a live read-only enumeration of registered entities in deterministic registration order.
+    /// </summary>
+    /// <remarks>
+    /// The view exposes model values for navigation without exposing the structure's occurrence-name or section
+    /// registration indexes. Adding or removing registrations changes subsequent enumerations.
+    /// </remarks>
+    public IEnumerable<Entity> Entities => _registrations.Select(registration => registration.Entity);
+
+    /// <summary>
     /// Reads, schema-binds, validates, and atomically publishes simple ISO 10303-21 data sections under one or more
     /// explicitly supplied generated schemas, including standard schema populations and cross-section references.
     /// </summary>

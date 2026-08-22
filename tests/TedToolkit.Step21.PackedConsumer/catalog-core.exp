@@ -1,0 +1,5 @@
+SCHEMA catalog_core;
+ENTITY target;
+  code : STRING;
+END_ENTITY;
+END_SCHEMA;

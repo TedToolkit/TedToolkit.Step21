@@ -1,0 +1,14 @@
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+  method TedToolkit.Step21.ValidationResult Validate()
+  method System.Void Write(System.IO.TextWriter destination)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity)

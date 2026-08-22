@@ -37,6 +37,34 @@ internal sealed class PublicContractTests
         }
     }
 
+    /// <summary>
+    /// Exposes registered model values for public navigation without exposing occurrence registrations.
+    /// </summary>
+    [Test]
+    public async Task Should_expose_a_live_read_only_entity_view_in_registration_order()
+    {
+        var structure = new ExchangeStructure(new HeaderSection(
+            new FileDescription(["entities"], "3;1"),
+            new FileName("entities.p21", "2026-08-22T00:00:00", [], [], "Pre", "System", "Auth"),
+            new FileSchema(["model"])));
+        var section = new DataSection(new SchemaName("model"));
+        structure.DataSections.Add(section);
+        var first = new TestEntity();
+        var second = new TestEntity();
+        var view = structure.Entities;
+
+        structure.Add(section, first);
+        structure.Add(section, second);
+        var initial = view.ToArray();
+        _ = structure.Remove(first);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(initial.SequenceEqual([first, second])).IsTrue();
+            await Assert.That(view.SequenceEqual([second])).IsTrue();
+        }
+    }
+
     private static string Format(MethodBase method)
     {
         var parameters = string.Join(", ", method.GetParameters().Select(parameter => Format(parameter.ParameterType)));
@@ -49,4 +77,9 @@ internal sealed class PublicContractTests
     private static string Format(Type type) => type.IsGenericType
         ? $"{type.Name[..type.Name.IndexOf('`')]}<{string.Join(", ", type.GetGenericArguments().Select(Format))}>"
         : type.Name;
+
+    private sealed class TestEntity : Entity
+    {
+        public override IEnumerable<Entity> DirectReferences => [];
+    }
 }

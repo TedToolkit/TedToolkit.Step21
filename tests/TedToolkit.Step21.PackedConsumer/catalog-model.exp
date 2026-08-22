@@ -1,0 +1,17 @@
+SCHEMA catalog_model;
+USE FROM catalog_core (target);
+ENTITY root SUPERTYPE OF (left ANDOR right);
+  label : STRING;
+  peer : target;
+  values : LIST [1:?] OF INTEGER;
+END_ENTITY;
+ENTITY left SUBTYPE OF (root);
+  enabled : BOOLEAN;
+END_ENTITY;
+ENTITY right SUBTYPE OF (root);
+  rank : INTEGER;
+END_ENTITY;
+ENTITY simple;
+  name : STRING;
+END_ENTITY;
+END_SCHEMA;
