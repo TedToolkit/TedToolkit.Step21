@@ -60,10 +60,20 @@ internal static class ExchangeStructureReader
             throw new ExchangeStructureBindingException(bindingDiagnostics);
         }
 
-        var sectionSyntax = syntax.DataSections[0];
-        var section = new DataSection(schemaName);
-        structure.DataSections.Add(section);
-        var allocations = AllocateEntities(sectionSyntax, descriptor, bindingDiagnostics);
+        var sectionBindings = BindDataSections(
+            syntax.DataSections,
+            schemaName,
+            structure,
+            bindingDiagnostics);
+        var occurrenceNames = new HashSet<EntityInstanceName>();
+        var allocations = sectionBindings.SelectMany(binding => AllocateEntities(
+                binding.Syntax,
+                binding.DataSection,
+                binding.Index,
+                descriptor,
+                occurrenceNames,
+                bindingDiagnostics))
+            .ToArray();
         var entitiesByName = allocations.ToDictionary(allocation => allocation.Name, allocation => allocation.Entity);
         var externalNames = BindExternalReferenceNames(syntax.Reference, bindingDiagnostics);
         foreach (var externalName in externalNames.Keys.Where(entitiesByName.ContainsKey))
@@ -76,7 +86,7 @@ internal static class ExchangeStructureReader
         }
 
         foreach (var allocation in allocations)
-            structure.Add(section, allocation.Name, allocation.Entity);
+            structure.Add(allocation.DataSection, allocation.Name, allocation.Entity);
 
         foreach (var allocation in allocations)
         {
@@ -86,7 +96,8 @@ internal static class ExchangeStructureReader
             for (var parameterIndex = 0; parameterIndex < record.Parameters.Count; parameterIndex++)
             {
                 var parameter = record.Parameters[parameterIndex];
-                var parameterPath = $"DataSections[0].{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]";
+                var parameterPath = $"DataSections[{allocation.SectionIndex.ToString(CultureInfo.InvariantCulture)}]."
+                    + $"{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]";
                 var convertedSuccessfully = TryConvertParameter(
                         parameter,
                         parameterPath,
@@ -197,26 +208,17 @@ internal static class ExchangeStructureReader
             }
         }
 
-        if (syntax.DataSections.Count != 1)
+        if (syntax.DataSections.Count == 0)
         {
             diagnostics.Add(new Step21Diagnostic(
                 "P21-CAP-DATA-SECTION",
                 Step21DiagnosticSeverity.Error,
-                "Simple typed reading requires exactly one data section.",
+                "Typed reading requires at least one data section.",
                 syntax.Span.Start));
         }
 
         foreach (var section in syntax.DataSections)
         {
-            if (section.Parameters.Count > 0)
-            {
-                diagnostics.Add(new Step21Diagnostic(
-                    "P21-CAP-DATA-SECTION",
-                    Step21DiagnosticSeverity.Error,
-                    "Named or schema-qualified data-section parameters are not implemented by simple typed reading.",
-                    section.Span.Start));
-            }
-
             foreach (var instance in section.EntityInstances)
             {
                 if (instance.Kind == EntityInstanceSyntaxKind.Complex)
@@ -411,13 +413,144 @@ internal static class ExchangeStructureReader
     private static Step21Diagnostic HeaderDiagnostic(HeaderEntitySyntax entity, string message) =>
         new("P21-BIND-HEADER", Step21DiagnosticSeverity.Error, message, entity.Span.Start);
 
+    private static IReadOnlyList<DataSectionBinding> BindDataSections(
+        IReadOnlyList<DataSectionSyntax> sections,
+        SchemaName headerSchemaName,
+        ExchangeStructure structure,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var bindings = new List<DataSectionBinding>(sections.Count);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < sections.Count; index++)
+        {
+            var syntax = sections[index];
+            if (sections.Count == 1 && syntax.Parameters.Count == 0)
+            {
+                var unnamed = new DataSection(headerSchemaName);
+                structure.DataSections.Add(unnamed);
+                bindings.Add(new DataSectionBinding(index, syntax, unnamed));
+                continue;
+            }
+
+            if (syntax.Parameters.Count != 2)
+            {
+                diagnostics.Add(DataSectionDiagnostic(
+                    syntax,
+                    $"DataSections[{index.ToString(CultureInfo.InvariantCulture)}] requires a section name "
+                    + "and one governing schema name."));
+                continue;
+            }
+
+            var valid = true;
+            var name = BindDataSectionName(syntax.Parameters[0], index, diagnostics);
+            if (name is null)
+            {
+                valid = false;
+            }
+            else if (!names.Add(name))
+            {
+                diagnostics.Add(DataSectionDiagnostic(
+                    syntax.Parameters[0],
+                    $"DataSections[{index.ToString(CultureInfo.InvariantCulture)}] repeats section name '{name}'."));
+                valid = false;
+            }
+
+            var schemaName = BindDataSectionSchemaName(syntax.Parameters[1], index, diagnostics);
+            if (schemaName is null)
+            {
+                valid = false;
+            }
+            else if (!string.Equals(schemaName, headerSchemaName.Value, StringComparison.Ordinal))
+            {
+                diagnostics.Add(DataSectionDiagnostic(
+                    syntax.Parameters[1],
+                    $"DataSections[{index.ToString(CultureInfo.InvariantCulture)}] schema '{schemaName}' "
+                    + "does not occur in FILE_SCHEMA."));
+                valid = false;
+            }
+
+            if (!valid)
+                continue;
+
+            var dataSection = new DataSection(new SchemaName(schemaName!), name);
+            structure.DataSections.Add(dataSection);
+            bindings.Add(new DataSectionBinding(index, syntax, dataSection));
+        }
+
+        return bindings;
+    }
+
+    private static string? BindDataSectionName(
+        ValueSyntax value,
+        int sectionIndex,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (value.Kind != Part21ValueKind.String)
+        {
+            diagnostics.Add(DataSectionDiagnostic(
+                value,
+                $"DataSections[{sectionIndex.ToString(CultureInfo.InvariantCulture)}] parameter 0 "
+                + "must be a STRING section name."));
+            return null;
+        }
+
+        return DecodeDataSectionString(value, sectionIndex, 0, "section name", diagnostics);
+    }
+
+    private static string? BindDataSectionSchemaName(
+        ValueSyntax value,
+        int sectionIndex,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (value.Kind != Part21ValueKind.List
+            || value.Values.Count != 1
+            || value.Values[0].Kind != Part21ValueKind.String)
+        {
+            diagnostics.Add(DataSectionDiagnostic(
+                value,
+                $"DataSections[{sectionIndex.ToString(CultureInfo.InvariantCulture)}] parameter 1 must be a list "
+                + "containing exactly one STRING schema name."));
+            return null;
+        }
+
+        return DecodeDataSectionString(value.Values[0], sectionIndex, 1, "schema name", diagnostics);
+    }
+
+    private static string? DecodeDataSectionString(
+        ValueSyntax value,
+        int sectionIndex,
+        int parameterIndex,
+        string description,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        try
+        {
+            return Part21LexicalValueDecoder.DecodeString(value.Text);
+        }
+        catch (Exception exception) when (exception is FormatException
+            or ArgumentOutOfRangeException
+            or OverflowException)
+        {
+            diagnostics.Add(DataSectionDiagnostic(
+                value,
+                $"DataSections[{sectionIndex.ToString(CultureInfo.InvariantCulture)}] parameter "
+                + $"{parameterIndex.ToString(CultureInfo.InvariantCulture)} contains an invalid {description}."));
+            return null;
+        }
+    }
+
+    private static Step21Diagnostic DataSectionDiagnostic(Part21SyntaxNode syntax, string message) =>
+        new("P21-BIND-DATA-SECTION", Step21DiagnosticSeverity.Error, message, syntax.Span.Start);
+
     private static IReadOnlyList<EntityAllocation> AllocateEntities(
         DataSectionSyntax section,
+        DataSection dataSection,
+        int sectionIndex,
         SchemaDescriptor descriptor,
+        ISet<EntityInstanceName> names,
         ICollection<Step21Diagnostic> diagnostics)
     {
         var allocations = new List<EntityAllocation>();
-        var names = new HashSet<EntityInstanceName>();
         foreach (var instance in section.EntityInstances)
         {
             EntityInstanceName name;
@@ -457,7 +590,7 @@ internal static class ExchangeStructureReader
                 continue;
             }
 
-            allocations.Add(new EntityAllocation(name, entity, instance));
+            allocations.Add(new EntityAllocation(name, entity, instance, dataSection, sectionIndex));
         }
 
         return allocations;
@@ -625,7 +758,8 @@ internal static class ExchangeStructureReader
         {
             failure = new ValidationFailure(
                 "P21.READ.REFERENCE.TYPE",
-                $"DataSections[0].{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
+                $"DataSections[{allocation.SectionIndex.ToString(CultureInfo.InvariantCulture)}]."
+                    + $"{allocation.Name}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
                 $"The resolved reference target is not assignable to the generated parameter type. {diagnostic.Message}",
                 record.Parameters[parameterIndex].Span.Start);
             return true;
@@ -685,13 +819,28 @@ internal static class ExchangeStructureReader
     private sealed class EntityAllocation(
         EntityInstanceName name,
         Entity entity,
-        EntityInstanceSyntax syntax)
+        EntityInstanceSyntax syntax,
+        DataSection dataSection,
+        int sectionIndex)
     {
         internal EntityInstanceName Name { get; } = name;
 
         internal Entity Entity { get; } = entity;
 
         internal EntityInstanceSyntax Syntax { get; } = syntax;
+
+        internal DataSection DataSection { get; } = dataSection;
+
+        internal int SectionIndex { get; } = sectionIndex;
+    }
+
+    private sealed class DataSectionBinding(int index, DataSectionSyntax syntax, DataSection dataSection)
+    {
+        internal int Index { get; } = index;
+
+        internal DataSectionSyntax Syntax { get; } = syntax;
+
+        internal DataSection DataSection { get; } = dataSection;
     }
 }
 

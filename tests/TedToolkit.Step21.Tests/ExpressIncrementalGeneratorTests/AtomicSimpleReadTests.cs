@@ -178,8 +178,8 @@ public sealed class AtomicSimpleReadTests
         var unsupported = Assert.Throws<ExchangeStructureCapabilityException>(() =>
             ExchangeStructure.Read(
                 new StringReader(CreateExchange("simple_read", string.Empty).Replace(
-                    "END-ISO-10303-21;",
-                    "DATA; ENDSEC; END-ISO-10303-21;",
+                    "FILE_SCHEMA(('simple_read'));",
+                    "FILE_SCHEMA(('simple_read','other_schema'));",
                     StringComparison.Ordinal)),
                 [simple]));
         var io = Assert.Throws<IOException>(() => ExchangeStructure.Read(new ThrowingTextReader(), [simple]));
@@ -205,7 +205,7 @@ public sealed class AtomicSimpleReadTests
             await Assert.That(invalid.ValidationResult.Failures.Select(failure => failure.Code))
                 .Contains("VALIDATING_READ.POSITIVE_VALUE.WHERE.POSITIVE");
             await Assert.That(unsupported.Diagnostics.Select(diagnostic => diagnostic.Code))
-                .Contains("P21-CAP-DATA-SECTION");
+                .Contains("P21-CAP-SCHEMA-POPULATION");
             await Assert.That(io.Message).IsEqualTo("probe I/O failure");
         }
     }

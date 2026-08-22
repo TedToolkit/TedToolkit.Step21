@@ -12,11 +12,19 @@ public sealed class DataSection
     /// <param name="schemaName">The governing schema name; later validation determines whether it is usable.</param>
     /// <exception cref="InvalidOperationException"><paramref name="schemaName"/> is the invalid default value.</exception>
     public DataSection(SchemaName schemaName)
+        : this(schemaName, name: null)
+    {
+    }
+
+    internal DataSection(SchemaName schemaName, string? name)
     {
         _ = schemaName.Value;
         SchemaName = schemaName;
+        Name = name;
     }
 
     /// <summary>Gets the governing schema name.</summary>
     public SchemaName SchemaName { get; }
+
+    internal string? Name { get; }
 }

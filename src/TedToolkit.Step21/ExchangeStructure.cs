@@ -69,8 +69,8 @@ public sealed class ExchangeStructure
     public IList<DataSection> DataSections { get; }
 
     /// <summary>
-    /// Reads, schema-binds, validates, and atomically publishes one simple ISO 10303-21 data section, including its
-    /// structure-local entity references.
+    /// Reads, schema-binds, validates, and atomically publishes one or more simple same-schema ISO 10303-21 data
+    /// sections, including structure-local entity references across section boundaries.
     /// </summary>
     /// <param name="source">The character source. Diagnostics identify it by the stable logical name <c>&lt;reader&gt;</c>.</param>
     /// <param name="schemaDescriptors">The generated schema descriptors available to the closed read operation.</param>

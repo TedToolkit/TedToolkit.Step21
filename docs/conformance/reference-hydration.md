@@ -7,7 +7,7 @@ properties receive the actual allocated target object through their declared gen
 
 ## Resolution and hydration order
 
-For the supported one-schema, one-data-section read slice, the runtime:
+For the supported one-schema read slice, the runtime:
 
 1. allocates every recognized simple entity and canonicalizes its positive `#n` name;
 2. registers all allocated objects in the private structure identity index;
@@ -33,15 +33,16 @@ physical-parameter order:
 | `P21.READ.REFERENCE.EXTERNAL` | A `REFERENCE` section declares `#n`, but operational external-resource resolution is unavailable. |
 | `P21.READ.REFERENCE.TYPE` | The allocated target exists but is not assignable to the generated entity interface required at that physical parameter. |
 
-Paths begin with `DataSections[0].#n.Parameters[i]`; recursive aggregate elements append `[i]`, and typed values append
-`.Value`. Each failure retains the exact `<reader>` line and 1-based column of the originating occurrence (or the root
+Paths begin with the occurrence's actual `DataSections[s].#n.Parameters[i]`; recursive aggregate elements append
+`[i]`, and typed values append `.Value`. Each failure retains the exact `<reader>` line and 1-based column of the originating occurrence (or the root
 physical parameter for descriptor-reported target incompatibility). Missing and unsupported external occurrences stay
 distinct even when both occur in one recursive parameter.
 
 No failed attempt exposes its private structure, generated entities, syntax graph, resolver, or hydration state.
 External resource acquisition remains a non-goal: the `REFERENCE` section is consumed only to distinguish declared
 external occurrences from missing local names. External value occurrences (`@n`), anchors, and signatures remain
-explicit capability failures. Multiple governing schemas and complex entity mappings remain later delivery stages.
+explicit capability failures. Multiple governing schemas and complex entity mappings remain later delivery stages;
+structure-local occurrence identity already spans all same-schema data sections.
 
 ## Verification
 

@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -78,12 +78,15 @@ The first typed reader handles one simple data section. This item expands only s
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and model/binder/test/docs artifacts |
-| Behavior-case proof | BC-13A command/results |
-| Migration and documentation | Multi-section governing-schema behavior documented |
-| Dependent-item unlock | Atomic multi-section population guarantee for SBRT-021 |
+| Delivery-boundary check | Started from `e8466a0`. Extended only the runtime-internal same-schema section binder/context, structure-wide allocation paths, focused generated-consumer fixtures, one obsolete capability fixture, public Read XML, and conformance/README guidance. Public `DataSection` still exposes only `SchemaName`; its decoded section name is retained as internal writer context. No public descriptor relationship/name member, multiple-descriptor binding, cross-schema population logic, writer, complex mapping, branch, remote, dependency, reflection, or dynamic code was added. |
+| Behavior-case proof | Red: the focused suite failed to compile because parsed `DataSection` values retained no name context. Green/refactor: `SameSchemaDataSectionReadTests` passed 4/4 and the complete fast TUnit project passed 213/213. BC-13A proves two named sections bind under one descriptor, preserve their decoded names and registration membership, share a structure-global occurrence namespace, and hydrate a forward cross-section cycle by actual object identity. One negative fixture aggregates five malformed/duplicate section-context diagnostics plus a duplicate `#n` across otherwise valid sections. Further fixtures aggregate MISSING and TYPE references with exact `DataSections[s]` paths and generated EXPRESS failures from both sections. The original unnamed single-section suite remains green. |
+| Normative and regression proof | ISO 10303-21:2016 Edition 3 clauses 11.1 and 11.2 were checked against the repository's pinned public final text: every section in a multi-section structure carries a unique STRING name and a one-STRING governing-schema list; occurrence names are unique across the exchange structure and may be referenced before definition. Release solution build passed with 0 warnings/errors. Runtime AOT/trim analyzer build passed with 0 warnings/errors. Integration TUnit passed 3/3 enabled cases with the explicit opt-in external corpus case skipped. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1; production scanning found no reflection, dynamic dispatch, or expression compilation. Public API snapshot diff is empty. |
+| Migration and documentation | `docs/conformance/same-schema-data-sections.md` records the normative parameter forms, unique section/occurrence namespaces, internal write context, two-phase cross-section identity, exact failure boundary, and multi-schema staging. Atomic-read/reference guides, README, and public Read XML now describe one or more same-schema sections without claiming multiple governing schemas. |
+| Independent review | Final read-only trace review compared the work item, Edition 3 clauses, governing decisions, reader/model diff, tests, public metadata, and documentation. No blocking or advisory findings remain. Review explicitly checked malformed-section exclusion, structure-global duplicate allocation, allocation of every valid section before any hydration, cross-section local/external lookup, actual section indexes for direct TYPE and nested MISSING evidence, validation dispatch per section, internal name retention, atomic failure precedence, and unchanged single-section behavior. |
+| Effort and variance | Approximately 0.8 elapsed implementation/review hours, below the 0.4–0.7 person-month planning range because syntax already preserved section parameters, structure validation already dispatched section-qualified batches, and SBRT-019 already supplied global two-phase reference hydration. The only added model state is the ISO section name required by later canonical writing, retained internally to preserve the approved minimal public API. |
+| Dependent-item unlock | Atomic same-schema multi-section context, structure-global identity, cross-section reference hydration, and section-qualified validation evidence are implemented and locally proven for SBRT-021 multi-schema binding and later canonical writing. |
 
 ## ⚠️ Risks and open questions
 

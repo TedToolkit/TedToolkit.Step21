@@ -1,9 +1,9 @@
 # Atomic simple typed reading
 
 `ExchangeStructure.Read(TextReader, IReadOnlyCollection<SchemaDescriptor>)` is the only public Part 21 read entry
-point. It consumes a closed descriptor set, parses into private immutable syntax, binds one unnamed `DATA` section,
-hydrates generated entities through direct descriptor dispatch, runs `ExchangeStructure.Validate()`, and returns only
-the complete validated mutable structure.
+point. It consumes a closed descriptor set, parses into private immutable syntax, binds one named or unnamed `DATA`
+section or multiple named same-schema sections, hydrates generated entities through direct descriptor dispatch, runs
+`ExchangeStructure.Validate()`, and returns only the complete validated mutable structure.
 
 ```csharp
 using var source = File.OpenText("sample.p21");
@@ -18,10 +18,12 @@ diagnostics use the stable logical source name `<reader>` because this overload 
 
 ## Supported publication slice
 
-The first typed-read slice requires exactly one unparameterized data section and exactly one `FILE_SCHEMA` string.
-That identifier becomes the section's governing `SchemaName` and must match one supplied descriptor exactly. Every
-simple instance is allocated before hydration, occurrence names are canonicalized without CLR integer narrowing, and
-physical parameters retain descriptor order.
+The current typed-read slice requires at least one data section and exactly one `FILE_SCHEMA` string. A lone section
+may be unnamed; a named section and every section in a multi-section structure carries the Edition 3 section-name and
+single-schema parameter pair. Every governing schema name must equal the header identifier and supplied descriptor.
+Every simple instance across every section is allocated before hydration, occurrence names are unique in the complete
+exchange structure and canonicalized without CLR integer narrowing, and physical parameters retain descriptor order.
+See the [same-schema data-section boundary](same-schema-data-sections.md) for section context and failure rules.
 
 The binder decodes arbitrary-precision INTEGER, exact REAL/NUMBER, ISO 10303-21 STRING directives (including ISO
 8859 pages and `X2`/`X4` Unicode forms), bit-accurate BINARY, BOOLEAN/LOGICAL symbols, enumerations, typed values,
@@ -37,15 +39,15 @@ originating record location when the generated diagnostic has no EXPRESS source 
   diagnostics;
 - an invalid hydrated population throws `ExchangeStructureReadValidationException` with the complete
   `ValidationResult`; and
-- anchor/signature operations, external value occurrences, complex instances, named or multiple data sections,
-  multiple schemas, and additional header entities throw `ExchangeStructureCapabilityException`.
+- anchor/signature operations, external value occurrences, complex instances, multiple governing schemas, and
+  additional header entities throw `ExchangeStructureCapabilityException`.
 
 Local entity references are allocated and hydrated atomically; missing, declared external, and incompatible targets
 instead produce the dedicated aggregate read-validation evidence documented by the
 [reference-hydration boundary](reference-hydration.md).
 
 No exception exposes syntax nodes, a binding/hydration context, or a partially hydrated entity. There is no public
-reader facade, result wrapper, raw model, registry, or nested public processing type. Multi-section and complex
+reader facade, result wrapper, raw model, registry, or nested public processing type. Multi-schema and complex
 populations remain later work items.
 
 ## Verification
