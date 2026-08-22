@@ -7,8 +7,9 @@ internal static class ExchangeStructureWriter
 {
     internal static void Write(ExchangeStructure structure, TextWriter destination)
     {
-        PreflightValidation(structure);
+        PreflightValidation(structure, additionalFailures: null);
         var projected = Project(structure, registration: null);
+        ThrowIfProjectedValuesAreInvalid(structure, projected);
         var builder = new StringBuilder();
         AppendHeader(builder, structure);
         AppendDataSections(builder, structure, projected);
@@ -18,28 +19,42 @@ internal static class ExchangeStructureWriter
 
     internal static void WriteEntity(ExchangeStructure structure, TextWriter destination, Entity entity)
     {
-        PreflightValidation(structure);
         var registration = structure.Registrations.SingleOrDefault(candidate => ReferenceEquals(candidate.Entity, entity));
-        if (registration is null)
-        {
-            throw new ExchangeStructureWriteValidationException(new ValidationResult(
-            [
-                new ValidationFailure(
+        var additionalFailures = registration is null
+            ? new ValidationFailure[]
+            {
+                new(
                     "P21.WRITE.ENTITY.REGISTRATION",
                     "Entity",
                     "The entity is not registered in this exchange structure."),
-            ]));
+            }
+            : null;
+        PreflightValidation(structure, additionalFailures);
+        if (registration is null)
+        {
+            throw new InvalidOperationException("Successful write preflight requires a registered entity.");
         }
 
         var projected = Project(structure, registration);
+        ThrowIfProjectedValuesAreInvalid(structure, projected);
         destination.Write(FormatEntity(structure, registration, projected[registration]));
     }
 
-    private static void PreflightValidation(ExchangeStructure structure)
+    private static void PreflightValidation(
+        ExchangeStructure structure,
+        IEnumerable<ValidationFailure>? additionalFailures)
     {
         var validation = structure.Validate();
-        if (!validation.IsValid)
-            throw new ExchangeStructureWriteValidationException(validation);
+        if (validation.IsValid && additionalFailures is null)
+        {
+            return;
+        }
+
+        var failures = validation.Failures.Concat(additionalFailures ?? []).ToArray();
+        if (failures.Length > 0)
+        {
+            throw new ExchangeStructureWriteValidationException(new ValidationResult(failures));
+        }
     }
 
     private static IReadOnlyDictionary<EntityRegistration, ProjectedEntity> Project(
@@ -104,6 +119,93 @@ internal static class ExchangeStructureWriter
         if (capabilityDiagnostics.Count > 0)
             throw new ExchangeStructureCapabilityException(capabilityDiagnostics);
         return result;
+    }
+
+    private static void ThrowIfProjectedValuesAreInvalid(
+        ExchangeStructure structure,
+        IReadOnlyDictionary<EntityRegistration, ProjectedEntity> projected)
+    {
+        var failures = new List<ValidationFailure>();
+        var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
+        for (var index = 0; index < structure.DataSections.Count; index++)
+        {
+            sectionIndexes.Add(structure.DataSections[index], index);
+        }
+
+        foreach (var entry in projected)
+        {
+            var registration = entry.Key;
+            var entityPath = $"DataSections[{sectionIndexes[registration.DataSection]}].{registration.Name}";
+            var components = entry.Value.Components;
+            for (var componentIndex = 0; componentIndex < components.Count; componentIndex++)
+            {
+                var component = components[componentIndex];
+                var componentPath = components.Count == 1
+                    ? entityPath
+                    : $"{entityPath}.Components[{componentIndex}]";
+                for (var parameterIndex = 0; parameterIndex < component.Value.Count; parameterIndex++)
+                {
+                    CollectProjectedValueFailures(
+                        structure,
+                        component.Value[parameterIndex],
+                        $"{componentPath}.Parameters[{parameterIndex}]",
+                        failures);
+                }
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new ExchangeStructureWriteValidationException(new ValidationResult(failures));
+        }
+    }
+
+    private static void CollectProjectedValueFailures(
+        ExchangeStructure structure,
+        ParameterValue? value,
+        string path,
+        ICollection<ValidationFailure> failures)
+    {
+        if (value is null)
+        {
+            failures.Add(new ValidationFailure(
+                "P21.WRITE.PARAMETER.REQUIRED",
+                path,
+                "The projected parameter value is null."));
+            return;
+        }
+
+        if (value.TryGetEntity(out var entity))
+        {
+            if (!structure.TryGetName(entity, out _))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.WRITE.REFERENCE.REGISTRATION",
+                    path,
+                    "The projected entity reference is not registered in this exchange structure."));
+            }
+
+            return;
+        }
+
+        if (value.TryGetAggregate(out var aggregate))
+        {
+            for (var index = 0; index < aggregate.Count; index++)
+            {
+                CollectProjectedValueFailures(
+                    structure,
+                    aggregate[index],
+                    $"{path}[{index}]",
+                    failures);
+            }
+
+            return;
+        }
+
+        if (value.TryGetTyped(out _, out var inner))
+        {
+            CollectProjectedValueFailures(structure, inner, path + ".Value", failures);
+        }
     }
 
     private static void CollectSectionCapabilityDiagnostics(

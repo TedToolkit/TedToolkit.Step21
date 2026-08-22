@@ -2,7 +2,7 @@
 
 ## 📌 Status
 
-Approved
+Completed
 
 ## 🚦 Delivery priority
 
@@ -82,12 +82,15 @@ Explicit validation and a simple writer exist after prerequisites, but their fin
 <!-- work-item: completion-evidence -->
 ## 📋 Completion evidence
 
-| Evidence | Required record |
+| Evidence | Completion record |
 | --- | --- |
-| Delivery-boundary check | Starting SHA and writer/validation/test/docs artifacts |
-| Behavior-case proof | Commands/results for BC-12, BC-15, and BC-23A |
-| Migration and documentation | Mutable lifecycle, thread-safety, and exception guidance |
-| Dependent-item unlock | Final write boundary for SBRT-025 |
+| Delivery-boundary check | Started from `59643b8` on `main`. Changed only private pre-write orchestration, existing public write XML, focused tests, and boundary documentation. No branch, remote, dependency, public type/member/signature, validation framework, context, or facade was added. |
+| Behavior-case proof | Red: focused TUnit passed the existing timing case but failed 2/3 because `WriteEntity` hid its unregistered-target failure behind earlier graph failures and projected dangling references escaped as fail-fast `InvalidOperationException`. Green/refactor: focused tests pass 5/5 and the complete fast Release project passes 236/236. BC-12 proves property/list/Add/Remove edits invoke zero validation and each write attempt invokes the complete structure validator once. BC-15 returns property, aggregate, foreign-entity, non-cascading-remove reference, unregistered target, and recursively nested projected-reference failures as complete deterministic results. BC-23A proves both `Write` and `WriteEntity` return all capability diagnostics with zero writes; the existing throwing-writer test continues to preserve the original `IOException`. |
+| Failure atomicity | Probe destinations remain at zero writes for every validation and capability failure in both entry points. Complete writes recursively inspect all projected simple/complex, aggregate, and typed parameters before building/delivering text. Unregistered `WriteEntity` evidence is appended to the complete structure result. Valid structures alone proceed to capability/projection checks, avoiding projection of invalid mandatory/aggregate state. |
+| Regression and deployment proof | Release solution and runtime AOT/trim analyzer builds pass with 0 warnings/errors. Integration TUnit passes 3/3 enabled cases; the explicit external-network corpus case remains opt-in and skipped. Runtime dependency inspection still reports only `Antlr4.Runtime.Standard` 4.13.1. The cumulative public API snapshot remains unchanged and `git diff --check` passes. |
+| Migration and documentation | `docs/conformance/atomic-prewrite-validation.md` defines unchecked editing, one final validation call, complete exception evidence, projection-reference defense, validation-before-capability precedence for invalid graphs, zero domain-output, non-thread-safe mutation timing, and unchanged external I/O exceptions. README, canonical-writing guidance, and both public method XML remarks link or state the delivered boundary. |
+| Independent review | Final trace covered validation call count, deterministic failure ordering, invalid-state projection avoidance, unregistered record targets, hidden/nested projected references, simple and complex parameter paths, complete capability diagnostics, both public sinks, buffered formatting, public API, AOT, and documentation. It corrected the two fail-fast/sequential gaps found by Red tests; no blocking or advisory findings remain. |
+| Dependent-item unlock | The final supported write boundary now supplies complete zero-output validation/capability evidence for SBRT-025 package/AOT proof. |
 
 ## ⚠️ Risks and open questions
 

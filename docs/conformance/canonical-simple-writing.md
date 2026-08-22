@@ -47,4 +47,5 @@ allowed to propagate unchanged; the runtime does not catch, translate, or claim 
 
 This item does not claim byte preservation. The later
 [complex-mapping round-trip](complex-mapping-round-trip.md) extends the same buffered writer with ordered external
-mapping; SBRT-024 owns the final complete pre-write aggregation gate across every delivered writer capability.
+mapping, and [atomic pre-write validation](atomic-prewrite-validation.md) defines the final complete failure gate shared
+by both public writer entry points.

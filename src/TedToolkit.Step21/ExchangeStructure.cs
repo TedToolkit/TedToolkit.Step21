@@ -114,7 +114,11 @@ public sealed class ExchangeStructure
     /// <exception cref="ExchangeStructureCapabilityException">
     /// The current structure requires an unsupported write operation. No output is produced.
     /// </exception>
-    /// <remarks>Exceptions raised by <paramref name="destination"/> are not caught or translated.</remarks>
+    /// <remarks>
+    /// The final current graph is validated once before projection or output. Property, aggregate, registration, and
+    /// removal edits remain unchecked until this boundary. Do not mutate the structure concurrently with writing.
+    /// Exceptions raised by <paramref name="destination"/> are not caught or translated.
+    /// </remarks>
     public void Write(TextWriter destination)
     {
         ArgumentNullException.ThrowIfNull(destination);
@@ -131,7 +135,11 @@ public sealed class ExchangeStructure
     /// <exception cref="ExchangeStructureCapabilityException">
     /// The entity requires an unsupported write operation. No output is produced.
     /// </exception>
-    /// <remarks>Exceptions raised by <paramref name="destination"/> are not caught or translated.</remarks>
+    /// <remarks>
+    /// The final current graph and target registration are validated together before projection or output. Property,
+    /// aggregate, registration, and removal edits remain unchecked until this boundary. Do not mutate the structure
+    /// concurrently with writing. Exceptions raised by <paramref name="destination"/> are not caught or translated.
+    /// </remarks>
     public void WriteEntity(TextWriter destination, Entity entity)
     {
         ArgumentNullException.ThrowIfNull(destination);
