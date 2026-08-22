@@ -226,17 +226,22 @@ internal static class ExpressSchemaCompiler
 
     private static ExpressBoundSchema CreateBoundSchema(SchemaDraft schema)
     {
-        var declarations = schema.Declarations.Select(CreateBoundDeclaration);
+        var declarations = schema.Declarations.Select(CreateBoundDeclaration).ToArray();
         var nestedDeclarations = schema.NestedDeclarations
             .OrderBy(declaration => declaration.Syntax.Span.Start.Line)
             .ThenBy(declaration => declaration.Syntax.Span.Start.Column)
-            .Select(CreateBoundDeclaration);
+            .Select(CreateBoundDeclaration)
+            .ToArray();
+        var expressions = ExpressExpressionBinder.Bind(
+            declarations,
+            schema.NameReferences);
         return new(
             schema.Identity,
             schema.ResolvedImports,
             declarations,
             nestedDeclarations,
-            schema.NameReferences);
+            schema.NameReferences,
+            expressions);
     }
 
     private static ExpressBoundDeclaration CreateBoundDeclaration(SymbolDraft declaration)
@@ -792,7 +797,8 @@ internal static class ExpressSchemaCompiler
                         ExpressBoundNameKind.Attribute,
                         attribute.Type,
                         schemaDeclaration: null,
-                        attribute.Span));
+                        attribute.Span,
+                        attribute.IsOptional));
             }
 
             VisitNames(schema, declaration.RequiredChild("entityBody"), scope);
@@ -1051,11 +1057,13 @@ internal static class ExpressSchemaCompiler
                 return;
             }
 
-            var target = BindNeutralName(
-                schema,
-                named,
-                scope,
-                named.Production == "namedApplication");
+            var target = named.ChildRules("builtInFunction").Any()
+                ? null
+                : BindNeutralName(
+                    schema,
+                    named,
+                    scope,
+                    named.Production == "namedApplication");
             foreach (var parameterList in named.ChildRules("actualParameterList"))
             {
                 VisitNames(schema, parameterList, scope);
@@ -1143,7 +1151,8 @@ internal static class ExpressSchemaCompiler
                         ExpressBoundNameKind.Attribute,
                         attribute.Type,
                         schemaDeclaration: null,
-                        attribute.Span);
+                        attribute.Span,
+                        attribute.IsOptional);
                 }
             }
             else if (draft?.BoundType is ExpressBoundEnumerationType)

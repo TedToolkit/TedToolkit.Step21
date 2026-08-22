@@ -22,18 +22,21 @@ internal sealed class ExpressBoundSchema
     /// <param name="declarations">The locally declared symbols.</param>
     /// <param name="nestedDeclarations">The declarations owned by nested algorithm scopes.</param>
     /// <param name="nameReferences">The resolved expression and statement names.</param>
+    /// <param name="expressions">The immutable typed outermost expression trees.</param>
     internal ExpressBoundSchema(
         ExpressBoundSchemaIdentity identity,
         IEnumerable<ExpressBoundImport> imports,
         IEnumerable<ExpressBoundDeclaration> declarations,
         IEnumerable<ExpressBoundDeclaration> nestedDeclarations,
-        IEnumerable<ExpressBoundNameReference> nameReferences)
+        IEnumerable<ExpressBoundNameReference> nameReferences,
+        IEnumerable<ExpressBoundExpression> expressions)
     {
         Identity = identity;
         Imports = new ReadOnlyCollection<ExpressBoundImport>(imports.ToArray());
         Declarations = new ReadOnlyCollection<ExpressBoundDeclaration>(declarations.ToArray());
         NestedDeclarations = new ReadOnlyCollection<ExpressBoundDeclaration>(nestedDeclarations.ToArray());
         NameReferences = new ReadOnlyCollection<ExpressBoundNameReference>(nameReferences.ToArray());
+        Expressions = new ReadOnlyCollection<ExpressBoundExpression>(expressions.ToArray());
     }
 
     /// <summary>
@@ -71,4 +74,9 @@ internal sealed class ExpressBoundSchema
     /// Gets expression and statement names resolved in source order.
     /// </summary>
     internal IReadOnlyList<ExpressBoundNameReference> NameReferences { get; }
+
+    /// <summary>
+    /// Gets the immutable typed outermost expression trees in source order.
+    /// </summary>
+    internal IReadOnlyList<ExpressBoundExpression> Expressions { get; }
 }

@@ -19,7 +19,7 @@ Approved
 
 ## 🧩 Explicit governing constraints
 
-Reachability begins from validation and Part 21 writing. Every reachable WHERE, UNIQUE, derived expression, query, constant, function, and dependency executes by completion; unrelated declarations remain source-located IR and do not create a public general execution API.
+Reachability begins from validation and Part 21 writing. This item consumes SBRT-016's typed expression compiler, attaches expressions to their governing declarations, and computes their complete dependency graph. Every reachable WHERE, UNIQUE, derived expression, query, constant, function, and dependency executes by completion; unrelated declarations remain source-located IR and do not create a public general execution API.
 
 <!-- work-item: scope -->
 ## 🎯 Outcome, scope, and non-goals

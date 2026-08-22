@@ -20,18 +20,21 @@ internal sealed class ExpressBoundName
     /// <param name="type">The declared type when one is statically available.</param>
     /// <param name="schemaDeclaration">The schema declaration, if this is a schema name.</param>
     /// <param name="span">The declaration span.</param>
+    /// <param name="isOptional">Whether this value name can denote the EXPRESS indeterminate value.</param>
     internal ExpressBoundName(
         string name,
         ExpressBoundNameKind kind,
         ExpressBoundType? type,
         ExpressBoundSymbol? schemaDeclaration,
-        ExpressSourceSpan span)
+        ExpressSourceSpan span,
+        bool isOptional = false)
     {
         Name = name;
         Kind = kind;
         Type = type;
         SchemaDeclaration = schemaDeclaration;
         Span = span;
+        IsOptional = isOptional;
     }
 
     /// <summary>
@@ -58,4 +61,9 @@ internal sealed class ExpressBoundName
     /// Gets the declaration span.
     /// </summary>
     internal ExpressSourceSpan Span { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this value name can denote the EXPRESS indeterminate value.
+    /// </summary>
+    internal bool IsOptional { get; }
 }
