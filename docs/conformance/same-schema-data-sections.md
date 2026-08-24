@@ -18,7 +18,9 @@ DATA('section-name',('schema_name'));
 The first value is a unique decoded STRING section name. The second is a list containing exactly one decoded STRING,
 which must occur in `FILE_SCHEMA`; in a same-schema structure every section selects that same descriptor.
 The reader preserves each valid name as runtime-internal write context while public `DataSection` continues to expose
-only its ISO governing `SchemaName`, never a generated descriptor relationship.
+only its ISO governing `SchemaName`, never a generated descriptor relationship. Descriptor selection compares the
+nominal EXPRESS identifier case-insensitively and ignores only a valid numeric object-identifier suffix; the public
+schema name and complete `FILE_SCHEMA` identifier retain their supplied spelling.
 
 Malformed parameter counts/types, duplicate section names, and a section schema absent from `FILE_SCHEMA` aggregate as
 source-located `P21-BIND-DATA-SECTION` diagnostics. Structures with different governing descriptors and explicit

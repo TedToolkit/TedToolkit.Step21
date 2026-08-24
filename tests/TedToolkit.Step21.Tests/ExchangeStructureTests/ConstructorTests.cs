@@ -44,10 +44,11 @@ internal sealed class ConstructorTests
             await Assert.That(structure.SchemaDescriptors.SequenceEqual([first, second])).IsTrue();
             await Assert.That(structure.TryGetSchemaDescriptor(new SchemaName("FIRST"), out var found)).IsTrue();
             await Assert.That(found).IsSameReferenceAs(first);
+            await Assert.That(structure.TryGetSchemaDescriptor(new SchemaName("first"), out var foundByCase)).IsTrue();
+            await Assert.That(foundByCase).IsSameReferenceAs(first);
             await Assert.That(structure.TryGetSchemaDescriptor(new SchemaName("MISSING"), out _)).IsFalse();
             await Assert.That(structure.GetSchemaDescriptorDiagnostics(new SchemaName("FIRST"))).IsEmpty();
-            await Assert.That(structure.GetSchemaDescriptorDiagnostics(new SchemaName("first")).Single().Code)
-                .IsEqualTo("P21-BIND-SCHEMA");
+            await Assert.That(structure.GetSchemaDescriptorDiagnostics(new SchemaName("first"))).IsEmpty();
             await Assert.That((Action)CreateDuplicates).Throws<ArgumentException>();
         }
     }

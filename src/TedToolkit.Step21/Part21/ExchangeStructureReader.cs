@@ -19,7 +19,7 @@ internal static class ExchangeStructureReader
         if (snapshot.Any(descriptor => descriptor is null))
             throw new ArgumentException("Schema descriptor collections cannot contain null values.", nameof(schemaDescriptors));
 
-        var names = new HashSet<SchemaName>();
+        var names = new HashSet<SchemaName>(ExchangeStructure.DescriptorNameComparer);
         foreach (var descriptor in snapshot)
         {
             var name = descriptor.Name;

@@ -41,7 +41,7 @@ public sealed class ExchangeStructure
         var descriptorSnapshot = schemaDescriptors.ToArray();
         if (descriptorSnapshot.Any(descriptor => descriptor is null))
             throw new ArgumentException("Schema descriptor collections cannot contain null values.", nameof(schemaDescriptors));
-        var descriptorBindings = new Dictionary<SchemaName, SchemaDescriptor>();
+        var descriptorBindings = new Dictionary<SchemaName, SchemaDescriptor>(DescriptorNameComparer);
         foreach (var descriptor in descriptorSnapshot)
         {
             var name = descriptor.Name;
@@ -332,6 +332,8 @@ public sealed class ExchangeStructure
 
     internal IReadOnlyList<SchemaDescriptor> SchemaDescriptors => _schemaDescriptors;
 
+    internal static IEqualityComparer<SchemaName> DescriptorNameComparer { get; } = new SchemaIdentifierComparer();
+
     internal IReadOnlyList<SchemaPopulationDefinition> SchemaPopulations => _schemaPopulations;
 
     internal IReadOnlyList<EntityRegistration> Registrations => _registrationView;
@@ -392,6 +394,88 @@ public sealed class ExchangeStructure
 
         dataSection = null;
         return false;
+    }
+
+    private sealed class SchemaIdentifierComparer : IEqualityComparer<SchemaName>
+    {
+        public bool Equals(SchemaName left, SchemaName right)
+        {
+            if (left.Equals(right))
+                return true;
+
+            return TryGetNominalName(left, out var leftNominal)
+                && TryGetNominalName(right, out var rightNominal)
+                && string.Equals(leftNominal, rightNominal, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode(SchemaName value) => TryGetNominalName(value, out var nominal)
+            ? StringComparer.OrdinalIgnoreCase.GetHashCode(nominal)
+            : value.GetHashCode();
+
+        private static bool TryGetNominalName(SchemaName name, out string nominal)
+        {
+            var identifier = name.Value;
+            var openBrace = identifier.IndexOf('{');
+            var nominalLength = openBrace < 0 ? identifier.Length : openBrace;
+            if (openBrace >= 0)
+            {
+                while (nominalLength > 0 && identifier[nominalLength - 1] == ' ')
+                    nominalLength--;
+                if (nominalLength == openBrace || identifier[^1] != '}')
+                {
+                    nominal = string.Empty;
+                    return false;
+                }
+            }
+
+            if (nominalLength == 0
+                || identifier[0] is not (>= 'A' and <= 'Z') and not (>= 'a' and <= 'z'))
+            {
+                nominal = string.Empty;
+                return false;
+            }
+
+            for (var index = 1; index < nominalLength; index++)
+            {
+                var character = identifier[index];
+                if (character is not (>= 'A' and <= 'Z')
+                    and not (>= 'a' and <= 'z')
+                    and not (>= '0' and <= '9')
+                    and not '_')
+                {
+                    nominal = string.Empty;
+                    return false;
+                }
+            }
+
+            nominal = identifier[..nominalLength];
+            if (openBrace < 0)
+                return true;
+
+            var suffix = identifier.AsSpan(openBrace + 1, identifier.Length - openBrace - 2);
+            var suffixIndex = 0;
+            while (suffixIndex < suffix.Length && suffix[suffixIndex] == ' ')
+                suffixIndex++;
+
+            var hasArc = false;
+            while (suffixIndex < suffix.Length)
+            {
+                var arcStart = suffixIndex;
+                while (suffixIndex < suffix.Length && suffix[suffixIndex] is >= '0' and <= '9')
+                    suffixIndex++;
+                if (suffixIndex == arcStart)
+                    return false;
+
+                hasArc = true;
+                var delimiterStart = suffixIndex;
+                while (suffixIndex < suffix.Length && suffix[suffixIndex] == ' ')
+                    suffixIndex++;
+                if (suffixIndex < suffix.Length && suffixIndex == delimiterStart)
+                    return false;
+            }
+
+            return hasArc;
+        }
     }
 
     private IReadOnlyList<ValidationFailure> ValidateSchemaPopulations(

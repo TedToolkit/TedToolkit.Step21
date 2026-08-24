@@ -16,7 +16,9 @@ For inherited-free entities whose physical attributes are supported by this stag
 - rejects `*` for an explicit attribute with `P21-BIND-PARAMETER`; and
 - constructs literal-bounded `ARRAY`, `LIST`, `BAG`, and `SET` candidates with their declared bounds and `OPTIONAL`/`UNIQUE` metadata, preserving unset optional array slots.
 
-Component, count, entity, and parameter mismatches return stable `P21-BIND-*` diagnostics. A structure lookup with no exact descriptor name returns `P21-BIND-SCHEMA`; lookup is nominal and case-sensitive. Descriptors supplied to manual structure construction are snapshotted by unique schema name, and duplicate names fail before construction completes.
+Component, count, entity, and parameter mismatches return stable `P21-BIND-*` diagnostics. Descriptor lookup compares the nominal EXPRESS identifier case-insensitively and accepts the ISO 10303-21 numeric object-identifier suffix form: at least one space followed by braces containing one or more space-delimited decimal arcs. The complete `FILE_SCHEMA` string remains unchanged. Other protocols, close names, malformed suffixes, and missing descriptors return `P21-BIND-SCHEMA`.
+
+Descriptors supplied to reading or manual structure construction are snapshotted before source consumption. Names that resolve to the same nominal binding identifier fail as duplicates, including case-only variants. Public `SchemaName` equality remains exact and ordinal; normalization is private to descriptor selection.
 
 Entity-capable physical parameters use an internal indexed `P21-BIND-REFERENCE-TYPE-*` mismatch code. The atomic
 reader consumes that machine evidence and publishes `P21.READ.REFERENCE.TYPE` with the original occurrence location;

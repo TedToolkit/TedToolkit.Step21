@@ -1,16 +1,18 @@
 # Multi-schema binding and schema instance populations
 
-`ExchangeStructure.Read` accepts a closed set of generated `SchemaDescriptor` instances and binds every named data
-section under the descriptor whose exact ordinal `SchemaName` occurs both in that section and in `FILE_SCHEMA`. It does
-not discover schemas, load external metadata, or attach descriptor state to entities or `DataSection` objects.
+`ExchangeStructure.Read` accepts a closed set of generated `SchemaDescriptor` instances and binds every data section
+under the descriptor whose nominal EXPRESS identifier matches its governing schema. Descriptor selection is
+case-insensitive and ignores only a valid numeric object-identifier suffix while retaining the supplied schema text.
+It does not discover schemas, load external metadata, or attach descriptor state to entities or `DataSection` objects.
 
 This boundary implements the schema-population and cross-schema rules in ISO 10303-21:2016 Edition 3 Annex E. The
 repository's [normative source](https://www.steptools.com/stds/step/IS_final_p21e3.html) supplies the clause text.
 
 ## Header and section binding
 
-Every schema identifier in `FILE_SCHEMA` must have one explicitly supplied descriptor. Multiple named data sections
-use the standard form:
+Every schema identifier in `FILE_SCHEMA` must have one explicitly supplied descriptor. Supplied descriptor names that
+normalize to one binding identifier are rejected before source consumption rather than resolved by order. Multiple
+named data sections use the standard form:
 
 ```step
 DATA('section-name',('governing_schema'));
