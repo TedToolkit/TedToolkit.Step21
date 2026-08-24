@@ -28,7 +28,7 @@ internal static class ExchangeStructureReader
             if (!names.Add(name))
             {
                 throw new ArgumentException(
-                    $"Schema descriptor name '{name}' occurs more than once.",
+                    $"Schema descriptor name '{name}' conflicts with another nominal binding identifier.",
                     nameof(schemaDescriptors));
             }
         }
@@ -331,11 +331,23 @@ internal static class ExchangeStructureReader
         else if (schemaIdentifiers is not null)
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var identifier in schemaIdentifiers.Where(identifier => !names.Add(identifier)))
+            var bindingNames = new HashSet<SchemaName>(ExchangeStructure.DescriptorNameComparer);
+            foreach (var identifier in schemaIdentifiers)
             {
-                diagnostics.Add(HeaderDiagnostic(
-                    syntax.FileSchema,
-                    $"FILE_SCHEMA repeats schema identifier '{identifier}'."));
+                if (!names.Add(identifier))
+                {
+                    diagnostics.Add(HeaderDiagnostic(
+                        syntax.FileSchema,
+                        $"FILE_SCHEMA repeats schema identifier '{identifier}'."));
+                }
+                else if (!bindingNames.Add(new SchemaName(identifier)))
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-BIND-SCHEMA",
+                        Step21DiagnosticSeverity.Error,
+                        $"FILE_SCHEMA identifier '{identifier}' conflicts with another nominal schema identifier.",
+                        syntax.FileSchema.Span.Start));
+                }
             }
         }
 
@@ -483,7 +495,9 @@ internal static class ExchangeStructureReader
             {
                 valid = false;
             }
-            else if (!headerSchemaNames.Contains(schemaText, StringComparer.Ordinal))
+            else if (!headerSchemaNames.Any(headerSchemaName => ExchangeStructure.SchemaIdentifiersAssociate(
+                         new SchemaName(headerSchemaName),
+                         new SchemaName(schemaText))))
             {
                 diagnostics.Add(PopulationDiagnostic(
                     syntax.Parameters[0],
@@ -651,7 +665,9 @@ internal static class ExchangeStructureReader
             {
                 valid = false;
             }
-            else if (!headerSchemaNames.Contains(schemaName, StringComparer.Ordinal))
+            else if (!headerSchemaNames.Any(headerSchemaName => ExchangeStructure.SchemaIdentifiersAssociate(
+                         new SchemaName(headerSchemaName),
+                         new SchemaName(schemaName))))
             {
                 diagnostics.Add(DataSectionDiagnostic(
                     syntax.Parameters[1],

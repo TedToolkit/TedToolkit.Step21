@@ -11,17 +11,19 @@ repository's [normative source](https://www.steptools.com/stds/step/IS_final_p21
 ## Header and section binding
 
 Every schema identifier in `FILE_SCHEMA` must have one explicitly supplied descriptor. Supplied descriptor names that
-normalize to one binding identifier are rejected before source consumption rather than resolved by order. Multiple
-named data sections use the standard form:
+normalize to one binding identifier are rejected before source consumption rather than resolved by order. Different
+raw header identifiers with one nominal name fail atomically with `P21-BIND-SCHEMA`; they are not folded. Multiple named
+data sections use the standard form:
 
 ```step
 DATA('section-name',('governing_schema'));
 ```
 
-The governing schema must occur in `FILE_SCHEMA`. Descriptor names, header schema names, and section schema names use
-exact ordinal matching. Missing descriptors, invalid section associations, malformed `FILE_POPULATION` entities,
-duplicate population input names, and absent input sections aggregate as source-located binding diagnostics before a
-model can be returned.
+The governing schema must associate with one identifier in `FILE_SCHEMA` through the same case-insensitive nominal
+rule used for descriptor selection. Named data sections and `FILE_POPULATION` declarations therefore associate with an
+OID-qualified header while retaining their own supplied strings. Missing descriptors, invalid section associations,
+malformed `FILE_POPULATION` entities, duplicate population input names, and absent input sections aggregate as
+source-located binding diagnostics before a model can be returned.
 
 ## `FILE_POPULATION`
 

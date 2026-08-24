@@ -28,11 +28,13 @@ public sealed class ExchangeStructure
     {
     }
 
-    /// <summary>Initializes an exchange structure with a snapshot of uniquely named schema descriptors.</summary>
+    /// <summary>Initializes an exchange structure with a snapshot of uniquely bound schema descriptors.</summary>
     /// <param name="header">The required ISO header.</param>
     /// <param name="schemaDescriptors">The descriptors to snapshot in supplied order.</param>
     /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Two descriptors have the same ordinal <see cref="SchemaDescriptor.Name"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Two descriptors have names that resolve to the same nominal binding identifier.
+    /// </exception>
     public ExchangeStructure(HeaderSection header, IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
     {
         ArgumentNullException.ThrowIfNull(header);
@@ -50,7 +52,7 @@ public sealed class ExchangeStructure
             if (!descriptorBindings.TryAdd(name, descriptor))
             {
                 throw new ArgumentException(
-                    $"Schema descriptor name '{name}' occurs more than once.",
+                    $"Schema descriptor name '{name}' conflicts with another nominal binding identifier.",
                     nameof(schemaDescriptors));
             }
         }
@@ -88,8 +90,8 @@ public sealed class ExchangeStructure
     /// <returns>A complete validated mutable exchange structure.</returns>
     /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
-    /// A descriptor name is invalid or occurs more than once. This is detected before <paramref name="source"/> is
-    /// consumed.
+    /// A descriptor name is invalid or resolves to the same nominal binding identifier as another descriptor. This is
+    /// detected before <paramref name="source"/> is consumed.
     /// </exception>
     /// <exception cref="ExchangeStructureSyntaxException">The source is not valid ISO 10303-21 syntax.</exception>
     /// <exception cref="ExchangeStructureBindingException">
@@ -334,6 +336,9 @@ public sealed class ExchangeStructure
 
     internal static IEqualityComparer<SchemaName> DescriptorNameComparer { get; } = new SchemaIdentifierComparer();
 
+    internal static bool SchemaIdentifiersAssociate(SchemaName left, SchemaName right) =>
+        DescriptorNameComparer.Equals(left, right);
+
     internal IReadOnlyList<SchemaPopulationDefinition> SchemaPopulations => _schemaPopulations;
 
     internal IReadOnlyList<EntityRegistration> Registrations => _registrationView;
@@ -457,7 +462,8 @@ public sealed class ExchangeStructure
             while (suffixIndex < suffix.Length && suffix[suffixIndex] == ' ')
                 suffixIndex++;
 
-            var hasArc = false;
+            var arcCount = 0;
+            var rootArc = -1;
             while (suffixIndex < suffix.Length)
             {
                 var arcStart = suffixIndex;
@@ -466,7 +472,27 @@ public sealed class ExchangeStructure
                 if (suffixIndex == arcStart)
                     return false;
 
-                hasArc = true;
+                var arcLength = suffixIndex - arcStart;
+                if (arcLength > 1 && suffix[arcStart] == '0')
+                    return false;
+                if (arcCount == 0)
+                {
+                    if (arcLength != 1 || suffix[arcStart] > '2')
+                        return false;
+                    rootArc = suffix[arcStart] - '0';
+                }
+                else if (arcCount == 1 && rootArc < 2)
+                {
+                    if (arcLength > 2)
+                        return false;
+                    var secondArc = suffix[arcStart] - '0';
+                    if (arcLength == 2)
+                        secondArc = (secondArc * 10) + suffix[arcStart + 1] - '0';
+                    if (secondArc > 39)
+                        return false;
+                }
+
+                arcCount++;
                 var delimiterStart = suffixIndex;
                 while (suffixIndex < suffix.Length && suffix[suffixIndex] == ' ')
                     suffixIndex++;
@@ -474,7 +500,7 @@ public sealed class ExchangeStructure
                     return false;
             }
 
-            return hasArc;
+            return arcCount >= 2;
         }
     }
 

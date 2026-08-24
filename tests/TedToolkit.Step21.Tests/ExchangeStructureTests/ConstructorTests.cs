@@ -24,7 +24,7 @@ internal sealed class ConstructorTests
     }
 
     /// <summary>
-    /// Verifies that descriptors are snapshotted by unique ordinal name before construction succeeds.
+    /// Verifies that descriptors are snapshotted by unique nominal binding identifier before construction succeeds.
     /// </summary>
     [Test]
     public async Task Should_snapshot_unique_descriptors_and_reject_duplicate_names()

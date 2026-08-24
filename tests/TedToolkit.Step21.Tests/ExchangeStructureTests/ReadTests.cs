@@ -41,6 +41,10 @@ internal sealed class ReadTests
     [Arguments("CONFIG_CONTROL_DESIGN { }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1 0 AP203 }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1.0.10303.203 }")]
+    [Arguments("CONFIG_CONTROL_DESIGN { 1 }")]
+    [Arguments("CONFIG_CONTROL_DESIGN { 01 0 }")]
+    [Arguments("CONFIG_CONTROL_DESIGN { 3 0 }")]
+    [Arguments("CONFIG_CONTROL_DESIGN { 1 40 }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 } trailing")]
     [Arguments("CONFIG_CONTROL_DESIGN{ 1 0 10303 203 1 1 1 }")]
@@ -58,6 +62,123 @@ internal sealed class ReadTests
                 .IsEquivalentTo(["P21-BIND-SCHEMA"]);
             await Assert.That(exception.Diagnostics[0].SourceLocation).IsNotNull();
             await Assert.That(exception.Diagnostics[0].SourceLocation!.FilePath).IsEqualTo("<reader>");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a named data section associates its nominal schema with an OID-qualified header without rewriting either.
+    /// </summary>
+    [Test]
+    public async Task Should_associate_nominal_named_section_with_oid_header_and_retain_both_spellings()
+    {
+        const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
+        const string sectionIdentifier = "CoNfIg_CoNtRoL_DeSiGn";
+        var descriptor = new TestSchemaDescriptor("config_control_design");
+        var structure = ExchangeStructure.Read(new StringReader(CreateExchange(
+            headerIdentifier,
+            dataSection: $$"""
+                DATA('main',('{{sectionIdentifier}}'));
+                ENDSEC;
+                """)), [descriptor]);
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.Header.FileSchema.SchemaIdentifiers[0]).IsEqualTo(headerIdentifier);
+            await Assert.That(structure.DataSections[0].SchemaName.Value).IsEqualTo(sectionIdentifier);
+            await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{headerIdentifier}'));\n");
+            await Assert.That(destination.ToString()).Contains($"DATA('main',('{sectionIdentifier}'));\n");
+        }
+    }
+
+    /// <summary>
+    /// Verifies FILE_POPULATION associates its nominal schema with an OID-qualified header without rewriting either.
+    /// </summary>
+    [Test]
+    public async Task Should_associate_nominal_file_population_with_oid_header_and_retain_both_spellings()
+    {
+        const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
+        const string populationIdentifier = "config_control_design";
+        var descriptor = new TestSchemaDescriptor("config_control_design");
+        var structure = ExchangeStructure.Read(new StringReader(CreateExchange(
+            headerIdentifier,
+            $"FILE_POPULATION('{populationIdentifier}','SECTION_BOUNDARY',$);")), [descriptor]);
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.Header.FileSchema.SchemaIdentifiers[0]).IsEqualTo(headerIdentifier);
+            await Assert.That(structure.SchemaPopulations[0].SchemaName.Value).IsEqualTo(populationIdentifier);
+            await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{headerIdentifier}'));\n");
+            await Assert.That(destination.ToString()).Contains(
+                $"FILE_POPULATION('{populationIdentifier}','SECTION_BOUNDARY',$);\n");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a close named-section schema remains outside the nominal header association.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_close_named_section_schema_without_publishing_a_model()
+    {
+        const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
+        var descriptor = new TestSchemaDescriptor("config_control_design");
+
+        var exception = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                headerIdentifier,
+                dataSection: "DATA('main',('CONFIG_CONTROL_DESIGNER'));\nENDSEC;")),
+            [descriptor]));
+
+        await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
+            .IsEquivalentTo(["P21-BIND-DATA-SECTION"]);
+    }
+
+    /// <summary>
+    /// Verifies a close FILE_POPULATION schema remains outside the nominal header association.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_close_file_population_schema_without_publishing_a_model()
+    {
+        const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
+        var descriptor = new TestSchemaDescriptor("config_control_design");
+
+        var exception = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                headerIdentifier,
+                "FILE_POPULATION('CONFIG_CONTROL_DESIGNER','SECTION_BOUNDARY',$);")),
+            [descriptor]));
+
+        await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
+            .IsEquivalentTo(["P21-BIND-SCHEMA-POPULATION"]);
+    }
+
+    /// <summary>
+    /// Verifies different raw FILE_SCHEMA identifiers with one nominal name fail atomically instead of being folded.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_normalized_header_collisions_without_publishing_a_model()
+    {
+        const string first = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
+        const string second = "config_control_design { 2 0 10303 203 1 1 2 }";
+        var source = CreateExchange(first).Replace(
+            $"FILE_SCHEMA(('{first}'));",
+            $"FILE_SCHEMA(('{first}','{second}'));",
+            StringComparison.Ordinal);
+        var descriptor = new TestSchemaDescriptor("config_control_design");
+
+        var exception = Assert.Throws<ExchangeStructureBindingException>(() =>
+            ExchangeStructure.Read(new StringReader(source), [descriptor]));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
+                .IsEquivalentTo(["P21-BIND-SCHEMA"]);
+            await Assert.That(exception.Diagnostics[0].SourceLocation?.FilePath).IsEqualTo("<reader>");
         }
     }
 
@@ -80,15 +201,18 @@ internal sealed class ReadTests
         }
     }
 
-    private static string CreateExchange(string identifier) => $$"""
+    private static string CreateExchange(
+        string identifier,
+        string additionalHeader = "",
+        string dataSection = "DATA;\nENDSEC;") => $$"""
         ISO-10303-21;
         HEADER;
         FILE_DESCRIPTION(('schema identifier test'),'3;1');
         FILE_NAME('identifier.p21','2026-08-24T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('{{identifier}}'));
+        {{additionalHeader}}
         ENDSEC;
-        DATA;
-        ENDSEC;
+        {{dataSection}}
         END-ISO-10303-21;
         """;
 
