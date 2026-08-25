@@ -1257,13 +1257,25 @@ internal static class ExpressReachableRuleEmitter
                     nestedSizeAliases ?? []);
                 JoinSelectFacts(
                     selectNarrowings,
+                    static (left, right) => ReferenceEquals(left, right),
+                    key => key.Type is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     nestedSelectNarrowings,
                     selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? []);
-                IntersectCollectionFacts(
+                JoinSelectFacts(
                     pathNarrowings,
-                    static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && ReferenceEquals(left.Value, right.Value),
+                    SameDirectReferencePath,
+                    key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     nestedPathNarrowings,
                     pathNarrowings?.ToList() ?? []);
                 IntersectCollectionFacts(
@@ -1558,12 +1570,24 @@ internal static class ExpressReachableRuleEmitter
                 fallingAliases[0]);
             JoinSelectFacts(
                 selectNarrowings,
+                static (left, right) => ReferenceEquals(left, right),
+                key => key.Type is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                        is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
                 fallingSelectNarrowings[0],
                 fallingSelectNarrowings[0]);
-            IntersectCollectionFacts(
+            JoinSelectFacts(
                 pathNarrowings,
-                static (left, right) => ReferenceEquals(left.Value, right.Value)
-                    && SameDirectReferencePath(left.Key, right.Key),
+                SameDirectReferencePath,
+                key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                        is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
                 fallingPathNarrowings[0],
                 fallingPathNarrowings[0]);
             IntersectCollectionFacts(
@@ -1619,12 +1643,24 @@ internal static class ExpressReachableRuleEmitter
                     fallingAliases[index]);
                 JoinSelectFacts(
                     selectNarrowings,
+                    static (left, right) => ReferenceEquals(left, right),
+                    key => key.Type is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     currentSelectNarrowings,
                     fallingSelectNarrowings[index]);
-                IntersectCollectionFacts(
+                JoinSelectFacts(
                     pathNarrowings,
-                    static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && ReferenceEquals(left.Value, right.Value),
+                    SameDirectReferencePath,
+                    key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     currentPathNarrowings,
                     fallingPathNarrowings[index]);
                 IntersectCollectionFacts(
@@ -2007,13 +2043,25 @@ internal static class ExpressReachableRuleEmitter
                         ?? []);
                 JoinSelectFacts(
                     selectNarrowings,
+                    static (left, right) => ReferenceEquals(left, right),
+                    key => key.Type is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     thenSelectNarrowings,
                     selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? []);
-                IntersectCollectionFacts(
+                JoinSelectFacts(
                     pathNarrowings,
-                    static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && ReferenceEquals(left.Value, right.Value),
+                    SameDirectReferencePath,
+                    key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                        && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType
+                            ? declaredSelect.Declaration
+                            : null,
                     thenPathNarrowings,
                     pathNarrowings?.ToList() ?? []);
                 IntersectCollectionFacts(
@@ -2116,12 +2164,24 @@ internal static class ExpressReachableRuleEmitter
                 rightAliases ?? []);
             JoinSelectFacts(
                 selectNarrowings,
+                static (left, right) => ReferenceEquals(left, right),
+                key => key.Type is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                        is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
                 leftSelectNarrowings,
                 rightSelectNarrowings);
-            IntersectCollectionFacts(
+            JoinSelectFacts(
                 pathNarrowings,
-                static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                    && ReferenceEquals(left.Value, right.Value),
+                SameDirectReferencePath,
+                key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType
+                        is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
                 leftPathNarrowings,
                 rightPathNarrowings);
             IntersectCollectionFacts(
@@ -3407,9 +3467,11 @@ internal static class ExpressReachableRuleEmitter
         }
     }
 
-    private static void JoinSelectFacts(
-        Dictionary<ExpressBoundName, ExpressBoundSymbol>? target,
-        params IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>[] branches)
+    private static void JoinSelectFacts<TKey>(
+        ICollection<KeyValuePair<TKey, ExpressBoundSymbol>>? target,
+        Func<TKey, TKey, bool> sameKey,
+        Func<TKey, ExpressBoundSymbol?> resolveDeclaredSelect,
+        params IReadOnlyCollection<KeyValuePair<TKey, ExpressBoundSymbol>>[] branches)
     {
         if (target is null || branches.Length == 0)
         {
@@ -3419,28 +3481,30 @@ internal static class ExpressReachableRuleEmitter
         target.Clear();
         foreach (var pair in branches[0])
         {
-            if (!branches.Skip(1).All(branch => branch.ContainsKey(pair.Key)))
+            if (branches.Skip(1).Any(branch => !branch.Any(candidate =>
+                    sameKey(candidate.Key, pair.Key))))
             {
                 continue;
             }
 
-            var values = branches.Select(branch => branch[pair.Key]).ToArray();
+            var values = branches.Select(branch => branch.First(candidate =>
+                    sameKey(candidate.Key, pair.Key)).Value)
+                .ToArray();
             if (values.All(value => value.Kind == ExpressDeclarationKind.Entity)
                 && values.All(value => ReferenceEquals(value, values[0])))
             {
-                target.Add(pair.Key, values[0]);
+                target.Add(new(pair.Key, values[0]));
                 continue;
             }
 
             var markers = values
                 .Where(value => value.Kind != ExpressDeclarationKind.Entity)
-                .Distinct()
                 .ToArray();
-            if (markers.Length == 1
-                && pair.Key.Type is ExpressBoundNamedType declaredSelect
-                && ReferenceEquals(declaredSelect.Declaration, markers[0]))
+            if (markers.Length > 0
+                && markers.All(marker => ReferenceEquals(marker, markers[0]))
+                && ReferenceEquals(resolveDeclaredSelect(pair.Key), markers[0]))
             {
-                target.Add(pair.Key, markers[0]);
+                target.Add(new(pair.Key, markers[0]));
             }
         }
     }

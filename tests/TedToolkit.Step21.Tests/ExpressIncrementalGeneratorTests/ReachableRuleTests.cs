@@ -3785,6 +3785,50 @@ public sealed class ReachableRuleTests
           END_IF;
           RETURN(?);
         END_FUNCTION;
+        FUNCTION path_branch_rewrite(
+                     item : carrier;
+                     replacement : value_choice;
+                     change : BOOLEAN) : INTEGER;
+          LOCAL working : carrier := item; END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(working.selected) THEN
+            IF change THEN
+              working.selected := replacement;
+            END_IF;
+            RETURN(first_code(working.selected));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION path_case_rewrite(
+                     item : carrier;
+                     replacement : value_choice;
+                     mode : INTEGER) : INTEGER;
+          LOCAL
+            working : carrier := item;
+            untouched : INTEGER;
+          END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(working.selected) THEN
+            CASE mode OF
+              1 : working.selected := replacement;
+              2 : untouched := 0;
+              OTHERWISE : untouched := 1;
+            END_CASE;
+            RETURN(first_code(working.selected));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION path_repeat_rewrite(
+                     item : carrier;
+                     replacement : value_choice;
+                     repetitions : INTEGER) : INTEGER;
+          LOCAL working : carrier := item; END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(working.selected) THEN
+            REPEAT index := 1 TO repetitions;
+              working.selected := replacement;
+            END_REPEAT;
+            RETURN(first_code(working.selected));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
         FUNCTION opposite_branch_rewrite(
                      left, right, replacement : value_choice;
                      change : BOOLEAN) : INTEGER;
@@ -3850,12 +3894,26 @@ public sealed class ReachableRuleTests
           first : value_choice;
           second : value_choice;
           path_left : carrier;
+          branch_write : carrier;
+          branch_no_write : carrier;
+          case_write : carrier;
+          case_nonwrite : carrier;
+          case_otherwise : carrier;
+          repeat_zero : carrier;
+          repeat_one : carrier;
           alias_value : carrier;
         WHERE
           direct_fact : NOT EXISTS(direct_rewrite(first, second));
           branch_fact : NOT EXISTS(branch_rewrite(first, second, TRUE));
           repeat_fact : NOT EXISTS(repeat_rewrite(first, second));
           path_fact : NOT EXISTS(path_rewrite(path_left, second));
+          path_branch_write : NOT EXISTS(path_branch_rewrite(branch_write, second, TRUE));
+          path_branch_no_write : (path_branch_rewrite(branch_no_write, second, FALSE) = 7);
+          path_case_write : NOT EXISTS(path_case_rewrite(case_write, second, 1));
+          path_case_nonwrite : (path_case_rewrite(case_nonwrite, second, 2) = 7);
+          path_case_otherwise : (path_case_rewrite(case_otherwise, second, 3) = 7);
+          path_repeat_zero : (path_repeat_rewrite(repeat_zero, second, 0) = 7);
+          path_repeat_one : NOT EXISTS(path_repeat_rewrite(repeat_one, second, 1));
           opposite_then_fact : NOT EXISTS(opposite_branch_rewrite(first, first, second, TRUE));
           opposite_else_fact : NOT EXISTS(opposite_branch_rewrite(first, first, second, FALSE));
           case_fact : NOT EXISTS(case_rewrite(first, second, 1));
@@ -3880,6 +3938,13 @@ public sealed class ReachableRuleTests
                 var first = ValueChoice.FromFirstValue(firstValue);
                 var second = ValueChoice.FromSecondValue(secondValue);
                 var pathLeft = new Carrier(first);
+                var branchWrite = new Carrier(first);
+                var branchNoWrite = new Carrier(first);
+                var caseWrite = new Carrier(first);
+                var caseNonwrite = new Carrier(first);
+                var caseOtherwise = new Carrier(first);
+                var repeatZero = new Carrier(first);
+                var repeatOne = new Carrier(first);
                 var aliasValue = new Carrier(first);
                 var structure = new ExchangeStructure(
                     new HeaderSection(
@@ -3893,7 +3958,18 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, secondValue);
                 _ = structure.Add(section, pathLeft);
                 _ = structure.Add(section, aliasValue);
-                _ = structure.Add(section, new Sample(first, second, pathLeft, aliasValue));
+                _ = structure.Add(section, new Sample(
+                    first,
+                    second,
+                    pathLeft,
+                    branchWrite,
+                    branchNoWrite,
+                    caseWrite,
+                    caseNonwrite,
+                    caseOtherwise,
+                    repeatZero,
+                    repeatOne,
+                    aliasValue));
                 return structure.Validate();
             }
         }
