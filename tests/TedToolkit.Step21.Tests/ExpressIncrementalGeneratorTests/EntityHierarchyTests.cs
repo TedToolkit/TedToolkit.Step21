@@ -479,13 +479,13 @@ public sealed class EntityHierarchyTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(leafType.GetProperties().Select(property => property.Name))
-                .IsEquivalentTo(["FirstBaseName", "SecondBaseName", "Code", "DirectReferences"]);
-            await Assert.That(derivedType.GetProperties().Select(property => property.Name))
-                .IsEquivalentTo(["FirstBaseName", "SecondBaseName", "Code", "Enabled", "DirectReferences"]);
+            await Assert.That(leafType.GetProperties().Select(property => property.Name)
+                .SequenceEqual(["FirstBaseName", "SecondBaseName", "Code", "DirectReferences"])).IsTrue();
+            await Assert.That(derivedType.GetProperties().Select(property => property.Name)
+                .SequenceEqual(["FirstBaseName", "SecondBaseName", "Code", "Enabled", "DirectReferences"])).IsTrue();
             await Assert.That(leafType.GetConstructors().Single().GetParameters()
-                .Select(parameter => parameter.Name ?? string.Empty))
-                .IsEquivalentTo(["firstBaseName", "secondBaseName", "code"]);
+                .Select(parameter => parameter.Name ?? string.Empty)
+                .SequenceEqual(["firstBaseName", "secondBaseName", "code"])).IsTrue();
             await Assert.That(firstInterface.GetProperty("Name")!.GetValue(leaf)).IsEqualTo("first");
             await Assert.That(secondInterface.GetProperty("Name")!.GetValue(leaf)).IsEqualTo("second");
             await Assert.That(firstInterface.GetProperty("Name")!.GetValue(derived)).IsEqualTo("derived-first");

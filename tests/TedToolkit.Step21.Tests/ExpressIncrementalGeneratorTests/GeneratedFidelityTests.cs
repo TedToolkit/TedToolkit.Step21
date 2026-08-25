@@ -99,11 +99,11 @@ public sealed class GeneratedFidelityTests
             await Assert.That(descriptorSource).Contains("SchemaName(\"config_control_design\")");
             await Assert.That(descriptor.GetMembers("Name").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("SchemaName");
-            await Assert.That(boundedPcurve.Interfaces.Select(type => type.Name))
-                .IsEquivalentTo(["IPcurve", "IBoundedCurve"]);
+            await Assert.That(boundedPcurve.Interfaces.Select(type => type.Name)
+                .SequenceEqual(["IPcurve", "IBoundedCurve"])).IsTrue();
             await Assert.That(product.Constructors.Single(constructor =>
-                    constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name))
-                .IsEquivalentTo(["id", "name", "description", "frameOfReference"]);
+                    constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name)
+                .SequenceEqual(["id", "name", "description", "frameOfReference"])).IsTrue();
             await Assert.That(product.GetMembers("FrameOfReference").OfType<IPropertySymbol>().Single().Type.ToDisplayString())
                 .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Generated.ConfigControlDesign.IProductContext>");
             await Assert.That(productCategory.GetMembers("Description").OfType<IPropertySymbol>().Single().Type.NullableAnnotation)
@@ -113,11 +113,11 @@ public sealed class GeneratedFidelityTests
             await Assert.That(reversibleSet.GetMembers("Value").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("ExpressSet");
             await Assert.That(aheadOrBehind.GetMembers().OfType<IPropertySymbol>()
-                .Where(property => property.IsStatic).Select(property => property.Name))
-                .IsEquivalentTo(["Ahead", "Behind"]);
+                .Where(property => property.IsStatic).Select(property => property.Name)
+                .SequenceEqual(["Ahead", "Behind"])).IsTrue();
             await Assert.That(axis2PlacementKind.GetMembers().OfType<IFieldSymbol>()
-                .Where(field => field.HasConstantValue).Select(field => field.Name))
-                .IsEquivalentTo(["Axis2Placement2d", "Axis2Placement3d"]);
+                .Where(field => field.HasConstantValue).Select(field => field.Name)
+                .SequenceEqual(["Axis2Placement2d", "Axis2Placement3d"])).IsTrue();
         }
     }
 }

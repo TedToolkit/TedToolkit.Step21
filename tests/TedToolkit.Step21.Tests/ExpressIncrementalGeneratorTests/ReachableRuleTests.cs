@@ -3587,6 +3587,24 @@ public sealed class ReachableRuleTests
           END_REPEAT;
           RETURN(?);
         END_FUNCTION;
+        FUNCTION source_rewrite(values, replacement : LIST [0:?] OF INTEGER) : INTEGER;
+          REPEAT index := 1 TO SIZEOF(values) BY 1;
+            values := replacement;
+            RETURN(values[index]);
+          END_REPEAT;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION branch_source_rewrite(
+                     values, replacement : LIST [0:?] OF INTEGER;
+                     trigger : BOOLEAN) : INTEGER;
+          REPEAT index := 1 TO SIZEOF(values) BY 1;
+            IF trigger THEN
+              values := replacement;
+            END_IF;
+            RETURN(values[index]);
+          END_REPEAT;
+          RETURN(?);
+        END_FUNCTION;
         FUNCTION controls(trigger : BOOLEAN) : LOGICAL;
           LOCAL
             values : LIST [0:?] OF INTEGER := [];
@@ -3600,7 +3618,9 @@ public sealed class ReachableRuleTests
             AND NOT EXISTS(rewritten_alias(values))
             AND NOT EXISTS(different_alias(values, bounds))
             AND NOT EXISTS(branch_rewrite(values, trigger))
-            AND NOT EXISTS(body_rewrite(values)));
+            AND NOT EXISTS(body_rewrite(values))
+            AND NOT EXISTS(source_rewrite(bounds, values))
+            AND NOT EXISTS(branch_source_rewrite(bounds, values, trigger)));
         END_FUNCTION;
         ENTITY sample;
           trigger : BOOLEAN;
@@ -3683,6 +3703,126 @@ public sealed class ReachableRuleTests
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, grid);
                 _ = structure.Add(section, new Sample(grid));
+                return structure.Validate();
+            }
+        }
+        """;
+
+    private const string FLOW_FACT_LIFECYCLE_SCHEMA = """
+        SCHEMA flow_fact_lifecycle_model;
+        ENTITY first_value;
+          code : INTEGER;
+        END_ENTITY;
+        ENTITY second_value;
+          label : STRING;
+        END_ENTITY;
+        TYPE value_choice = SELECT (first_value, second_value);
+        END_TYPE;
+        ENTITY carrier;
+          selected : value_choice;
+        END_ENTITY;
+        FUNCTION first_code(item : first_value) : INTEGER;
+          RETURN(item.code);
+        END_FUNCTION;
+        FUNCTION direct_rewrite(item, replacement : value_choice) : INTEGER;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(item) THEN
+            item := replacement;
+            RETURN(first_code(item));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION branch_rewrite(
+                     item, replacement : value_choice;
+                     change : BOOLEAN) : INTEGER;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(item) THEN
+            IF change THEN
+              item := replacement;
+            END_IF;
+            RETURN(first_code(item));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION repeat_rewrite(item, replacement : value_choice) : INTEGER;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(item) THEN
+            REPEAT index := 1 TO 1 BY 1;
+              item := replacement;
+            END_REPEAT;
+            RETURN(first_code(item));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION path_rewrite(item : carrier; replacement : value_choice) : INTEGER;
+          LOCAL working : carrier := item; END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(working.selected) THEN
+            working.selected := replacement;
+            RETURN(first_code(working.selected));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION unrelated_root_write(left, right : carrier) : INTEGER;
+          LOCAL
+            left_working : carrier := left;
+            right_working : carrier := right;
+          END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(left_working.selected) THEN
+            right_working.selected := right_working.selected;
+            RETURN(first_code(left_working.selected));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION controls(first, second : value_choice; left, right : carrier) : LOGICAL;
+          RETURN(NOT EXISTS(direct_rewrite(first, second))
+            AND NOT EXISTS(branch_rewrite(first, second, TRUE))
+            AND NOT EXISTS(repeat_rewrite(first, second))
+            AND NOT EXISTS(path_rewrite(left, second))
+            AND EXISTS(unrelated_root_write(left, right)));
+        END_FUNCTION;
+        ENTITY sample;
+          first : value_choice;
+          second : value_choice;
+          path_left : carrier;
+          unrelated_left : carrier;
+          right : carrier;
+        WHERE
+          direct_fact : NOT EXISTS(direct_rewrite(first, second));
+          branch_fact : NOT EXISTS(branch_rewrite(first, second, TRUE));
+          repeat_fact : NOT EXISTS(repeat_rewrite(first, second));
+          path_fact : NOT EXISTS(path_rewrite(path_left, second));
+          unrelated_root_fact : EXISTS(unrelated_root_write(unrelated_left, right));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string FLOW_FACT_LIFECYCLE_CONSUMER = """
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.FlowFactLifecycleModel;
+
+        internal static class FlowFactLifecycleConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                var firstValue = new FirstValue(new BigInteger(7));
+                var secondValue = new SecondValue("other");
+                var first = ValueChoice.FromFirstValue(firstValue);
+                var second = ValueChoice.FromSecondValue(secondValue);
+                var pathLeft = new Carrier(first);
+                var unrelatedLeft = new Carrier(first);
+                var right = new Carrier(second);
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["flow fact lifecycle"], "3;1"),
+                        new FileName("flow-fact.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileSchema(["flow_fact_lifecycle_model"])),
+                    [TedToolkit.Step21.Generated.FlowFactLifecycleModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("flow_fact_lifecycle_model"));
+                structure.DataSections.Add(section);
+                _ = structure.Add(section, firstValue);
+                _ = structure.Add(section, secondValue);
+                _ = structure.Add(section, pathLeft);
+                _ = structure.Add(section, unrelatedLeft);
+                _ = structure.Add(section, right);
+                _ = structure.Add(section, new Sample(first, second, pathLeft, unrelatedLeft, right));
                 return structure.Validate();
             }
         }
@@ -5134,7 +5274,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
         var assembly = Emit(result.OutputCompilation);
@@ -7862,6 +8001,8 @@ public sealed class ReachableRuleTests
                          "__ExpressFunction_DifferentAlias",
                          "__ExpressFunction_BranchRewrite",
                          "__ExpressFunction_BodyRewrite",
+                         "__ExpressFunction_SourceRewrite",
+                         "__ExpressFunction_BranchSourceRewrite",
                      })
             {
                 var start = generated.IndexOf(methodName, StringComparison.Ordinal);
@@ -7871,6 +8012,33 @@ public sealed class ReachableRuleTests
                 await Assert.That(method).Contains("(global::System.Numerics.BigInteger?)null");
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies mutable lexical and qualified-path facts are killed and joined by bound identity.
+    /// </summary>
+    [Test]
+    public async Task Should_invalidate_mutable_flow_facts_at_assignments_and_control_flow_joins()
+    {
+        var result = GeneratorHostTests.Run(
+            FLOW_FACT_LIFECYCLE_CONSUMER,
+            ("schemas/flow-fact-lifecycle.exp", FLOW_FACT_LIFECYCLE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType(
+                "FlowFactLifecycleConsumer",
+                throwOnError: true)!
+            .GetMethod(
+                "Validate",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
     }
 
     /// <summary>
