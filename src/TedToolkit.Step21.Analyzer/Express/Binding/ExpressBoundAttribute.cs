@@ -20,18 +20,24 @@ internal sealed class ExpressBoundAttribute
     /// <param name="type">The resolved attribute type.</param>
     /// <param name="isOptional">Whether the explicit attribute is optional.</param>
     /// <param name="span">The attribute declaration span.</param>
+    /// <param name="inverseEntity">The entity that declares the forward role for an inverse attribute.</param>
+    /// <param name="inverseAttributeName">The forward role name for an inverse attribute.</param>
     internal ExpressBoundAttribute(
         string name,
         ExpressAttributeKind kind,
         ExpressBoundType type,
         bool isOptional,
-        ExpressSourceSpan span)
+        ExpressSourceSpan span,
+        ExpressBoundSymbol? inverseEntity = null,
+        string? inverseAttributeName = null)
     {
         Name = name;
         Kind = kind;
         Type = type;
         IsOptional = isOptional;
         Span = span;
+        InverseEntity = inverseEntity;
+        InverseAttributeName = inverseAttributeName;
     }
 
     /// <summary>
@@ -58,4 +64,14 @@ internal sealed class ExpressBoundAttribute
     /// Gets the attribute declaration span.
     /// </summary>
     internal ExpressSourceSpan Span { get; }
+
+    /// <summary>
+    /// Gets the entity that declares the forward role for an inverse attribute.
+    /// </summary>
+    internal ExpressBoundSymbol? InverseEntity { get; }
+
+    /// <summary>
+    /// Gets the forward role name for an inverse attribute.
+    /// </summary>
+    internal string? InverseAttributeName { get; }
 }

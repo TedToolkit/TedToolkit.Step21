@@ -23,6 +23,9 @@ internal static class ExpressStructuralValidationEmitter
     private const string FAILURE_LIST_TYPE =
         "global::System.Collections.Generic.List<global::TedToolkit.Step21.ValidationFailure>";
 
+    private const string POPULATION_TYPE =
+        "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>";
+
     /// <summary>
     /// Creates the generated descriptor validation dispatch method.
     /// </summary>
@@ -100,6 +103,8 @@ internal static class ExpressStructuralValidationEmitter
                 "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>"),
             "entities"));
         method.AddStatement(new CustomExpression($"var failures = new {FAILURE_LIST_TYPE}()"));
+        var temporaryOrdinal = 0;
+        Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
 
         var loop = new ForEachStatement(DataType.Var, "entry", new CustomExpression("entities"));
         loop.AddStatement(new CustomExpression("var recognized = false"));
@@ -109,7 +114,7 @@ internal static class ExpressStructuralValidationEmitter
             var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
                 .AddStatement(new CustomExpression("recognized = true"))
                 .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures)"));
+                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities)"));
             loop.AddStatement(branch);
         }
 
@@ -119,7 +124,7 @@ internal static class ExpressStructuralValidationEmitter
             var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
                 .AddStatement(new CustomExpression("recognized = true"))
                 .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures)"));
+                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities)"));
             loop.AddStatement(branch);
         }
 
@@ -148,7 +153,7 @@ internal static class ExpressStructuralValidationEmitter
         AddUniqueValidation(method, entities, resolver, rulePlan);
         if (executeGlobalRules)
         {
-            AddGlobalRuleValidation(method, rulePlan);
+            AddGlobalRuleValidation(method, rulePlan, allocateTemporaryName);
         }
 
         method.AddStatement(new CustomExpression(
@@ -161,14 +166,16 @@ internal static class ExpressStructuralValidationEmitter
 
     private static void AddGlobalRuleValidation(
         IStatementOwner owner,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName)
     {
         var ruleIndex = 0;
         foreach (var declaration in rulePlan.Schema.Declarations
                      .Where(candidate => candidate.Kind == ExpressDeclarationKind.Rule))
         {
             var head = declaration.Syntax.RequiredChild("ruleHead");
-            var lexicalNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var lexicalNames = new Dictionary<string, (string Code, ExpressBoundType Type)>(
+                StringComparer.OrdinalIgnoreCase);
             foreach (var entityReference in head.ChildRules("entityRef"))
             {
                 var entityName = entityReference.IdentifierToken().Text;
@@ -179,7 +186,29 @@ internal static class ExpressStructuralValidationEmitter
                         && string.Equals(candidate.Name, entityName, StringComparison.OrdinalIgnoreCase));
                 var generatedEntityName = GetGeneratedEntityInterface(rulePlan.Schema.Identity, entity);
                 var populationName = $"rulePopulation{Invariant(ruleIndex++)}";
-                lexicalNames.Add(entityName, populationName);
+                var populations = rulePlan.Schema.NameReferences
+                    .Select(reference => reference.Target)
+                    .Where(candidate => candidate.Kind == ExpressBoundNameKind.Population
+                        && string.Equals(candidate.Name, entityName, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(
+                            candidate.Span.Start.FilePath,
+                            declaration.Syntax.Span.Start.FilePath,
+                            StringComparison.Ordinal)
+                        && (candidate.Span.Start.Line > declaration.Syntax.Span.Start.Line
+                            || (candidate.Span.Start.Line == declaration.Syntax.Span.Start.Line
+                                && candidate.Span.Start.Column >= declaration.Syntax.Span.Start.Column))
+                        && (candidate.Span.End.Line < declaration.Syntax.Span.End.Line
+                            || (candidate.Span.End.Line == declaration.Syntax.Span.End.Line
+                                && candidate.Span.End.Column <= declaration.Syntax.Span.End.Column)))
+                    .Distinct()
+                    .ToArray();
+                if (populations.Length == 0)
+                {
+                    continue;
+                }
+
+                var population = populations.Single();
+                lexicalNames.Add(entityName, (populationName, population.Type!));
                 owner.AddStatement(new CustomExpression(
                     $"var {populationName} = new global::TedToolkit.Step21.ExpressSet<{generatedEntityName}>(0)"));
                 var entryName = $"rulePopulationEntry{Invariant(ruleIndex)}";
@@ -203,7 +232,9 @@ internal static class ExpressStructuralValidationEmitter
                     ExpressReachableRuleEmitter.CreateContext(
                         rulePlan,
                         selfExpression: null,
-                        lexicalNames));
+                        "entities",
+                        lexicalNames,
+                        allocateTemporaryName: allocateTemporaryName));
                 var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
                     ?? $"RULE_{Invariant(index + 1)}";
                 var code = $"{rulePlan.Schema.Name}.RULE.{declaration.Name}.WHERE.{label}"
@@ -276,7 +307,10 @@ internal static class ExpressStructuralValidationEmitter
                 var previousKeyParts = rawPreviousKeyParts.ToArray();
                 for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
                 {
-                    if (attributes[attributeIndex].IsOptional
+                    if ((attributes[attributeIndex].IsOptional
+                            || (attributes[attributeIndex].Kind == ExpressAttributeKind.Derived
+                                && rulePlan.GetDerivedExpression(attributes[attributeIndex])
+                                    .Type.CanBeIndeterminate))
                         && !resolver.Resolve(rulePlan.Schema.Identity, attributes[attributeIndex].Type).IsReferenceType)
                     {
                         keyParts[attributeIndex] = $"({keyParts[attributeIndex]}).Value";
@@ -344,7 +378,7 @@ internal static class ExpressStructuralValidationEmitter
                 + ExpressEntityProjection.ToPascalCase(owner.Name)
                 + "_"
                 + ExpressEntityProjection.ToPascalCase(attribute.Name)
-                + $"({valueExpression})";
+                + $"({valueExpression}, entities)";
         }
 
         return $"{valueExpression}.{ExpressEntityProjection.ToPascalCase(attribute.Name)}";
@@ -357,7 +391,9 @@ internal static class ExpressStructuralValidationEmitter
         ExpressReachableRulePlan rulePlan,
         ref int variable)
     {
-        if (attribute.IsOptional)
+        if (attribute.IsOptional
+            || (attribute.Kind == ExpressAttributeKind.Derived
+                && rulePlan.GetDerivedExpression(attribute).Type.CanBeIndeterminate))
         {
             return $"({valueExpression}) is not null";
         }
@@ -744,8 +780,11 @@ internal static class ExpressStructuralValidationEmitter
         method.AddParameter(SourceComposer.Parameter(new DataType($"I{entity.Name}"), "value"));
         method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
         method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
 
         var variable = 0;
+        var temporaryOrdinal = 0;
+        Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
         for (var index = 0; index < entity.EffectiveAttributes.Count; index++)
         {
             AddAttributeValidation(
@@ -762,10 +801,11 @@ internal static class ExpressStructuralValidationEmitter
                 index,
                 resolver,
                 rulePlan,
+                allocateTemporaryName,
                 ref variable);
         }
 
-        AddEntityWhereValidation(method, entity, rulePlan);
+        AddEntityWhereValidation(method, entity, rulePlan, allocateTemporaryName);
 
         AddSummary(method, $"Validates one {entity.Entity.Name} candidate without mutation.");
         return method;
@@ -791,12 +831,15 @@ internal static class ExpressStructuralValidationEmitter
         method.AddParameter(SourceComposer.Parameter(new DataType(entity.Name), "value"));
         method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
         method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
 
         var context = entity.Leaves[0];
         var attributes = entity.Components
             .SelectMany(ExpressComplexEntityProjection.GetComponentAttributes)
             .ToArray();
         var variable = 0;
+        var temporaryOrdinal = 0;
+        Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
         for (var index = 0; index < attributes.Length; index++)
         {
             AddAttributeValidation(method, context, attributes[index], index, resolver, ref variable);
@@ -807,6 +850,7 @@ internal static class ExpressStructuralValidationEmitter
                 index,
                 resolver,
                 rulePlan,
+                allocateTemporaryName,
                 ref variable);
         }
 
@@ -814,7 +858,7 @@ internal static class ExpressStructuralValidationEmitter
         foreach (var governingEntity in entity.Leaves.SelectMany(leaf =>
                      EntityRuleOwners(entity.Schema, leaf.Entity, visited)))
         {
-            AddEntityWhereValidation(method, context, governingEntity, rulePlan);
+            AddEntityWhereValidation(method, context, governingEntity, rulePlan, allocateTemporaryName);
         }
 
         AddSummary(method, "Validates one supported multi-leaf candidate without duplicate inherited checks.");
@@ -828,6 +872,7 @@ internal static class ExpressStructuralValidationEmitter
         int attributeIndex,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName,
         ref int variable)
     {
         if (!ContainsDefinedTypeWhere(attribute.Type, resolver, new HashSet<ExpressBoundSymbol>()))
@@ -837,7 +882,19 @@ internal static class ExpressStructuralValidationEmitter
 
         var valueName = $"ruleAttribute{Invariant(attributeIndex)}";
         var pathName = $"ruleAttributePath{Invariant(attributeIndex)}";
-        owner.AddStatement(new CustomExpression($"var {valueName} = value.{attribute.Name}"));
+        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Name)}";
+        if (!ReferenceEquals(entity.Schema.Identity, attribute.StorageEntity.Symbol.DeclaringSchema))
+        {
+            storageInterface = "global::TedToolkit.Step21.Generated."
+                + $"{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Symbol.DeclaringSchema.Name)}."
+                + storageInterface;
+        }
+
+        var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+            ? $"value.{attribute.Name}"
+            : $"(({storageInterface})value).{attribute.Name}";
+        owner.AddStatement(new CustomExpression(
+            $"var {valueName} = {valueExpression}"));
         owner.AddStatement(new CustomExpression(
             $"var {pathName} = path + {Literal($".{attribute.Name}")}"));
         var isReference = resolver.Resolve(entity.Schema.Identity, attribute.Type).IsReferenceType;
@@ -854,6 +911,7 @@ internal static class ExpressStructuralValidationEmitter
                 pathName,
                 resolver,
                 rulePlan,
+                allocateTemporaryName,
                 ref variable);
             owner.AddStatement(present);
             return;
@@ -866,6 +924,7 @@ internal static class ExpressStructuralValidationEmitter
             pathName,
             resolver,
             rulePlan,
+            allocateTemporaryName,
             ref variable);
     }
 
@@ -876,6 +935,7 @@ internal static class ExpressStructuralValidationEmitter
         string pathExpression,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName,
         ref int variable)
     {
         if (type is ExpressBoundAggregateType aggregate)
@@ -896,6 +956,7 @@ internal static class ExpressStructuralValidationEmitter
                 $"{pathExpression} + \"[\" + {indexName} + \"]\"",
                 resolver,
                 rulePlan,
+                allocateTemporaryName,
                 ref variable);
             loop.AddStatement(new CustomExpression($"{indexName}++"));
             owner.AddStatement(loop);
@@ -909,7 +970,13 @@ internal static class ExpressStructuralValidationEmitter
         }
 
         var declaration = resolver.GetDefinedType(named.Declaration);
-        AddDefinedTypeWhereRules(owner, declaration, valueExpression, pathExpression, rulePlan);
+        AddDefinedTypeWhereRules(
+            owner,
+            declaration,
+            valueExpression,
+            pathExpression,
+            rulePlan,
+            allocateTemporaryName);
         switch (declaration.UnderlyingType)
         {
             case ExpressBoundEnumerationType:
@@ -937,6 +1004,7 @@ internal static class ExpressStructuralValidationEmitter
                         pathExpression,
                         resolver,
                         rulePlan,
+                        allocateTemporaryName,
                         ref variable);
                     owner.AddStatement(branch);
                 }
@@ -951,6 +1019,7 @@ internal static class ExpressStructuralValidationEmitter
                     pathExpression,
                     resolver,
                     rulePlan,
+                    allocateTemporaryName,
                     ref variable);
                 return;
         }
@@ -961,7 +1030,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressBoundDefinedType declaration,
         string valueExpression,
         string pathExpression,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName)
     {
         var whereClause = declaration.Syntax.ChildRules("whereClause").SingleOrDefault();
         if (whereClause is null)
@@ -976,7 +1046,11 @@ internal static class ExpressStructuralValidationEmitter
             var expression = rulePlan.GetExpression(rule.RequiredChild("expression"));
             var generated = ExpressExpressionEmitter.Emit(
                 expression,
-                ExpressReachableRuleEmitter.CreateContext(rulePlan, valueExpression));
+                ExpressReachableRuleEmitter.CreateContext(
+                    rulePlan,
+                    valueExpression,
+                    "entities",
+                    allocateTemporaryName: allocateTemporaryName));
             var failed = RuleFailureCondition(expression, generated.Code);
             var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
                 ?? $"RULE_{Invariant(index + 1)}";
@@ -1025,14 +1099,15 @@ internal static class ExpressStructuralValidationEmitter
     private static void AddEntityWhereValidation(
         IStatementOwner owner,
         ExpressEntityProjection entity,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName)
     {
         foreach (var governingEntity in EntityRuleOwners(
                      entity.Schema,
                      entity.Entity,
                      new HashSet<ExpressBoundSymbol>()))
         {
-            AddEntityWhereValidation(owner, entity, governingEntity, rulePlan);
+            AddEntityWhereValidation(owner, entity, governingEntity, rulePlan, allocateTemporaryName);
         }
     }
 
@@ -1040,7 +1115,8 @@ internal static class ExpressStructuralValidationEmitter
         IStatementOwner owner,
         ExpressEntityProjection candidateEntity,
         ExpressBoundEntity governingEntity,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        Func<string, string> allocateTemporaryName)
     {
         var whereClause = governingEntity.Syntax.RequiredChild("entityBody")
             .ChildRules("whereClause")
@@ -1058,7 +1134,11 @@ internal static class ExpressStructuralValidationEmitter
             var expression = rulePlan.GetExpression(expressionSyntax);
             var generated = ExpressExpressionEmitter.Emit(
                 expression,
-                ExpressReachableRuleEmitter.CreateContext(rulePlan, "value"));
+                ExpressReachableRuleEmitter.CreateContext(
+                    rulePlan,
+                    "value",
+                    "entities",
+                    allocateTemporaryName: allocateTemporaryName));
             var failed = RuleFailureCondition(expression, generated.Code);
             var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
                 ?? $"RULE_{Invariant(index + 1)}";
@@ -1107,9 +1187,9 @@ internal static class ExpressStructuralValidationEmitter
     {
         return expression.Type.Kind switch
         {
-            ExpressExpressionTypeKind.Boolean => $"!({generatedCode})",
-            ExpressExpressionTypeKind.Logical =>
-                $"({generatedCode}) != global::TedToolkit.Step21.LogicalValue.True",
+            ExpressExpressionTypeKind.Boolean or ExpressExpressionTypeKind.Logical =>
+                $"({ExpressExpressionEmitter.AsLogical(expression, generatedCode)}) "
+                + "!= global::TedToolkit.Step21.LogicalValue.True",
             ExpressExpressionTypeKind.Indeterminate => "true",
             _ => throw new InvalidOperationException(
                 $"WHERE expression '{expression.SourceText}' does not produce BOOLEAN or LOGICAL."),
@@ -1193,7 +1273,19 @@ internal static class ExpressStructuralValidationEmitter
         var prefix = ConstraintPrefix(entity, attribute);
         var valueName = $"attribute{Invariant(attributeIndex)}";
         var pathName = $"attributePath{Invariant(attributeIndex)}";
-        owner.AddStatement(new CustomExpression($"var {valueName} = value.{attribute.Name}"));
+        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Name)}";
+        if (!ReferenceEquals(entity.Schema.Identity, attribute.StorageEntity.Symbol.DeclaringSchema))
+        {
+            storageInterface = "global::TedToolkit.Step21.Generated."
+                + $"{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Symbol.DeclaringSchema.Name)}."
+                + storageInterface;
+        }
+
+        var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+            ? $"value.{attribute.Name}"
+            : $"(({storageInterface})value).{attribute.Name}";
+        owner.AddStatement(new CustomExpression(
+            $"var {valueName} = {valueExpression}"));
         owner.AddStatement(new CustomExpression(
             $"var {pathName} = path + {Literal($".{attribute.Name}")}"));
 

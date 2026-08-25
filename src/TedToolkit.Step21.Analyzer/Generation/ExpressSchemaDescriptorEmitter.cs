@@ -73,7 +73,11 @@ internal static class ExpressSchemaDescriptorEmitter
                 rulePlan));
         }
 
-        foreach (var method in ExpressReachableRuleEmitter.CreateDependencyMethods(rulePlan, resolver))
+        foreach (var method in ExpressReachableRuleEmitter.CreateDependencyMethods(
+                     rulePlan,
+                     resolver,
+                     entities,
+                     complexEntities))
         {
             descriptor.AddMember(method);
         }
@@ -398,7 +402,7 @@ internal static class ExpressSchemaDescriptorEmitter
             hydration = new IfStatement(new CustomExpression(
                     $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}].Kind "
                     + "== global::TedToolkit.Step21.ParameterValueKind.Omitted"))
-                .AddStatement(new CustomExpression($"{typedName}.{attribute.Name} = null"))
+                .AddStatement(new CustomExpression($"{typedName}.{attribute.StorageMemberName} = null"))
                 .Else()
                 .AddStatement(valueBranch);
         }
@@ -571,7 +575,10 @@ internal static class ExpressSchemaDescriptorEmitter
         int index,
         ExpressGeneratedTypeResolver resolver)
     {
-        var value = $"{typedName}.{attribute.Name}";
+        var value = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+            ? $"{typedName}.{attribute.Name}"
+            : $"(({GetGeneratedTypeName(entity.Schema.Identity, attribute.StorageEntity.Symbol)})"
+                + $"{typedName}).{attribute.Name}";
         var physicalValue = attribute.Attribute.IsOptional
             && !resolver.Resolve(entity.Schema.Identity, attribute.Type).IsReferenceType
                 ? $"{value}.Value"
@@ -596,7 +603,7 @@ internal static class ExpressSchemaDescriptorEmitter
         CustomExpression invalid,
         ExpressGeneratedTypeResolver resolver)
     {
-        var target = $"{typedName}.{attribute.Name}";
+        var target = $"{typedName}.{attribute.StorageMemberName}";
         if (attribute.Type is ExpressBoundNamedType namedEntity
             && namedEntity.Declaration.Kind == ExpressDeclarationKind.Entity)
         {

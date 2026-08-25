@@ -130,6 +130,23 @@ public sealed class EntityHierarchyTests
         END_SCHEMA;
         """;
 
+    private const string INHERITED_STORAGE_COLLISION_SCHEMA = """
+        SCHEMA inherited_storage_collision;
+        ENTITY first_base;
+          name : STRING;
+        END_ENTITY;
+        ENTITY second_base;
+          name : STRING;
+        END_ENTITY;
+        ENTITY leaf SUBTYPE OF (first_base, second_base);
+          code : INTEGER;
+        END_ENTITY;
+        ENTITY derived_leaf SUBTYPE OF (leaf);
+          enabled : BOOLEAN;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>
     /// Verifies interface inheritance, class shape, flattened storage, and constructors.
     /// </summary>
@@ -404,6 +421,81 @@ public sealed class EntityHierarchyTests
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
             await Assert.That(holderClass.Constructors.Single().Parameters.Single().Name).IsEqualTo("event");
+        }
+    }
+
+    /// <summary>
+    /// Verifies inherited same-name attributes retain distinct physical storage and interface contracts.
+    /// </summary>
+    [Test]
+    public async Task Should_disambiguate_inherited_same_name_storage_without_changing_slot_order()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/inherited-storage-collision.exp", INHERITED_STORAGE_COLLISION_SCHEMA));
+        var diagnostics = result.Diagnostics
+            .Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var leafType = assembly.GetType(
+            "TedToolkit.Step21.Generated.InheritedStorageCollision.Leaf",
+            throwOnError: true)!;
+        var derivedType = assembly.GetType(
+            "TedToolkit.Step21.Generated.InheritedStorageCollision.DerivedLeaf",
+            throwOnError: true)!;
+        var firstInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.InheritedStorageCollision.IFirstBase",
+            throwOnError: true)!;
+        var secondInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.InheritedStorageCollision.ISecondBase",
+            throwOnError: true)!;
+        var descriptor = (SchemaDescriptor)assembly.GetType(
+            "TedToolkit.Step21.Generated.InheritedStorageCollision.SchemaDescriptor",
+            throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
+        var source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('collision'),'3;1');
+            FILE_NAME('collision.p21','2026-08-24T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('inherited_storage_collision'));
+            ENDSEC;
+            DATA;
+            #1=LEAF('first','second',7);
+            #2=DERIVED_LEAF('derived-first','derived-second',8,.T.);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+        var first = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        var leaf = first.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var derived = first.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+        var output = new StringWriter();
+        first.Write(output);
+        var reread = ExchangeStructure.Read(new StringReader(output.ToString()), [descriptor]);
+        var rereadLeaf = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var rereadDerived = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(leafType.GetProperties().Select(property => property.Name))
+                .IsEquivalentTo(["FirstBaseName", "SecondBaseName", "Code", "DirectReferences"]);
+            await Assert.That(derivedType.GetProperties().Select(property => property.Name))
+                .IsEquivalentTo(["FirstBaseName", "SecondBaseName", "Code", "Enabled", "DirectReferences"]);
+            await Assert.That(leafType.GetConstructors().Single().GetParameters()
+                .Select(parameter => parameter.Name ?? string.Empty))
+                .IsEquivalentTo(["firstBaseName", "secondBaseName", "code"]);
+            await Assert.That(firstInterface.GetProperty("Name")!.GetValue(leaf)).IsEqualTo("first");
+            await Assert.That(secondInterface.GetProperty("Name")!.GetValue(leaf)).IsEqualTo("second");
+            await Assert.That(firstInterface.GetProperty("Name")!.GetValue(derived)).IsEqualTo("derived-first");
+            await Assert.That(secondInterface.GetProperty("Name")!.GetValue(derived)).IsEqualTo("derived-second");
+            await Assert.That(firstInterface.GetProperty("Name")!.GetValue(rereadLeaf)).IsEqualTo("first");
+            await Assert.That(secondInterface.GetProperty("Name")!.GetValue(rereadLeaf)).IsEqualTo("second");
+            await Assert.That(firstInterface.GetProperty("Name")!.GetValue(rereadDerived)).IsEqualTo("derived-first");
+            await Assert.That(secondInterface.GetProperty("Name")!.GetValue(rereadDerived)).IsEqualTo("derived-second");
+            await Assert.That(output.ToString()).Contains("#1=LEAF('first','second',7);");
+            await Assert.That(output.ToString()).Contains("#2=DERIVED_LEAF('derived-first','derived-second',8,.T.);");
         }
     }
 

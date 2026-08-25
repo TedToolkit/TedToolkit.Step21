@@ -71,7 +71,7 @@ internal sealed class ExpressComplexEntityProjection
         foreach (var root in projections)
         {
             var expression = root.Entity.Syntax.DescendantsAndSelf()
-                .SingleOrDefault(rule => rule.Production == "supertypeExpression");
+                .FirstOrDefault(rule => rule.Production == "supertypeExpression");
             if (expression is null)
             {
                 continue;

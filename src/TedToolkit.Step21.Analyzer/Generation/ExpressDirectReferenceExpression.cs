@@ -47,7 +47,7 @@ internal static class ExpressDirectReferenceExpression
         {
             attributeExpressions.Add(CreateValue(
                 attribute.Type,
-                attribute.Name,
+                attribute.StorageMemberName,
                 resolver,
                 ref nextName));
         }
@@ -64,6 +64,22 @@ internal static class ExpressDirectReferenceExpression
         return "global::System.Linq.Enumerable.SelectMany("
             + "global::System.Linq.Enumerable.Repeat(0, 1), "
             + $"_ => {combined})";
+    }
+
+    /// <summary>
+    /// Creates a deferred expression for one reference-bearing value with a caller-supplied generated spelling.
+    /// </summary>
+    /// <param name="type">The bound value type.</param>
+    /// <param name="valueExpression">The generated expression that reads the value.</param>
+    /// <param name="resolver">The closed-set generated value resolver.</param>
+    /// <returns>The generated one-level entity-reference sequence.</returns>
+    internal static string Create(
+        ExpressBoundType type,
+        string valueExpression,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        var nextName = 0;
+        return CreateValue(type, valueExpression, resolver, ref nextName);
     }
 
     private static bool ContainsEntityReference(

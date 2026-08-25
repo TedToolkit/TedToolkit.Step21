@@ -120,6 +120,19 @@ internal sealed class ExpressEntityProjection
     {
         var ownAttributes = ProjectOwnAttributes(entity, valueResolver).ToArray();
         var (flattenedAttributes, effectiveAttributes) = FlattenAttributes(entity, entityBySymbol, valueResolver);
+        foreach (var group in flattenedAttributes
+                     .GroupBy(attribute => attribute.Name, StringComparer.Ordinal)
+                     .Where(group => group
+                         .Select(attribute => (attribute.StorageEntity.Symbol, attribute.StorageAttributeName))
+                         .Distinct()
+                         .Count() > 1))
+        {
+            foreach (var attribute in group)
+            {
+                attribute.DisambiguateStorageMember();
+            }
+        }
+
         var components = CreatePhysicalComponents(entity, entityBySymbol);
         var hasDerivedRedeclaration = ComputeHasDerivedRedeclaration(
             entity,

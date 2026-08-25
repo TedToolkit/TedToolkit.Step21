@@ -96,6 +96,23 @@ internal sealed class BindingTests
         END_SCHEMA;
         """;
 
+    private const string StaticallyBoundIndexSchema = """
+        SCHEMA statically_bound_index;
+        FUNCTION inspect(
+          low, high : INTEGER;
+          fixed_array : ARRAY [2:4] OF INTEGER;
+          dynamic_array : ARRAY [low:high] OF INTEGER;
+          bounded_list : LIST [2:4] OF INTEGER;
+          open_list : LIST [0:?] OF INTEGER;
+          index : INTEGER) : INTEGER;
+          RETURN(fixed_array[2] + fixed_array[4] + fixed_array[1]
+            + dynamic_array[2]
+            + bounded_list[1] + bounded_list[2] + bounded_list[3]
+            + open_list[1] + fixed_array[index]);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
     /// <summary>
     /// Verifies every grammar expression shape becomes source-located typed immutable IR.
     /// </summary>
@@ -156,7 +173,9 @@ internal sealed class BindingTests
                 .IsEqualTo(ExpressExpressionTypeKind.Aggregate);
             await Assert.That(Find(roots, "{0<=total<10}").Type.Kind)
                 .IsEqualTo(ExpressExpressionTypeKind.Logical);
-            await Assert.That(Find(roots, "?").Type.Kind).IsEqualTo(ExpressExpressionTypeKind.Indeterminate);
+            await Assert.That(roots.SelectMany(root => root.DescendantsAndSelf())
+                .Any(expression => expression.SourceText == "?"
+                    && expression.Type.Kind == ExpressExpressionTypeKind.Indeterminate)).IsTrue();
         }
     }
 
@@ -181,6 +200,196 @@ internal sealed class BindingTests
             await Assert.That(initializers.Count()).IsEqualTo(2);
             await Assert.That(initializers.All(expression =>
                 expression.Type.DeclaredType is ExpressBoundAggregateType)).IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies only constant indices guaranteed by declared aggregate bounds are determinate.
+    /// </summary>
+    [Test]
+    public async Task Should_distinguish_statically_safe_indices_from_potentially_missing_elements()
+    {
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("statically-bound-index.exp", StaticallyBoundIndexSchema),
+        ]);
+        await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+        await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+        var roots = compilation.Schemas.Single().Expressions;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(Find(roots, "fixed_array[2]").Type.CanBeIndeterminate).IsFalse();
+            await Assert.That(Find(roots, "fixed_array[4]").Type.CanBeIndeterminate).IsFalse();
+            await Assert.That(Find(roots, "bounded_list[1]").Type.CanBeIndeterminate).IsFalse();
+            await Assert.That(Find(roots, "bounded_list[2]").Type.CanBeIndeterminate).IsFalse();
+            await Assert.That(Find(roots, "fixed_array[1]").Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(Find(roots, "bounded_list[3]").Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(Find(roots, "open_list[1]").Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(Find(roots, "dynamic_array[2]").Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(Find(roots, "fixed_array[index]").Type.CanBeIndeterminate).IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies contextual ARRAY initializers retain indeterminacy from their bounds and children.
+    /// </summary>
+    [Test]
+    public async Task Should_propagate_array_initializer_indeterminacy()
+    {
+        const string source = """
+            SCHEMA array_initializer_indeterminacy;
+            FUNCTION evaluate(values : LIST [0:?] OF INTEGER;
+                              low, high : INTEGER) : LOGICAL;
+              LOCAL
+                dynamic_result : ARRAY [low:high] OF INTEGER;
+                unsafe_result : ARRAY [1:1] OF INTEGER;
+                fixed_result : ARRAY [1:1] OF INTEGER;
+              END_LOCAL;
+              dynamic_result := [1];
+              unsafe_result := [values[1]];
+              fixed_result := [1];
+              RETURN(TRUE);
+            END_FUNCTION;
+            END_SCHEMA;
+            """;
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("array-initializer-indeterminacy.exp", source),
+        ]);
+        var initializers = compilation.Schemas.Single().Expressions
+            .Where(expression => expression.Kind == ExpressExpressionKind.AggregateInitializer)
+            .OrderBy(expression => expression.Span.Start.Line)
+            .ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(initializers).Count().IsEqualTo(3);
+            await Assert.That(initializers[0].Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(initializers[1].Type.CanBeIndeterminate).IsTrue();
+            await Assert.That(initializers[2].Type.CanBeIndeterminate).IsFalse();
+        }
+    }
+
+    /// <summary>
+    /// Verifies only an exact statically folded USEDIN role binds a concrete owner element type.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_only_exact_static_usedin_roles()
+    {
+        const string source = """
+            SCHEMA usedin_role_binding;
+            FUNCTION valid_role(candidate : target) : INTEGER;
+              RETURN(SIZEOF(USEDIN(candidate, 'USEDIN_ROLE_BINDING.' + 'OWNER.ITEM')));
+            END_FUNCTION;
+            FUNCTION unknown_role(candidate : target) : INTEGER;
+              RETURN(SIZEOF(USEDIN(candidate, 'USEDIN_ROLE_BINDING.OWNER.MISSING')));
+            END_FUNCTION;
+            FUNCTION dynamic_role(candidate : target; role_name : STRING) : INTEGER;
+              RETURN(SIZEOF(USEDIN(candidate, role_name)));
+            END_FUNCTION;
+            ENTITY target; END_ENTITY;
+            ENTITY owner;
+              item : target;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("usedin-role-binding.exp", source),
+        ]);
+        var usedIn = compilation.Schemas.Single().Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Where(expression => string.Equals(expression.Operation, "USEDIN", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(expression => expression.Span.Start.Line)
+            .ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(usedIn).Count().IsEqualTo(3);
+            await Assert.That(((ExpressBoundAggregateType)usedIn[0].Type.DeclaredType!).ElementType)
+                .IsTypeOf<ExpressBoundNamedType>();
+            await Assert.That(((ExpressBoundAggregateType)usedIn[1].Type.DeclaredType!).ElementType)
+                .IsTypeOf<ExpressBoundGenericType>();
+            await Assert.That(((ExpressBoundAggregateType)usedIn[2].Type.DeclaredType!).ElementType)
+                .IsTypeOf<ExpressBoundGenericType>();
+        }
+    }
+
+    /// <summary>
+    /// Verifies unlabeled GENERIC_ENTITY is the only generic actual closed to the runtime Entity representation.
+    /// </summary>
+    [Test]
+    public async Task Should_close_only_an_unlabeled_generic_entity_actual()
+    {
+        const string source = """
+            SCHEMA generic_entity_closure;
+            FUNCTION bag_to_set(values : BAG OF GENERIC:t) : SET OF GENERIC:t;
+              LOCAL result : SET OF GENERIC:t := []; END_LOCAL;
+              IF SIZEOF(values) = 0 THEN RETURN(result); END_IF;
+              RETURN(result);
+            END_FUNCTION;
+            FUNCTION entity_actual(candidate : target) : INTEGER;
+              RETURN(SIZEOF(bag_to_set(USEDIN(candidate, ''))));
+            END_FUNCTION;
+            FUNCTION unlabeled_value_actual(values : BAG OF GENERIC) : INTEGER;
+              RETURN(SIZEOF(bag_to_set(values)));
+            END_FUNCTION;
+            FUNCTION conflicting_label_actual(values : BAG OF GENERIC:u) : INTEGER;
+              RETURN(SIZEOF(bag_to_set(values)));
+            END_FUNCTION;
+            FUNCTION explicit_entity(values : BAG OF GENERIC_ENTITY) : SET OF GENERIC_ENTITY;
+              LOCAL result : SET OF GENERIC_ENTITY := []; END_LOCAL;
+              IF SIZEOF(values) = 0 THEN RETURN(result); END_IF;
+              RETURN(result);
+            END_FUNCTION;
+            FUNCTION explicit_entity_control(candidate : target) : SET OF target;
+              LOCAL result : SET OF target := explicit_entity(USEDIN(candidate, '')); END_LOCAL;
+              RETURN(result);
+            END_FUNCTION;
+            ENTITY target; END_ENTITY;
+            END_SCHEMA;
+            """;
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("generic-entity-closure.exp", source),
+        ]);
+        var schema = compilation.Schemas.Single();
+        var calls = schema.Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Where(expression => string.Equals(expression.Operation, "bag_to_set", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(expression => expression.Span.Start.Line)
+            .ToArray();
+        var elements = calls
+            .Select(call => (ExpressBoundGenericType)((ExpressBoundAggregateType)call.Type.DeclaredType!).ElementType)
+            .ToArray();
+        var entityActual = (ExpressBoundGenericType)((ExpressBoundAggregateType)calls[0].Children[0].Type.DeclaredType!).ElementType;
+        var explicitEntityCall = schema.Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Single(expression => string.Equals(
+                expression.Operation,
+                "explicit_entity",
+                StringComparison.OrdinalIgnoreCase));
+        var explicitEntityResult = (ExpressBoundGenericType)((ExpressBoundAggregateType)explicitEntityCall.Type.DeclaredType!).ElementType;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(calls).Count().IsEqualTo(3);
+            await Assert.That(entityActual.IsEntity).IsTrue();
+            await Assert.That(entityActual.TypeLabel).IsNull();
+            await Assert.That(elements[0].IsEntity).IsTrue();
+            await Assert.That(elements[0].TypeLabel).IsNull();
+            await Assert.That(elements[1].IsEntity).IsFalse();
+            await Assert.That(elements[1].TypeLabel).IsEqualTo("t");
+            await Assert.That(elements[2].TypeLabel).IsEqualTo("t");
+            await Assert.That(explicitEntityResult.IsEntity).IsTrue();
+            await Assert.That(explicitEntityResult.TypeLabel).IsNull();
         }
     }
 

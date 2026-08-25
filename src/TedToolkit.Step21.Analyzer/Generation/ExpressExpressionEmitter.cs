@@ -26,7 +26,7 @@ internal static class ExpressExpressionEmitter
     internal static ExpressGeneratedExpression Emit(ExpressBoundExpression expression)
     {
         return Emit(expression, new ExpressExpressionEmissionContext(
-            static reference => throw new InvalidOperationException(
+            static (reference, _, _, _) => throw new InvalidOperationException(
                 $"Reference '{reference.Name}' requires a schema generation context.")));
     }
 
@@ -40,7 +40,8 @@ internal static class ExpressExpressionEmitter
         ExpressBoundExpression expression,
         Func<ExpressBoundName, string> resolveReference)
     {
-        return Emit(expression, new ExpressExpressionEmissionContext(resolveReference));
+        return Emit(expression, new ExpressExpressionEmissionContext(
+            (reference, _, _, _) => resolveReference(reference)));
     }
 
     /// <summary>
@@ -55,7 +56,12 @@ internal static class ExpressExpressionEmitter
     {
         try
         {
-            return new(EmitCode(expression, context), TypeName(expression.Type));
+            var typeName = expression.Type.Kind == ExpressExpressionTypeKind.Generic
+                && expression.Type.DeclaredType is ExpressBoundGenericType { TypeLabel: { } typeLabel, } generic
+                && context.GenericTypeLabels.Contains(typeLabel, StringComparer.OrdinalIgnoreCase)
+                    ? BoundTypeName(generic)
+                    : TypeName(expression.Type);
+            return new(EmitCode(expression, context), typeName);
         }
         catch (InvalidOperationException exception) when (!IsSourceLocated(expression, exception))
         {
@@ -146,6 +152,7 @@ internal static class ExpressExpressionEmitter
         {
             return GuardIndeterminate(
                 expression,
+                context,
                 [operand,],
                 [code,],
                 codes => EmitUnaryCore(expression, operand, codes[0]));
@@ -172,6 +179,41 @@ internal static class ExpressExpressionEmitter
         ExpressBoundExpression expression,
         ExpressExpressionEmissionContext context)
     {
+        if (expression.Operation == "||"
+            && expression.Children.All(child => child.Type.Kind == ExpressExpressionTypeKind.Entity)
+            && context.ResolveModelFunction is not null)
+        {
+            var components = new List<ExpressBoundExpression>() { expression, };
+            for (var index = 0; index < components.Count; index++)
+            {
+                var component = components[index];
+                if (component.Kind == ExpressExpressionKind.Binary
+                    && component.Operation == "||"
+                    && component.Children.All(child => child.Type.Kind == ExpressExpressionTypeKind.Entity))
+                {
+                    components.RemoveAt(index);
+                    components.InsertRange(index, component.Children);
+                    index--;
+                }
+            }
+
+            var componentArguments = components.SelectMany(component =>
+                    component.Kind == ExpressExpressionKind.Application
+                    && component.Reference?.Kind == ExpressBoundNameKind.Entity
+                        ? component.Children
+                        : [component,])
+                .ToArray();
+            var arguments = componentArguments
+                .Select(argument => EmitCode(argument, context))
+                .ToArray();
+            return GuardIndeterminate(
+                expression,
+                context,
+                componentArguments,
+                arguments,
+                codes => context.ResolveModelFunction("COMPLEX_CONSTRUCTOR", expression, codes));
+        }
+
         var left = expression.Children[0];
         var right = expression.Children[1];
         var leftCode = EmitCode(left, context);
@@ -182,6 +224,7 @@ internal static class ExpressExpressionEmitter
         {
             return GuardIndeterminate(
                 expression,
+                context,
                 [left, right,],
                 [leftCode, rightCode,],
                 codes => EmitBinaryCore(expression, operation, left, codes[0], right, codes[1], context));
@@ -205,7 +248,7 @@ internal static class ExpressExpressionEmitter
                 $"new global::TedToolkit.Step21.BinaryValue(global::System.String.Concat(({leftCode}).ToString(), ({rightCode}).ToString()))",
             "+" or "-" or "*" when left.Type.Kind == ExpressExpressionTypeKind.Aggregate
                 || right.Type.Kind == ExpressExpressionTypeKind.Aggregate =>
-                EmitAggregateBinary(expression, operation, left, leftCode, right, rightCode),
+                EmitAggregateBinary(expression, operation, left, leftCode, right, rightCode, context),
             "+" or "-" or "*" or "/" => EmitNumericBinary(
                 expression,
                 operation,
@@ -223,7 +266,7 @@ internal static class ExpressExpressionEmitter
             "||" when left.Type.Kind == ExpressExpressionTypeKind.Entity
                 && right.Type.Kind == ExpressExpressionTypeKind.Entity
                 && context.ResolveModelFunction is not null =>
-                context.ResolveModelFunction("COMPLEX_CONSTRUCTOR", [leftCode, rightCode,]),
+                context.ResolveModelFunction("COMPLEX_CONSTRUCTOR", expression, [leftCode, rightCode,]),
             "||" when left.Type.Kind == ExpressExpressionTypeKind.Entity
                 && right.Type.Kind == ExpressExpressionTypeKind.Entity => throw GenerationError(
                     expression,
@@ -234,14 +277,20 @@ internal static class ExpressExpressionEmitter
             "XOR" => EmitLogicalBinary("XOR", AsLogical(left, leftCode), AsLogical(right, rightCode)),
             "=" => EmitValueComparison(expression, left, leftCode, right, rightCode, context, negated: false),
             "<>" => EmitValueComparison(expression, left, leftCode, right, rightCode, context, negated: true),
-            ":=:" => LogicalComparison(InstanceEquality(expression, left, leftCode, right, rightCode, context)),
+            ":=:" => LogicalComparison(InstanceEquality(
+                expression,
+                left,
+                leftCode,
+                right,
+                rightCode,
+                context)),
             ":<>:" => LogicalComparison(
                 $"!({InstanceEquality(expression, left, leftCode, right, rightCode, context)})"),
             "<=" or ">=" when left.Type.Kind == ExpressExpressionTypeKind.Aggregate =>
                 LogicalComparison(AggregateSubset(operation, left, leftCode, rightCode)),
             "<" or "<=" or ">" or ">=" => LogicalComparison(
-                OrderedComparison(operation, left, leftCode, right, rightCode)),
-            "IN" => EmitMembership(expression, leftCode, right, rightCode),
+                OrderedComparison(operation, left, leftCode, right, rightCode, context)),
+            "IN" => EmitMembership(expression, left, leftCode, right, rightCode, context),
             "LIKE" => LogicalComparison(LikeMatch(leftCode, rightCode)),
             _ => throw new InvalidOperationException($"Operation '{expression.Operation}' is not statically generated."),
         };
@@ -293,6 +342,7 @@ internal static class ExpressExpressionEmitter
         };
         var body = GuardIndeterminate(
             expression,
+            context,
             expression.Children,
             variables,
             codes =>
@@ -302,13 +352,15 @@ internal static class ExpressExpressionEmitter
                     expression.Children[0],
                     codes[0],
                     expression.Children[1],
-                    codes[1]));
+                    codes[1],
+                    context));
                 var upper = LogicalComparison(OrderedComparison(
                     operations[1],
                     expression.Children[1],
                     codes[1],
                     expression.Children[2],
-                    codes[2]));
+                    codes[2],
+                    context));
                 return EmitLogicalBinary("AND", lower, upper);
             });
         return $"(({low}), ({item}), ({high})) switch {{ "
@@ -321,7 +373,7 @@ internal static class ExpressExpressionEmitter
     {
         if (expression.Reference is not null)
         {
-            return UnwrapDefined(expression.Type, context.ResolveReference(expression.Reference));
+            return UnwrapDefined(expression.Type, context.ResolveReference(expression.Reference, null, null, null), context);
         }
 
         return expression.Operation?.ToUpperInvariant() switch
@@ -330,7 +382,8 @@ internal static class ExpressExpressionEmitter
             "PI" => EmitReal("3.141592653589793"),
             "SELF" when context.SelfExpression is not null => UnwrapDefined(
                 expression.Type,
-                context.SelfExpression),
+                context.SelfExpression,
+                context),
             "SELF" => throw GenerationError(expression, "SELF requires an enclosing generated entity operation."),
             _ => throw new InvalidOperationException(
                 $"Reference '{expression.SourceText}' has no resolved static target."),
@@ -351,6 +404,7 @@ internal static class ExpressExpressionEmitter
             {
                 return GuardIndeterminate(
                     expression,
+                    context,
                     expression.Children,
                     arguments,
                     codes => EmitBuiltIn(expression, codes, context));
@@ -362,17 +416,26 @@ internal static class ExpressExpressionEmitter
         var target = expression.Reference.Kind == ExpressBoundNameKind.Entity
             && expression.Reference.SchemaDeclaration is { } entity
                 ? $"new {GeneratedTypeName(entity, entityInterface: false)}"
-                : context.ResolveReference(expression.Reference);
+                : context.ResolveReference(expression.Reference, null, null, null);
+        string Invoke(IReadOnlyList<string> codes)
+        {
+            return context.ResolveApplication is not null
+                && expression.Reference.Kind is ExpressBoundNameKind.Function or ExpressBoundNameKind.Entity
+                    ? context.ResolveApplication(expression, codes)
+                    : $"{target}({string.Join(", ", codes)})";
+        }
+
         if (expression.Children.Any(child => child.Type.CanBeIndeterminate))
         {
             return GuardIndeterminate(
                 expression,
+                context,
                 expression.Children,
                 arguments,
-                codes => UnwrapDefined(expression.Type, $"{target}({string.Join(", ", codes)})"));
+                codes => UnwrapDefined(expression.Type, Invoke(codes), context));
         }
 
-        return UnwrapDefined(expression.Type, $"{target}({string.Join(", ", arguments)})");
+        return UnwrapDefined(expression.Type, Invoke(arguments), context);
     }
 
     private static string EmitAttribute(
@@ -394,23 +457,26 @@ internal static class ExpressExpressionEmitter
         {
             return context.ResolveAttribute is null
                 ? $"({candidate}).{ExpressEntityProjection.ToPascalCase(reference.Name)}"
-                : context.ResolveAttribute(reference, candidate);
+                : context.ResolveAttribute(expression.Children[0], reference, candidate);
         }
 
         if (expression.Children[0].Type.CanBeIndeterminate)
         {
             return GuardIndeterminate(
                 expression,
+                context,
                 expression.Children,
                 [source,],
                 codes => UnwrapDefined(
                     expression.Type,
-                    Access(codes[0])));
+                    Access(codes[0]),
+                    context));
         }
 
         return UnwrapDefined(
             expression.Type,
-            Access(source));
+            Access(source),
+            context);
     }
 
     private static string EmitGroup(
@@ -420,17 +486,27 @@ internal static class ExpressExpressionEmitter
         var reference = expression.Reference?.SchemaDeclaration
             ?? throw new InvalidOperationException(
                 $"Group expression '{expression.SourceText}' has no resolved entity.");
-        var source = EmitCode(expression.Children.Single(), context);
+        var sourceExpression = expression.Children.Single();
+        var source = EmitCode(sourceExpression, context);
+        string Access(string candidate)
+        {
+            return sourceExpression.Type.Kind == ExpressExpressionTypeKind.Select
+                && context.ResolveAttribute is not null
+                    ? context.ResolveAttribute(sourceExpression, expression.Reference!, candidate)
+                    : $"(({GeneratedTypeName(reference, entityInterface: true)})({candidate}))";
+        }
+
         if (expression.Children[0].Type.CanBeIndeterminate)
         {
             return GuardIndeterminate(
                 expression,
+                context,
                 expression.Children,
                 [source,],
-                codes => $"(({GeneratedTypeName(reference, entityInterface: true)})({codes[0]}))");
+                codes => Access(codes[0]));
         }
 
-        return $"(({GeneratedTypeName(reference, entityInterface: true)})({source}))";
+        return Access(source);
     }
 
     private static string EmitIndex(
@@ -443,29 +519,45 @@ internal static class ExpressExpressionEmitter
         var codes = expression.Children.Count == 2
             ? new[] { source, index, }
             : new[] { source, index, EmitCode(expression.Children[2], context), };
+        var isProvenPresent = sourceExpression.Type.DeclaredType is ExpressBoundAggregateType
+        { Kind: ExpressAggregateKind.List or ExpressAggregateKind.Bag, }
+            && (context.SafeIndices.Any(safeIndex =>
+                    ReferenceEquals(sourceExpression.Reference, safeIndex.Key)
+                    && ReferenceEquals(expression.Children[1].Reference, safeIndex.Value))
+                || context.IsKnownDeterminate?.Invoke(expression) == true);
         return GuardIndeterminate(
             expression,
+            context,
             expression.Children,
             codes,
-            present => EmitIndexCore(expression, sourceExpression, present));
+            present => EmitIndexCore(expression, sourceExpression, present, isProvenPresent, context));
     }
 
     private static string EmitIndexCore(
         ExpressBoundExpression expression,
         ExpressBoundExpression sourceExpression,
-        string[] codes)
+        string[] codes,
+        bool isProvenPresent,
+        ExpressExpressionEmissionContext context)
     {
         var source = codes[0];
         var index = codes[1];
+        var indexValue = expression.Children[1].Type.Kind == ExpressExpressionTypeKind.Number
+            ? $"({index}).ToIntegerTruncated()"
+            : index;
         var suffix = expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
             + "_"
             + expression.Span.Start.Column.ToString(CultureInfo.InvariantCulture);
         var value = "__expressIndexed_" + suffix;
         var position = "__expressIndex_" + suffix;
-        var nullValue = $"({TypeName(expression.Type.WithIndeterminate(false))}?)null";
+        var resultType = expression.Type.Kind == ExpressExpressionTypeKind.Generic
+            && sourceExpression.Type.DeclaredType is ExpressBoundAggregateType genericSource
+            ? BoundTypeName(genericSource.ElementType)
+            : TypeName(expression.Type.WithIndeterminate(false));
+        var nullValue = $"({resultType}?)null";
         if (sourceExpression.Type.Kind == ExpressExpressionTypeKind.Binary)
         {
-            return $"(({source}), checked((int)({index}))) switch {{ "
+            return $"(({source}), checked((int)({indexValue}))) switch {{ "
                 + $"var ({value}, {position}) when {position} >= 1 && {position} <= {value}.Length => "
                 + $"new global::TedToolkit.Step21.BinaryValue({value}.ToString().Substring({position} - 1, 1)), "
                 + $"_ => {nullValue} }}";
@@ -473,29 +565,48 @@ internal static class ExpressExpressionEmitter
 
         if (sourceExpression.Type.Kind == ExpressExpressionTypeKind.String)
         {
-            return $"(({source}), checked((int)({index}))) switch {{ "
+            return $"(({source}), checked((int)({indexValue}))) switch {{ "
                 + $"var ({value}, {position}) when {position} >= 1 && {position} <= {value}.Length => "
                 + $"{value}.Substring({position} - 1, 1), _ => {nullValue} }}";
         }
 
         var aggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
+        if (isProvenPresent)
+        {
+            var presentValue = aggregate.Kind is ExpressAggregateKind.Bag or ExpressAggregateKind.Set
+                ? $"global::System.Linq.Enumerable.ElementAt({source}, checked((int)({indexValue})) - 1)"
+                : $"{source}[checked((int)({indexValue})) - 1]";
+            return UnwrapDefined(
+                expression.Type,
+                presentValue,
+                context);
+        }
+
+        var endIndexValue = "";
+        if (codes.Length == 3)
+        {
+            endIndexValue = expression.Children[2].Type.Kind == ExpressExpressionTypeKind.Number
+                ? $"({codes[2]}).ToIntegerTruncated()"
+                : codes[2];
+        }
+
         var samePosition = codes.Length == 3
-            ? $" && {position} == checked((int)({codes[2]}))"
+            ? $" && {position} == checked((int)({endIndexValue}))"
             : "";
         if (aggregate.Kind == ExpressAggregateKind.Array)
         {
             var item = "__expressItem_" + suffix;
-            return $"(({source}), checked((int)({index}))) switch {{ "
+            return $"(({source}), checked((int)({indexValue}))) switch {{ "
                 + $"var ({value}, {position}) when {position} >= {value}.LowerIndex "
                 + $"&& {position} <= {value}.UpperIndex{samePosition} "
                 + $"&& {value}.TryGetValue({position}, out var {item}) => "
-                + $"{UnwrapDefined(expression.Type, item)}, _ => {nullValue} }}";
+                + $"{UnwrapDefined(expression.Type, item, context)}, _ => {nullValue} }}";
         }
 
-        return $"(({source}), checked((int)({index}))) switch {{ "
+        return $"(({source}), checked((int)({indexValue}))) switch {{ "
             + $"var ({value}, {position}) when {position} >= 1 "
             + $"&& {position} <= global::System.Linq.Enumerable.Count({value}){samePosition} => "
-            + $"{UnwrapDefined(expression.Type, $"global::System.Linq.Enumerable.ElementAt({value}, {position} - 1)")}, "
+            + $"{UnwrapDefined(expression.Type, $"global::System.Linq.Enumerable.ElementAt({value}, {position} - 1)", context)}, "
             + $"_ => {nullValue} }}";
     }
 
@@ -509,6 +620,7 @@ internal static class ExpressExpressionEmitter
         var high = EmitCode(expression.Children[2], context);
         return GuardIndeterminate(
             expression,
+            context,
             expression.Children,
             [source, low, high,],
             codes => EmitSliceCore(expression, sourceExpression, codes));
@@ -565,24 +677,39 @@ internal static class ExpressExpressionEmitter
             return EmitArrayAggregate(expression, aggregate, context, dynamicRepetitions);
         }
 
-        var items = expression.Children.Select(child =>
-        {
-            if (child.Kind != ExpressExpressionKind.Repetition)
+        var elementExpressions = expression.Children
+            .Select(child => child.Kind == ExpressExpressionKind.Repetition ? child.Children[0] : child)
+            .ToArray();
+        var elementCodes = elementExpressions
+            .Select(child => EmitCode(child, context))
+            .ToArray();
+        var aggregateCode = GuardIndeterminate(
+            expression,
+            context,
+            elementExpressions,
+            elementCodes,
+            presentCodes =>
             {
-                return ConvertAggregateElement(child, EmitCode(child, context), aggregate.ElementType);
-            }
+                var items = expression.Children.Select((child, index) =>
+                {
+                    if (child.Kind != ExpressExpressionKind.Repetition)
+                    {
+                        return ConvertAggregateElement(child, presentCodes[index], aggregate.ElementType);
+                    }
 
-            var dynamicRepetition = dynamicRepetitions.SingleOrDefault(item => ReferenceEquals(item.Child, child));
-            var count = dynamicRepetition.Child is null
-                ? EmitCode(child.Children[1], context)
-                : dynamicRepetition.Variable;
-            return "..global::System.Linq.Enumerable.Repeat("
-                + $"{ConvertAggregateElement(child.Children[0], EmitCode(child.Children[0], context), aggregate.ElementType)}, "
-                + $"checked((int)({count})))";
-        });
-        var itemCodes = items.ToArray();
+                    var dynamicRepetition = dynamicRepetitions.SingleOrDefault(item =>
+                        ReferenceEquals(item.Child, child));
+                    var count = dynamicRepetition.Child is null
+                        ? EmitCode(child.Children[1], context)
+                        : dynamicRepetition.Variable;
+                    return "..global::System.Linq.Enumerable.Repeat("
+                        + $"{ConvertAggregateElement(child.Children[0], presentCodes[index], aggregate.ElementType)}, "
+                        + $"checked((int)({count})))";
+                });
+                var resultType = TypeName(expression.Type.WithIndeterminate(false));
+                return $"({resultType})[{string.Join(", ", items)}]";
+            });
         var resultType = TypeName(expression.Type.WithIndeterminate(false));
-        var aggregateCode = $"({resultType})[{string.Join(", ", itemCodes)}]";
         return GuardDynamicRepetitions(dynamicRepetitions, resultType, aggregateCode);
     }
 
@@ -602,13 +729,51 @@ internal static class ExpressExpressionEmitter
     {
         var lowerText = aggregate.ResolvedLowerBoundText ?? aggregate.LowerBoundText;
         var upperText = aggregate.ResolvedUpperBoundText ?? aggregate.UpperBoundText;
-        if (!int.TryParse(lowerText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lower)
-            || !int.TryParse(upperText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var upper))
+        var hasStaticLower = int.TryParse(
+            lowerText,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var lower);
+        var hasStaticUpper = int.TryParse(
+            upperText,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var upper);
+        var lexicalLower = hasStaticLower ? null : context.ResolveLexicalBound?.Invoke(aggregate.LowerBoundText ?? "");
+        var lexicalUpper = hasStaticUpper ? null : context.ResolveLexicalBound?.Invoke(aggregate.UpperBoundText ?? "");
+        if ((!hasStaticLower && lexicalLower is null)
+            || (!hasStaticUpper && lexicalUpper is null))
         {
             throw GenerationError(
                 expression,
-                "ARRAY initializer generation requires statically integral declared bounds.");
+                "ARRAY initializer generation requires static or lexical numeric declared bounds.");
         }
+
+        string lowerCode;
+        if (hasStaticLower)
+        {
+            lowerCode = lower.ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            lowerCode = lexicalLower!.Value.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, }
+                ? $"checked((int)({lexicalLower.Value.Code}).ToIntegerTruncated())"
+                : $"checked((int)({lexicalLower.Value.Code}))";
+        }
+
+        string upperCode;
+        if (hasStaticUpper)
+        {
+            upperCode = upper.ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            upperCode = lexicalUpper!.Value.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, }
+                ? $"checked((int)({lexicalUpper.Value.Code}).ToIntegerTruncated())"
+                : $"checked((int)({lexicalUpper.Value.Code}))";
+        }
+
+        var hasStaticBounds = hasStaticLower && hasStaticUpper;
 
         var staticCardinality = expression.Children.Aggregate(0, (count, child) =>
         {
@@ -621,7 +786,9 @@ internal static class ExpressExpressionEmitter
                 ? checked(count + int.Parse(child.Children[1].SourceText, CultureInfo.InvariantCulture))
                 : count;
         });
-        if (dynamicRepetitions.Length == 0 && staticCardinality != upper - lower + 1)
+        if (hasStaticBounds
+            && dynamicRepetitions.Length == 0
+            && staticCardinality != upper - lower + 1)
         {
             throw GenerationError(
                 expression,
@@ -635,13 +802,78 @@ internal static class ExpressExpressionEmitter
         var result = "__expressArray_" + suffix;
         var values = "__expressArrayValues_" + suffix;
         var index = "__expressArrayIndex_" + suffix;
+        var lowerIndex = "__expressArrayLower_" + suffix;
+        var upperIndex = "__expressArrayUpper_" + suffix;
         var elementType = BoundTypeName(aggregate.ElementType);
+        var guardedGenericIndices = hasStaticBounds
+            ? []
+            : expression.Children
+                .Select(child => child.Kind == ExpressExpressionKind.Repetition ? child.Children[0] : child)
+                .Where(value => value.Kind == ExpressExpressionKind.IndexQualifier
+                    && value.Type.Kind == ExpressExpressionTypeKind.Generic
+                    && value.Children.Count == 2
+                    && value.Children[0].Kind == ExpressExpressionKind.Reference
+                    && !value.Children[0].Type.CanBeIndeterminate
+                    && value.Children[0].Type.DeclaredType is ExpressBoundAggregateType
+                    {
+                        Kind: ExpressAggregateKind.List,
+                    })
+                .Select(value =>
+                {
+                    var location = value.Span.Start;
+                    var itemVariable = "__expressArrayItem_"
+                        + location.Line.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + location.Column.ToString(CultureInfo.InvariantCulture);
+                    var positionVariable = "__expressArrayItemIndex_"
+                        + location.Line.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + location.Column.ToString(CultureInfo.InvariantCulture);
+                    var sourceCode = EmitCode(value.Children[0], context);
+                    var indexCode = EmitCode(value.Children[1], context);
+                    var positionCode = value.Children[1].Type.Kind == ExpressExpressionTypeKind.Number
+                        ? $"checked((int)({indexCode}).ToIntegerTruncated())"
+                        : $"checked((int)({indexCode}))";
+                    var guard = $"var {positionVariable} = {positionCode}; "
+                        + $"if ({positionVariable} < 1 "
+                        + $"|| {positionVariable} > global::System.Linq.Enumerable.Count({sourceCode}) "
+                        + $"|| global::System.Linq.Enumerable.ElementAt({sourceCode}, {positionVariable} - 1) "
+                        + $"is not {{ }} {itemVariable}) return null; ";
+                    return (Value: value, Variable: itemVariable, Guard: guard);
+                })
+                .ToArray();
         var items = expression.Children.Select(child =>
         {
             var value = child.Kind == ExpressExpressionKind.Repetition ? child.Children[0] : child;
-            var item = value.Kind == ExpressExpressionKind.Indeterminate
-                ? $"(false, default({elementType})!)"
-                : $"(true, {ConvertAggregateElement(value, EmitCode(value, context), aggregate.ElementType)})";
+            var guarded = guardedGenericIndices.SingleOrDefault(candidate => ReferenceEquals(candidate.Value, value));
+            string item;
+            if (guarded.Value is not null)
+            {
+                item = $"(true, new {elementType}[] {{ {guarded.Variable} }})";
+            }
+            else if (value.Kind == ExpressExpressionKind.Indeterminate)
+            {
+                item = $"(false, global::System.Array.Empty<{elementType}>())";
+            }
+            else if (aggregate.IsOptional && value.Type.CanBeIndeterminate)
+            {
+                var presentValue = context.AllocateTemporaryName(
+                    "__expressOptionalElement_"
+                    + value.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                    + "_"
+                    + value.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                    + "_");
+                item = $"(({EmitCode(value, context)}) is {{ }} {presentValue} "
+                    + $"? (true, new {elementType}[] {{ "
+                    + $"{ConvertAggregateElement(value, presentValue, aggregate.ElementType)} }}) "
+                    + $": (false, global::System.Array.Empty<{elementType}>()))";
+            }
+            else
+            {
+                item = $"(true, new {elementType}[] {{ "
+                    + $"{ConvertAggregateElement(value, EmitCode(value, context), aggregate.ElementType)} }})";
+            }
+
             if (child.Kind != ExpressExpressionKind.Repetition)
             {
                 return item;
@@ -654,18 +886,29 @@ internal static class ExpressExpressionEmitter
                 : dynamicRepetition.Variable;
             return $"..global::System.Linq.Enumerable.Repeat({item}, checked((int)({count})))";
         });
+        var generatedLower = hasStaticBounds ? lowerCode : lowerIndex;
+        var generatedUpper = hasStaticBounds ? upperCode : upperIndex;
+        var lexicalBounds = hasStaticBounds
+            ? ""
+            : $"var {lowerIndex} = {lowerCode}; var {upperIndex} = {upperCode}; "
+                + $"if ({upperIndex} < {lowerIndex}) return null; "
+                + string.Concat(guardedGenericIndices.Select(item => item.Guard));
+        var cardinality = hasStaticBounds
+            ? (upper - lower + 1).ToString(CultureInfo.InvariantCulture)
+            : $"((long)({upperIndex}) - ({lowerIndex}) + 1L)";
         var arrayCode = $"((global::System.Func<{resultType}{(expression.Type.CanBeIndeterminate ? "?" : "")}>)(() => {{ "
-            + $"var {values} = ((bool IsSet, {elementType} Value)[])[{string.Join(", ", items)}]; "
+            + lexicalBounds
+            + $"var {values} = ((bool IsSet, {elementType}[] Values)[])[{string.Join(", ", items)}]; "
             + (expression.Type.CanBeIndeterminate
-                ? $"if ({values}.Length != {(upper - lower + 1).ToString(CultureInfo.InvariantCulture)}) return null; "
+                ? $"if ({values}.LongLength != {cardinality}) return null; "
                 : "")
             + $"var {result} = new {resultType}("
-            + $"{lower.ToString(CultureInfo.InvariantCulture)}, {upper.ToString(CultureInfo.InvariantCulture)}, "
+            + $"{generatedLower}, {generatedUpper}, "
             + $"isOptional: {(aggregate.IsOptional ? "true" : "false")}, "
             + $"isUnique: {(aggregate.IsUnique ? "true" : "false")}); "
             + $"for (var {index} = 0; {index} < {values}.Length; {index}++) "
             + $"{{ if ({values}[{index}].IsSet) "
-            + $"{result}[{lower.ToString(CultureInfo.InvariantCulture)} + {index}] = {values}[{index}].Value; }} "
+            + $"{result}[checked({generatedLower} + {index})] = {values}[{index}].Values[0]; }} "
             + $"return {result}; }}))()";
         return GuardDynamicRepetitions(dynamicRepetitions, resultType, arrayCode);
     }
@@ -715,23 +958,42 @@ internal static class ExpressExpressionEmitter
         var source = EmitCode(sourceExpression, context);
         var variableName = "__query_" + ExpressEntityProjection.ToPascalCase(expression.Operation!);
         var predicate = expression.Children[1];
-        string ResolveQueryReference(ExpressBoundName reference)
+        string ResolveQueryReference(
+            ExpressBoundName reference,
+            ExpressBoundType? narrowedType,
+            string? narrowedCode,
+            ExpressBoundSymbol? narrowedAlternative)
         {
             return reference.Kind == ExpressBoundNameKind.QueryVariable
                 && string.Equals(reference.Name, expression.Operation, StringComparison.OrdinalIgnoreCase)
                     ? variableName
-                    : context.ResolveReference(reference);
+                    : context.ResolveReference(reference, narrowedType, narrowedCode, narrowedAlternative);
         }
 
         var predicateCode = EmitCode(predicate, context.WithReferenceResolver(ResolveQueryReference));
-        var condition = predicate.Type.Kind == ExpressExpressionTypeKind.Boolean
-            ? predicateCode
-            : $"({predicateCode}) == global::TedToolkit.Step21.LogicalValue.True";
+        var condition = $"({AsLogical(predicate, predicateCode)}) "
+            + "== global::TedToolkit.Step21.LogicalValue.True";
+        var sourceAggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
+        var resultAggregate = expression.Type.DeclaredType as ExpressBoundAggregateType
+            ?? throw new InvalidOperationException("A QUERY result must retain its aggregate type.");
+        var resultValue = variableName;
+        if (!ReferenceEquals(sourceAggregate.ElementType, resultAggregate.ElementType)
+            && expression.Reference is { } queryVariable
+            && resultAggregate.ElementType is ExpressBoundNamedType narrowedElement)
+        {
+            resultValue = context.ResolveReference(
+                queryVariable,
+                sourceAggregate.ElementType,
+                variableName,
+                narrowedElement.Declaration);
+        }
+
         return GuardIndeterminate(
             expression,
+            context,
             [sourceExpression,],
             [source,],
-            codes => EmitQueryCore(expression, sourceExpression, codes[0], variableName, condition));
+            codes => EmitQueryCore(expression, sourceExpression, codes[0], variableName, resultValue, condition));
     }
 
     private static string EmitQueryCore(
@@ -739,9 +1001,11 @@ internal static class ExpressExpressionEmitter
         ExpressBoundExpression sourceExpression,
         string source,
         string variableName,
+        string resultValue,
         string condition)
     {
         var aggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
+        var sourceType = TypeName(sourceExpression.Type.WithIndeterminate(false));
         var resultType = TypeName(expression.Type.WithIndeterminate(false));
         var elementType = BoundTypeName(aggregate.ElementType);
         var suffix = expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
@@ -766,15 +1030,15 @@ internal static class ExpressExpressionEmitter
             var index = "__expressQueryIndex_" + suffix;
             body = $"for (var {index} = {input}.LowerIndex; {index} <= {input}.UpperIndex; {index}++) {{ "
                 + $"if ({input}.TryGetValue({index}, out var {variableName}) && ({condition})) "
-                + $"{{ {result}[{index}] = {variableName}; }} }}";
+                + $"{{ {result}[{index}] = {resultValue}; }} }}";
         }
         else
         {
             body = $"foreach (var {variableName} in {input}) {{ if ({condition}) "
-                + $"{{ {result}.Add({variableName}); }} }}";
+                + $"{{ {result}.Add({resultValue}); }} }}";
         }
 
-        return $"((global::System.Func<{resultType}, {resultType}>)({input} => {{ "
+        return $"((global::System.Func<{sourceType}, {resultType}>)({input} => {{ "
             + $"var {result} = {factory}; {body} return {result}; }}))({source})";
     }
 
@@ -784,6 +1048,27 @@ internal static class ExpressExpressionEmitter
         ExpressExpressionEmissionContext context)
     {
         var parameters = expression.Children;
+        if (string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase)
+            && parameters.Count > 1
+            && parameters[0].Type.Kind is ExpressExpressionTypeKind.Integer
+                or ExpressExpressionTypeKind.Real
+                or ExpressExpressionTypeKind.Number
+            && parameters[1].Type.Kind is ExpressExpressionTypeKind.Integer
+                or ExpressExpressionTypeKind.Real
+                or ExpressExpressionTypeKind.Number)
+        {
+            var target = expression.Type.Kind;
+            var fallback = PromoteNumeric(parameters[1], arguments[1], target);
+            if (!parameters[0].Type.CanBeIndeterminate)
+            {
+                return PromoteNumeric(parameters[0], arguments[0], target);
+            }
+
+            var present = context.AllocateTemporaryName("__expressNvlValue");
+            var promoted = PromoteNumeric(parameters[0], present, target);
+            return $"(({arguments[0]}) is {{ }} {present} ? {promoted} : {fallback})";
+        }
+
         return expression.Operation!.ToUpperInvariant() switch
         {
             "ABS" when parameters[0].Type.Kind == ExpressExpressionTypeKind.Integer =>
@@ -823,7 +1108,7 @@ internal static class ExpressExpressionEmitter
             "VALUE_IN" => EmitValueIn(expression, arguments),
             "VALUE_UNIQUE" => EmitValueUnique(expression, arguments[0]),
             "ROLESOF" or "TYPEOF" or "USEDIN" when context.ResolveModelFunction is not null =>
-                context.ResolveModelFunction(expression.Operation.ToUpperInvariant(), arguments),
+                context.ResolveModelFunction(expression.Operation.ToUpperInvariant(), expression, arguments),
             "ROLESOF" or "TYPEOF" or "USEDIN" => throw GenerationError(
                 expression,
                 $"{expression.Operation.ToUpperInvariant()} requires an enclosing generated model operation."),
@@ -932,7 +1217,8 @@ internal static class ExpressExpressionEmitter
         ExpressBoundExpression left,
         string leftCode,
         ExpressBoundExpression right,
-        string rightCode)
+        string rightCode,
+        ExpressExpressionEmissionContext context)
     {
         var resultType = TypeName(expression.Type);
         var resultAggregate = (ExpressBoundAggregateType)expression.Type.DeclaredType!;
@@ -942,6 +1228,31 @@ internal static class ExpressExpressionEmitter
         string enumerable;
         if (operation == "+")
         {
+            if ((leftIsAggregate || rightIsAggregate)
+                && resultAggregate.Kind is ExpressAggregateKind.List
+                    or ExpressAggregateKind.Bag
+                    or ExpressAggregateKind.Set
+                && !resultAggregate.IsOptional
+                && left.Type.DeclaredType is not ExpressBoundAggregateType { IsOptional: true, }
+                && right.Type.DeclaredType is not ExpressBoundAggregateType { IsOptional: true, }
+                && (resultAggregate.ElementType is ExpressBoundNamedType
+                    || resultAggregate.ElementType is ExpressBoundGenericType { IsEntity: true, })
+                && (!ReferenceEquals(
+                        (left.Type.DeclaredType as ExpressBoundAggregateType)?.ElementType
+                            ?? left.Type.DeclaredType,
+                        resultAggregate.ElementType)
+                    || !ReferenceEquals(
+                        (right.Type.DeclaredType as ExpressBoundAggregateType)?.ElementType
+                            ?? right.Type.DeclaredType,
+                        resultAggregate.ElementType)))
+            {
+                return context.ResolveModelFunction is not null
+                    ? context.ResolveModelFunction("AGGREGATE_UNION", expression, [leftCode, rightCode,])
+                    : throw GenerationError(
+                        expression,
+                        "A sole-alternative SELECT aggregate union requires an enclosing generated model operation.");
+            }
+
             enumerable = (leftIsAggregate, rightIsAggregate) switch
             {
                 (true, true) => $"global::System.Linq.Enumerable.Concat(({leftCode}), ({rightCode}))",
@@ -1022,25 +1333,35 @@ internal static class ExpressExpressionEmitter
             : string.Format(CultureInfo.InvariantCulture, subset, rightCode, leftCode);
     }
 
-    private static string PromoteNumeric(
+    /// <summary>
+    /// Promotes one emitted numeric value to a compatible wider numeric representation.
+    /// </summary>
+    /// <param name="expression">The statically bound source value.</param>
+    /// <param name="code">The emitted source value expression.</param>
+    /// <param name="target">The wider numeric result kind.</param>
+    /// <param name="sourceType">The branch-proven scalar source kind, when narrower than the bound expression.</param>
+    /// <returns>The promoted value expression, or the original expression when no promotion applies.</returns>
+    internal static string PromoteNumeric(
         ExpressBoundExpression expression,
         string code,
-        ExpressExpressionTypeKind target)
+        ExpressExpressionTypeKind target,
+        ExpressExpressionTypeKind? sourceType = null)
     {
-        if (expression.Type.Kind == target)
+        var source = sourceType ?? expression.Type.Kind;
+        if (source == target)
         {
             return code;
         }
 
         return target switch
         {
-            ExpressExpressionTypeKind.Number when expression.Type.Kind == ExpressExpressionTypeKind.Integer =>
+            ExpressExpressionTypeKind.Number when source == ExpressExpressionTypeKind.Integer =>
                 $"global::TedToolkit.Step21.NumberValue.FromInteger({code})",
-            ExpressExpressionTypeKind.Number when expression.Type.Kind == ExpressExpressionTypeKind.Real =>
+            ExpressExpressionTypeKind.Number when source == ExpressExpressionTypeKind.Real =>
                 $"global::TedToolkit.Step21.NumberValue.FromReal({code})",
-            ExpressExpressionTypeKind.Real when expression.Type.Kind == ExpressExpressionTypeKind.Integer =>
+            ExpressExpressionTypeKind.Real when source == ExpressExpressionTypeKind.Integer =>
                 $"new global::TedToolkit.Step21.RealValue(({code}), global::System.Numerics.BigInteger.Zero)",
-            ExpressExpressionTypeKind.Real when expression.Type.Kind == ExpressExpressionTypeKind.Number =>
+            ExpressExpressionTypeKind.Real when source == ExpressExpressionTypeKind.Number =>
                 $"({code}).ToReal()",
             _ => code,
         };
@@ -1128,8 +1449,18 @@ internal static class ExpressExpressionEmitter
                 negated);
         }
 
-        var equality = ValueEquality(expression, left, leftCode, right, rightCode, context);
-        return LogicalComparison(negated ? $"!({equality})" : equality);
+        if (RequiresSchemaValueEquality(left.Type) || RequiresSchemaValueEquality(right.Type))
+        {
+            var equality = context.ResolveValueEquality is null
+                ? throw GenerationError(
+                    expression,
+                    "Entity-containing value equality requires an enclosing generated schema operation.")
+                : context.ResolveValueEquality(left, leftCode, right, rightCode, null);
+            return negated ? EmitNot(equality) : equality;
+        }
+
+        var valueEquality = ValueEqualityCore(left, leftCode, right, rightCode);
+        return LogicalComparison(negated ? $"!({valueEquality})" : valueEquality);
     }
 
     private static string EmitOptionalArrayValueComparison(
@@ -1168,10 +1499,48 @@ internal static class ExpressExpressionEmitter
 
     private static string EmitMembership(
         ExpressBoundExpression expression,
+        ExpressBoundExpression valueExpression,
         string value,
         ExpressBoundExpression aggregateExpression,
-        string aggregate)
+        string aggregate,
+        ExpressExpressionEmissionContext context)
     {
+        if (aggregateExpression.Type.DeclaredType is ExpressBoundAggregateType aggregateType
+            && valueExpression.Type.Kind is ExpressExpressionTypeKind.Entity or ExpressExpressionTypeKind.Select
+            && aggregateType.ElementType is ExpressBoundSelectType
+                or ExpressBoundNamedType
+            {
+                Declaration.Kind: not ExpressDeclarationKind.Entity,
+            })
+        {
+            var resolve = context.ResolveValueEquality
+                ?? throw GenerationError(
+                    expression,
+                    "SELECT membership requires an enclosing generated schema operation.");
+            var suffix = expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                + "_"
+                + expression.Span.Start.Column.ToString(CultureInfo.InvariantCulture);
+            var element = "__expressMember_" + suffix;
+            var state = "__expressMembershipState_" + suffix;
+            var match = "__expressMembershipMatch_" + suffix;
+            var equality = resolve(
+                aggregateExpression,
+                element,
+                valueExpression,
+                value,
+                aggregateType.ElementType);
+            return "global::System.Linq.Enumerable.Aggregate("
+                + $"global::System.Linq.Enumerable.Select(({aggregate}), {element} => {equality}), "
+                + "global::TedToolkit.Step21.LogicalValue.False, "
+                + $"({state}, {match}) => {state} == global::TedToolkit.Step21.LogicalValue.True "
+                + $"|| {match} == global::TedToolkit.Step21.LogicalValue.True "
+                + "? global::TedToolkit.Step21.LogicalValue.True : "
+                + $"{state} == global::TedToolkit.Step21.LogicalValue.Unknown "
+                + $"|| {match} == global::TedToolkit.Step21.LogicalValue.Unknown "
+                + "? global::TedToolkit.Step21.LogicalValue.Unknown "
+                + ": global::TedToolkit.Step21.LogicalValue.False)";
+        }
+
         var contains = $"global::System.Linq.Enumerable.Contains(({aggregate}), ({value}))";
         if (aggregateExpression.Type.DeclaredType is not ExpressBoundAggregateType
             {
@@ -1187,27 +1556,15 @@ internal static class ExpressExpressionEmitter
             + "? global::TedToolkit.Step21.LogicalValue.False : global::TedToolkit.Step21.LogicalValue.Unknown)";
     }
 
-    private static string ValueEquality(
-        ExpressBoundExpression expression,
-        ExpressBoundExpression left,
-        string leftCode,
-        ExpressBoundExpression right,
-        string rightCode,
-        ExpressExpressionEmissionContext context)
-    {
-        if (RequiresSchemaValueEquality(left.Type))
-        {
-            return context.ResolveValueEquality is null
-                ? throw GenerationError(
-                    expression,
-                    "Entity-containing value equality requires an enclosing generated schema operation.")
-                : context.ResolveValueEquality(left.Type, leftCode, rightCode);
-        }
-
-        return ValueEqualityCore(left, leftCode, right, rightCode);
-    }
-
-    private static string ValueEqualityCore(
+    /// <summary>
+    /// Emits statically typed EXPRESS value equality for two bound operands.
+    /// </summary>
+    /// <param name="left">The left bound operand.</param>
+    /// <param name="leftCode">The generated left operand.</param>
+    /// <param name="right">The right bound operand.</param>
+    /// <param name="rightCode">The generated right operand.</param>
+    /// <returns>The generated Boolean equality expression.</returns>
+    internal static string ValueEqualityCore(
         ExpressBoundExpression left,
         string leftCode,
         ExpressBoundExpression right,
@@ -1234,6 +1591,12 @@ internal static class ExpressExpressionEmitter
                 : $"({promotedLeft}) == ({promotedRight})";
         }
 
+        if (left.Type.Kind is ExpressExpressionTypeKind.Boolean or ExpressExpressionTypeKind.Logical
+            && right.Type.Kind is ExpressExpressionTypeKind.Boolean or ExpressExpressionTypeKind.Logical)
+        {
+            return $"({AsLogical(left, leftCode)}) == ({AsLogical(right, rightCode)})";
+        }
+
         return $"global::System.Collections.Generic.EqualityComparer<{TypeName(left.Type)}>"
             + $".Default.Equals(({leftCode}), ({rightCode}))";
     }
@@ -1246,23 +1609,32 @@ internal static class ExpressExpressionEmitter
         string rightCode,
         ExpressExpressionEmissionContext context)
     {
+        if (left.Type.Kind == ExpressExpressionTypeKind.Select
+            || right.Type.Kind == ExpressExpressionTypeKind.Select)
+        {
+            return context.ResolveModelFunction is not null
+                ? context.ResolveModelFunction("INSTANCE_EQUALITY", expression, [leftCode, rightCode,])
+                : throw GenerationError(
+                    expression,
+                    "SELECT instance equality requires an enclosing generated model operation.");
+        }
+
         if (left.Type.Kind == ExpressExpressionTypeKind.Entity)
         {
             return $"global::System.Object.ReferenceEquals(({leftCode}), ({rightCode}))";
         }
 
-        if (left.Type.Kind == ExpressExpressionTypeKind.Select)
-        {
-            return $"global::System.Collections.Generic.EqualityComparer<{TypeName(left.Type)}>"
-                + $".Default.Equals(({leftCode}), ({rightCode}))";
-        }
-
         return left.Type.Kind == ExpressExpressionTypeKind.Aggregate
             ? ValueEqualityCore(left, leftCode, right, rightCode)
-            : ValueEquality(expression, left, leftCode, right, rightCode, context);
+            : ValueEqualityCore(left, leftCode, right, rightCode);
     }
 
-    private static bool RequiresSchemaValueEquality(ExpressExpressionType type)
+    /// <summary>
+    /// Determines whether an expression type requires generated schema-aware value equality.
+    /// </summary>
+    /// <param name="type">The bound expression type.</param>
+    /// <returns><see langword="true"/> when entity values occur in the type.</returns>
+    internal static bool RequiresSchemaValueEquality(ExpressExpressionType type)
     {
         if (type.Kind is ExpressExpressionTypeKind.Entity or ExpressExpressionTypeKind.Select)
         {
@@ -1273,7 +1645,12 @@ internal static class ExpressExpressionEmitter
             && RequiresSchemaValueEquality(aggregate.ElementType);
     }
 
-    private static bool RequiresSchemaValueEquality(ExpressBoundType type)
+    /// <summary>
+    /// Determines whether a declared type requires generated schema-aware value equality.
+    /// </summary>
+    /// <param name="type">The bound declared type.</param>
+    /// <returns><see langword="true"/> when entity values occur in the type.</returns>
+    internal static bool RequiresSchemaValueEquality(ExpressBoundType type)
     {
         return type switch
         {
@@ -1290,28 +1667,49 @@ internal static class ExpressExpressionEmitter
         ExpressBoundExpression left,
         string leftCode,
         ExpressBoundExpression right,
-        string rightCode)
+        string rightCode,
+        ExpressExpressionEmissionContext context)
     {
-        if (IsNumeric(left.Type.Kind) && IsNumeric(right.Type.Kind))
+        var leftKind = left.Reference is { } leftReference
+            && context.ResolveLexicalBound?.Invoke(leftReference.Name)?.Type is ExpressBoundScalarType leftScalar
+                ? leftScalar.Kind switch
+                {
+                    ExpressScalarKind.Integer => ExpressExpressionTypeKind.Integer,
+                    ExpressScalarKind.Number => ExpressExpressionTypeKind.Number,
+                    ExpressScalarKind.Real => ExpressExpressionTypeKind.Real,
+                    _ => left.Type.Kind,
+                }
+                : left.Type.Kind;
+        var rightKind = right.Reference is { } rightReference
+            && context.ResolveLexicalBound?.Invoke(rightReference.Name)?.Type is ExpressBoundScalarType rightScalar
+                ? rightScalar.Kind switch
+                {
+                    ExpressScalarKind.Integer => ExpressExpressionTypeKind.Integer,
+                    ExpressScalarKind.Number => ExpressExpressionTypeKind.Number,
+                    ExpressScalarKind.Real => ExpressExpressionTypeKind.Real,
+                    _ => right.Type.Kind,
+                }
+                : right.Type.Kind;
+        if (IsNumeric(leftKind) && IsNumeric(rightKind))
         {
-            var target = NumericComparisonType(left.Type.Kind, right.Type.Kind);
-            return $"(({PromoteNumeric(left, leftCode, target)}) {operation} "
-                + $"({PromoteNumeric(right, rightCode, target)}))";
+            var target = NumericComparisonType(leftKind, rightKind);
+            return $"(({PromoteNumeric(left, leftCode, target, leftKind)}) {operation} "
+                + $"({PromoteNumeric(right, rightCode, target, rightKind)}))";
         }
 
-        if (left.Type.Kind == ExpressExpressionTypeKind.String)
+        if (leftKind == ExpressExpressionTypeKind.String)
         {
             return $"global::System.StringComparer.Ordinal.Compare(({leftCode}), ({rightCode})) "
                 + $"{operation} 0";
         }
 
-        if (left.Type.Kind == ExpressExpressionTypeKind.Binary)
+        if (leftKind == ExpressExpressionTypeKind.Binary)
         {
             return $"global::System.StringComparer.Ordinal.Compare(({leftCode}).ToString(), "
                 + $"({rightCode}).ToString()) {operation} 0";
         }
 
-        if (left.Type.Kind == ExpressExpressionTypeKind.Enumeration
+        if (leftKind == ExpressExpressionTypeKind.Enumeration
             && left.Type.EnumerationValues is { } values)
         {
             var order = "new global::System.String[] { "
@@ -1320,7 +1718,7 @@ internal static class ExpressExpressionEmitter
                 + $"global::System.Array.IndexOf({order}, ({rightCode}).Value)";
         }
 
-        if (left.Type.Kind is ExpressExpressionTypeKind.Boolean or ExpressExpressionTypeKind.Logical)
+        if (leftKind is ExpressExpressionTypeKind.Boolean or ExpressExpressionTypeKind.Logical)
         {
             return $"global::System.Convert.ToInt32({AsLogical(left, leftCode)}) {operation} "
                 + $"global::System.Convert.ToInt32({AsLogical(right, rightCode)})";
@@ -1352,6 +1750,7 @@ internal static class ExpressExpressionEmitter
 
     private static string GuardIndeterminate(
         ExpressBoundExpression result,
+        ExpressExpressionEmissionContext context,
         IReadOnlyList<ExpressBoundExpression> operands,
         string[] codes,
         Func<string[], string> emitPresent)
@@ -1360,18 +1759,21 @@ internal static class ExpressExpressionEmitter
         var conditions = new List<string>();
         for (var index = 0; index < operands.Count; index++)
         {
-            if (!operands[index].Type.CanBeIndeterminate)
+            if (!operands[index].Type.CanBeIndeterminate
+                || context.IsKnownDeterminate?.Invoke(operands[index]) == true)
             {
                 continue;
             }
 
             var location = operands[index].Span.Start;
-            var variable = "__expressPresent_"
+            var variablePrefix = "__expressPresent_"
                 + location.Line.ToString(CultureInfo.InvariantCulture)
                 + "_"
                 + location.Column.ToString(CultureInfo.InvariantCulture)
                 + "_"
-                + index.ToString(CultureInfo.InvariantCulture);
+                + index.ToString(CultureInfo.InvariantCulture)
+                + "_";
+            var variable = context.AllocateTemporaryName(variablePrefix);
             conditions.Add($"({codes[index]}) is {{ }} {variable}");
             presentCodes[index] = variable;
         }
@@ -1466,7 +1868,13 @@ internal static class ExpressExpressionEmitter
             + "(global::TedToolkit.Step21.RealValue?)null)";
     }
 
-    private static string AsLogical(ExpressBoundExpression expression, string code)
+    /// <summary>
+    /// Converts a BOOLEAN or LOGICAL expression to its generated LOGICAL representation.
+    /// </summary>
+    /// <param name="expression">The bound expression that supplies determinacy facts.</param>
+    /// <param name="code">The generated expression code.</param>
+    /// <returns>The generated LOGICAL expression.</returns>
+    internal static string AsLogical(ExpressBoundExpression expression, string code)
     {
         if (expression.Type.CanBeIndeterminate)
         {
@@ -1476,8 +1884,12 @@ internal static class ExpressExpressionEmitter
                     + "true => global::TedToolkit.Step21.LogicalValue.True, "
                     + "false => global::TedToolkit.Step21.LogicalValue.False, "
                     + "_ => global::TedToolkit.Step21.LogicalValue.Unknown })",
-                ExpressExpressionTypeKind.Logical => $"(({code}) ?? "
-                    + "global::TedToolkit.Step21.LogicalValue.Unknown)",
+                ExpressExpressionTypeKind.Logical => $"(({code}) switch {{ "
+                    + "global::TedToolkit.Step21.LogicalValue.True => "
+                    + "global::TedToolkit.Step21.LogicalValue.True, "
+                    + "global::TedToolkit.Step21.LogicalValue.False => "
+                    + "global::TedToolkit.Step21.LogicalValue.False, "
+                    + "_ => global::TedToolkit.Step21.LogicalValue.Unknown })",
                 _ => "global::TedToolkit.Step21.LogicalValue.Unknown",
             };
         }
@@ -1496,14 +1908,33 @@ internal static class ExpressExpressionEmitter
             + "global::TedToolkit.Step21.LogicalValue.False)";
     }
 
-    private static string UnwrapDefined(ExpressExpressionType type, string code)
+    private static string UnwrapDefined(
+        ExpressExpressionType type,
+        string code,
+        ExpressExpressionEmissionContext context)
     {
-        for (var index = 0; index < type.DefinedValueDepth; index++)
+        if (!type.CanBeIndeterminate)
         {
-            code = $"({code}).Value";
+            for (var index = 0; index < type.DefinedValueDepth; index++)
+            {
+                code = $"({code}).Value";
+            }
+
+            return code;
         }
 
-        return code;
+        var presencePatterns = new List<string>(type.DefinedValueDepth);
+        for (var index = 0; index < type.DefinedValueDepth; index++)
+        {
+            var value = context.AllocateTemporaryName("__expressDefinedValue");
+            presencePatterns.Add($"({code}) is {{ }} {value}");
+            code = $"({value}).Value";
+        }
+
+        return presencePatterns.Count == 0
+            ? code
+            : $"(({string.Join(" && ", presencePatterns)}) ? {code} : "
+                + $"({TypeName(type.WithIndeterminate(false))}?)null)";
     }
 
     private static string EmitNot(string operand)
@@ -1575,7 +2006,13 @@ internal static class ExpressExpressionEmitter
         return $"global::TedToolkit.Step21.{definition}<{BoundTypeName(aggregate.ElementType)}>";
     }
 
-    private static string BoundTypeName(ExpressBoundType type)
+    /// <summary>
+    /// Gets the generated C# spelling for a bound expression value type.
+    /// </summary>
+    /// <param name="type">The bound type.</param>
+    /// <returns>The fully qualified generated type spelling.</returns>
+    /// <exception cref="InvalidOperationException">The bound type has no static generated representation.</exception>
+    internal static string BoundTypeName(ExpressBoundType type)
     {
         return type switch
         {
@@ -1591,6 +2028,8 @@ internal static class ExpressExpressionEmitter
             ExpressBoundScalarType { Kind: ExpressScalarKind.String, } => "global::System.String",
             ExpressBoundAggregateType aggregate => AggregateTypeName(aggregate),
             ExpressBoundGenericType { IsEntity: true, } => "global::TedToolkit.Step21.Entity",
+            ExpressBoundGenericType { TypeLabel: { } label, } =>
+                "T" + ExpressEntityProjection.ToPascalCase(label),
             ExpressBoundGenericType => "global::System.Object",
             ExpressBoundNamedType named => GeneratedTypeName(
                 named.Declaration,
@@ -1598,6 +2037,44 @@ internal static class ExpressExpressionEmitter
             _ => throw new InvalidOperationException(
                 $"Bound type '{type.GetType().Name}' has no static C# expression type."),
         };
+    }
+
+    /// <summary>
+    /// Collects labeled generic variables from bound aggregate trees in stable first-declaration order.
+    /// </summary>
+    /// <param name="types">The formal, result, or local bound types.</param>
+    /// <returns>The distinct EXPRESS type labels.</returns>
+    internal static IReadOnlyList<string> GenericTypeLabels(IEnumerable<ExpressBoundType> types)
+    {
+        var labels = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in types)
+        {
+            var type = root;
+            while (true)
+            {
+                if (type is ExpressBoundAggregateType aggregate)
+                {
+                    if (aggregate.TypeLabel is { } aggregateLabel && seen.Add(aggregateLabel))
+                    {
+                        labels.Add(aggregateLabel);
+                    }
+
+                    type = aggregate.ElementType;
+                    continue;
+                }
+
+                if (type is ExpressBoundGenericType { TypeLabel: { } genericLabel, }
+                    && seen.Add(genericLabel))
+                {
+                    labels.Add(genericLabel);
+                }
+
+                break;
+            }
+        }
+
+        return labels;
     }
 
     private static string GeneratedTypeName(ExpressBoundSymbol symbol, bool entityInterface)

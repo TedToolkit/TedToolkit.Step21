@@ -22,24 +22,50 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="resolveModelFunction">Maps a model-context function and its emitted arguments to static C#.</param>
     /// <param name="resolveValueEquality">Maps schema-dependent value equality to static C#.</param>
     /// <param name="resolveAttribute">Maps a qualified entity attribute access to static C#.</param>
+    /// <param name="resolveApplication">Maps a resolved function application to static C#.</param>
+    /// <param name="safeIndices">Identifies aggregate and REPEAT-variable pairs whose index access is proven present.</param>
+    /// <param name="resolveLexicalBound">Maps a lexical aggregate bound to its generated value and bound type.</param>
+    /// <param name="genericTypeLabels">Identifies type labels closed by the enclosing generated generic method.</param>
+    /// <param name="allocateTemporaryName">Allocates a deterministic private C# name within the generated method.</param>
+    /// <param name="isKnownDeterminate">Identifies expressions made determinate by the enclosing control-flow branch.</param>
     internal ExpressExpressionEmissionContext(
-        Func<ExpressBoundName, string> resolveReference,
+        Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference,
         string? selfExpression = null,
-        Func<string, IReadOnlyList<string>, string>? resolveModelFunction = null,
-        Func<ExpressExpressionType, string, string, string>? resolveValueEquality = null,
-        Func<ExpressBoundName, string, string>? resolveAttribute = null)
+        Func<string, ExpressBoundExpression, IReadOnlyList<string>, string>? resolveModelFunction = null,
+        Func<ExpressBoundExpression, string, ExpressBoundExpression, string, ExpressBoundType?, string>?
+            resolveValueEquality = null,
+        Func<ExpressBoundExpression, ExpressBoundName, string, string>? resolveAttribute = null,
+        Func<ExpressBoundExpression, IReadOnlyList<string>, string>? resolveApplication = null,
+        IReadOnlyCollection<KeyValuePair<ExpressBoundName, ExpressBoundName>>? safeIndices = null,
+        Func<string, (string Code, ExpressBoundType Type)?>? resolveLexicalBound = null,
+        IReadOnlyCollection<string>? genericTypeLabels = null,
+        Func<string, string>? allocateTemporaryName = null,
+        Func<ExpressBoundExpression, bool>? isKnownDeterminate = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
         ResolveModelFunction = resolveModelFunction;
         ResolveValueEquality = resolveValueEquality;
         ResolveAttribute = resolveAttribute;
+        ResolveApplication = resolveApplication;
+        SafeIndices = safeIndices ?? [];
+        ResolveLexicalBound = resolveLexicalBound;
+        GenericTypeLabels = genericTypeLabels ?? [];
+        IsKnownDeterminate = isKnownDeterminate;
+        if (allocateTemporaryName is null)
+        {
+            var temporaryOrdinal = 0;
+            allocateTemporaryName = prefix => prefix
+                + (temporaryOrdinal++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        AllocateTemporaryName = allocateTemporaryName;
     }
 
     /// <summary>
     /// Gets the declaration-reference resolver.
     /// </summary>
-    internal Func<ExpressBoundName, string> ResolveReference { get; }
+    internal Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> ResolveReference { get; }
 
     /// <summary>
     /// Gets the static SELF expression, when the surrounding operation has one.
@@ -49,25 +75,69 @@ internal sealed class ExpressExpressionEmissionContext
     /// <summary>
     /// Gets the static model-context function resolver.
     /// </summary>
-    internal Func<string, IReadOnlyList<string>, string>? ResolveModelFunction { get; }
+    internal Func<string, ExpressBoundExpression, IReadOnlyList<string>, string>? ResolveModelFunction { get; }
 
     /// <summary>
     /// Gets the static schema-dependent value-equality resolver.
     /// </summary>
-    internal Func<ExpressExpressionType, string, string, string>? ResolveValueEquality { get; }
+    internal Func<ExpressBoundExpression, string, ExpressBoundExpression, string, ExpressBoundType?, string>?
+        ResolveValueEquality
+    { get; }
 
     /// <summary>
     /// Gets the generated qualified-attribute resolver, when the enclosing operation supplies one.
     /// </summary>
-    internal Func<ExpressBoundName, string, string>? ResolveAttribute { get; }
+    internal Func<ExpressBoundExpression, ExpressBoundName, string, string>? ResolveAttribute { get; }
+
+    /// <summary>
+    /// Gets the generated function-application resolver, when the enclosing operation supplies one.
+    /// </summary>
+    internal Func<ExpressBoundExpression, IReadOnlyList<string>, string>? ResolveApplication { get; }
+
+    /// <summary>
+    /// Gets aggregate and REPEAT-variable pairs whose index access is proven present.
+    /// </summary>
+    internal IReadOnlyCollection<KeyValuePair<ExpressBoundName, ExpressBoundName>> SafeIndices { get; }
+
+    /// <summary>
+    /// Gets the lexical aggregate-bound resolver, when the enclosing function supplies one.
+    /// </summary>
+    internal Func<string, (string Code, ExpressBoundType Type)?>? ResolveLexicalBound { get; }
+
+    /// <summary>
+    /// Gets type labels closed by the enclosing generated generic method.
+    /// </summary>
+    internal IReadOnlyCollection<string> GenericTypeLabels { get; }
+
+    /// <summary>
+    /// Gets the deterministic generated-method temporary-name allocator.
+    /// </summary>
+    internal Func<string, string> AllocateTemporaryName { get; }
+
+    /// <summary>
+    /// Gets the branch-scoped determinacy proof, when one is available.
+    /// </summary>
+    internal Func<ExpressBoundExpression, bool>? IsKnownDeterminate { get; }
 
     /// <summary>
     /// Creates an equivalent context with a scoped declaration-reference resolver.
     /// </summary>
     /// <param name="resolveReference">The scoped resolver.</param>
     /// <returns>The scoped immutable context.</returns>
-    internal ExpressExpressionEmissionContext WithReferenceResolver(Func<ExpressBoundName, string> resolveReference)
+    internal ExpressExpressionEmissionContext WithReferenceResolver(
+        Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference)
     {
-        return new(resolveReference, SelfExpression, ResolveModelFunction, ResolveValueEquality, ResolveAttribute);
+        return new(
+            resolveReference,
+            SelfExpression,
+            ResolveModelFunction,
+            ResolveValueEquality,
+            ResolveAttribute,
+            ResolveApplication,
+            SafeIndices,
+            ResolveLexicalBound,
+            GenericTypeLabels,
+            AllocateTemporaryName,
+            IsKnownDeterminate);
     }
 }

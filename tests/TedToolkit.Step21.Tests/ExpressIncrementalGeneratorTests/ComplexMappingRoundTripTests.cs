@@ -47,6 +47,36 @@ public sealed class ComplexMappingRoundTripTests
         END_SCHEMA;
         """;
 
+    /// <summary>Ignores nested ANDOR forms outside the supported flat complex-projection subset without failing generation.</summary>
+    [Test]
+    public async Task Should_compile_nested_andor_supertype_constraints_without_generator_failure()
+    {
+        const string schema = """
+            SCHEMA nested_andor;
+            ENTITY root SUPERTYPE OF (ONEOF (left, right) ANDOR marker);
+            END_ENTITY;
+            ENTITY left SUBTYPE OF (root);
+            END_ENTITY;
+            ENTITY right SUBTYPE OF (root);
+            END_ENTITY;
+            ENTITY marker SUBTYPE OF (root);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+
+        var result = GeneratorHostTests.Run(("schemas/nested-andor.exp", schema));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
+                .IsEmpty();
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
+                .IsEmpty();
+        }
+    }
+
     /// <summary>Maps inherited, redeclared, aggregate, optional, and reference values through ordered components.</summary>
     [Test]
     public async Task Should_read_write_and_reread_the_same_complex_semantic_graph()

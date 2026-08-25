@@ -64,14 +64,21 @@ If redistribution evidence cannot be established, stop before checking the schem
 - Any compiler correction is standards-derived and protected by the narrowest useful regression test.
 
 <!-- work-item: completion-evidence -->
-## Completion evidence requirements
+## Completion evidence
 
-Record the candidate revision, ingested asset checksum, actual changed artifacts, AC-02 evidence
-purpose and execution shape, commands, observable assertions, discovered/passed/failed/skipped
-counts, and the verified schema input supplied to AP203-002 and AP203-004.
+| Evidence | Completion record |
+| --- | --- |
+| Delivery boundary | Candidate work started from `60b826f`. It adds the checked-in AP203 source/evidence, reusable EXPRESS binding and generation corrections, and generated-fidelity/regression tests. It adds no AP203-specific production branch, hand-written AP203 domain type, public/protected API, runtime class, or package shell. The candidate revision is the single local commit reported in the AP203-001 handoff. |
+| Asset identity | `schemas/ap203/ap203.exp` is derived from STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`, path `data/ap203/ap203.exp`. The pinned upstream SHA-256 is `020B4D25DBD0B6EE7D15099B978E3448F6699A72CB862D381E416E32187562F1`; the checked-in corrected file SHA-256 is `19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251`. `PROVENANCE.md` records the only two comma-to-repetition-separator corrections. Copied evidence hashes are `COPYING` `C787486F3E1358CF1CB4456B56E00862DE9C0433E7D49F5501D1289FF8BEF37E`, `AUTHORS` `619EE3D3D9CE6DB690B4A20F36AB30616CB8F1FB8616FAEB85D9685AFDFD15FB`, and `INTENT.md` `B10C7DCC9C269B383C944ACC139F787CCA050D497142CA03ED90C49EF41CE23F`. |
+| Changed artifacts | Production changes remain inside the existing EXPRESS bound-name/type/expression compiler and Roslyn generation pipeline. Tests cover binding, expression generation, entity/complex projections, reachable rules, and one full-schema `GeneratedFidelityTests` contract. `TedToolkit.Step21.Tests.csproj` supplies the checked-in schema as an offline test asset. No generated C# output is checked in. |
+| AC-02 and behavior proof | The full pinned schema generates with zero warning/error diagnostics and the fidelity contract asserts schema name, entity inheritance, OPTIONAL nullability, aggregate kinds, enumeration members, SELECT surfaces, and constructor member order. All affected focused classes passed 132/132. The complete fast Release project passed 307/307. |
+| Build and integration proof | After restoring the integration project's initially absent `project.assets.json`, `dotnet build TedToolkit.Step21.slnx -c Release --no-restore` passed with 0 warnings/errors. Default Release integration passed 5 enabled tests with 1 explicit external-network corpus test skipped. The skipped test is not an AP203 package or fixture proof and AP203-002/AP203-004 remain responsible for those boundaries. |
+| Composition boundary | Source declarations and control flow use the existing RoslynHelper composition boundary. The approved CustomExpression templates remain limited to type-pattern, lambda, matrix/index, and typed-leaf equality fragments; no fifth category was introduced. Production adds 33 private static analyzer/emitter methods, including the six private generated entity-value-equality declarations, but no new production type or caller-visible API. |
+| Dependent input | AP203-002 receives the offline source/license/provenance asset and verified generated surface. AP203-004 receives the same generated AP203 entity/value contract; neither package delivery nor OCCT fixture execution is claimed by this candidate. |
 
 ## Risks and implementation notes
 
-The first full AP203 compile may expose several symptoms of one compiler gap. Prefer one root-cause
-correction over AP203 name lists, special cases, or extra abstractions. A required new public runtime
-concept or a schema-baseline change returns to change design.
+The first full AP203 compile exposed multiple symptoms of shared compiler gaps. The implementation
+corrects their existing semantic boundaries and retains focused controls for UNKNOWN, SELECT,
+aggregate, entity identity/value equality, and flow narrowing. Integration remains the gate before
+this work item may move from Implementing to Implemented.

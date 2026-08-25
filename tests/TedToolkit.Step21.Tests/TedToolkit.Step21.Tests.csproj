@@ -19,6 +19,9 @@
 
   <ItemGroup>
     <None Update="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap203\ap203.exp"
+          Link="TestData\Express\Ap203\ap203.exp"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

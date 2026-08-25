@@ -93,7 +93,16 @@ internal static class ExpressEntityEmitter
 
         foreach (var attribute in projection.FlattenedAttributes)
         {
-            entityClass.AddMember(CreateProperty(projection, attribute, valueResolver, isMutable: true));
+            entityClass.AddMember(CreateProperty(
+                projection,
+                attribute,
+                valueResolver,
+                isMutable: true,
+                generatedName: attribute.StorageMemberName));
+            if (!StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName))
+            {
+                entityClass.AddMember(CreateExplicitInterfaceGetter(projection, attribute, valueResolver));
+            }
         }
 
         entityClass.AddMember(CreateConstructor(projection, valueResolver));
@@ -110,13 +119,15 @@ internal static class ExpressEntityEmitter
     /// <param name="valueResolver">The closed-set generated value resolver.</param>
     /// <param name="isMutable">Whether the property is mutable.</param>
     /// <param name="initializeDefault">Whether a mandatory property receives a null-forgiving default initializer.</param>
+    /// <param name="generatedName">The generated class member name, or <see langword="null"/> for the interface name.</param>
     /// <returns>The composed property.</returns>
     internal static Property CreateProperty(
         ExpressEntityProjection projection,
         ExpressEntityAttributeProjection attribute,
         ExpressGeneratedTypeResolver valueResolver,
         bool isMutable,
-        bool initializeDefault = false)
+        bool initializeDefault = false,
+        string? generatedName = null)
     {
         var (dataType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
         if (attribute.Attribute.IsOptional)
@@ -124,7 +135,9 @@ internal static class ExpressEntityEmitter
             dataType = dataType.Null;
         }
 
-        var property = SourceComposer<ExpressIncrementalGenerator>.Property(dataType, attribute.Name);
+        var property = SourceComposer<ExpressIncrementalGenerator>.Property(
+            dataType,
+            generatedName ?? attribute.Name);
         property.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         if (isReferenceType)
         {
@@ -134,10 +147,17 @@ internal static class ExpressEntityEmitter
         string summary;
         if (isMutable && attribute.RedirectTargetName is not null)
         {
+            var redirectTargetName = projection.FlattenedAttributes
+                .First(candidate => StringComparer.Ordinal.Equals(candidate.Name, attribute.RedirectTargetName)
+                    && ReferenceEquals(candidate.StorageEntity, attribute.StorageEntity)
+                    && StringComparer.OrdinalIgnoreCase.Equals(
+                        candidate.StorageAttributeName,
+                        attribute.StorageAttributeName))
+                .StorageMemberName;
             var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET)
-                .AddStatement(attribute.RedirectTargetName.ToSimpleName().Return);
+                .AddStatement(redirectTargetName.ToSimpleName().Return);
             var setter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.SET)
-                .AddStatement(attribute.RedirectTargetName.ToSimpleName().Assign("value".ToSimpleName()));
+                .AddStatement(redirectTargetName.ToSimpleName().Assign("value".ToSimpleName()));
             property.AddAccessor(getter)
                 .AddAccessor(setter);
             summary = $"Gets or sets the {attribute.Attribute.Name} attribute.";
@@ -192,7 +212,8 @@ internal static class ExpressEntityEmitter
 
         foreach (var attribute in projection.EffectiveAttributes.Where(attribute => !attribute.Attribute.IsOptional))
         {
-            var parameterName = char.ToLowerInvariant(attribute.Name[0]) + attribute.Name.Substring(1);
+            var parameterName = char.ToLowerInvariant(attribute.StorageMemberName[0])
+                + attribute.StorageMemberName.Substring(1);
             var parameterIdentifier = EscapeIdentifier(parameterName);
             var (parameterType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
             var parameter = SourceComposer.Parameter(parameterType, parameterIdentifier);
@@ -203,13 +224,35 @@ internal static class ExpressEntityEmitter
             }
 
             constructor.AddParameter(parameter);
-            constructor.AddStatement(attribute.Name.ToSimpleName().Assign(parameterIdentifier.ToSimpleName()));
+            constructor.AddStatement(
+                attribute.StorageMemberName.ToSimpleName().Assign(parameterIdentifier.ToSimpleName()));
             constructor.AddRootDescription(new DescriptionParam(
                 parameterName,
                 new IDescriptionItem[] { new DescriptionText($"The {attribute.Attribute.Name} attribute."), }));
         }
 
         return constructor;
+    }
+
+    private static Custom CreateExplicitInterfaceGetter(
+        ExpressEntityProjection projection,
+        ExpressEntityAttributeProjection attribute,
+        ExpressGeneratedTypeResolver valueResolver)
+    {
+        var (dataType, _) = AttributeDataType(projection, attribute, valueResolver);
+        if (attribute.Attribute.IsOptional)
+        {
+            dataType = dataType.Null;
+        }
+
+        var interfaceType = EntityInterfaceDataType(projection, attribute.DeclaringEntity.Symbol);
+        return new((ref SourceBuilder builder) =>
+        {
+            dataType.ToCode(ref builder);
+            builder.AppendSpace();
+            interfaceType.ToCode(ref builder);
+            builder.Append($".{attribute.Name} => {attribute.StorageMemberName};");
+        });
     }
 
     private static string EscapeIdentifier(string identifier)

@@ -34,6 +34,7 @@ internal sealed class ExpressEntityAttributeProjection
         DeclaringEntity = declaringEntity;
         Attribute = attribute;
         Name = name;
+        StorageMemberName = name;
         Type = type;
         StorageEntity = declaringEntity;
         StorageAttributeName = attribute.Name;
@@ -56,6 +57,11 @@ internal sealed class ExpressEntityAttributeProjection
     /// Gets the generated property name.
     /// </summary>
     internal string Name { get; }
+
+    /// <summary>
+    /// Gets the generated class member that stores this physical occurrence.
+    /// </summary>
+    internal string StorageMemberName { get; private set; }
 
     /// <summary>
     /// Gets the resolved supported attribute type.
@@ -118,5 +124,13 @@ internal sealed class ExpressEntityAttributeProjection
         StorageAttributeName = inheritedAttribute.StorageAttributeName;
         StorageType = inheritedAttribute.StorageType;
         RedirectTargetName = redirectTargetName;
+    }
+
+    /// <summary>
+    /// Disambiguates this physical occurrence from another inherited occurrence with the same public interface name.
+    /// </summary>
+    internal void DisambiguateStorageMember()
+    {
+        StorageMemberName = ExpressEntityProjection.ToPascalCase(StorageEntity.Name) + Name;
     }
 }

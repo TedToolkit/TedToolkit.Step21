@@ -201,7 +201,7 @@ internal sealed class ExpressEntityGenerationPlan
         foreach (var projection in projections)
         {
             var groups = projection.FlattenedAttributes
-                .GroupBy(attribute => attribute.Name, StringComparer.Ordinal)
+                .GroupBy(attribute => attribute.StorageMemberName, StringComparer.Ordinal)
                 .Where(group => group.Count() > 1
                     || group.Key is "DirectReferences" or "ToString"
                     || StringComparer.Ordinal.Equals(group.Key, projection.Name));

@@ -414,6 +414,160 @@ internal sealed class CompilationTests
         }
     }
 
+    /// <summary>
+    /// Verifies an unqualified enumeration item resolves from its schema-visible declaration.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_unqualified_enumeration_items_in_expressions()
+    {
+        const string source = """
+            SCHEMA enumeration_items;
+            TYPE transition_code = ENUMERATION OF (continuous, discontinuous);
+            END_TYPE;
+            ENTITY segment;
+              transition : transition_code;
+            DERIVE
+              is_closed : BOOLEAN := transition <> discontinuous;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+
+        var compilation = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("enumeration-items.exp", source)]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(compilation.Schemas.Single().NameReferences.Any(reference =>
+                reference.Target.Kind == ExpressBoundNameKind.Enumeration
+                && reference.Target.Name == "discontinuous")).IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies member qualifiers resolve through SELECT values and function result types.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_member_qualifiers_through_selects_and_function_results()
+    {
+        const string source = """
+            SCHEMA qualified_results;
+            ENTITY direction;
+              ratios : LIST [1:3] OF REAL;
+            END_ENTITY;
+            ENTITY vector;
+              orientation : direction;
+              magnitude : REAL;
+            END_ENTITY;
+            ENTITY curve;
+            END_ENTITY;
+            ENTITY offset_curve
+              SUBTYPE OF (curve);
+              basis_curve : curve;
+            END_ENTITY;
+            ENTITY trimmed_curve
+              SUBTYPE OF (curve);
+              basis_curve : curve;
+            END_ENTITY;
+            TYPE vector_or_direction = SELECT (vector, direction);
+            END_TYPE;
+            FUNCTION normalise(arg : vector_or_direction) : vector_or_direction;
+              RETURN(arg);
+            END_FUNCTION;
+            FUNCTION magnitude_of(arg : vector_or_direction) : REAL;
+              RETURN(normalise(arg).magnitude + arg.orientation.ratios[1]);
+            END_FUNCTION;
+            FUNCTION unwrap_curve(candidate : curve) : curve;
+              IF 'QUALIFIED_RESULTS.OFFSET_CURVE' IN TYPEOF(candidate) THEN
+                RETURN(candidate.basis_curve);
+              END_IF;
+              RETURN(candidate);
+            END_FUNCTION;
+            FUNCTION unwrap_trimmed(candidate : curve) : curve;
+              IF 'QUALIFIED_RESULTS.TRIMMED_CURVE' IN TYPEOF(candidate) THEN
+                RETURN(candidate.basis_curve);
+              END_IF;
+              RETURN(candidate);
+            END_FUNCTION;
+            END_SCHEMA;
+            """;
+
+        var compilation = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("qualified-results.exp", source)]);
+        var references = compilation.Schemas.SingleOrDefault()?.NameReferences ?? [];
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(references.Count(reference => reference.Target.Name == "magnitude")).IsEqualTo(1);
+            await Assert.That(references.Count(reference => reference.Target.Name == "orientation")).IsEqualTo(1);
+            await Assert.That(references.Count(reference => reference.Target.Name == "ratios")).IsEqualTo(1);
+            await Assert.That(references.Count(reference => reference.Target.Name == "basis_curve")).IsEqualTo(2);
+            await Assert.That(references.Where(reference => reference.Target.Name == "basis_curve")
+                .All(reference => reference.Target.AttributeCandidates.Count == 2)).IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies indexed aggregate elements retain their entity type for following attribute binding.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_attributes_after_grouped_aggregate_indices()
+    {
+        const string source = """
+            SCHEMA indexed_qualifiers;
+            ENTITY vertex;
+            END_ENTITY;
+            ENTITY edge;
+              edge_start : vertex;
+              edge_end : vertex;
+            END_ENTITY;
+            ENTITY oriented_edge
+              SUBTYPE OF (edge);
+              edge_element : edge;
+            DERIVE
+              SELF\edge.edge_start : vertex := SELF.edge_element.edge_start;
+              SELF\edge.edge_end : vertex := SELF.edge_element.edge_end;
+            END_ENTITY;
+            ENTITY path;
+              edge_list : LIST [1:?] OF oriented_edge;
+            END_ENTITY;
+            ENTITY edge_loop
+              SUBTYPE OF (path);
+            WHERE
+              connected : SELF\path.edge_list[1].edge_start :=: SELF\path.edge_list[1].edge_end;
+            END_ENTITY;
+            FUNCTION replace_start(candidate : edge_loop; replacement : vertex) : vertex;
+              candidate\path.edge_list[1].edge_start := replacement;
+              RETURN(candidate\path.edge_list[1].edge_start);
+            END_FUNCTION;
+            END_SCHEMA;
+            """;
+
+        var compilation = ExpressSchemaCompiler.Compile(
+            [new ExpressSchemaSource("indexed-qualifiers.exp", source)]);
+        var references = compilation.Schemas.SingleOrDefault()?.NameReferences ?? [];
+        var invalid = ExpressSchemaCompiler.Compile(
+            [new ExpressSchemaSource(
+                "missing-indexed-member.exp",
+                source.Replace(
+                    "edge_start := replacement",
+                    "missing_slot := replacement",
+                    StringComparison.Ordinal))]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(references.Where(reference => reference.Target.Name == "edge_start")
+                .Count(reference => reference.Target.AttributeCandidates.Count == 2)).IsEqualTo(3);
+            await Assert.That(references.Where(reference => reference.Target.Name == "edge_end")
+                .Count(reference => reference.Target.AttributeCandidates.Count == 2)).IsEqualTo(1);
+            await Assert.That(invalid.BindingDiagnostics.Select(diagnostic => diagnostic.Code))
+                .Contains("EXPRESS-BIND-UNRESOLVED-MEMBER");
+        }
+    }
+
     private static string Snapshot(ExpressSchemaCompilation compilation)
     {
         return string.Join(

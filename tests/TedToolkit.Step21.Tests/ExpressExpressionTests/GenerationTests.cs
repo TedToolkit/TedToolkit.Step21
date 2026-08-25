@@ -8,6 +8,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Numerics;
+using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
 
@@ -160,6 +161,20 @@ internal sealed class GenerationTests
         END_SCHEMA;
         """;
 
+    private const string TemporaryNameSchema = """
+        SCHEMA temporary_name_expression;
+        ENTITY optional_item;
+          optional_number : OPTIONAL INTEGER;
+        END_ENTITY;
+        ENTITY optional_holder;
+          candidate : OPTIONAL optional_item;
+        END_ENTITY;
+        FUNCTION compare(holder : optional_holder) : LOGICAL;
+          RETURN(holder.candidate.optional_number = 1);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
     private const string NumericDomainSchema = """
         SCHEMA numeric_domain;
         FUNCTION exercise(input_number : REAL; divisor : INTEGER; exponent : INTEGER) : REAL;
@@ -218,6 +233,8 @@ internal sealed class GenerationTests
         SCHEMA nominal_expression;
         TYPE measure = INTEGER;
         END_TYPE;
+        TYPE parameter_value = REAL;
+        END_TYPE;
         TYPE state = ENUMERATION OF (off, on, unknown_state);
         END_TYPE;
         TYPE choice = SELECT (measure, state);
@@ -226,10 +243,17 @@ internal sealed class GenerationTests
         FUNCTION inspect(
           left_measure : measure;
           right_measure : measure;
+          left_parameter : parameter_value;
+          right_parameter : parameter_value;
+          boolean_value : BOOLEAN;
+          logical_value : LOGICAL;
           current_state : state;
           left_choice : choice;
           right_choice : choice) : LOGICAL;
           RETURN((left_measure + right_measure = 3)
+            AND (left_parameter <> right_parameter)
+            AND (boolean_value = logical_value)
+            AND (logical_value = UNKNOWN)
             AND (current_state > state.off)
             AND (left_choice = right_choice));
         END_FUNCTION;
@@ -1006,6 +1030,101 @@ internal sealed class GenerationTests
     }
 
     /// <summary>
+    /// Verifies repeated lowering shares deterministic temporary names without re-evaluating guarded operands.
+    /// </summary>
+    [Test]
+    public async Task Should_allocate_unique_guard_names_within_one_generated_method()
+    {
+        var schema = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("temporary-name.exp", TemporaryNameSchema),
+        ]).Schemas.Single();
+        var expression = Find(schema, "holder.candidate.optional_number=1");
+        var context = new ExpressExpressionEmissionContext((reference, _, _, _) => reference.Name switch
+        {
+            "holder" => "NextHolder()",
+            _ => throw new InvalidOperationException(reference.Name),
+        });
+        var first = ExpressExpressionEmitter.Emit(expression, context);
+        var second = ExpressExpressionEmitter.Emit(expression, context);
+        var declarations = Regex.Matches(
+                first.Code + second.Code,
+                @"is \{ \} (?<name>__expressPresent_[A-Za-z0-9_]+)")
+            .Select(match => match.Groups["name"].Value)
+            .ToArray();
+        var consumer = $$"""
+            #nullable enable
+            using System.Collections.Generic;
+            using System.Numerics;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.TemporaryNameExpression;
+
+            internal sealed class TemporaryNameProbe : TedToolkit.Step21.SchemaDescriptor
+            {
+                private static OptionalHolder? _holder;
+                internal static int Reads { get; private set; }
+
+                internal static LogicalValue[] Compare(int mode)
+                {
+                    var item = mode == 2 ? null : new OptionalItem
+                    {
+                        OptionalNumber = mode == 0 ? BigInteger.One : mode == 1 ? new BigInteger(2) : null,
+                    };
+                    _holder = new OptionalHolder { Candidate = item };
+                    Reads = 0;
+                    return [{{first.Code}}, {{second.Code}}];
+                }
+
+                private static OptionalHolder NextHolder()
+                {
+                    Reads++;
+                    return _holder!;
+                }
+
+                public override SchemaName Name => new("temporary_name_expression");
+                protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) => null;
+                protected override IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
+                    ExchangeStructure structure,
+                    Entity value,
+                    IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) => [];
+                protected override ValidationResult ValidateCore(
+                    ExchangeStructure structure,
+                    IReadOnlyList<KeyValuePair<string, Entity>> entities) => new([]);
+                protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
+                    ExchangeStructure structure) => [];
+                protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+                    Entity value) => [];
+            }
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("temporary-name.exp", TemporaryNameSchema));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(declarations).IsNotEmpty();
+            await Assert.That(declarations.Distinct(StringComparer.Ordinal)).Count().IsEqualTo(declarations.Length);
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+        }
+
+        var assembly = Emit(result.OutputCompilation);
+        var probe = assembly.GetType("TemporaryNameProbe", throwOnError: true)!;
+        var flags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
+        var compare = probe.GetMethod("Compare", flags)!;
+        var reads = probe.GetProperty("Reads", flags)!;
+        var expected = new[] { LogicalValue.True, LogicalValue.False, LogicalValue.Unknown, };
+        for (var mode = 0; mode < expected.Length; mode++)
+        {
+            var values = (LogicalValue[])compare.Invoke(null, [mode])!;
+            using (Assert.Multiple())
+            {
+                await Assert.That(values).IsEquivalentTo([expected[mode], expected[mode],]);
+                await Assert.That((int)reads.GetValue(null)!).IsEqualTo(2);
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies arithmetic domain failures produce the EXPRESS indeterminate value instead of CLR exceptions.
     /// </summary>
     [Test]
@@ -1091,15 +1210,21 @@ internal sealed class GenerationTests
             new ExpressSchemaSource("model-context.exp", ModelContextSchema),
         ]).Schemas.Single();
         string Resolve(ExpressBoundName reference) => reference.Name.ToLowerInvariant();
-        string ResolveModel(string operation, IReadOnlyList<string> arguments) => operation switch
-        {
-            "TYPEOF" => $"ModelTypes({arguments[0]})",
-            "ROLESOF" => $"ModelRoles({arguments[0]})",
-            "USEDIN" => $"ModelUsers({arguments[0]}, {arguments[1]})",
-            _ => throw new InvalidOperationException(operation),
-        };
+        string ResolveModel(
+            string operation,
+            ExpressBoundExpression expression,
+            IReadOnlyList<string> arguments) => operation switch
+            {
+                "TYPEOF" => $"ModelTypes({arguments[0]})",
+                "ROLESOF" => $"ModelRoles({arguments[0]})",
+                "USEDIN" => $"ModelUsers({arguments[0]}, {arguments[1]})",
+                _ => throw new InvalidOperationException($"{operation}: {expression.SourceText}"),
+            };
 
-        var context = new ExpressExpressionEmissionContext(Resolve, "candidate", ResolveModel);
+        var context = new ExpressExpressionEmissionContext(
+            (reference, _, _, _) => Resolve(reference),
+            "candidate",
+            ResolveModel);
         var typeOf = ExpressExpressionEmitter.Emit(Find(schema, "TYPEOF(candidate)"), context);
         var rolesOf = ExpressExpressionEmitter.Emit(Find(schema, "ROLESOF(candidate)"), context);
         var usedIn = ExpressExpressionEmitter.Emit(
@@ -1349,10 +1474,15 @@ internal sealed class GenerationTests
         ]).Schemas.Single();
         string Resolve(ExpressBoundName reference) => reference.Name.ToLowerInvariant();
         var sum = ExpressExpressionEmitter.Emit(Find(schema, "left_measure+right_measure"), Resolve);
+        var parameterEquality = ExpressExpressionEmitter.Emit(
+            Find(schema, "left_parameter<>right_parameter"),
+            Resolve);
+        var logicalEquality = ExpressExpressionEmitter.Emit(Find(schema, "boolean_value=logical_value"), Resolve);
+        var unknownEquality = ExpressExpressionEmitter.Emit(Find(schema, "logical_value=UNKNOWN"), Resolve);
         var order = ExpressExpressionEmitter.Emit(Find(schema, "current_state>state.off"), Resolve);
         var selectionContext = new ExpressExpressionEmissionContext(
-            Resolve,
-            resolveValueEquality: static (_, left, right) => $"SelectValueEquals({left}, {right})");
+            (reference, _, _, _) => Resolve(reference),
+            resolveValueEquality: static (_, left, _, right, _) => $"SelectValueEquals({left}, {right})");
         var selection = ExpressExpressionEmitter.Emit(
             Find(schema, "left_choice=right_choice"),
             selectionContext);
@@ -1366,23 +1496,34 @@ internal sealed class GenerationTests
             internal sealed class NominalExpressionProbe : TedToolkit.Step21.SchemaDescriptor
             {
                 internal static BigInteger Sum(Measure left_measure, Measure right_measure) => {{sum.Code}};
+                internal static LogicalValue ParameterNotEqual(
+                    global::TedToolkit.Step21.Generated.NominalExpression.ParameterValue left_parameter,
+                    global::TedToolkit.Step21.Generated.NominalExpression.ParameterValue right_parameter) =>
+                    {{parameterEquality.Code}};
+                internal static LogicalValue LogicalEqual(bool boolean_value, LogicalValue logical_value) =>
+                    {{logicalEquality.Code}};
+                internal static LogicalValue UnknownEqual(LogicalValue logical_value) => {{unknownEquality.Code}};
                 internal static LogicalValue Ordered(State current_state) => {{order.Code}};
                 internal static LogicalValue Equal(Choice left_choice, Choice right_choice) => {{selection.Code}};
 
-                private static bool SelectValueEquals(Choice left, Choice right) => left == right;
+                private static LogicalValue SelectValueEquals(Choice left, Choice right) => left == right
+                    ? LogicalValue.True
+                    : LogicalValue.False;
 
                 public override SchemaName Name => new("nominal_expression");
                 protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) => null;
                 protected override IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
                     ExchangeStructure structure,
                     Entity value,
-                    IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components) => [];
+                    IReadOnlyList<KeyValuePair<string,
+                        IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>> components) => [];
                 protected override ValidationResult ValidateCore(
                     ExchangeStructure structure,
                     IReadOnlyList<KeyValuePair<string, Entity>> entities) => new([]);
                 protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
                     ExchangeStructure structure) => [];
-                protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+                protected override IReadOnlyList<KeyValuePair<string,
+                    IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>> ProjectEntityCore(
                     Entity value) => [];
             }
             """;
@@ -1400,6 +1541,11 @@ internal sealed class GenerationTests
             throwOnError: true)!;
         var one = Activator.CreateInstance(measureType, new BigInteger(1))!;
         var two = Activator.CreateInstance(measureType, new BigInteger(2))!;
+        var parameterType = assembly.GetType(
+            "TedToolkit.Step21.Generated.NominalExpression.ParameterValue",
+            throwOnError: true)!;
+        var parameterOne = Activator.CreateInstance(parameterType, new RealValue(1, 0))!;
+        var parameterTwo = Activator.CreateInstance(parameterType, new RealValue(2, 0))!;
         var on = stateType.GetProperty("On", BindingFlags.Static | BindingFlags.Public)!.GetValue(null)!;
         var firstChoice = choiceType.GetMethod("FromMeasure", BindingFlags.Static | BindingFlags.Public)!
             .Invoke(null, [one])!;
@@ -1416,6 +1562,12 @@ internal sealed class GenerationTests
                 .IsEmpty();
             await Assert.That(probe.GetMethod("Sum", flags)!.Invoke(null, [one, two]))
                 .IsEqualTo(new BigInteger(3));
+            await Assert.That(probe.GetMethod("ParameterNotEqual", flags)!
+                .Invoke(null, [parameterOne, parameterTwo])).IsEqualTo(LogicalValue.True);
+            await Assert.That(probe.GetMethod("LogicalEqual", flags)!
+                .Invoke(null, [true, LogicalValue.True])).IsEqualTo(LogicalValue.True);
+            await Assert.That(probe.GetMethod("UnknownEqual", flags)!
+                .Invoke(null, [LogicalValue.Unknown])).IsEqualTo(LogicalValue.True);
             await Assert.That(probe.GetMethod("Ordered", flags)!.Invoke(null, [on]))
                 .IsEqualTo(LogicalValue.True);
             await Assert.That(probe.GetMethod("Equal", flags)!.Invoke(null, [firstChoice, equalChoice]))
@@ -1437,8 +1589,8 @@ internal sealed class GenerationTests
         ]).Schemas.Single();
         string Resolve(ExpressBoundName reference) => reference.Name.ToLowerInvariant();
         var context = new ExpressExpressionEmissionContext(
-            Resolve,
-            resolveValueEquality: static (_, left, right) => $"EntityValueEquals({left}, {right})");
+            (reference, _, _, _) => Resolve(reference),
+            resolveValueEquality: static (_, left, _, right, _) => $"EntityValueEquals({left}, {right})");
         var valueEquality = ExpressExpressionEmitter.Emit(Find(schema, "left_item=right_item"), context);
         var instanceEquality = ExpressExpressionEmitter.Emit(Find(schema, "left_item:=:right_item"), context);
         var consumer = $$"""
@@ -1453,7 +1605,9 @@ internal sealed class GenerationTests
                 internal static LogicalValue ValueEqual(Item left_item, Item right_item) => {{valueEquality.Code}};
                 internal static LogicalValue InstanceEqual(Item left_item, Item right_item) => {{instanceEquality.Code}};
 
-                private static bool EntityValueEquals(Item left, Item right) => left.Code == right.Code;
+                private static LogicalValue EntityValueEquals(Item left, Item right) => left.Code == right.Code
+                    ? LogicalValue.True
+                    : LogicalValue.False;
 
                 public override SchemaName Name => new("entity_equality");
                 protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) => null;
@@ -1922,10 +2076,15 @@ internal sealed class GenerationTests
             new ExpressSchemaSource("complex-construction.exp", ComplexConstructionSchema),
         ]).Schemas.Single();
         string Resolve(ExpressBoundName reference) => reference.Name.ToLowerInvariant();
-        string ResolveModel(string operation, IReadOnlyList<string> arguments) => operation == "COMPLEX_CONSTRUCTOR"
+        string ResolveModel(
+            string operation,
+            ExpressBoundExpression expression,
+            IReadOnlyList<string> arguments) => operation == "COMPLEX_CONSTRUCTOR"
             ? $"ConstructComplex({arguments[0]}, {arguments[1]})"
-            : throw new InvalidOperationException(operation);
-        var context = new ExpressExpressionEmissionContext(Resolve, resolveModelFunction: ResolveModel);
+            : throw new InvalidOperationException($"{operation}: {expression.SourceText}");
+        var context = new ExpressExpressionEmissionContext(
+            (reference, _, _, _) => Resolve(reference),
+            resolveModelFunction: ResolveModel);
         var construction = ExpressExpressionEmitter.Emit(Find(schema, "left_part||right_part"), context);
         var consumer = $$"""
             #nullable enable

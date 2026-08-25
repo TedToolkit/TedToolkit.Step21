@@ -232,7 +232,7 @@ internal static class ExpressSchemaCompiler
             .ThenBy(declaration => declaration.Syntax.Span.Start.Column)
             .Select(CreateBoundDeclaration)
             .ToArray();
-        var expressions = ExpressExpressionBinder.Bind(
+        var expressionFacts = ExpressExpressionBinder.Bind(
             declarations,
             schema.NameReferences);
         return new(
@@ -241,7 +241,9 @@ internal static class ExpressSchemaCompiler
             declarations,
             nestedDeclarations,
             schema.NameReferences,
-            expressions);
+            expressionFacts.Expressions,
+            expressionFacts.IndeterminateFunctions,
+            expressionFacts.IndeterminateLocals);
     }
 
     private static ExpressBoundDeclaration CreateBoundDeclaration(SymbolDraft declaration)
@@ -713,6 +715,24 @@ internal static class ExpressSchemaCompiler
                 schemaScope.TryAdd(CreateSchemaName(symbol.Value, symbol.Key));
             }
 
+            foreach (var item in schema.Declarations
+                         .Where(declaration => declaration.BoundType is ExpressBoundEnumerationType)
+                         .SelectMany(declaration => declaration.Syntax.DescendantsAndSelf()
+                             .Where(node => node.Production == "enumerationId")
+                             .Select(node => (Declaration: declaration, Item: node)))
+                         .GroupBy(pair => pair.Item.IdentifierToken().Text, _nameComparer)
+                         .Where(group => group.Count() == 1)
+                         .Select(group => group.Single()))
+            {
+                var token = item.Item.IdentifierToken();
+                schemaScope.TryAdd(new ExpressBoundName(
+                    token.Text,
+                    ExpressBoundNameKind.Enumeration,
+                    new ExpressBoundNamedType(item.Declaration.Symbol, item.Item.Span),
+                    schemaDeclaration: null,
+                    item.Item.Span));
+            }
+
             foreach (var declaration in schema.Declarations)
             {
                 BindDeclarationNames(schema, declaration.Syntax, schemaScope);
@@ -1022,6 +1042,50 @@ internal static class ExpressSchemaCompiler
                     BindRestrictedName(schema, syntax, scope, expectedKind: null);
                     return;
 
+                case "assignmentStmt":
+                    var assignmentTarget = BindRestrictedName(
+                        schema,
+                        syntax.RequiredChild("generalRef"),
+                        scope,
+                        expectedKind: null);
+                    foreach (var qualifier in syntax.ChildRules("qualifier"))
+                    {
+                        var child = qualifier.ChildRules().Single();
+                        if (child.Production == "attributeQualifier")
+                        {
+                            assignmentTarget = BindMemberName(schema, child, assignmentTarget);
+                        }
+                        else if (child.Production == "groupQualifier")
+                        {
+                            assignmentTarget = BindRestrictedName(
+                                schema,
+                                child.RequiredChild("entityRef"),
+                                scope,
+                                ExpressBoundNameKind.Entity);
+                        }
+                        else if (child.Production == "indexQualifier"
+                                 && assignmentTarget?.Type is ExpressBoundAggregateType aggregate)
+                        {
+                            VisitNames(schema, child, scope);
+                            assignmentTarget = new(
+                                assignmentTarget.Name,
+                                assignmentTarget.Kind,
+                                aggregate.ElementType,
+                                assignmentTarget.SchemaDeclaration,
+                                assignmentTarget.Span,
+                                assignmentTarget.IsOptional,
+                                assignmentTarget.Attribute,
+                                assignmentTarget.AttributeCandidates);
+                        }
+                        else
+                        {
+                            VisitNames(schema, child, scope);
+                        }
+                    }
+
+                    VisitNames(schema, syntax.RequiredChild("expression"), scope);
+                    return;
+
                 case "procedureCallStmt":
                     var procedure = syntax.ChildRules("procedureRef").SingleOrDefault();
                     if (procedure is not null)
@@ -1125,6 +1189,20 @@ internal static class ExpressSchemaCompiler
                         scope,
                         ExpressBoundNameKind.Entity);
                 }
+                else if (child.Production == "indexQualifier"
+                         && target?.Type is ExpressBoundAggregateType aggregate)
+                {
+                    VisitNames(schema, child, scope);
+                    target = new(
+                        target.Name,
+                        target.Kind,
+                        aggregate.ElementType,
+                        target.SchemaDeclaration,
+                        target.Span,
+                        target.IsOptional,
+                        target.Attribute,
+                        target.AttributeCandidates);
+                }
                 else
                 {
                     VisitNames(schema, child, scope);
@@ -1157,8 +1235,8 @@ internal static class ExpressSchemaCompiler
                 return null;
             }
 
-            var declaration = source.SchemaDeclaration
-                ?? (source.Type as ExpressBoundNamedType)?.Declaration;
+            var declaration = (source.Type as ExpressBoundNamedType)?.Declaration
+                ?? source.SchemaDeclaration;
             if (declaration is null)
             {
                 return null;
@@ -1166,36 +1244,41 @@ internal static class ExpressSchemaCompiler
 
             var draft = FindSymbol(declaration);
             ExpressBoundName? target = null;
-            if (draft?.Symbol.Kind == ExpressDeclarationKind.Entity)
+            var attributes = EnumerateAttributes(
+                    source.Type,
+                    new HashSet<ExpressBoundSymbol>(),
+                    includeSubtypes: false)
+                .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
+                .Distinct()
+                .ToArray();
+            if (attributes.Length == 0)
             {
-                var attributes = draft.Attributes
+                attributes = EnumerateAttributes(
+                        source.Type,
+                        new HashSet<ExpressBoundSymbol>(),
+                        includeSubtypes: true)
                     .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
+                    .Distinct()
                     .ToArray();
-                if (attributes.Length == 0)
-                {
-                    attributes = draft.Supertypes
-                        .Select(FindSymbol)
-                        .Where(candidate => candidate is not null)
-                        .SelectMany(candidate => EnumerateAttributes(
-                            candidate!,
-                            new HashSet<ExpressBoundSymbol>()))
-                        .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
-                        .Distinct()
-                        .ToArray();
-                }
+            }
 
-                if (attributes.Length == 1)
-                {
-                    var attribute = attributes[0];
-                    target = new(
-                        attribute.Name,
-                        ExpressBoundNameKind.Attribute,
-                        attribute.Type,
-                        schemaDeclaration: null,
-                        attribute.Span,
-                        attribute.IsOptional,
-                        attribute);
-                }
+            var compatibleAttributes = attributes.Length > 0
+                && attributes.All(candidate => ReferenceEquals(candidate.Type, attributes[0].Type)
+                    || (candidate.Type is ExpressBoundNamedType candidateNamed
+                        && attributes[0].Type is ExpressBoundNamedType firstNamed
+                        && ReferenceEquals(candidateNamed.Declaration, firstNamed.Declaration)));
+            if (compatibleAttributes)
+            {
+                var attribute = attributes[0];
+                target = new(
+                    attribute.Name,
+                    ExpressBoundNameKind.Attribute,
+                    attribute.Type,
+                    schemaDeclaration: null,
+                    attribute.Span,
+                    attribute.IsOptional,
+                    attribute,
+                    attributes);
             }
             else if (draft?.BoundType is ExpressBoundEnumerationType)
             {
@@ -1227,6 +1310,93 @@ internal static class ExpressSchemaCompiler
 
             schema.NameReferences.Add(new ExpressBoundNameReference(target, isApplication: false, span));
             return target;
+        }
+
+        private IEnumerable<ExpressBoundAttribute> EnumerateAttributes(
+            ExpressBoundType? type,
+            ISet<ExpressBoundSymbol> visited,
+            bool includeSubtypes)
+        {
+            if (type is ExpressBoundNamedType named)
+            {
+                var draft = FindSymbol(named.Declaration);
+                if (draft?.Symbol.Kind == ExpressDeclarationKind.Entity)
+                {
+                    foreach (var attribute in EnumerateAttributes(draft, visited))
+                    {
+                        yield return attribute;
+                    }
+
+                    if (includeSubtypes)
+                    {
+                        var declarations = FindSchema(named.Declaration.DeclaringSchema).Declarations;
+                        var subtypes = new Queue<SymbolDraft>(declarations.Where(candidate =>
+                            candidate.Symbol.Kind == ExpressDeclarationKind.Entity
+                            && candidate.Supertypes.Contains(named.Declaration)));
+                        while (subtypes.Count > 0)
+                        {
+                            var subtype = subtypes.Dequeue();
+                            if (!visited.Add(subtype.Symbol))
+                            {
+                                continue;
+                            }
+
+                            foreach (var attribute in subtype.Attributes)
+                            {
+                                yield return attribute;
+                            }
+
+                            foreach (var candidate in declarations.Where(candidate =>
+                                         candidate.Symbol.Kind == ExpressDeclarationKind.Entity
+                                         && candidate.Supertypes.Contains(subtype.Symbol)))
+                            {
+                                subtypes.Enqueue(candidate);
+                            }
+                        }
+                    }
+
+                    yield break;
+                }
+
+                if (!visited.Add(named.Declaration) || draft?.BoundType is null)
+                {
+                    yield break;
+                }
+
+                foreach (var attribute in EnumerateAttributes(draft.BoundType, visited, includeSubtypes))
+                {
+                    yield return attribute;
+                }
+
+                yield break;
+            }
+
+            if (type is not ExpressBoundSelectType select)
+            {
+                yield break;
+            }
+
+            if (select.BaseType is not null)
+            {
+                foreach (var attribute in EnumerateAttributes(
+                             new ExpressBoundNamedType(select.BaseType, select.Span),
+                             visited,
+                             includeSubtypes))
+                {
+                    yield return attribute;
+                }
+            }
+
+            foreach (var alternative in select.Alternatives)
+            {
+                foreach (var attribute in EnumerateAttributes(
+                             new ExpressBoundNamedType(alternative, select.Span),
+                             visited,
+                             includeSubtypes))
+                {
+                    yield return attribute;
+                }
+            }
         }
 
         private ExpressRuleSyntax? FindEnumerationItem(
@@ -1635,7 +1805,9 @@ internal static class ExpressSchemaCompiler
                 syntax.RequiredChild("attributeDecl"),
                 ExpressAttributeKind.Inverse,
                 type,
-                isOptional: false);
+                isOptional: false,
+                entity,
+                syntax.RequiredChild("attributeRef").IdentifierToken().Text);
         }
 
         private void AddAttribute(
@@ -1644,7 +1816,9 @@ internal static class ExpressSchemaCompiler
             ExpressRuleSyntax attributeDeclaration,
             ExpressAttributeKind kind,
             ExpressBoundType type,
-            bool isOptional)
+            bool isOptional,
+            ExpressBoundSymbol? inverseEntity = null,
+            string? inverseAttributeName = null)
         {
             var nameToken = attributeDeclaration.DescendantTokens()
                 .Last(token => token.TokenName == "SimpleId");
@@ -1664,7 +1838,9 @@ internal static class ExpressSchemaCompiler
                 kind,
                 type,
                 isOptional,
-                attributeDeclaration.Span));
+                attributeDeclaration.Span,
+                inverseEntity,
+                inverseAttributeName));
         }
 
         private void BindContainedTypes(
