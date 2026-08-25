@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System.Security.Cryptography;
+using System.Text;
 
 using Microsoft.CodeAnalysis;
 
@@ -29,10 +30,15 @@ public sealed class GeneratedFidelityTests
     {
         var schemaPath = Path.Combine(AppContext.BaseDirectory, "TestData", "Express", "Ap203", "ap203.exp");
         await Assert.That(File.Exists(schemaPath)).IsTrue();
-        await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(schemaPath))))
-            .IsEqualTo(AP203_SHA256);
-
         var schemaText = File.ReadAllText(schemaPath);
+        foreach (var lineEnding in new[] { "\n", "\r\n", })
+        {
+            var variant = schemaText.ReplaceLineEndings(lineEnding);
+            var canonicalBytes = Encoding.UTF8.GetBytes(variant.ReplaceLineEndings("\n"));
+            await Assert.That(Convert.ToHexString(SHA256.HashData(canonicalBytes)))
+                .IsEqualTo(AP203_SHA256);
+        }
+
         var bound = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("schemas/ap203.exp", schemaText)]);
         var boundExpressions = bound.Schemas.Single().Expressions.Select(expression => expression.Span).ToArray();
         var missingRuleExpressions = bound.Schemas.Single().Declarations

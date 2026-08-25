@@ -6132,14 +6132,20 @@ public sealed class ReachableRuleTests
         var result = GeneratorHostTests.Run(
             SCALAR_GENERIC_CHOOSE_CONSUMER,
             ("schemas/scalar-generic-choose.exp", SCALAR_GENERIC_CHOOSE_SCHEMA));
-        var conflicting = GeneratorHostTests.Run(
-            ("schemas/scalar-generic-conflict.exp", SCALAR_GENERIC_CHOOSE_SCHEMA.Replace(
-                "ENTITY sample;\n  actual : vertex;",
-                "ENTITY other; END_ENTITY;\nENTITY sample;\n  actual : vertex;\n  other_value : other;",
-                StringComparison.Ordinal).Replace(
-                "choose(TRUE, actual, actual)",
-                "choose(TRUE, actual, other_value)",
-                StringComparison.Ordinal)));
+        var conflicting = new[] { "\n", "\r\n", }
+            .Select((lineEnding, index) => GeneratorHostTests.Run((
+                $"schemas/scalar-generic-conflict-{index}.exp",
+                SCALAR_GENERIC_CHOOSE_SCHEMA.ReplaceLineEndings(lineEnding).Replace(
+                    "ENTITY sample;",
+                    "ENTITY other; END_ENTITY;" + Environment.NewLine + "ENTITY sample;",
+                    StringComparison.Ordinal).Replace(
+                    "  actual : vertex;",
+                    "  actual : vertex;" + Environment.NewLine + "  other_value : other;",
+                    StringComparison.Ordinal).Replace(
+                    "choose(TRUE, actual, actual)",
+                    "choose(TRUE, actual, other_value)",
+                    StringComparison.Ordinal))))
+            .ToArray();
         var unbound = GeneratorHostTests.Run(
             ("schemas/scalar-generic-unbound.exp", SCALAR_GENERIC_CHOOSE_SCHEMA.Replace(
                 "choose(TRUE, actual, actual)",
@@ -6170,9 +6176,11 @@ public sealed class ReachableRuleTests
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
             await Assert.That(validation.IsValid).IsTrue();
-            await Assert.That(conflicting.Diagnostics.Any(diagnostic =>
+            await Assert.That(conflicting.All(conflict => conflict.Diagnostics.Any(diagnostic =>
                 diagnostic.Id == "STEP21EXP006"
-                && diagnostic.GetMessage().Contains("no generated result type", StringComparison.Ordinal))).IsTrue();
+                && diagnostic.GetMessage().Contains(
+                    "no generated result type",
+                    StringComparison.Ordinal)))).IsTrue();
             await Assert.That(unbound.Diagnostics.Any(diagnostic =>
                 diagnostic.Id == "STEP21EXP006"
                 && diagnostic.GetMessage().Contains("no generated result type", StringComparison.Ordinal))).IsTrue();
