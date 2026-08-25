@@ -20,6 +20,106 @@ namespace TedToolkit.Step21.IntegrationTests.PackedConsumerTests;
 internal sealed class PackageTests
 {
     /// <summary>
+    /// Verifies the precompiled AP203 package exposes generated types without consumer schema inputs or analyzer runtime assets.
+    /// </summary>
+    [Test]
+    public async Task Should_build_and_run_the_precompiled_ap203_package_only_consumer()
+    {
+        var repositoryRoot = RepositoryPaths.FindRoot();
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), $"TedToolkit.Step21.Ap203.Packed.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryRoot);
+
+        try
+        {
+            var runtimeProject = Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "TedToolkit.Step21.csproj");
+            var packageProject = Path.Combine(repositoryRoot, "src", "TedToolkit.Step21.Ap203", "TedToolkit.Step21.Ap203.csproj");
+            var consumerProject = Path.Combine(
+                repositoryRoot,
+                "tests",
+                "TedToolkit.Step21.PackedConsumer",
+                "TedToolkit.Step21.PackedConsumer.csproj");
+            var packageDirectory = Path.Combine(temporaryRoot, "packages");
+            Directory.CreateDirectory(packageDirectory);
+
+            _ = await RunDotNet(
+                repositoryRoot,
+                "pack",
+                runtimeProject,
+                "--configuration",
+                "Release",
+                "--no-build",
+                "--output",
+                packageDirectory);
+            _ = await RunDotNet(
+                repositoryRoot,
+                "pack",
+                packageProject,
+                "--configuration",
+                "Release",
+                "--no-build",
+                "--output",
+                packageDirectory);
+            var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+            CopyCachedPackage(
+                packageDirectory,
+                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
+                "antlr4.runtime.standard",
+                "4.13.1");
+
+            var consumer = await BuildConsumer(
+                repositoryRoot,
+                consumerProject,
+                packageDirectory,
+                Path.Combine(temporaryRoot, "consumer"),
+                "--property:Ap203PackageProof=true");
+            var runtimeLibraries = ReadRuntimeLibraries(
+                Path.Combine(consumer.IntermediateDirectory, "project.assets.json"));
+            var packageEntries = ReadPackageEntries(packagePath);
+            var packageSpecification = ReadPackageText(packagePath, "TedToolkit.Step21.Ap203.nuspec");
+            var runOutput = await RunDotNet(
+                repositoryRoot,
+                Path.Combine(consumer.OutputDirectory, "TedToolkit.Step21.PackedConsumer.dll"));
+            var generatedRoot = Path.Combine(consumer.IntermediateDirectory, "Generated");
+
+            using (Assert.Multiple())
+            {
+                await Assert.That(runOutput).Contains("PACKED_AP203_OK");
+                await Assert.That(Directory.Exists(generatedRoot)
+                    && Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories).Any()).IsFalse();
+                await Assert.That(packageEntries).Contains("lib/net10.0/TedToolkit.Step21.Ap203.dll");
+                await Assert.That(packageEntries).Contains("README.md");
+                await Assert.That(packageEntries.Any(path => path.EndsWith(".exp", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(packageEntries.Any(path => path.StartsWith("analyzers/", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(packageEntries.Any(path => path.Contains("RoslynHelper", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(packageEntries.Any(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(packageEntries.Any(path => path.EndsWith("System.Xml.dll", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(packageSpecification).Contains(
+                    "<dependency id=\"TedToolkit.Step21\" version=\"1.0.0\" exclude=\"Build,Analyzers\" />");
+                await Assert.That(packageSpecification).DoesNotContain("TedToolkit.Step21.Analyzer");
+                await Assert.That(packageSpecification).DoesNotContain("TedToolkit.RoslynHelper");
+                await Assert.That(runtimeLibraries.Count(name => name.Equals(
+                    "TedToolkit.Step21.Ap203/1.0.0",
+                    StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
+                await Assert.That(runtimeLibraries.Count(name => name.Equals(
+                    "TedToolkit.Step21/1.0.0",
+                    StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
+                await Assert.That(runtimeLibraries.Any(name => name.StartsWith(
+                    "TedToolkit.Step21.Analyzer/",
+                    StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(runtimeLibraries.Any(name => name.StartsWith(
+                    "TedToolkit.RoslynHelper/",
+                    StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(runtimeLibraries.Any(name => name.Contains("Json", StringComparison.OrdinalIgnoreCase))).IsFalse();
+                await Assert.That(runtimeLibraries.Any(name => name.Contains("Xml", StringComparison.OrdinalIgnoreCase))).IsFalse();
+            }
+        }
+        finally
+        {
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies a local package reproducibly generates, builds, and runs the representative consumer cleanly.
     /// </summary>
     [Test]
@@ -132,13 +232,14 @@ internal sealed class PackageTests
         string repositoryRoot,
         string consumerProject,
         string packageDirectory,
-        string buildRoot)
+        string buildRoot,
+        params string[] properties)
     {
         var consumerPackagesDirectory = Path.Combine(buildRoot, "packages");
         var intermediateDirectory = Path.Combine(buildRoot, "obj") + Path.DirectorySeparatorChar;
         var outputDirectory = Path.Combine(buildRoot, "bin") + Path.DirectorySeparatorChar;
-        _ = await RunDotNet(
-            repositoryRoot,
+        var restoreArguments = new List<string>
+        {
             "restore",
             consumerProject,
             "--source",
@@ -148,9 +249,13 @@ internal sealed class PackageTests
             "--force",
             "--no-cache",
             $"--property:BaseIntermediateOutputPath={intermediateDirectory}",
-            $"--property:MSBuildProjectExtensionsPath={intermediateDirectory}");
-        _ = await RunDotNet(
-            repositoryRoot,
+            $"--property:MSBuildProjectExtensionsPath={intermediateDirectory}",
+        };
+        restoreArguments.AddRange(properties);
+        _ = await RunDotNet(repositoryRoot, [.. restoreArguments]);
+
+        var buildArguments = new List<string>
+        {
             "build",
             consumerProject,
             "--configuration",
@@ -158,7 +263,10 @@ internal sealed class PackageTests
             "--no-restore",
             $"--property:BaseIntermediateOutputPath={intermediateDirectory}",
             $"--property:MSBuildProjectExtensionsPath={intermediateDirectory}",
-            $"--property:OutputPath={outputDirectory}");
+            $"--property:OutputPath={outputDirectory}",
+        };
+        buildArguments.AddRange(properties);
+        _ = await RunDotNet(repositoryRoot, [.. buildArguments]);
         return new(intermediateDirectory, outputDirectory);
     }
 

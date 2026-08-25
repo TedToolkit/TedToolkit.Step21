@@ -8,6 +8,7 @@
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
     <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.7.15" />
     <PackageVersion Include="TedToolkit.Step21" Version="1.0.0" />
+    <PackageVersion Include="TedToolkit.Step21.Ap203" Version="1.0.0" />
     <PackageVersion Include="TUnit" Version="1.63.0" />
   </ItemGroup>
 </Project>
