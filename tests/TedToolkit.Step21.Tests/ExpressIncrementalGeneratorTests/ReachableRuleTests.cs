@@ -2223,6 +2223,29 @@ public sealed class ReachableRuleTests
             RETURN(item > 0);
           END_IF;
         END_FUNCTION;
+        FUNCTION scalar_assignment(item, replacement : measure_choice) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(item) THEN
+            item := replacement;
+          END_IF;
+          RETURN(EXISTS(item));
+        END_FUNCTION;
+        FUNCTION scalar_use_after_no_else(item : measure_choice) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(item) THEN
+            IF item > 0.0 THEN
+              RETURN(TRUE);
+            END_IF;
+          END_IF;
+          RETURN(EXISTS(item));
+        END_FUNCTION;
+        FUNCTION scalar_assignment_then_use(item, replacement : measure_choice) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(item) THEN
+            item := replacement;
+            IF 'INTEGER' IN TYPEOF(item) THEN
+              RETURN(item > 0);
+            END_IF;
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
         ENTITY sample;
           first : measure_choice;
           second : measure_choice;
@@ -2234,6 +2257,9 @@ public sealed class ReachableRuleTests
           number_real_branch : positive_real(number_real);
           integer_branch : positive_integer(integer_item);
           closed_else_branch : positive_closed_else(integer_item);
+          scalar_assignment_storage : scalar_assignment(first, integer_item);
+          scalar_no_else_storage : scalar_use_after_no_else(first);
+          scalar_assignment_use : scalar_assignment_then_use(first, integer_item);
           integer_control : 2 > 1;
           real_control : 2.0 > 1.0;
         END_ENTITY;
@@ -3759,36 +3785,83 @@ public sealed class ReachableRuleTests
           END_IF;
           RETURN(?);
         END_FUNCTION;
-        FUNCTION unrelated_root_write(left, right : carrier) : INTEGER;
+        FUNCTION opposite_branch_rewrite(
+                     left, right, replacement : value_choice;
+                     change : BOOLEAN) : INTEGER;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(left) THEN
+            IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(right) THEN
+              IF change THEN
+                left := replacement;
+              ELSE
+                right := replacement;
+              END_IF;
+              RETURN(first_code(left) + first_code(right));
+            END_IF;
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION case_rewrite(item, replacement : value_choice; mode : INTEGER) : INTEGER;
+          LOCAL untouched : INTEGER; END_LOCAL;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(item) THEN
+            CASE mode OF
+              1 : item := replacement;
+              OTHERWISE : untouched := 0;
+            END_CASE;
+            RETURN(first_code(item));
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION aliased_root_write(left, right : carrier; replacement : value_choice) : INTEGER;
           LOCAL
             left_working : carrier := left;
             right_working : carrier := right;
           END_LOCAL;
           IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(left_working.selected) THEN
-            right_working.selected := right_working.selected;
+            right_working.selected := replacement;
             RETURN(first_code(left_working.selected));
           END_IF;
           RETURN(?);
         END_FUNCTION;
-        FUNCTION controls(first, second : value_choice; left, right : carrier) : LOGICAL;
+        FUNCTION no_explicit_unknown(item, replacement : value_choice) : INTEGER;
+          IF 'FLOW_FACT_LIFECYCLE_MODEL.FIRST_VALUE' IN TYPEOF(item) THEN
+            item := replacement;
+            RETURN(first_code(item));
+          END_IF;
+          RETURN(0);
+        END_FUNCTION;
+        FUNCTION immediate_return(input_value : INTEGER) : INTEGER;
+          RETURN(input_value);
+          input_value := input_value + 1;
+          RETURN(input_value);
+        END_FUNCTION;
+        FUNCTION controls(first, second : value_choice; left, alias_value : carrier) : LOGICAL;
           RETURN(NOT EXISTS(direct_rewrite(first, second))
             AND NOT EXISTS(branch_rewrite(first, second, TRUE))
             AND NOT EXISTS(repeat_rewrite(first, second))
             AND NOT EXISTS(path_rewrite(left, second))
-            AND EXISTS(unrelated_root_write(left, right)));
+            AND NOT EXISTS(opposite_branch_rewrite(first, first, second, TRUE))
+            AND NOT EXISTS(opposite_branch_rewrite(first, first, second, FALSE))
+            AND NOT EXISTS(case_rewrite(first, second, 1))
+            AND NOT EXISTS(aliased_root_write(alias_value, alias_value, second))
+            AND NOT EXISTS(no_explicit_unknown(first, second))
+            AND immediate_return(1) = 1);
         END_FUNCTION;
         ENTITY sample;
           first : value_choice;
           second : value_choice;
           path_left : carrier;
-          unrelated_left : carrier;
-          right : carrier;
+          alias_value : carrier;
         WHERE
           direct_fact : NOT EXISTS(direct_rewrite(first, second));
           branch_fact : NOT EXISTS(branch_rewrite(first, second, TRUE));
           repeat_fact : NOT EXISTS(repeat_rewrite(first, second));
           path_fact : NOT EXISTS(path_rewrite(path_left, second));
-          unrelated_root_fact : EXISTS(unrelated_root_write(unrelated_left, right));
+          opposite_then_fact : NOT EXISTS(opposite_branch_rewrite(first, first, second, TRUE));
+          opposite_else_fact : NOT EXISTS(opposite_branch_rewrite(first, first, second, FALSE));
+          case_fact : NOT EXISTS(case_rewrite(first, second, 1));
+          alias_fact : NOT EXISTS(aliased_root_write(alias_value, alias_value, second));
+          no_explicit_unknown_fact : NOT EXISTS(no_explicit_unknown(first, second));
+          top_return_fact : immediate_return(1) = 1;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -3807,8 +3880,7 @@ public sealed class ReachableRuleTests
                 var first = ValueChoice.FromFirstValue(firstValue);
                 var second = ValueChoice.FromSecondValue(secondValue);
                 var pathLeft = new Carrier(first);
-                var unrelatedLeft = new Carrier(first);
-                var right = new Carrier(second);
+                var aliasValue = new Carrier(first);
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["flow fact lifecycle"], "3;1"),
@@ -3820,12 +3892,34 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, firstValue);
                 _ = structure.Add(section, secondValue);
                 _ = structure.Add(section, pathLeft);
-                _ = structure.Add(section, unrelatedLeft);
-                _ = structure.Add(section, right);
-                _ = structure.Add(section, new Sample(first, second, pathLeft, unrelatedLeft, right));
+                _ = structure.Add(section, aliasValue);
+                _ = structure.Add(section, new Sample(first, second, pathLeft, aliasValue));
                 return structure.Validate();
             }
         }
+        """;
+
+    private const string UNPROTECTED_SELECT_APPLICATION_SCHEMA = """
+        SCHEMA unprotected_select_application_model;
+        ENTITY first_value;
+          code : INTEGER;
+        END_ENTITY;
+        ENTITY second_value;
+        END_ENTITY;
+        TYPE value_choice = SELECT (first_value, second_value);
+        END_TYPE;
+        FUNCTION first_code(item : first_value) : INTEGER;
+          RETURN(item.code);
+        END_FUNCTION;
+        FUNCTION unprotected(item : value_choice) : INTEGER;
+          RETURN(first_code(item));
+        END_FUNCTION;
+        ENTITY sample;
+          selected : value_choice;
+        WHERE
+          remains_a_type_error : unprotected(selected) > 0;
+        END_ENTITY;
+        END_SCHEMA;
         """;
 
     private const string DYNAMIC_GENERIC_ARRAY_SCHEMA = """
@@ -8020,14 +8114,56 @@ public sealed class ReachableRuleTests
     [Test]
     public async Task Should_invalidate_mutable_flow_facts_at_assignments_and_control_flow_joins()
     {
+        var bound = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("schemas/flow-fact-lifecycle.exp", FLOW_FACT_LIFECYCLE_SCHEMA),
+        ]);
+        if (bound.Schemas.Count == 0)
+        {
+            throw new InvalidOperationException(string.Join(
+                Environment.NewLine,
+                bound.SyntaxDiagnostics.Select(diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")
+                    .Concat(bound.BindingDiagnostics.Select(diagnostic =>
+                        $"{diagnostic.Code}: {diagnostic.Message}"))));
+        }
+
+        var narrowedApplications = bound.Schemas.Single().Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Where(expression => expression.Kind == ExpressExpressionKind.Application
+                && string.Equals(expression.Reference?.Name, "first_code", StringComparison.OrdinalIgnoreCase)
+                && expression.Children.Single().Type.Kind == ExpressExpressionTypeKind.Select)
+            .Distinct()
+            .ToArray();
         var result = GeneratorHostTests.Run(
             FLOW_FACT_LIFECYCLE_CONSUMER,
             ("schemas/flow-fact-lifecycle.exp", FLOW_FACT_LIFECYCLE_SCHEMA));
+        var unprotected = GeneratorHostTests.Run(
+            ("schemas/unprotected-select-application.exp", UNPROTECTED_SELECT_APPLICATION_SCHEMA));
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-        await Assert.That(diagnostics).IsEmpty()
-            .Because(string.Join(Environment.NewLine, diagnostics));
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+        var immediateStart = generated.IndexOf("__ExpressFunction_ImmediateReturn", StringComparison.Ordinal);
+        var immediateEnd = immediateStart < 0
+            ? -1
+            : generated.IndexOf("private static", immediateStart + 1, StringComparison.Ordinal);
+        var immediateMethod = immediateStart < 0
+            ? string.Empty
+            : generated[immediateStart..(immediateEnd < 0 ? generated.Length : immediateEnd)];
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(narrowedApplications).IsNotEmpty();
+            await Assert.That(narrowedApplications.All(application => application.Type.CanBeIndeterminate)).IsTrue();
+            await Assert.That(unprotected.Diagnostics.Concat(unprotected.OutputCompilation.GetDiagnostics())
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsNotEmpty();
+            await Assert.That(immediateMethod).DoesNotContain("__parameter_InputValue =");
+        }
+
         var assembly = Emit(result.OutputCompilation);
         var validation = (ValidationResult)assembly.GetType(
                 "FlowFactLifecycleConsumer",

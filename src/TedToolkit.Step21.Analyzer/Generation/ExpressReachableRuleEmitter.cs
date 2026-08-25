@@ -89,6 +89,7 @@ internal static class ExpressReachableRuleEmitter
     /// <param name="pathNarrowings">Maps qualified reference paths to branch-proven entity alternatives.</param>
     /// <param name="determinateLexicals">Identifies branch-proven determinate lexical values.</param>
     /// <param name="safeIndexPaths">Qualified aggregate paths proven present at a REPEAT index.</param>
+    /// <param name="scalarNarrowings">Branch-local scalar projections over stable lexical storage.</param>
     /// <returns>The immutable emission context.</returns>
     internal static ExpressExpressionEmissionContext CreateContext(
         ExpressReachableRulePlan plan,
@@ -100,27 +101,67 @@ internal static class ExpressReachableRuleEmitter
         IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings = null,
         IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings = null,
         ISet<ExpressBoundName>? determinateLexicals = null,
-        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths = null)
+        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths = null,
+        IReadOnlyDictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>?
+            scalarNarrowings = null)
     {
-        return new(
-            (reference, narrowedType, narrowedCode, narrowedAlternative) =>
-                reference.Kind == ExpressBoundNameKind.Variable
+        string ResolveBoundReference(
+            ExpressBoundName reference,
+            ExpressBoundType? narrowedType,
+            string? narrowedCode,
+            ExpressBoundSymbol? narrowedAlternative)
+        {
+            if (scalarNarrowings?.TryGetValue(reference.Name, out var scalarNarrowing) == true
+                && lexicalNames?.TryGetValue(reference.Name, out var scalarStorage) == true
+                && string.Equals(
+                    scalarStorage.Code,
+                    scalarNarrowing.StorageCode,
+                    StringComparison.Ordinal))
+            {
+                return scalarNarrowing.Code;
+            }
+
+            if (reference.Kind == ExpressBoundNameKind.Variable
                 && reference.Type is ExpressBoundScalarType scalarType
                 && scalarType.Kind is ExpressScalarKind.Integer or ExpressScalarKind.Number or ExpressScalarKind.Real
                 && plan.Schema.IndeterminateLocals.Contains(reference)
                 && determinateLexicals?.Contains(reference) == true
-                && lexicalNames?.TryGetValue(reference.Name, out var determinateLexical) == true
-                    ? $"({determinateLexical.Code}).Value"
-                    : ResolveReference(
-                        plan,
-                        reference,
-                        selfExpression,
-                        populationExpression,
-                        lexicalNames,
-                        selectNarrowings,
-                        narrowedType,
-                        narrowedCode,
-                        narrowedAlternative),
+                && lexicalNames?.TryGetValue(reference.Name, out var determinateLexical) == true)
+            {
+                return $"({determinateLexical.Code}).Value";
+            }
+
+            return ResolveReference(
+                plan,
+                reference,
+                selfExpression,
+                populationExpression,
+                lexicalNames,
+                selectNarrowings,
+                narrowedType,
+                narrowedCode,
+                narrowedAlternative);
+        }
+
+        (string Code, ExpressBoundType Type)? ResolveLexicalBound(string name)
+        {
+            if (scalarNarrowings?.TryGetValue(name, out var scalarNarrowing) == true
+                && lexicalNames?.TryGetValue(name, out var scalarStorage) == true
+                && string.Equals(
+                    scalarStorage.Code,
+                    scalarNarrowing.StorageCode,
+                    StringComparison.Ordinal))
+            {
+                return (scalarNarrowing.Code, scalarNarrowing.Type);
+            }
+
+            return lexicalNames is not null && lexicalNames.TryGetValue(name, out var lexical)
+                ? lexical
+                : null;
+        }
+
+        return new(
+            ResolveBoundReference,
             selfExpression,
             resolveModelFunction: (operation, expression, arguments) =>
                 ResolveModelFunction(plan, operation, expression, arguments, populationExpression),
@@ -145,10 +186,7 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings),
             safeIndices: safeIndices,
-            resolveLexicalBound: name => lexicalNames is not null
-                && lexicalNames.TryGetValue(name, out var lexical)
-                    ? lexical
-                    : null,
+            resolveLexicalBound: ResolveLexicalBound,
             genericTypeLabels: ExpressExpressionEmitter.GenericTypeLabels(
                 lexicalNames?.Values.Select(lexical => lexical.Type) ?? []),
             allocateTemporaryName: allocateTemporaryName,
@@ -498,9 +536,13 @@ internal static class ExpressReachableRuleEmitter
         }
 
         var sizeAliases = new Dictionary<ExpressBoundName, ExpressBoundName>();
+        var scalarNarrowings = new Dictionary<
+            string,
+            (string StorageCode, string Code, ExpressBoundType Type)>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var statement in declaration.Syntax.ChildRules("stmt"))
         {
-            _ = EmitFunctionStatement(
+            if (!EmitFunctionStatement(
                 plan,
                 statement,
                 declaration.DeclaredType!,
@@ -509,7 +551,11 @@ internal static class ExpressReachableRuleEmitter
                 lexicalNames,
                 allocateTemporaryName,
                 sizeAliases: sizeAliases,
-                determinateLexicals: determinateLexicals);
+                determinateLexicals: determinateLexicals,
+                scalarNarrowings: scalarNarrowings))
+            {
+                break;
+            }
         }
 
         AddSummary(method, $"Evaluates reachable EXPRESS function {declaration.Name}.");
@@ -529,7 +575,9 @@ internal static class ExpressReachableRuleEmitter
         Dictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings = null,
         List<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings = null,
         ISet<ExpressBoundName>? determinateLexicals = null,
-        List<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths = null)
+        List<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths = null,
+        Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>?
+            scalarNarrowings = null)
     {
         var operation = statement.Production == "stmt"
             ? statement.ChildRules().Single()
@@ -585,7 +633,8 @@ internal static class ExpressReachableRuleEmitter
                         selectNarrowings,
                         pathNarrowings,
                         determinateLexicals,
-                        safeIndexPaths));
+                        safeIndexPaths,
+                        scalarNarrowings));
                 var indexCode = index.Type.Kind == ExpressExpressionTypeKind.Number
                     ? $"checked((int)({emittedIndex.Code}).ToIntegerTruncated())"
                     : $"checked((int)({emittedIndex.Code}))";
@@ -619,15 +668,13 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths));
+                    safeIndexPaths,
+                    scalarNarrowings));
             safeIndexPaths?.Clear();
             if (!hasQualifier)
             {
                 determinateLexicals?.Remove(target);
-                if (lexicalNames.TryGetValue(target.Name, out var targetLexical))
-                {
-                    lexicalNames[target.Name] = (targetLexical.Code, target.Type!);
-                }
+                scalarNarrowings?.Remove(target.Name);
 
                 if (selectNarrowings?.ContainsKey(target) == true
                     && target.Type is ExpressBoundNamedType invalidatedSelect
@@ -656,7 +703,28 @@ internal static class ExpressReachableRuleEmitter
                 }
             }
 
-            if (pathNarrowings is not null)
+            if (hasQualifier)
+            {
+                if (pathNarrowings is not null)
+                {
+                    for (var index = pathNarrowings.Count - 1; index >= 0; index--)
+                    {
+                        var narrowing = pathNarrowings[index];
+                        if (narrowing.Key.Type.DeclaredType is ExpressBoundNamedType invalidatedSelect
+                            && invalidatedSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                            && plan.Resolver.GetDefinedType(invalidatedSelect.Declaration).UnderlyingType
+                                is ExpressBoundSelectType)
+                        {
+                            pathNarrowings[index] = new(narrowing.Key, invalidatedSelect.Declaration);
+                        }
+                        else
+                        {
+                            pathNarrowings.RemoveAt(index);
+                        }
+                    }
+                }
+            }
+            else if (pathNarrowings is not null)
             {
                 for (var index = pathNarrowings.Count - 1; index >= 0; index--)
                 {
@@ -868,7 +936,8 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths));
+                    safeIndexPaths,
+                    scalarNarrowings));
             var expressionCode = expression.Code;
             if (functionResultType is ExpressBoundNamedType resultSelectName
                 && resultSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
@@ -1010,7 +1079,8 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths));
+                    safeIndexPaths,
+                    scalarNarrowings));
             var upperValue = ExpressExpressionEmitter.Emit(
                 upper,
                 CreateContext(
@@ -1023,7 +1093,8 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths));
+                    safeIndexPaths,
+                    scalarNarrowings));
             var stepValue = step is null
                 ? null
                 : ExpressExpressionEmitter.Emit(
@@ -1038,7 +1109,8 @@ internal static class ExpressReachableRuleEmitter
                         selectNarrowings,
                         pathNarrowings,
                         determinateLexicals,
-                        safeIndexPaths));
+                        safeIndexPaths,
+                        scalarNarrowings));
             var lowerCode = lower.Type.Kind switch
             {
                 ExpressExpressionTypeKind.Integer =>
@@ -1122,6 +1194,13 @@ internal static class ExpressReachableRuleEmitter
             var nestedDeterminateLexicals = determinateLexicals is null
                 ? null
                 : new HashSet<ExpressBoundName>(determinateLexicals);
+            var nestedScalarNarrowings = scalarNarrowings is null
+                ? new Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>(
+                    StringComparer.OrdinalIgnoreCase)
+                : scalarNarrowings.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase);
             var bodyOwner = new IfStatement(new CustomExpression("true"));
             var bodyFallsThrough = true;
             foreach (var nested in operation.ChildRules("stmt"))
@@ -1144,20 +1223,26 @@ internal static class ExpressReachableRuleEmitter
                     nestedSelectNarrowings,
                     nestedPathNarrowings,
                     nestedDeterminateLexicals,
-                    repeatSafeIndexPaths);
+                    repeatSafeIndexPaths,
+                    nestedScalarNarrowings);
             }
 
             if (bodyFallsThrough)
             {
                 IntersectDictionaryFacts(
-                    lexicalNames,
-                    static (left, right) => string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                    scalarNarrowings,
+                    static (left, right) => string.Equals(
+                            left.StorageCode,
+                            right.StorageCode,
+                            StringComparison.Ordinal)
+                        && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
                         && ReferenceEquals(left.Type, right.Type),
-                    lexicalNames.ToDictionary(
+                    scalarNarrowings?.ToDictionary(
                         pair => pair.Key,
                         pair => pair.Value,
-                        StringComparer.OrdinalIgnoreCase),
-                    nestedNames);
+                        StringComparer.OrdinalIgnoreCase)
+                        ?? [],
+                    nestedScalarNarrowings);
                 IntersectCollectionFacts(
                     safeIndices,
                     static (left, right) => ReferenceEquals(left.Key, right.Key)
@@ -1170,20 +1255,15 @@ internal static class ExpressReachableRuleEmitter
                     sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? [],
                     nestedSizeAliases ?? []);
-                IntersectDictionaryFacts(
+                JoinSelectFacts(
                     selectNarrowings,
-                    static (left, right) => ReferenceEquals(left, right)
-                        || ((left.Kind == ExpressDeclarationKind.Entity)
-                            != (right.Kind == ExpressDeclarationKind.Entity)),
                     nestedSelectNarrowings,
                     selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? []);
                 IntersectCollectionFacts(
                     pathNarrowings,
                     static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && (ReferenceEquals(left.Value, right.Value)
-                            || ((left.Value.Kind == ExpressDeclarationKind.Entity)
-                                != (right.Value.Kind == ExpressDeclarationKind.Entity))),
+                        && ReferenceEquals(left.Value, right.Value),
                     nestedPathNarrowings,
                     pathNarrowings?.ToList() ?? []);
                 IntersectCollectionFacts(
@@ -1239,7 +1319,8 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths);
+                    safeIndexPaths,
+                    scalarNarrowings);
             }
 
             return fallsThrough;
@@ -1261,7 +1342,8 @@ internal static class ExpressReachableRuleEmitter
                     selectNarrowings,
                     pathNarrowings,
                     determinateLexicals,
-                    safeIndexPaths));
+                    safeIndexPaths,
+                    scalarNarrowings));
             var selectorName = "__case_"
                 + operation.Span.Start.Line.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 + "_"
@@ -1284,7 +1366,12 @@ internal static class ExpressReachableRuleEmitter
                 ? new HashSet<ExpressBoundName>()
                 : new HashSet<ExpressBoundName>(determinateLexicals);
             var incomingSafeIndexPaths = safeIndexPaths?.ToList() ?? [];
-            var fallingLexicalNames = new List<Dictionary<string, (string Code, ExpressBoundType Type)>>();
+            var incomingScalarNarrowings = scalarNarrowings?.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase)
+                ?? new(
+                    StringComparer.OrdinalIgnoreCase);
             var fallingSafeIndices = new List<List<KeyValuePair<ExpressBoundName, ExpressBoundName>>>();
             var fallingAliases = new List<Dictionary<ExpressBoundName, ExpressBoundName>>();
             var fallingSelectNarrowings = new List<Dictionary<ExpressBoundName, ExpressBoundSymbol>>();
@@ -1293,6 +1380,9 @@ internal static class ExpressReachableRuleEmitter
             var fallingDeterminateLexicals = new List<HashSet<ExpressBoundName>>();
             var fallingSafeIndexPaths =
                 new List<List<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>>();
+            var fallingScalarNarrowings = new List<Dictionary<
+                string,
+                (string StorageCode, string Code, ExpressBoundType Type)>>();
             IfStatement? conditionalCase = null;
             foreach (var action in operation.ChildRules("caseAction"))
             {
@@ -1311,7 +1401,8 @@ internal static class ExpressReachableRuleEmitter
                             selectNarrowings,
                             pathNarrowings,
                             determinateLexicals,
-                            safeIndexPaths));
+                            safeIndexPaths,
+                            scalarNarrowings));
                     return ExpressExpressionEmitter.ValueEqualityCore(
                         selector,
                         selectorName,
@@ -1336,6 +1427,10 @@ internal static class ExpressReachableRuleEmitter
                 var actionDeterminateLexicals = new HashSet<ExpressBoundName>(
                     incomingDeterminateLexicals);
                 var actionSafeIndexPaths = incomingSafeIndexPaths.ToList();
+                var actionScalarNarrowings = incomingScalarNarrowings.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase);
                 var actionOwner = new IfStatement(new CustomExpression("true"));
                 var actionFallsThrough = EmitFunctionStatement(
                     plan,
@@ -1350,7 +1445,8 @@ internal static class ExpressReachableRuleEmitter
                     actionSelectNarrowings,
                     actionPathNarrowings,
                     actionDeterminateLexicals,
-                    actionSafeIndexPaths);
+                    actionSafeIndexPaths,
+                    actionScalarNarrowings);
                 foreach (var actionStatement in actionOwner.Statements)
                 {
                     caseBranch.AddStatement(actionStatement);
@@ -1358,13 +1454,13 @@ internal static class ExpressReachableRuleEmitter
 
                 if (actionFallsThrough)
                 {
-                    fallingLexicalNames.Add(actionLexicalNames);
                     fallingSafeIndices.Add(actionSafeIndices);
                     fallingAliases.Add(actionAliases);
                     fallingSelectNarrowings.Add(actionSelectNarrowings);
                     fallingPathNarrowings.Add(actionPathNarrowings);
                     fallingDeterminateLexicals.Add(actionDeterminateLexicals);
                     fallingSafeIndexPaths.Add(actionSafeIndexPaths);
+                    fallingScalarNarrowings.Add(actionScalarNarrowings);
                 }
             }
 
@@ -1385,6 +1481,10 @@ internal static class ExpressReachableRuleEmitter
                 var otherwiseDeterminateLexicals = new HashSet<ExpressBoundName>(
                     incomingDeterminateLexicals);
                 var otherwiseSafeIndexPaths = incomingSafeIndexPaths.ToList();
+                var otherwiseScalarNarrowings = incomingScalarNarrowings.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase);
                 var otherwiseOwner = new IfStatement(new CustomExpression("true"));
                 var otherwiseFallsThrough = EmitFunctionStatement(
                     plan,
@@ -1399,7 +1499,8 @@ internal static class ExpressReachableRuleEmitter
                     otherwiseSelectNarrowings,
                     otherwisePathNarrowings,
                     otherwiseDeterminateLexicals,
-                    otherwiseSafeIndexPaths);
+                    otherwiseSafeIndexPaths,
+                    otherwiseScalarNarrowings);
                 foreach (var otherwiseStatement in otherwiseOwner.Statements)
                 {
                     otherwiseBranch.AddStatement(otherwiseStatement);
@@ -1407,39 +1508,43 @@ internal static class ExpressReachableRuleEmitter
 
                 if (otherwiseFallsThrough)
                 {
-                    fallingLexicalNames.Add(otherwiseLexicalNames);
                     fallingSafeIndices.Add(otherwiseSafeIndices);
                     fallingAliases.Add(otherwiseAliases);
                     fallingSelectNarrowings.Add(otherwiseSelectNarrowings);
                     fallingPathNarrowings.Add(otherwisePathNarrowings);
                     fallingDeterminateLexicals.Add(otherwiseDeterminateLexicals);
                     fallingSafeIndexPaths.Add(otherwiseSafeIndexPaths);
+                    fallingScalarNarrowings.Add(otherwiseScalarNarrowings);
                 }
             }
             else
             {
-                fallingLexicalNames.Add(incomingLexicalNames);
                 fallingSafeIndices.Add(incomingSafeIndices);
                 fallingAliases.Add(incomingAliases);
                 fallingSelectNarrowings.Add(incomingSelectNarrowings);
                 fallingPathNarrowings.Add(incomingPathNarrowings);
                 fallingDeterminateLexicals.Add(incomingDeterminateLexicals);
                 fallingSafeIndexPaths.Add(incomingSafeIndexPaths);
+                fallingScalarNarrowings.Add(incomingScalarNarrowings);
             }
 
             owner.AddStatement(conditionalCase
                 ?? throw new InvalidOperationException("CASE requires at least one action."));
-            if (fallingLexicalNames.Count == 0)
+            if (fallingScalarNarrowings.Count == 0)
             {
                 return false;
             }
 
             IntersectDictionaryFacts(
-                lexicalNames,
-                static (left, right) => string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                scalarNarrowings,
+                static (left, right) => string.Equals(
+                        left.StorageCode,
+                        right.StorageCode,
+                        StringComparison.Ordinal)
+                    && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
                     && ReferenceEquals(left.Type, right.Type),
-                fallingLexicalNames[0],
-                fallingLexicalNames[0]);
+                fallingScalarNarrowings[0],
+                fallingScalarNarrowings[0]);
             IntersectCollectionFacts(
                 safeIndices,
                 static (left, right) => ReferenceEquals(left.Key, right.Key)
@@ -1451,9 +1556,8 @@ internal static class ExpressReachableRuleEmitter
                 static (left, right) => ReferenceEquals(left, right),
                 fallingAliases[0],
                 fallingAliases[0]);
-            IntersectDictionaryFacts(
+            JoinSelectFacts(
                 selectNarrowings,
-                static (left, right) => ReferenceEquals(left, right),
                 fallingSelectNarrowings[0],
                 fallingSelectNarrowings[0]);
             IntersectCollectionFacts(
@@ -1473,12 +1577,14 @@ internal static class ExpressReachableRuleEmitter
                     && ReferenceEquals(left.Value, right.Value),
                 fallingSafeIndexPaths[0],
                 fallingSafeIndexPaths[0]);
-            for (var index = 1; index < fallingLexicalNames.Count; index++)
+            for (var index = 1; index < fallingScalarNarrowings.Count; index++)
             {
-                var currentLexicalNames = lexicalNames.ToDictionary(
+                var currentScalarNarrowings = scalarNarrowings?.ToDictionary(
                     pair => pair.Key,
                     pair => pair.Value,
-                    StringComparer.OrdinalIgnoreCase);
+                    StringComparer.OrdinalIgnoreCase)
+                    ?? new(
+                        StringComparer.OrdinalIgnoreCase);
                 var currentSafeIndices = safeIndices?.ToList() ?? [];
                 var currentAliases = sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value)
                     ?? [];
@@ -1490,32 +1596,16 @@ internal static class ExpressReachableRuleEmitter
                 var currentDeterminateLexicals = determinateLexicals?.ToArray()
                     ?? Array.Empty<ExpressBoundName>();
                 var currentSafeIndexPaths = safeIndexPaths?.ToList() ?? [];
-                var comparedSelectNarrowings = fallingSelectNarrowings[index];
-                var comparedPathNarrowings = fallingPathNarrowings[index];
-                if (!currentSelectNarrowings.Values.Any(
-                        value => value.Kind != ExpressDeclarationKind.Entity)
-                    && comparedSelectNarrowings.Values.Any(
-                        value => value.Kind != ExpressDeclarationKind.Entity))
-                {
-                    (currentSelectNarrowings, comparedSelectNarrowings) =
-                        (comparedSelectNarrowings, currentSelectNarrowings);
-                }
-
-                if (!currentPathNarrowings.Any(
-                        pair => pair.Value.Kind != ExpressDeclarationKind.Entity)
-                    && comparedPathNarrowings.Any(
-                        pair => pair.Value.Kind != ExpressDeclarationKind.Entity))
-                {
-                    (currentPathNarrowings, comparedPathNarrowings) =
-                        (comparedPathNarrowings, currentPathNarrowings);
-                }
-
                 IntersectDictionaryFacts(
-                    lexicalNames,
-                    static (left, right) => string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                    scalarNarrowings,
+                    static (left, right) => string.Equals(
+                            left.StorageCode,
+                            right.StorageCode,
+                            StringComparison.Ordinal)
+                        && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
                         && ReferenceEquals(left.Type, right.Type),
-                    currentLexicalNames,
-                    fallingLexicalNames[index]);
+                    currentScalarNarrowings,
+                    fallingScalarNarrowings[index]);
                 IntersectCollectionFacts(
                     safeIndices,
                     static (left, right) => ReferenceEquals(left.Key, right.Key)
@@ -1527,21 +1617,16 @@ internal static class ExpressReachableRuleEmitter
                     static (left, right) => ReferenceEquals(left, right),
                     currentAliases,
                     fallingAliases[index]);
-                IntersectDictionaryFacts(
+                JoinSelectFacts(
                     selectNarrowings,
-                    static (left, right) => ReferenceEquals(left, right)
-                        || ((left.Kind == ExpressDeclarationKind.Entity)
-                            != (right.Kind == ExpressDeclarationKind.Entity)),
                     currentSelectNarrowings,
-                    comparedSelectNarrowings);
+                    fallingSelectNarrowings[index]);
                 IntersectCollectionFacts(
                     pathNarrowings,
                     static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && (ReferenceEquals(left.Value, right.Value)
-                            || ((left.Value.Kind == ExpressDeclarationKind.Entity)
-                                != (right.Value.Kind == ExpressDeclarationKind.Entity))),
+                        && ReferenceEquals(left.Value, right.Value),
                     currentPathNarrowings,
-                    comparedPathNarrowings);
+                    fallingPathNarrowings[index]);
                 IntersectCollectionFacts(
                     determinateLexicals,
                     static (left, right) => ReferenceEquals(left, right),
@@ -1572,7 +1657,8 @@ internal static class ExpressReachableRuleEmitter
                 selectNarrowings,
                 pathNarrowings,
                 determinateLexicals,
-                safeIndexPaths));
+                safeIndexPaths,
+                scalarNarrowings));
         var conditionCode = $"({ExpressExpressionEmitter.AsLogical(boundCondition, condition.Code)}) "
             + "== global::TedToolkit.Step21.LogicalValue.True";
         var thenStatements = new List<ExpressRuleSyntax>();
@@ -1603,6 +1689,20 @@ internal static class ExpressReachableRuleEmitter
             pair => pair.Key,
             pair => pair.Value,
             StringComparer.OrdinalIgnoreCase);
+        var thenScalarNarrowings = scalarNarrowings is null
+            ? new Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>(
+                StringComparer.OrdinalIgnoreCase)
+            : scalarNarrowings.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
+        var elseScalarNarrowings = scalarNarrowings is null
+            ? new Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>(
+                StringComparer.OrdinalIgnoreCase)
+            : scalarNarrowings.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
         var thenSelectNarrowings = selectNarrowings is null
             ? new Dictionary<ExpressBoundName, ExpressBoundSymbol>()
             : selectNarrowings.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -1764,7 +1864,8 @@ internal static class ExpressReachableRuleEmitter
                                 constraintText: null,
                                 isFixed: false,
                                 narrowedSelect.Span);
-                            thenLexicalNames[narrowedReference.Name] = (
+                            thenScalarNarrowings[narrowedReference.Name] = (
+                                lexicalName.Code,
                                 ResolveReference(
                                     plan,
                                     narrowedReference,
@@ -1800,7 +1901,8 @@ internal static class ExpressReachableRuleEmitter
                                 constraintText: null,
                                 isFixed: false,
                                 narrowedSelect.Span);
-                            elseLexicalNames[narrowedReference.Name] = (
+                            elseScalarNarrowings[narrowedReference.Name] = (
+                                lexicalName.Code,
                                 ResolveReference(
                                     plan,
                                     narrowedReference,
@@ -1862,7 +1964,8 @@ internal static class ExpressReachableRuleEmitter
                 thenSelectNarrowings,
                 thenPathNarrowings,
                 thenDeterminateLexicals,
-                thenSafeIndexPaths);
+                thenSafeIndexPaths,
+                thenScalarNarrowings);
         }
 
         foreach (var thenStatement in thenOwner.Statements)
@@ -1872,18 +1975,24 @@ internal static class ExpressReachableRuleEmitter
 
         if (elseStatements.Count == 0)
         {
-            var implicitElseLexicalNames = lexicalNames.ToDictionary(
+            var implicitElseScalarNarrowings = scalarNarrowings?.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value,
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase)
+                ?? new(
+                    StringComparer.OrdinalIgnoreCase);
             if (thenFallsThrough)
             {
                 IntersectDictionaryFacts(
-                    lexicalNames,
-                    static (left, right) => string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                    scalarNarrowings,
+                    static (left, right) => string.Equals(
+                            left.StorageCode,
+                            right.StorageCode,
+                            StringComparison.Ordinal)
+                        && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
                         && ReferenceEquals(left.Type, right.Type),
-                    thenLexicalNames,
-                    implicitElseLexicalNames);
+                    thenScalarNarrowings,
+                    implicitElseScalarNarrowings);
                 IntersectCollectionFacts(
                     safeIndices,
                     static (left, right) => ReferenceEquals(left.Key, right.Key)
@@ -1896,20 +2005,15 @@ internal static class ExpressReachableRuleEmitter
                     thenAliases ?? [],
                     sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? []);
-                IntersectDictionaryFacts(
+                JoinSelectFacts(
                     selectNarrowings,
-                    static (left, right) => ReferenceEquals(left, right)
-                        || ((left.Kind == ExpressDeclarationKind.Entity)
-                            != (right.Kind == ExpressDeclarationKind.Entity)),
                     thenSelectNarrowings,
                     selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value)
                         ?? []);
                 IntersectCollectionFacts(
                     pathNarrowings,
                     static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                        && (ReferenceEquals(left.Value, right.Value)
-                            || ((left.Value.Kind == ExpressDeclarationKind.Entity)
-                                != (right.Value.Kind == ExpressDeclarationKind.Entity))),
+                        && ReferenceEquals(left.Value, right.Value),
                     thenPathNarrowings,
                     pathNarrowings?.ToList() ?? []);
                 IntersectCollectionFacts(
@@ -1955,7 +2059,8 @@ internal static class ExpressReachableRuleEmitter
                 elseSelectNarrowings,
                 elsePathNarrowings,
                 elseDeterminateLexicals,
-                elseSafeIndexPaths);
+                elseSafeIndexPaths,
+                elseScalarNarrowings);
         }
 
         var elseStatement = conditionalStatement.Else();
@@ -1966,8 +2071,12 @@ internal static class ExpressReachableRuleEmitter
 
         if (thenFallsThrough || elseFallsThrough)
         {
-            var leftLexicalNames = thenFallsThrough ? thenLexicalNames : elseLexicalNames;
-            var rightLexicalNames = elseFallsThrough ? elseLexicalNames : thenLexicalNames;
+            var leftScalarNarrowings = thenFallsThrough
+                ? thenScalarNarrowings
+                : elseScalarNarrowings;
+            var rightScalarNarrowings = elseFallsThrough
+                ? elseScalarNarrowings
+                : thenScalarNarrowings;
             var leftSafeIndices = thenFallsThrough ? thenSafeIndices : elseSafeIndices;
             var rightSafeIndices = elseFallsThrough ? elseSafeIndices : thenSafeIndices;
             var leftAliases = thenFallsThrough ? thenAliases : elseAliases;
@@ -1984,26 +2093,16 @@ internal static class ExpressReachableRuleEmitter
                 : thenDeterminateLexicals;
             var leftSafeIndexPaths = thenFallsThrough ? thenSafeIndexPaths : elseSafeIndexPaths;
             var rightSafeIndexPaths = elseFallsThrough ? elseSafeIndexPaths : thenSafeIndexPaths;
-            if (!leftSelectNarrowings.Values.Any(value => value.Kind != ExpressDeclarationKind.Entity)
-                && rightSelectNarrowings.Values.Any(value => value.Kind != ExpressDeclarationKind.Entity))
-            {
-                (leftSelectNarrowings, rightSelectNarrowings) =
-                    (rightSelectNarrowings, leftSelectNarrowings);
-            }
-
-            if (!leftPathNarrowings.Any(pair => pair.Value.Kind != ExpressDeclarationKind.Entity)
-                && rightPathNarrowings.Any(pair => pair.Value.Kind != ExpressDeclarationKind.Entity))
-            {
-                (leftPathNarrowings, rightPathNarrowings) =
-                    (rightPathNarrowings, leftPathNarrowings);
-            }
-
             IntersectDictionaryFacts(
-                lexicalNames,
-                static (left, right) => string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                scalarNarrowings,
+                static (left, right) => string.Equals(
+                        left.StorageCode,
+                        right.StorageCode,
+                        StringComparison.Ordinal)
+                    && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
                     && ReferenceEquals(left.Type, right.Type),
-                leftLexicalNames,
-                rightLexicalNames);
+                leftScalarNarrowings,
+                rightScalarNarrowings);
             IntersectCollectionFacts(
                 safeIndices,
                 static (left, right) => ReferenceEquals(left.Key, right.Key)
@@ -2015,19 +2114,14 @@ internal static class ExpressReachableRuleEmitter
                 static (left, right) => ReferenceEquals(left, right),
                 leftAliases ?? [],
                 rightAliases ?? []);
-            IntersectDictionaryFacts(
+            JoinSelectFacts(
                 selectNarrowings,
-                static (left, right) => ReferenceEquals(left, right)
-                    || ((left.Kind == ExpressDeclarationKind.Entity)
-                        != (right.Kind == ExpressDeclarationKind.Entity)),
                 leftSelectNarrowings,
                 rightSelectNarrowings);
             IntersectCollectionFacts(
                 pathNarrowings,
                 static (left, right) => SameDirectReferencePath(left.Key, right.Key)
-                    && (ReferenceEquals(left.Value, right.Value)
-                        || ((left.Value.Kind == ExpressDeclarationKind.Entity)
-                            != (right.Value.Kind == ExpressDeclarationKind.Entity))),
+                    && ReferenceEquals(left.Value, right.Value),
                 leftPathNarrowings,
                 rightPathNarrowings);
             IntersectCollectionFacts(
@@ -3309,6 +3403,44 @@ internal static class ExpressReachableRuleEmitter
             if (branches.Skip(1).All(branch => branch.Any(candidate => sameItem(candidate, item))))
             {
                 target.Add(item);
+            }
+        }
+    }
+
+    private static void JoinSelectFacts(
+        Dictionary<ExpressBoundName, ExpressBoundSymbol>? target,
+        params IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>[] branches)
+    {
+        if (target is null || branches.Length == 0)
+        {
+            return;
+        }
+
+        target.Clear();
+        foreach (var pair in branches[0])
+        {
+            if (!branches.Skip(1).All(branch => branch.ContainsKey(pair.Key)))
+            {
+                continue;
+            }
+
+            var values = branches.Select(branch => branch[pair.Key]).ToArray();
+            if (values.All(value => value.Kind == ExpressDeclarationKind.Entity)
+                && values.All(value => ReferenceEquals(value, values[0])))
+            {
+                target.Add(pair.Key, values[0]);
+                continue;
+            }
+
+            var markers = values
+                .Where(value => value.Kind != ExpressDeclarationKind.Entity)
+                .Distinct()
+                .ToArray();
+            if (markers.Length == 1
+                && pair.Key.Type is ExpressBoundNamedType declaredSelect
+                && ReferenceEquals(declaredSelect.Declaration, markers[0]))
+            {
+                target.Add(pair.Key, markers[0]);
             }
         }
     }

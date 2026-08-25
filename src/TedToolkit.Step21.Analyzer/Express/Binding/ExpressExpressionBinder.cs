@@ -1402,6 +1402,102 @@ internal sealed class ExpressExpressionBinder
             {
                 for (var index = 0; index < parameters.Length && !type.CanBeIndeterminate; index++)
                 {
+                    if (formalTypes[index] is ExpressBoundNamedType
+                        { Declaration.Kind: ExpressDeclarationKind.Entity, } formalEntity
+                        && parameters[index].Type.DeclaredType is ExpressBoundNamedType actualSelectName
+                        && actualSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && _declarations.TryGetValue(actualSelectName.Declaration, out var actualDeclaration)
+                        && actualDeclaration is ExpressBoundDefinedType
+                        { UnderlyingType: ExpressBoundSelectType, })
+                    {
+                        var pendingActualTypes = new Stack<ExpressBoundType>();
+                        pendingActualTypes.Push(actualSelectName);
+                        var visitedActualTypes = new HashSet<ExpressBoundSymbol>();
+                        var hasCompatibleActual = false;
+                        var hasIncompatibleActual = false;
+                        while (pendingActualTypes.Count > 0)
+                        {
+                            var pendingActual = pendingActualTypes.Pop();
+                            if (pendingActual is ExpressBoundSelectType pendingActualSelect)
+                            {
+                                foreach (var alternative in pendingActualSelect.Alternatives)
+                                {
+                                    pendingActualTypes.Push(new ExpressBoundNamedType(
+                                        alternative,
+                                        pendingActualSelect.Span));
+                                }
+
+                                if (pendingActualSelect.BaseType is not null)
+                                {
+                                    pendingActualTypes.Push(new ExpressBoundNamedType(
+                                        pendingActualSelect.BaseType,
+                                        pendingActualSelect.Span));
+                                }
+
+                                continue;
+                            }
+
+                            if (pendingActual is not ExpressBoundNamedType pendingActualNamed)
+                            {
+                                hasIncompatibleActual = true;
+                                continue;
+                            }
+
+                            if (!visitedActualTypes.Add(pendingActualNamed.Declaration))
+                            {
+                                continue;
+                            }
+
+                            if (pendingActualNamed.Declaration.Kind != ExpressDeclarationKind.Entity)
+                            {
+                                if (_declarations.TryGetValue(
+                                        pendingActualNamed.Declaration,
+                                        out var pendingActualDeclaration)
+                                    && pendingActualDeclaration is ExpressBoundDefinedType pendingActualDefined)
+                                {
+                                    pendingActualTypes.Push(pendingActualDefined.UnderlyingType);
+                                }
+
+                                continue;
+                            }
+
+                            var pendingEntities = new Queue<ExpressBoundSymbol>();
+                            var physicalClosure = new HashSet<ExpressBoundSymbol>();
+                            pendingEntities.Enqueue(pendingActualNamed.Declaration);
+                            while (pendingEntities.Count > 0)
+                            {
+                                var entity = pendingEntities.Dequeue();
+                                if (!physicalClosure.Add(entity)
+                                    || !_declarations.TryGetValue(entity, out var entityDeclaration)
+                                    || entityDeclaration is not ExpressBoundEntity boundEntity)
+                                {
+                                    continue;
+                                }
+
+                                foreach (var supertype in boundEntity.DirectSupertypes)
+                                {
+                                    pendingEntities.Enqueue(supertype);
+                                }
+                            }
+
+                            if (physicalClosure.Contains(formalEntity.Declaration))
+                            {
+                                hasCompatibleActual = true;
+                            }
+                            else
+                            {
+                                hasIncompatibleActual = true;
+                            }
+                        }
+
+                        if (hasCompatibleActual && hasIncompatibleActual)
+                        {
+                            type = type.WithIndeterminate(true);
+                        }
+
+                        continue;
+                    }
+
                     if (parameters[index].Type.DeclaredType is not ExpressBoundNamedType
                         { Declaration.Kind: ExpressDeclarationKind.Entity, } actualEntity)
                     {
