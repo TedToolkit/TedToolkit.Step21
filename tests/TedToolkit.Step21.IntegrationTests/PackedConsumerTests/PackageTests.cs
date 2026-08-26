@@ -7,6 +7,10 @@
 
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using TedToolkit.Step21.IntegrationTests.ExternalCorpus;
@@ -19,6 +23,9 @@ namespace TedToolkit.Step21.IntegrationTests.PackedConsumerTests;
 [NotInParallel("packed-consumer")]
 internal sealed class PackageTests
 {
+    private const string Ap203DescriptorTypeName =
+        "TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor";
+
     /// <summary>
     /// Verifies the precompiled AP203 package exposes generated types without consumer schema inputs or analyzer runtime assets.
     /// </summary>
@@ -127,7 +134,7 @@ internal sealed class PackageTests
                 await Assert.That(packageEntries.Any(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(packageEntries.Any(path => path.EndsWith("System.Xml.dll", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(packageSpecification).Contains(
-                    "<dependency id=\"TedToolkit.Step21\" version=\"1.0.0\" exclude=\"Build,Analyzers\" />");
+                    "<dependency id=\"TedToolkit.Step21\" version=\"[1.0.0, 2.0.0)\" exclude=\"Build,Analyzers\" />");
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.Step21.Analyzer");
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.RoslynHelper");
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
@@ -144,6 +151,119 @@ internal sealed class PackageTests
                     StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(runtimeLibraries.Any(name => name.Contains("Json", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(runtimeLibraries.Any(name => name.Contains("Xml", StringComparison.OrdinalIgnoreCase))).IsFalse();
+            }
+        }
+        finally
+        {
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies the candidate package, repository-owned inputs, and approved generated API describe one versioned baseline.
+    /// </summary>
+    [Test]
+    public async Task Should_match_the_approved_ap203_package_contract_and_reproducible_inputs()
+    {
+        var repositoryRoot = RepositoryPaths.FindRoot();
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), $"TedToolkit.Step21.Ap203.Contract.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryRoot);
+
+        try
+        {
+            var packageProject = Path.Combine(
+                repositoryRoot,
+                "src",
+                "TedToolkit.Step21.Ap203",
+                "TedToolkit.Step21.Ap203.csproj");
+            var firstPackageDirectory = Path.Combine(temporaryRoot, "first");
+            var secondPackageDirectory = Path.Combine(temporaryRoot, "second");
+            Directory.CreateDirectory(firstPackageDirectory);
+            Directory.CreateDirectory(secondPackageDirectory);
+
+            _ = await RunDotNet(
+                repositoryRoot,
+                "pack",
+                packageProject,
+                "--configuration",
+                "Release",
+                "--no-build",
+                "--no-restore",
+                "--output",
+                firstPackageDirectory);
+            _ = await RunDotNet(
+                repositoryRoot,
+                "pack",
+                packageProject,
+                "--configuration",
+                "Release",
+                "--no-build",
+                "--no-restore",
+                "--output",
+                secondPackageDirectory);
+
+            var firstPackage = Directory.GetFiles(
+                firstPackageDirectory,
+                "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+            var secondPackage = Directory.GetFiles(
+                secondPackageDirectory,
+                "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+            var firstManifest = ReadNormalizedPackageManifest(firstPackage);
+            var secondManifest = ReadNormalizedPackageManifest(secondPackage);
+            var packageSpecification = ReadPackageText(firstPackage, "TedToolkit.Step21.Ap203.nuspec");
+            var packagedReadme = ReadPackageText(firstPackage, "README.md");
+            var projectReadme = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "src",
+                "TedToolkit.Step21.Ap203",
+                "README.md"));
+            var schemaHash = ComputeCanonicalTextHash(Path.Combine(
+                repositoryRoot,
+                "schemas",
+                "ap203",
+                "ap203.exp"));
+            var validFixtureHash = ComputeFileHash(Path.Combine(
+                repositoryRoot,
+                "tests",
+                "TedToolkit.Step21.IntegrationTests",
+                "TestData",
+                "Ap203",
+                "occt-box-10x20x30-ap203.step"));
+            var unsupportedFixtureHash = ComputeFileHash(Path.Combine(
+                repositoryRoot,
+                "tests",
+                "TedToolkit.Step21.IntegrationTests",
+                "TestData",
+                "Ap203",
+                "occt-unsupported-extension-ap203.step"));
+            var assemblyContract = InspectPackageAssembly(firstPackage);
+            var approvedApiHash = File.ReadAllText(Path.Combine(
+                repositoryRoot,
+                "tests",
+                "TedToolkit.Step21.IntegrationTests",
+                "TestData",
+                "Ap203",
+                "PublicApi.approved.sha256")).Trim();
+
+            using (Assert.Multiple())
+            {
+                await Assert.That(firstManifest).IsEqualTo(secondManifest);
+                await Assert.That(packageSpecification).Contains(
+                    "<dependency id=\"TedToolkit.Step21\" version=\"[1.0.0, 2.0.0)\" exclude=\"Build,Analyzers\" />");
+                await Assert.That(packagedReadme).IsEqualTo(projectReadme);
+                await Assert.That(packagedReadme).Contains("STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`");
+                await Assert.That(packagedReadme).Contains("`CONFIG_CONTROL_DESIGN`");
+                await Assert.That(packagedReadme).Contains("`[1.0.0,2.0.0)`");
+                await Assert.That(packagedReadme).Contains("generated public surface");
+                await Assert.That(schemaHash).IsEqualTo(
+                    "19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251");
+                await Assert.That(validFixtureHash).IsEqualTo(
+                    "2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62");
+                await Assert.That(unsupportedFixtureHash).IsEqualTo(
+                    "00B8AA7438180351BE42F30972DA96350302E435D3C778184C174CCCFA1B466F");
+                await Assert.That(assemblyContract.DescriptorName).IsEqualTo("config_control_design");
+                await Assert.That(assemblyContract.PublicApiHash).IsEqualTo(approvedApiHash)
+                    .Because($"Actual AP203 generated public API SHA-256: {assemblyContract.PublicApiHash}");
             }
         }
         finally
@@ -396,7 +516,182 @@ internal sealed class PackageTests
         return reader.ReadToEnd();
     }
 
+    private static string ReadNormalizedPackageManifest(string packagePath)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        return string.Join(
+            '\n',
+            archive.Entries
+                .Where(entry => entry.Length > 0)
+                .Where(entry => !entry.FullName.Equals("[Content_Types].xml", StringComparison.OrdinalIgnoreCase))
+                .Where(entry => !entry.FullName.Equals("_rels/.rels", StringComparison.OrdinalIgnoreCase))
+                .Where(entry => !entry.FullName.StartsWith(
+                    "package/services/metadata/core-properties/",
+                    StringComparison.OrdinalIgnoreCase))
+                .OrderBy(entry => entry.FullName, StringComparer.Ordinal)
+                .Select(entry => $"{entry.FullName}={ComputeStreamHash(entry.Open())}"));
+    }
+
+    private static PackageAssemblyContract InspectPackageAssembly(string packagePath)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        var entry = archive.GetEntry("lib/net10.0/TedToolkit.Step21.Ap203.dll")
+            ?? throw new InvalidOperationException("The packaged AP203 assembly is missing.");
+        using var assemblyStream = new MemoryStream();
+        using (var entryStream = entry.Open())
+        {
+            entryStream.CopyTo(assemblyStream);
+        }
+
+        assemblyStream.Position = 0;
+        var loadContext = new AssemblyLoadContext($"ap203-contract-{Guid.NewGuid():N}", isCollectible: true);
+        loadContext.Resolving += static (_, name) => AssemblyLoadContext.Default.Assemblies
+            .SingleOrDefault(assembly => AssemblyName.ReferenceMatchesDefinition(assembly.GetName(), name));
+        PackageAssemblyContract result;
+        try
+        {
+            var assembly = loadContext.LoadFromStream(assemblyStream);
+            var descriptor = assembly.GetType(Ap203DescriptorTypeName, throwOnError: true)!;
+            var descriptorInstance = descriptor.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)!
+                .GetValue(null)!;
+            var descriptorName = descriptor.GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)!
+                .GetValue(descriptorInstance)!;
+            var descriptorNameValue = (string)descriptorName.GetType().GetProperty("Value")!
+                .GetValue(descriptorName)!;
+            result = new(ComputeTextHash(RenderPublicApi(assembly)), descriptorNameValue);
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        return result;
+    }
+
+    private static string ComputeCanonicalTextHash(string path)
+    {
+        var text = File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal);
+        return ComputeTextHash(text);
+    }
+
+    private static string ComputeFileHash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return ComputeStreamHash(stream);
+    }
+
+    private static string ComputeTextHash(string text) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+
+    private static string ComputeStreamHash(Stream stream)
+    {
+        using (stream)
+        {
+            return Convert.ToHexString(SHA256.HashData(stream));
+        }
+    }
+
+    private static string RenderPublicApi(Assembly assembly)
+    {
+        var lines = new List<string>();
+        foreach (var type in assembly.GetExportedTypes().OrderBy(type => type.FullName, StringComparer.Ordinal))
+        {
+            lines.Add($"type {FormatType(type)} : {FormatType(type.BaseType)}");
+            lines.AddRange(type.GetInterfaces()
+                .OrderBy(FormatType, StringComparer.Ordinal)
+                .Select(contract => $"  interface {FormatType(contract)}"));
+            lines.AddRange(type.GetConstructors(
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(IsPublicContract)
+                .Select(constructor =>
+                    $"  constructor {FormatVisibility(constructor)}({FormatParameters(constructor.GetParameters())})")
+                .OrderBy(value => value, StringComparer.Ordinal));
+            lines.AddRange(type.GetFields(
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                    | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(field => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly)
+                .Select(field =>
+                    $"  field {FormatVisibility(field)}{(field.IsStatic ? "static " : string.Empty)}"
+                    + $"{FormatType(new NullabilityInfoContext().Create(field))} {field.Name}")
+                .OrderBy(value => value, StringComparer.Ordinal));
+            lines.AddRange(type.GetProperties(
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                    | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(property => property.GetAccessors(nonPublic: true).Any(IsPublicContract))
+                .Select(property =>
+                {
+                    var accessor = property.GetAccessors(nonPublic: true).First(IsPublicContract);
+                    return $"  property {FormatVisibility(accessor)}{(accessor.IsStatic ? "static " : string.Empty)}"
+                        + $"{FormatType(new NullabilityInfoContext().Create(property))} {property.Name}"
+                        + (property.SetMethod is null ? " { get; }" : " { get; set; }");
+                })
+                .OrderBy(value => value, StringComparer.Ordinal));
+            lines.AddRange(type.GetMethods(
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                    | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(method => IsPublicContract(method)
+                    && (!method.IsSpecialName || method.Name.StartsWith("op_", StringComparison.Ordinal)))
+                .Select(method =>
+                    $"  method {FormatVisibility(method)}{(method.IsStatic ? "static " : string.Empty)}"
+                    + $"{FormatType(new NullabilityInfoContext().Create(method.ReturnParameter))} "
+                    + $"{method.Name}({FormatParameters(method.GetParameters())})")
+                .OrderBy(value => value, StringComparer.Ordinal));
+        }
+
+        return string.Join('\n', lines) + '\n';
+    }
+
+    private static bool IsPublicContract(MethodBase method) =>
+        method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly;
+
+    private static string FormatVisibility(MethodBase method) => method.IsPublic ? string.Empty : "protected ";
+
+    private static string FormatVisibility(FieldInfo field) => field.IsPublic ? string.Empty : "protected ";
+
+    private static string FormatParameters(IEnumerable<ParameterInfo> parameters) =>
+        string.Join(", ", parameters.Select(parameter =>
+            $"{FormatType(new NullabilityInfoContext().Create(parameter))} {parameter.Name}"));
+
+    private static string FormatType(NullabilityInfo nullability)
+    {
+        var type = nullability.Type;
+        var nullableSuffix = nullability.ReadState == NullabilityState.Nullable ? "?" : string.Empty;
+        if (type.IsByRef)
+            return $"{FormatType(type.GetElementType())}&";
+        if (type.IsArray)
+            return $"{FormatType(nullability.ElementType!)}[]{nullableSuffix}";
+        if (!type.IsGenericType)
+            return $"{type.FullName ?? type.Name}{nullableSuffix}";
+
+        if (type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return $"{FormatType(type.GetGenericArguments()[0])}?";
+
+        var genericName = type.GetGenericTypeDefinition().FullName!;
+        genericName = genericName[..genericName.IndexOf('`')];
+        return $"{genericName}<{string.Join(",", nullability.GenericTypeArguments.Select(FormatType))}>{nullableSuffix}";
+    }
+
+    private static string FormatType(Type? type)
+    {
+        if (type is null)
+            return "<none>";
+        if (type.IsByRef)
+            return $"{FormatType(type.GetElementType())}&";
+        if (type.IsArray)
+            return $"{FormatType(type.GetElementType())}[]";
+        if (!type.IsGenericType)
+            return type.FullName ?? type.Name;
+
+        var genericName = type.GetGenericTypeDefinition().FullName!;
+        genericName = genericName[..genericName.IndexOf('`')];
+        return $"{genericName}<{string.Join(",", type.GetGenericArguments().Select(FormatType))}>";
+    }
+
     private sealed record ConsumerBuild(string IntermediateDirectory, string OutputDirectory);
 
     private sealed record GeneratedSource(string RelativePath, string Source);
+
+    private sealed record PackageAssemblyContract(string PublicApiHash, string DescriptorName);
 }

@@ -32,7 +32,9 @@ the assembly; supplying the same schema again would generate duplicate public ty
 
 ## Schema identity and provenance
 
+- Package version: `1.0.0`.
 - EXPRESS nominal name: `config_control_design`.
+- Generated descriptor: `TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor.Instance`.
 - Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,
   `data/ap203/ap203.exp`, described upstream as the AP203 Amendment 1 AIM long form with
   non-semantic modifications.
@@ -40,13 +42,33 @@ the assembly; supplying the same schema again would generate duplicate public ty
   `19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251`.
 - Redistribution evidence: the pinned STEPcode material is BSD-3-Clause; the repository records the
   copied license and the two syntax-only corrections in `schemas/ap203/PROVENANCE.md`.
+- Interoperability fixture: OCCT commit `7d2efad9c8a9a57ea96c4c8587134b34dd503cd8`, AP203 mode,
+  fixed 10 x 20 x 30 mm box/product. Its checked-in STEP file SHA-256 is
+  `2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62`.
 
 ## Package boundary
 
-The package contains generated schema code and depends on the compatible `TedToolkit.Step21`
-runtime. It does not add an AP203 reader/writer facade, registry, reflection-based discovery, CAD
+The package contains generated schema code and declares the tested `TedToolkit.Step21` runtime
+range `[1.0.0,2.0.0)`. It does not add an AP203 reader/writer facade, registry, reflection-based discovery, CAD
 kernel conversion, JSON/XML serialization, or a second parser/writer. Consumers do not receive the
 EXPRESS source, generator implementation, or RoslynHelper as runtime assets.
 
 The package targets .NET 10. AP214, AP242, AP203 Edition 2, and schema extensions absent from the
-pinned long form are outside this package's supported boundary.
+pinned long form are outside this package's supported boundary. The checked-in OCCT extension
+fixture records this boundary and must fail explicitly; the OCCT sample is interoperability evidence,
+not a claim of complete AP203 conformance.
+
+## Version compatibility
+
+The package follows SemVer independently from the core runtime. A Patch may fix behavior,
+documentation, or provenance only when descriptor identity, declared schema semantics, generated
+public surface, and the supported runtime range remain compatible. A Minor may add backward-compatible
+generated API within this same AP203 Amendment 1 baseline. A different edition or vendor variant,
+a descriptor/closed-schema change, a removed, renamed, retyped, reordered, newly required, or less
+nullable generated member, incompatible validation or mapping behavior, or a narrowed runtime range
+requires a Major version.
+
+Every release compares the generated public surface with the approved repository baseline. Package
+metadata, this provenance record, descriptor identity, dependency range, and that comparison must
+agree before a release is treated as compatible. Widening the runtime range requires package-consumer
+and Native AOT evidence; it does not couple the AP203 package's release cadence to the core package.
