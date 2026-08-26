@@ -7,7 +7,7 @@
 
 using System.Collections.Immutable;
 
-using TedToolkit.Step21.Analyzer.Express.Binding;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
 
@@ -23,7 +23,7 @@ internal sealed class ExpressGeneratorCompilation
     /// <param name="compilation">The closed EXPRESS compilation.</param>
     internal ExpressGeneratorCompilation(
         in ImmutableArray<ExpressGeneratorInput> inputs,
-        ExpressSchemaCompilation compilation)
+        ExpressAnalyzedCompilation compilation)
     {
         Inputs = inputs;
         Compilation = compilation;
@@ -37,5 +37,5 @@ internal sealed class ExpressGeneratorCompilation
     /// <summary>
     /// Gets the closed EXPRESS compilation.
     /// </summary>
-    internal ExpressSchemaCompilation Compilation { get; }
+    internal ExpressAnalyzedCompilation Compilation { get; }
 }

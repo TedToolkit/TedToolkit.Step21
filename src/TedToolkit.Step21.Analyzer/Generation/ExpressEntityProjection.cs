@@ -8,6 +8,7 @@
 using System.Collections.ObjectModel;
 
 using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -96,7 +97,7 @@ internal sealed class ExpressEntityProjection
     /// <param name="valueResolver">The closed-set generated type resolver.</param>
     /// <returns>The projections in schema and declaration order.</returns>
     internal static IReadOnlyList<ExpressEntityProjection> Create(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver valueResolver)
     {
         var entities = compilation.Schemas

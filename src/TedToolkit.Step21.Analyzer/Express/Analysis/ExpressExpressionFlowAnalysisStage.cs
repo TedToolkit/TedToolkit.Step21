@@ -20,17 +20,15 @@ internal static class ExpressExpressionFlowAnalysisStage
     /// <param name="compilation">The closed-set binding output.</param>
     /// <returns>The analyzed schemas with the original deterministic diagnostics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="compilation"/> is null.</exception>
-    internal static ExpressSchemaCompilation Analyze(ExpressSchemaCompilation compilation)
+    internal static ExpressAnalyzedCompilation Analyze(ExpressSchemaCompilation compilation)
     {
         if (compilation is null)
         {
             throw new ArgumentNullException(nameof(compilation));
         }
 
-        return new(
-            compilation.Schemas.Select(AnalyzeSchema),
-            compilation.SyntaxDiagnostics,
-            compilation.BindingDiagnostics);
+        var schemas = compilation.Schemas.Select(AnalyzeSchema).ToArray();
+        return new(compilation, schemas, schemas.Select(schema => new ExpressSchemaAnalysis(schema)));
     }
 
     private static ExpressBoundSchema AnalyzeSchema(ExpressBoundSchema schema)

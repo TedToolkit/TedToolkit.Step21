@@ -7,6 +7,7 @@
 
 using System.Collections.ObjectModel;
 
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -17,7 +18,7 @@ namespace TedToolkit.Step21.Analyzer.Generation;
 internal sealed class ExpressGenerationPlan
 {
     private ExpressGenerationPlan(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver valueResolver,
         IEnumerable<ExpressValueProjection> valueProjections,
         ExpressEntityGenerationPlan entityPlan,
@@ -40,7 +41,7 @@ internal sealed class ExpressGenerationPlan
     /// <summary>
     /// Gets the analyzed closed schema compilation.
     /// </summary>
-    internal ExpressSchemaCompilation Compilation { get; }
+    internal ExpressAnalyzedCompilation Compilation { get; }
 
     /// <summary>
     /// Gets the closed generated-type resolver.
@@ -82,7 +83,7 @@ internal sealed class ExpressGenerationPlan
     /// </summary>
     /// <param name="compilation">The analyzed closed schema compilation.</param>
     /// <returns>The immutable source-emission input.</returns>
-    internal static ExpressGenerationPlan Create(ExpressSchemaCompilation compilation)
+    internal static ExpressGenerationPlan Create(ExpressAnalyzedCompilation compilation)
     {
         var valueResolver = ExpressGeneratedTypeResolver.Create(compilation);
         var valueProjections = ExpressValueProjection.Create(compilation, valueResolver);

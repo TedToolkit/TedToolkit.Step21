@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -58,7 +59,7 @@ internal sealed class ExpressValueProjection
     /// <param name="resolver">The supported type resolver.</param>
     /// <returns>The supported value projections.</returns>
     internal static IReadOnlyList<ExpressValueProjection> Create(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver resolver)
     {
         var schemasByIdentity = compilation.Schemas.ToDictionary(schema => schema.Identity);

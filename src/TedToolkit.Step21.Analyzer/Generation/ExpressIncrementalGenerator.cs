@@ -49,6 +49,6 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
         var readableInputs = inputs
             .Where(input => input.Text is not null)
             .Select(input => new ExpressSchemaSource(input.Path, input.Text!));
-        return new(inputs, ExpressSchemaCompiler.Compile(readableInputs));
+        return new(inputs, ExpressSchemaCompiler.Analyze(readableInputs));
     }
 }

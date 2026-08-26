@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.Step21.Analyzer.Express.Analysis;
+
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
@@ -22,7 +24,17 @@ internal static class ExpressSchemaCompiler
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> or one of its elements is null.</exception>
     internal static ExpressSchemaCompilation Compile(IEnumerable<ExpressSchemaSource> sources)
     {
-        return ExpressCompilerPipeline.Compile(sources);
+        return Analyze(sources).Compilation;
+    }
+
+    /// <summary>
+    /// Compiles the supplied sources and retains syntax-detached analysis output for generation.
+    /// </summary>
+    /// <param name="sources">The complete closed source set.</param>
+    /// <returns>The analyzed compilation and semantic lowering input.</returns>
+    internal static ExpressAnalyzedCompilation Analyze(IEnumerable<ExpressSchemaSource> sources)
+    {
+        return ExpressCompilerPipeline.Analyze(sources);
     }
 
     /// <summary>

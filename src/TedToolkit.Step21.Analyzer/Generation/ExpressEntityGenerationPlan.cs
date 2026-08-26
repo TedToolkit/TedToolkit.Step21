@@ -8,6 +8,7 @@
 using System.Collections.ObjectModel;
 
 using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -56,7 +57,7 @@ internal sealed class ExpressEntityGenerationPlan
     /// <param name="valueResolver">The closed-set generated type resolver.</param>
     /// <returns>The atomic generation plan.</returns>
     internal static ExpressEntityGenerationPlan Create(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver valueResolver)
     {
         var projections = ExpressEntityProjection.Create(compilation, valueResolver);
@@ -92,7 +93,7 @@ internal sealed class ExpressEntityGenerationPlan
     }
 
     private static void AddSchemaNameCollisions(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         HashSet<ExpressBoundSchema> invalidSchemas,
         List<ExpressEntityGenerationCollision> collisions)
     {
@@ -243,7 +244,7 @@ internal sealed class ExpressEntityGenerationPlan
     }
 
     private static void PropagateInvalidImports(
-        ExpressSchemaCompilation compilation,
+        ExpressAnalyzedCompilation compilation,
         HashSet<ExpressBoundSchema> invalidSchemas)
     {
         bool changed;

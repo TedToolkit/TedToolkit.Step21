@@ -21,7 +21,7 @@ internal static class ExpressCompilerPipeline
     /// <param name="sources">The complete closed source set.</param>
     /// <returns>The analyzed valid schemas and complete diagnostics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> or one of its elements is null.</exception>
-    internal static ExpressSchemaCompilation Compile(IEnumerable<ExpressSchemaSource> sources)
+    internal static ExpressAnalyzedCompilation Analyze(IEnumerable<ExpressSchemaSource> sources)
     {
         if (sources is null)
         {
