@@ -38,6 +38,8 @@ internal sealed class ExpressExpressionBinder
 
     private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
 
+    private readonly Func<ExpressBoundDeclaration, ExpressRuleSyntax> _syntaxOf;
+
     private readonly HashSet<ExpressBoundSymbol> _indeterminateFunctions = [];
 
     private readonly HashSet<ExpressBoundName> _indeterminateLocals = [];
@@ -48,10 +50,12 @@ internal sealed class ExpressExpressionBinder
 
     private ExpressExpressionBinder(
         IReadOnlyList<ExpressBoundNameReference> references,
-        IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations)
+        IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations,
+        Func<ExpressBoundDeclaration, ExpressRuleSyntax> syntaxOf)
     {
         _references = references;
         _declarations = declarations;
+        _syntaxOf = syntaxOf;
     }
 
     /// <summary>
@@ -59,19 +63,21 @@ internal sealed class ExpressExpressionBinder
     /// </summary>
     /// <param name="declarations">The resolved schema declarations.</param>
     /// <param name="references">The resolved lexical and schema name references.</param>
+    /// <param name="syntaxOf">The binding-owned syntax lookup.</param>
     /// <returns>The typed outermost expression trees in source order.</returns>
     internal static (
         IReadOnlyList<ExpressBoundExpression> Expressions,
         HashSet<ExpressBoundSymbol> IndeterminateFunctions,
         HashSet<ExpressBoundName> IndeterminateLocals) Bind(
         IReadOnlyList<ExpressBoundDeclaration> declarations,
-        IReadOnlyList<ExpressBoundNameReference> references)
+        IReadOnlyList<ExpressBoundNameReference> references,
+        Func<ExpressBoundDeclaration, ExpressRuleSyntax> syntaxOf)
     {
         var bySymbol = declarations.ToDictionary(declaration => declaration.Symbol);
-        var binder = new ExpressExpressionBinder(references, bySymbol);
+        var binder = new ExpressExpressionBinder(references, bySymbol, syntaxOf);
         var expectedTypes = binder.FindExpectedTypes(declarations);
         var assignmentExpressions = new HashSet<ExpressRuleSyntax>(declarations
-            .SelectMany(declaration => declaration.Syntax.DescendantsAndSelf())
+            .SelectMany(declaration => syntaxOf(declaration).DescendantsAndSelf())
             .Where(candidate => candidate.Production == "assignmentStmt")
             .Select(candidate => candidate.RequiredChild("expression")));
         while (true)
@@ -81,11 +87,15 @@ internal sealed class ExpressExpressionBinder
             {
                 binder._selfType = declaration switch
                 {
-                    ExpressBoundEntity entity => binder.TypeOf(new ExpressBoundNamedType(entity.Symbol, entity.Syntax.Span)),
-                    ExpressBoundDefinedType type => binder.TypeOf(new ExpressBoundNamedType(type.Symbol, type.Syntax.Span)),
+                    ExpressBoundEntity entity => binder.TypeOf(new ExpressBoundNamedType(
+                        entity.Symbol,
+                        syntaxOf(entity).Span)),
+                    ExpressBoundDefinedType type => binder.TypeOf(new ExpressBoundNamedType(
+                        type.Symbol,
+                        syntaxOf(type).Span)),
                     _ => null,
                 };
-                foreach (var expression in ExpressionRoots(declaration.Syntax))
+                foreach (var expression in ExpressionRoots(syntaxOf(declaration)))
                 {
                     result.Add(binder.BindExpression(
                         expression,
@@ -126,7 +136,7 @@ internal sealed class ExpressExpressionBinder
             {
                 DeclaredType: ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, },
             };
-            var allAssignments = DescendantsInAlgorithm(declaration.Syntax)
+            var allAssignments = DescendantsInAlgorithm(_syntaxOf(declaration))
                 .Where(candidate => candidate.Production == "assignmentStmt")
                 .ToArray();
             var assignments = allAssignments
@@ -185,7 +195,7 @@ internal sealed class ExpressExpressionBinder
                 }
             }
 
-            foreach (var returnStatement in DescendantsInAlgorithm(declaration.Syntax)
+            foreach (var returnStatement in DescendantsInAlgorithm(_syntaxOf(declaration))
                          .Where(candidate => candidate.Production == "returnStmt"))
             {
                 var returnSyntax = returnStatement.RequiredChild("expression");
@@ -207,7 +217,7 @@ internal sealed class ExpressExpressionBinder
             foreach (var attribute in entity.Attributes.Where(candidate =>
                          candidate.Kind == ExpressAttributeKind.Derived))
             {
-                var syntax = entity.Syntax.DescendantsAndSelf()
+                var syntax = _syntaxOf(entity).DescendantsAndSelf()
                     .Where(candidate => candidate.Production == "derivedAttr")
                     .Single(candidate => SameStart(
                         candidate.RequiredChild("attributeDecl").Span,
@@ -232,14 +242,14 @@ internal sealed class ExpressExpressionBinder
         {
             if (declaration.Kind == ExpressDeclarationKind.Constant
                 && declaration.DeclaredType is not null
-                && declaration.Syntax.ChildRules("expression").SingleOrDefault() is { } constantValue)
+                && _syntaxOf(declaration).ChildRules("expression").SingleOrDefault() is { } constantValue)
             {
                 result[constantValue] = TypeOf(declaration.DeclaredType);
             }
 
             if (declaration.Kind == ExpressDeclarationKind.Function && declaration.DeclaredType is not null)
             {
-                foreach (var returnStatement in DescendantsInAlgorithm(declaration.Syntax)
+                foreach (var returnStatement in DescendantsInAlgorithm(_syntaxOf(declaration))
                              .Where(node => node.Production == "returnStmt"))
                 {
                     if (returnStatement.ChildRules("expression").SingleOrDefault() is { } returnValue)
@@ -250,7 +260,7 @@ internal sealed class ExpressExpressionBinder
             }
         }
 
-        foreach (var syntax in declarations.SelectMany(declaration => declaration.Syntax.DescendantsAndSelf()))
+        foreach (var syntax in declarations.SelectMany(declaration => _syntaxOf(declaration).DescendantsAndSelf()))
         {
             if (syntax.Production == "assignmentStmt")
             {
@@ -612,7 +622,7 @@ internal sealed class ExpressExpressionBinder
             && boundDeclaration is ExpressBoundOpaqueDeclaration opaque
             && opaque.Kind == ExpressDeclarationKind.Function
             && opaque.DeclaredType is ExpressBoundAggregateType declaredResultAggregate
-            && opaque.Syntax.RequiredChild("functionHead")
+            && _syntaxOf(opaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .FirstOrDefault() is { } firstParameter
@@ -1153,7 +1163,7 @@ internal sealed class ExpressExpressionBinder
             && calledDeclaration is ExpressBoundOpaqueDeclaration calledFunction
             && calledFunction.Kind == ExpressDeclarationKind.Function)
         {
-            var formalTypes = calledFunction.Syntax.RequiredChild("functionHead")
+            var formalTypes = _syntaxOf(calledFunction).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .Select(parameter => _references.Select(candidate => candidate.Target)
@@ -1243,7 +1253,7 @@ internal sealed class ExpressExpressionBinder
             && scalarOpaque.Kind == ExpressDeclarationKind.Function
             && scalarOpaque.DeclaredType is ExpressBoundGenericType)
         {
-            var formalTypes = scalarOpaque.Syntax.RequiredChild("functionHead")
+            var formalTypes = _syntaxOf(scalarOpaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .Select(parameter => _references.Select(candidate => candidate.Target)
@@ -1311,7 +1321,7 @@ internal sealed class ExpressExpressionBinder
             && resultAggregate.ElementType is ExpressBoundGenericType { TypeLabel: { } resultLabel, }
             && parameters.FirstOrDefault()?.Type.DeclaredType is ExpressBoundAggregateType
                 actualAggregate
-            && opaque.Syntax.RequiredChild("functionHead")
+            && _syntaxOf(opaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .FirstOrDefault() is { } firstParameter
@@ -1350,7 +1360,7 @@ internal sealed class ExpressExpressionBinder
             && nestedOpaque.DeclaredType is ExpressBoundAggregateType nestedResultAggregate
             && nestedResultAggregate.ElementType is ExpressBoundAggregateType
             && parameters.FirstOrDefault()?.Type.DeclaredType is ExpressBoundAggregateType nestedActualAggregate
-            && nestedOpaque.Syntax.RequiredChild("functionHead")
+            && _syntaxOf(nestedOpaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .FirstOrDefault() is { } nestedFirstParameter
@@ -1388,7 +1398,7 @@ internal sealed class ExpressExpressionBinder
             && dynamicBoundDeclaration is ExpressBoundOpaqueDeclaration dynamicFunction
             && dynamicFunction.Kind == ExpressDeclarationKind.Function)
         {
-            var formalTypes = dynamicFunction.Syntax.RequiredChild("functionHead")
+            var formalTypes = _syntaxOf(dynamicFunction).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .Select(parameter => _references.Select(candidate => candidate.Target)

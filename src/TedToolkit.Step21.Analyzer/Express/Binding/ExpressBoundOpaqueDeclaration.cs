@@ -16,13 +16,11 @@ internal sealed class ExpressBoundOpaqueDeclaration : ExpressBoundDeclaration
     /// Initializes a preserved declaration.
     /// </summary>
     /// <param name="symbol">The resolved declaration identity.</param>
-    /// <param name="syntax">The preserved source syntax.</param>
     /// <param name="declaredType">The constant or function result type when applicable.</param>
     internal ExpressBoundOpaqueDeclaration(
         ExpressBoundSymbol symbol,
-        ExpressRuleSyntax syntax,
         ExpressBoundType? declaredType)
-        : base(symbol, syntax)
+        : base(symbol)
     {
         DeclaredType = declaredType;
     }

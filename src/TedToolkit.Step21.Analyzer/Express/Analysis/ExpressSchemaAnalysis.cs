@@ -22,7 +22,10 @@ internal sealed class ExpressSchemaAnalysis
     /// Initializes one syntax-detached schema analysis.
     /// </summary>
     /// <param name="schema">The analyzed bound schema.</param>
-    internal ExpressSchemaAnalysis(ExpressBoundSchema schema)
+    /// <param name="syntaxOf">The binding-owned syntax lookup consumed during construction.</param>
+    internal ExpressSchemaAnalysis(
+        ExpressBoundSchema schema,
+        Func<ExpressBoundDeclaration, ExpressRuleSyntax> syntaxOf)
     {
         Schema = schema;
         _declarations = new(
@@ -30,7 +33,7 @@ internal sealed class ExpressSchemaAnalysis
                 .Concat(schema.NestedDeclarations)
                 .ToDictionary(
                     declaration => declaration,
-                    declaration => ExpressSemanticRule.Create(declaration.Syntax)));
+                    declaration => ExpressSemanticRule.Create(syntaxOf(declaration))));
     }
 
     /// <summary>

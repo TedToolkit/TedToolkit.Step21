@@ -8,7 +8,7 @@
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
-/// Provides immutable identity and source evidence for a bound schema declaration.
+/// Provides immutable identity for a bound schema declaration.
 /// </summary>
 internal abstract class ExpressBoundDeclaration
 {
@@ -16,11 +16,9 @@ internal abstract class ExpressBoundDeclaration
     /// Initializes a bound declaration.
     /// </summary>
     /// <param name="symbol">The resolved declaration identity.</param>
-    /// <param name="syntax">The preserved source syntax.</param>
-    protected ExpressBoundDeclaration(ExpressBoundSymbol symbol, ExpressRuleSyntax syntax)
+    protected ExpressBoundDeclaration(ExpressBoundSymbol symbol)
     {
         Symbol = symbol;
-        Syntax = syntax;
     }
 
     /// <summary>
@@ -60,9 +58,4 @@ internal abstract class ExpressBoundDeclaration
             return Symbol.DeclaringSchema;
         }
     }
-
-    /// <summary>
-    /// Gets the preserved source syntax for later staged semantics.
-    /// </summary>
-    internal ExpressRuleSyntax Syntax { get; }
 }

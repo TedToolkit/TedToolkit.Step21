@@ -18,17 +18,15 @@ internal sealed class ExpressBoundEntity : ExpressBoundDeclaration
     /// Initializes a bound entity.
     /// </summary>
     /// <param name="symbol">The entity identity.</param>
-    /// <param name="syntax">The preserved declaration syntax.</param>
     /// <param name="isAbstract">Whether the entity is abstract.</param>
     /// <param name="directSupertypes">The resolved direct supertypes.</param>
     /// <param name="attributes">The locally declared attributes.</param>
     internal ExpressBoundEntity(
         ExpressBoundSymbol symbol,
-        ExpressRuleSyntax syntax,
         bool isAbstract,
         IEnumerable<ExpressBoundSymbol> directSupertypes,
         IEnumerable<ExpressBoundAttribute> attributes)
-        : base(symbol, syntax)
+        : base(symbol)
     {
         IsAbstract = isAbstract;
         DirectSupertypes = new ReadOnlyCollection<ExpressBoundSymbol>(directSupertypes.ToArray());

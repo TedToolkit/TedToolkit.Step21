@@ -357,7 +357,9 @@ internal sealed class CompilationTests
         ]);
         var schema = compilation.Schemas.Single();
         var types = schema.Declarations.OfType<ExpressBoundDefinedType>().ToArray();
-        var function = schema.Declarations.Single(declaration => declaration.Kind == ExpressDeclarationKind.Function);
+        var function = schema.Declarations
+            .OfType<ExpressBoundOpaqueDeclaration>()
+            .Single(declaration => declaration.Kind == ExpressDeclarationKind.Function);
 
         using (Assert.Multiple())
         {
@@ -369,7 +371,10 @@ internal sealed class CompilationTests
                 .Contains(typeof(ExpressBoundEnumerationType));
             await Assert.That(types.Select(type => type.UnderlyingType.GetType()))
                 .Contains(typeof(ExpressBoundSelectType));
-            await Assert.That(function.Syntax.DescendantTokens().Any(token => token.Text == "GENERIC_ENTITY")).IsTrue();
+            await Assert.That(function.DeclaredType).IsTypeOf<ExpressBoundGenericType>();
+            await Assert.That(types.Select(type => type.UnderlyingType)
+                .OfType<ExpressBoundSelectType>()
+                .Any(type => type.IsGenericEntity)).IsTrue();
         }
     }
 

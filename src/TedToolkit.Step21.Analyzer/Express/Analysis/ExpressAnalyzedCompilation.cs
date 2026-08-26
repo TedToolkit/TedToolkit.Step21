@@ -21,7 +21,7 @@ internal sealed class ExpressAnalyzedCompilation
     /// <summary>
     /// Initializes analyzed schemas and their syntax-detached semantic rule models.
     /// </summary>
-    /// <param name="binding">The closed-set binding output.</param>
+    /// <param name="binding">The syntax-free closed-set binding output.</param>
     /// <param name="schemas">The analyzed schemas.</param>
     /// <param name="analyses">The semantic rule analysis for every schema.</param>
     internal ExpressAnalyzedCompilation(
@@ -29,7 +29,6 @@ internal sealed class ExpressAnalyzedCompilation
         IEnumerable<ExpressBoundSchema> schemas,
         IEnumerable<ExpressSchemaAnalysis> analyses)
     {
-        Binding = binding;
         Schemas = new ReadOnlyCollection<ExpressBoundSchema>(schemas.ToArray());
         Compilation = new(
             Schemas,
@@ -38,11 +37,6 @@ internal sealed class ExpressAnalyzedCompilation
         _analyses = new(
             analyses.ToDictionary(analysis => analysis.Schema));
     }
-
-    /// <summary>
-    /// Gets the closed-set binding output retained as analysis evidence.
-    /// </summary>
-    internal ExpressSchemaCompilation Binding { get; }
 
     /// <summary>
     /// Gets the compatibility compilation containing analyzed bound schemas.
@@ -61,7 +55,7 @@ internal sealed class ExpressAnalyzedCompilation
     {
         get
         {
-            return Binding.SyntaxDiagnostics;
+            return Compilation.SyntaxDiagnostics;
         }
     }
 
@@ -72,7 +66,7 @@ internal sealed class ExpressAnalyzedCompilation
     {
         get
         {
-            return Binding.BindingDiagnostics;
+            return Compilation.BindingDiagnostics;
         }
     }
 

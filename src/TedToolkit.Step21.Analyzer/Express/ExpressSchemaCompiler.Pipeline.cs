@@ -9,10 +9,10 @@ using TedToolkit.Step21.Analyzer.Express.Analysis;
 
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
-/// <content>
+/// <summary>
 /// Provides the compatibility entry points owned by compiler-pipeline orchestration.
-/// </content>
-internal static partial class ExpressSchemaCompiler
+/// </summary>
+internal static class ExpressSchemaCompiler
 {
     /// <summary>
     /// Compiles the supplied sources without reading their logical paths or consulting external state.

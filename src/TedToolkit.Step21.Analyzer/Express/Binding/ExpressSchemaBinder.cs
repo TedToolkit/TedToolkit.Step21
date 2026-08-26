@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="ExpressSchemaCompiler.cs" company="TedToolkit">
+// <copyright file="ExpressSchemaBinder.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
 // </copyright>
@@ -8,9 +8,9 @@
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
-/// Compiles exactly the supplied EXPRESS sources through the deterministic compiler pipeline.
+/// Binds exactly the supplied parsed EXPRESS schemas as one deterministic closed set.
 /// </summary>
-internal static partial class ExpressSchemaCompiler
+internal static class ExpressSchemaBinder
 {
     private static readonly StringComparer _nameComparer = StringComparer.OrdinalIgnoreCase;
 
@@ -20,7 +20,7 @@ internal static partial class ExpressSchemaCompiler
     /// <param name="syntaxCompilation">The deterministic syntax-stage output.</param>
     /// <returns>The closed-set binding output and complete diagnostics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="syntaxCompilation"/> is null.</exception>
-    internal static ExpressSchemaCompilation BindClosedSet(ExpressSyntaxCompilation syntaxCompilation)
+    internal static ExpressBindingCompilation BindClosedSet(ExpressSyntaxCompilation syntaxCompilation)
     {
         if (syntaxCompilation is null)
         {
@@ -40,16 +40,19 @@ internal static partial class ExpressSchemaCompiler
         var resolver = new Resolver(schemas, bindingDiagnostics);
         resolver.ResolveAll();
         resolver.ValidateCycles();
+        var declarationSyntax = new Dictionary<ExpressBoundDeclaration, ExpressRuleSyntax>();
         var boundSchemas = schemas
             .Where(schema => !schema.IsInvalid)
             .OrderBy(SchemaSortKey, StringComparer.OrdinalIgnoreCase)
-            .Select(CreateBoundSchema)
+            .Select(schema => CreateBoundSchema(schema, declarationSyntax))
             .ToArray();
 
         return new(
-            boundSchemas,
-            syntaxCompilation.Diagnostics,
-            OrderBindingDiagnostics(bindingDiagnostics));
+            new ExpressSchemaCompilation(
+                boundSchemas,
+                syntaxCompilation.Diagnostics,
+                OrderBindingDiagnostics(bindingDiagnostics)),
+            declarationSyntax);
     }
 
     private static SchemaDraft CreateSchema(ExpressParsedSchema syntax)
@@ -205,13 +208,17 @@ internal static partial class ExpressSchemaCompiler
         return new(source, local, syntax.Span);
     }
 
-    private static ExpressBoundSchema CreateBoundSchema(SchemaDraft schema)
+    private static ExpressBoundSchema CreateBoundSchema(
+        SchemaDraft schema,
+        IDictionary<ExpressBoundDeclaration, ExpressRuleSyntax> declarationSyntax)
     {
-        var declarations = schema.Declarations.Select(CreateBoundDeclaration).ToArray();
+        var declarations = schema.Declarations
+            .Select(declaration => CreateBoundDeclaration(declaration, declarationSyntax))
+            .ToArray();
         var nestedDeclarations = schema.NestedDeclarations
             .OrderBy(declaration => declaration.Syntax.Span.Start.Line)
             .ThenBy(declaration => declaration.Syntax.Span.Start.Column)
-            .Select(CreateBoundDeclaration)
+            .Select(declaration => CreateBoundDeclaration(declaration, declarationSyntax))
             .ToArray();
         return new(
             schema.Identity,
@@ -224,31 +231,35 @@ internal static partial class ExpressSchemaCompiler
             []);
     }
 
-    private static ExpressBoundDeclaration CreateBoundDeclaration(SymbolDraft declaration)
+    private static ExpressBoundDeclaration CreateBoundDeclaration(
+        SymbolDraft declaration,
+        IDictionary<ExpressBoundDeclaration, ExpressRuleSyntax> declarationSyntax)
     {
+        ExpressBoundDeclaration result;
         if (declaration.Symbol.Kind == ExpressDeclarationKind.Entity)
         {
-            return new ExpressBoundEntity(
+            result = new ExpressBoundEntity(
                 declaration.Symbol,
-                declaration.Syntax,
                 declaration.IsAbstract,
                 declaration.Supertypes,
                 declaration.Attributes);
         }
-
-        if (declaration.Symbol.Kind == ExpressDeclarationKind.Type)
+        else if (declaration.Symbol.Kind == ExpressDeclarationKind.Type)
         {
-            return new ExpressBoundDefinedType(
+            result = new ExpressBoundDefinedType(
                 declaration.Symbol,
-                declaration.Syntax,
                 declaration.BoundType
                 ?? throw new InvalidOperationException("A valid type declaration must have a bound type."));
         }
+        else
+        {
+            result = new ExpressBoundOpaqueDeclaration(
+                declaration.Symbol,
+                declaration.BoundType);
+        }
 
-        return new ExpressBoundOpaqueDeclaration(
-            declaration.Symbol,
-            declaration.Syntax,
-            declaration.BoundType);
+        declarationSyntax.Add(result, declaration.Syntax);
+        return result;
     }
 
     private static IEnumerable<ExpressBindingDiagnostic> OrderBindingDiagnostics(

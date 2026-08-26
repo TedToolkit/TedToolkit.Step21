@@ -39,11 +39,13 @@ public sealed class GeneratedFidelityTests
                 .IsEqualTo(AP203_SHA256);
         }
 
-        var bound = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("schemas/ap203.exp", schemaText)]);
+        var analyzed = ExpressSchemaCompiler.Analyze([new ExpressSchemaSource("schemas/ap203.exp", schemaText)]);
+        var bound = analyzed.Compilation;
         var boundExpressions = bound.Schemas.Single().Expressions.Select(expression => expression.Span).ToArray();
-        var missingRuleExpressions = bound.Schemas.Single().Declarations
+        var schema = bound.Schemas.Single();
+        var missingRuleExpressions = schema.Declarations
             .OfType<ExpressBoundDefinedType>()
-            .SelectMany(type => type.Syntax.ChildRules("whereClause"))
+            .SelectMany(type => analyzed.GetAnalysis(schema).GetDeclaration(type).ChildRules("whereClause"))
             .SelectMany(clause => clause.ChildRules("domainRule"))
             .Select(rule => rule.RequiredChild("expression"))
             .Where(expression => !boundExpressions.Any(span =>

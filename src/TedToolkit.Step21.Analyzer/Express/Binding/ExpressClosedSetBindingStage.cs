@@ -18,8 +18,8 @@ internal static class ExpressClosedSetBindingStage
     /// <param name="syntaxCompilation">The deterministic syntax-stage output.</param>
     /// <returns>The closed-set binding output and complete diagnostics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="syntaxCompilation"/> is null.</exception>
-    internal static ExpressSchemaCompilation Bind(ExpressSyntaxCompilation syntaxCompilation)
+    internal static ExpressBindingCompilation Bind(ExpressSyntaxCompilation syntaxCompilation)
     {
-        return ExpressSchemaCompiler.BindClosedSet(syntaxCompilation);
+        return ExpressSchemaBinder.BindClosedSet(syntaxCompilation);
     }
 }

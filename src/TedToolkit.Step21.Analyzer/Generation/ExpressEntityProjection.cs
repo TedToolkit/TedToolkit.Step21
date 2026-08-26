@@ -154,9 +154,11 @@ internal sealed class ExpressEntityProjection
                          .Distinct()
                          .Count() > 1))
         {
-            foreach (var attribute in group)
+            foreach (var attribute in group.ToArray())
             {
-                attribute.DisambiguateStorageMember();
+                var replacement = attribute.WithDisambiguatedStorageMember();
+                ReplaceReference(flattenedAttributes, attribute, replacement);
+                ReplaceReference(effectiveAttributes, attribute, replacement);
             }
         }
 
@@ -309,17 +311,18 @@ internal sealed class ExpressEntityProjection
             AddAttributes(entityBySymbol[supertype].Entity, entityBySymbol, valueResolver, result, effective);
         }
 
-        foreach (var attribute in ProjectOwnAttributes(
+        foreach (var candidate in ProjectOwnAttributes(
                      entity,
                      entityBySymbol[entity.Symbol].Analysis,
                      valueResolver))
         {
+            var attribute = candidate;
             var effectiveIndex = FindRedeclaredStorage(effective, attribute);
             if (effectiveIndex >= 0)
             {
                 var inherited = effective[effectiveIndex];
                 var isRenamed = !StringComparer.Ordinal.Equals(inherited.Name, attribute.Name);
-                attribute.BindStorage(
+                attribute = attribute.WithStorage(
                     inherited,
                     isRenamed ? inherited.Name : null);
                 effective[effectiveIndex] = attribute;
@@ -408,6 +411,20 @@ internal sealed class ExpressEntityProjection
     {
         return ReferenceEquals(first.StorageEntity, second.StorageEntity)
             && StringComparer.OrdinalIgnoreCase.Equals(first.StorageAttributeName, second.StorageAttributeName);
+    }
+
+    private static void ReplaceReference(
+        List<ExpressEntityAttributeProjection> attributes,
+        ExpressEntityAttributeProjection current,
+        ExpressEntityAttributeProjection replacement)
+    {
+        for (var index = 0; index < attributes.Count; index++)
+        {
+            if (ReferenceEquals(attributes[index], current))
+            {
+                attributes[index] = replacement;
+            }
+        }
     }
 
     private static bool SameLocation(ExpressSourceLocation first, ExpressSourceLocation second)
