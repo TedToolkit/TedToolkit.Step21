@@ -4,11 +4,11 @@
 This file is the only mutable work-item status source. Item contracts remain stable after approval.
 
 Status evidence as of this revision: AP203-003 and AP203-001 are integrated with complete proof and
-independent `Ready` reviews; the reviewed AP203-001 range ends at `28ba730`. Candidate revision
-`f66c33d` still contains the AP203-002 completion evidence and the start of AP203-004; those artifacts
-await reconciliation onto this delivery baseline. `Implemented` means the item has complete evidence;
-`Implementing` means implementation exists or has started but its authoritative completion record or
-review is not yet closed.
+independent `Ready` reviews; the reviewed AP203-001 range ends at `28ba730`. AP203-002 is reconciled
+through `692d4ee` with current proof and awaits its integration review. Candidate revision `f66c33d`
+still contains the start of AP203-004, which awaits reconciliation onto this delivery baseline.
+`Implemented` means the item has complete evidence; `Implementing` means implementation exists or has
+started but its authoritative completion record or review is not yet closed.
 
 | ID | Outcome | Contract ownership | Real prerequisites and supplied input | Primary proof | Status | Document |
 | --- | --- | --- | --- | --- | --- | --- |
