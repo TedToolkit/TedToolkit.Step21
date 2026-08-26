@@ -43,13 +43,14 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
             var valueResolver = ExpressGeneratedTypeResolver.Create(result.Compilation);
             var valueProjections = ExpressValueProjection.Create(result.Compilation, valueResolver);
             var plan = ExpressEntityGenerationPlan.Create(result.Compilation, valueResolver);
-            var complexProjections = ExpressComplexEntityProjection.Create(plan.Projections);
+            var complexProjections = ExpressComplexEntityProjection.Create(plan.Projections, valueResolver);
             var rulePlans = result.Compilation.Schemas.ToDictionary(
                 schema => schema,
                 schema => ExpressReachableRulePlan.Create(
                     schema,
                     valueResolver,
-                    plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray()));
+                    plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
+                    complexProjections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray()));
             var ruleFailures = rulePlans.Values.SelectMany(rulePlan => rulePlan.Failures).ToArray();
             var invalidSchemas = new HashSet<ExpressBoundSchema>(plan.InvalidSchemas);
             invalidSchemas.UnionWith(ruleFailures.Select(failure => failure.Schema));

@@ -467,6 +467,108 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string DIMENSIONAL_SELECT_SCHEMA = """
+        SCHEMA dimensional_select_model;
+        TYPE length_measure = REAL;
+        END_TYPE;
+        TYPE measure_value = SELECT (length_measure);
+        END_TYPE;
+        TYPE unit = SELECT (named_unit);
+        END_TYPE;
+        TYPE si_unit_name = ENUMERATION OF (metre, radian);
+        END_TYPE;
+        ENTITY dimensional_exponents;
+          length_exponent : REAL;
+          mass_exponent : REAL;
+          time_exponent : REAL;
+          electric_current_exponent : REAL;
+          thermodynamic_temperature_exponent : REAL;
+          amount_of_substance_exponent : REAL;
+          luminous_intensity_exponent : REAL;
+        END_ENTITY;
+        ENTITY named_unit
+          SUPERTYPE OF (ONEOF (si_unit) ANDOR ONEOF (length_unit));
+          dimensions : dimensional_exponents;
+        END_ENTITY;
+        ENTITY length_unit SUBTYPE OF (named_unit);
+        END_ENTITY;
+        ENTITY si_unit SUBTYPE OF (named_unit);
+          name : si_unit_name;
+        DERIVE
+          SELF\named_unit.dimensions : dimensional_exponents := dimensions_for_si_unit(SELF.name);
+        END_ENTITY;
+        ENTITY measure_with_unit;
+          value_component : measure_value;
+          unit_component : unit;
+        WHERE
+          typed_value : 'DIMENSIONAL_SELECT_MODEL.LENGTH_MEASURE' IN TYPEOF(value_component);
+          derived_dimensions : derive_dimensional_exponents(unit_component) =
+            dimensional_exponents(1,0,0,0,0,0,0);
+          valid_combination : valid_units(SELF);
+        END_ENTITY;
+        FUNCTION dimensions_for_si_unit(name : si_unit_name) : dimensional_exponents;
+          CASE name OF
+            metre : RETURN(dimensional_exponents(1,0,0,0,0,0,0));
+            radian : RETURN(dimensional_exponents(0,0,0,0,0,0,0));
+          END_CASE;
+        END_FUNCTION;
+        FUNCTION derive_dimensional_exponents(x : unit) : dimensional_exponents;
+          LOCAL
+            result : dimensional_exponents := dimensional_exponents(0,0,0,0,0,0,0);
+          END_LOCAL;
+          result := x.dimensions;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION valid_units(m : measure_with_unit) : BOOLEAN;
+          IF 'DIMENSIONAL_SELECT_MODEL.LENGTH_MEASURE' IN TYPEOF(m.value_component) THEN
+            IF derive_dimensional_exponents(m.unit_component) <>
+              dimensional_exponents(1,0,0,0,0,0,0) THEN
+              RETURN(FALSE);
+            END_IF;
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
+    private const string DIMENSIONAL_SELECT_CONSUMER = """"
+        using System.IO;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.DimensionalSelectModel;
+
+        internal static class DimensionalSelectConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                const string sourceText = """
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('dimensional select'),'2;1');
+                    FILE_NAME('dimensional-select.step','2026-08-26T00:00:00',(),(),'tests','tests','');
+                    FILE_SCHEMA(('DIMENSIONAL_SELECT_MODEL'));
+                    ENDSEC;
+                    DATA;
+                    #1 = (LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.METRE.));
+                    #2 = MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-07),#1);
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """;
+                try
+                {
+                    using var source = new StringReader(sourceText);
+                    var structure = ExchangeStructure.Read(
+                        source,
+                        [TedToolkit.Step21.Generated.DimensionalSelectModel.SchemaDescriptor.Instance]);
+                    return structure.Validate();
+                }
+                catch (ExchangeStructureReadValidationException exception)
+                {
+                    return exception.ValidationResult;
+                }
+            }
+        }
+        """";
+
     private const string AGGREGATE_TYPEOF_SCHEMA = """
         SCHEMA aggregate_typeof_model;
         TYPE integer_set = SET OF INTEGER;
@@ -6262,6 +6364,41 @@ public sealed class ReachableRuleTests
             .Invoke(null, null)!;
         await Assert.That(validation.IsValid).IsTrue()
             .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+    }
+
+    /// <summary>
+    /// Verifies typed SELECT values and derived complex-unit dimensions cooperate in value rules.
+    /// </summary>
+    [Test]
+    public async Task Should_validate_typed_measure_against_derived_complex_unit_dimensions()
+    {
+        var result = GeneratorHostTests.Run(
+            DIMENSIONAL_SELECT_CONSUMER,
+            ("schemas/dimensional-select.exp", DIMENSIONAL_SELECT_SCHEMA));
+        if (result.GeneratedSources.IsEmpty)
+        {
+            throw new InvalidOperationException(string.Join(
+                Environment.NewLine,
+                result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())));
+        }
+
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType("DimensionalSelectConsumer", throwOnError: true)!
+            .GetMethod(
+                "Validate",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+        }
     }
 
     /// <summary>

@@ -3,6 +3,26 @@ namespace TedToolkit.Step21.Tests.ExchangeStructureTests;
 internal sealed class ReadTests
 {
     /// <summary>
+    /// Verifies signed REAL values with an empty fractional part survive the syntax-to-value boundary.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_signed_real_with_trailing_decimal_point()
+    {
+        var descriptor = new RealCaptureDescriptor();
+
+        _ = ExchangeStructure.Read(
+            new StringReader(CreateExchange("TEST_SCHEMA", dataSection: "DATA;\n#1 = TEST_ENTITY(-0.);\nENDSEC;")),
+            [descriptor]);
+
+        var parameter = descriptor.Components.Single().Value.Single();
+        using (Assert.Multiple())
+        {
+            await Assert.That(parameter.TryGetReal(out var value)).IsTrue();
+            await Assert.That(value).IsEqualTo(new RealValue(0, 0));
+        }
+    }
+
+    /// <summary>
     /// Verifies case-insensitive nominal matching and the numeric object-identifier suffix while retaining header text.
     /// </summary>
     [Test]
@@ -217,6 +237,37 @@ internal sealed class ReadTests
         {{dataSection}}
         END-ISO-10303-21;
         """;
+
+    private sealed class RealCaptureDescriptor : SchemaDescriptor
+    {
+        private readonly TestEntity _entity = new();
+
+        public override SchemaName Name { get; } = new("TEST_SCHEMA");
+
+        internal IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> Components { get; private set; } = [];
+
+        protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) =>
+            entityNames.SequenceEqual(["TEST_ENTITY"], StringComparer.Ordinal) ? _entity : null;
+
+        protected override IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
+            ExchangeStructure structure,
+            Entity value,
+            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components)
+        {
+            Components = components;
+            return [];
+        }
+
+        protected override ValidationResult ValidateCore(
+            ExchangeStructure structure,
+            IReadOnlyList<KeyValuePair<string, Entity>> entities) => new([]);
+
+        protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
+            ExchangeStructure structure) => [];
+
+        protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+            Entity value) => [];
+    }
 
     private sealed class ProbeTextReader : TextReader
     {

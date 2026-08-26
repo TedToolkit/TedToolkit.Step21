@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('OCCT unsupported AP203 extension proof'),'2;1');
+FILE_NAME('occt-unsupported-extension-ap203.step','2026-08-26T00:00:00',('TedToolkit'),('TedToolkit'),'fixture','fixture','');
+FILE_SCHEMA(('CONFIG_CONTROL_DESIGN'));
+ENDSEC;
+DATA;
+#1 = OCCT_AP203_EXTENSION('unsupported');
+ENDSEC;
+END-ISO-10303-21;

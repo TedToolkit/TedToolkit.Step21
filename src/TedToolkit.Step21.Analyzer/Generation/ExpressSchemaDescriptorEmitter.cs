@@ -137,16 +137,20 @@ internal static class ExpressSchemaDescriptorEmitter
         method.AddParameter(SourceComposer.Parameter(
             new DataType("global::System.Collections.Generic.IReadOnlyList<global::System.String>"),
             "entityNames"));
-        var alternatives = entities
-            .Where(entity => !entity.Entity.IsAbstract)
-            .Select(entity => $"{CreateMappingCondition(entity)} ? {CreateEntity(entity)} : ")
-            .Concat(complexEntities.Select(entity =>
-                $"{CreateComplexMappingCondition(entity, "entityNames", hasKey: false)} ? new {entity.Name}() : "))
-            .ToArray();
-        var expression = alternatives.Length == 0
-            ? "null"
-            : string.Concat(alternatives) + "null";
-        method.AddStatement(new CustomExpression(expression).Return);
+        foreach (var entity in entities.Where(entity => !entity.Entity.IsAbstract))
+        {
+            method.AddStatement(new IfStatement(new CustomExpression(CreateMappingCondition(entity)))
+                .AddStatement(new CustomExpression(CreateEntity(entity)).Return));
+        }
+
+        foreach (var entity in complexEntities)
+        {
+            method.AddStatement(new IfStatement(new CustomExpression(
+                    CreateComplexMappingCondition(entity, "entityNames", hasKey: false)))
+                .AddStatement(new CustomExpression($"new {entity.Name}()").Return));
+        }
+
+        method.AddStatement(new CustomExpression("null").Return);
         AddSummary(method, "Allocates a supported generated entity from its ordered physical name group.");
         return method;
     }
@@ -351,7 +355,8 @@ internal static class ExpressSchemaDescriptorEmitter
                     attributeIndex,
                     typedName,
                     resolver,
-                    component.Entity.Name));
+                    component.Entity.Name,
+                    entity.IsDerivedRedeclared(attributes[attributeIndex])));
             }
 
             branch.AddStatement(componentBranch);
@@ -378,7 +383,8 @@ internal static class ExpressSchemaDescriptorEmitter
         int index,
         string typedName,
         ExpressGeneratedTypeResolver resolver,
-        string physicalEntityName)
+        string physicalEntityName,
+        bool isDerivedRedeclared = false)
     {
         var parameterName = $"parameter{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var expectedType = ExpressTypeDocumentation.Format(attribute.Type);
@@ -395,7 +401,8 @@ internal static class ExpressSchemaDescriptorEmitter
             parameterName,
             typedName,
             invalid,
-            resolver);
+            resolver,
+            isDerivedRedeclared);
         IfStatement hydration;
         if (attribute.Attribute.IsOptional)
         {
@@ -467,7 +474,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 attributes,
                 typedName,
                 resolver,
-                indexOffset));
+                indexOffset,
+                entity));
             indexOffset += attributes.Count;
         }
 
@@ -481,14 +489,16 @@ internal static class ExpressSchemaDescriptorEmitter
         IReadOnlyList<ExpressEntityAttributeProjection> attributes,
         string typedName,
         ExpressGeneratedTypeResolver resolver,
-        int indexOffset = 0)
+        int indexOffset = 0,
+        ExpressComplexEntityProjection? complexEntity = null)
     {
         var parameters = attributes.Select((attribute, index) => CreateProjectedAttribute(
             entity,
             attribute,
             typedName,
             indexOffset + index,
-            resolver));
+            resolver,
+            complexEntity?.IsDerivedRedeclared(attribute) == true));
         return "new global::System.Collections.Generic.KeyValuePair<global::System.String, "
             + "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>("
             + $"\"{componentName.ToUpperInvariant()}\", [{string.Join(", ", parameters)}])";
@@ -498,8 +508,7 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressEntityProjection entity,
         ExpressGeneratedTypeResolver resolver)
     {
-        return !entity.HasDerivedRedeclaration
-            && entity.EffectiveAttributes.All(attribute => CanMapType(attribute.Type, resolver));
+        return entity.EffectiveAttributes.All(attribute => CanMapType(attribute.Type, resolver));
     }
 
     private static IfStatement CreateScalarHydrationBranch(
@@ -573,8 +582,14 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressEntityAttributeProjection attribute,
         string typedName,
         int index,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        bool isDerivedRedeclared = false)
     {
+        if (isDerivedRedeclared || entity.IsDerivedRedeclared(attribute))
+        {
+            return "global::TedToolkit.Step21.ParameterValue.Derived";
+        }
+
         var value = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
             ? $"{typedName}.{attribute.Name}"
             : $"(({GetGeneratedTypeName(entity.Schema.Identity, attribute.StorageEntity.Symbol)})"
@@ -601,8 +616,18 @@ internal static class ExpressSchemaDescriptorEmitter
         string parameterName,
         string typedName,
         CustomExpression invalid,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        bool isDerivedRedeclared)
     {
+        if (isDerivedRedeclared || entity.IsDerivedRedeclared(attribute))
+        {
+            return new IfStatement(new CustomExpression(
+                    $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}].Kind "
+                    + "== global::TedToolkit.Step21.ParameterValueKind.Derived"))
+                .Else()
+                .AddStatement(invalid);
+        }
+
         var target = $"{typedName}.{attribute.StorageMemberName}";
         if (attribute.Type is ExpressBoundNamedType namedEntity
             && namedEntity.Declaration.Kind == ExpressDeclarationKind.Entity)
@@ -939,6 +964,20 @@ internal static class ExpressSchemaDescriptorEmitter
             return $"{parameter}.TryGetEntity(out var {rawName}Entity) && {rawName}Entity is {entityType}";
         }
 
+        if (type is ExpressBoundNamedType namedSelect
+            && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
+        {
+            var branches = CreateSelectReadBranches(
+                currentSchema,
+                namedSelect,
+                select,
+                parameter,
+                rawName,
+                resolver,
+                new HashSet<ExpressBoundSymbol>());
+            return $"({string.Join(" || ", branches.Select(branch => $"({branch.Condition})"))})";
+        }
+
         var terminal = GetTerminalType(type, resolver);
         if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, })
         {
@@ -973,6 +1012,21 @@ internal static class ExpressSchemaDescriptorEmitter
             var entityType = GetGeneratedTypeName(currentSchema, namedEntity.Declaration);
             return $"{parameter}.TryGetEntity(out var {rawName}Entity) && {rawName}Entity is {entityType} {rawName} "
                 + $"? {rawName} : throw new global::System.InvalidOperationException()";
+        }
+
+        if (type is ExpressBoundNamedType namedSelect
+            && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
+        {
+            var branches = CreateSelectReadBranches(
+                currentSchema,
+                namedSelect,
+                select,
+                parameter,
+                rawName,
+                resolver,
+                new HashSet<ExpressBoundSymbol>());
+            return string.Concat(branches.Select(branch => $"{branch.Condition} ? {branch.Value} : "))
+                + "throw new global::System.InvalidOperationException()";
         }
 
         var terminal = GetTerminalType(type, resolver);
@@ -1069,6 +1123,12 @@ internal static class ExpressSchemaDescriptorEmitter
             return true;
         }
 
+        if (type is ExpressBoundNamedType namedSelect
+            && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType)
+        {
+            return CanMapType(type, resolver);
+        }
+
         var terminal = GetTerminalType(type, resolver);
         return terminal is ExpressBoundScalarType or ExpressBoundEnumerationType;
     }
@@ -1155,7 +1215,13 @@ internal static class ExpressSchemaDescriptorEmitter
                 + $"{ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name)}.{generatedName}";
     }
 
-    private static bool CanMapType(ExpressBoundType type, ExpressGeneratedTypeResolver resolver)
+    /// <summary>
+    /// Determines whether a bound type can participate in a generated schema descriptor.
+    /// </summary>
+    /// <param name="type">The bound type.</param>
+    /// <param name="resolver">The generated type resolver.</param>
+    /// <returns><see langword="true" /> when the type can be mapped; otherwise, <see langword="false" />.</returns>
+    internal static bool CanMapType(ExpressBoundType type, ExpressGeneratedTypeResolver resolver)
     {
         if (type is ExpressBoundNamedType namedSelect
             && namedSelect.Declaration.Kind != ExpressDeclarationKind.Entity
@@ -1198,8 +1264,10 @@ internal static class ExpressSchemaDescriptorEmitter
 
         if (type is ExpressBoundSelectType select)
         {
-            var entityTypes = resolver.GetSelectAlternatives(select)
-                .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
+            var entityTypes = GetSelectEntityAlternatives(
+                    select,
+                    resolver,
+                    new HashSet<ExpressBoundSymbol>())
                 .Select(alternative => GetGeneratedTypeName(currentSchema, alternative))
                 .ToArray();
             return entityTypes.Length == 0
@@ -1227,15 +1295,51 @@ internal static class ExpressSchemaDescriptorEmitter
             resolver);
     }
 
+    private static ExpressBoundSymbol[] GetSelectEntityAlternatives(
+        ExpressBoundSelectType select,
+        ExpressGeneratedTypeResolver resolver,
+        HashSet<ExpressBoundSymbol> path)
+    {
+        var result = new List<ExpressBoundSymbol>();
+        foreach (var alternative in resolver.GetSelectAlternatives(select))
+        {
+            if (alternative.Kind == ExpressDeclarationKind.Entity)
+            {
+                result.Add(alternative);
+                continue;
+            }
+
+            if (!path.Add(alternative))
+            {
+                continue;
+            }
+
+            if (resolver.GetDefinedType(alternative).UnderlyingType is ExpressBoundSelectType nested)
+            {
+                result.AddRange(GetSelectEntityAlternatives(
+                    nested,
+                    resolver,
+                    new HashSet<ExpressBoundSymbol>(path)));
+            }
+        }
+
+        return result.Distinct().ToArray();
+    }
+
     private static bool CanMapSelectAlternative(
         ExpressBoundSymbol alternative,
         ExpressGeneratedTypeResolver resolver)
     {
-        var terminal = GetTerminalType(
-            resolver.GetDefinedType(alternative).UnderlyingType,
-            resolver);
-        return terminal is ExpressBoundScalarType { Kind: not ExpressScalarKind.Number, }
-            or ExpressBoundEnumerationType;
+        var underlying = resolver.GetDefinedType(alternative).UnderlyingType;
+        if (underlying is ExpressBoundSelectType nestedSelect)
+        {
+            return resolver.GetSelectAlternatives(nestedSelect)
+                .All(nested => nested.Kind == ExpressDeclarationKind.Entity
+                    || CanMapSelectAlternative(nested, resolver));
+        }
+
+        var terminal = GetTerminalType(underlying, resolver);
+        return terminal is ExpressBoundScalarType or ExpressBoundEnumerationType;
     }
 
     private static IfStatement CreateSelectHydrationBranch(
@@ -1248,44 +1352,26 @@ internal static class ExpressSchemaDescriptorEmitter
         CustomExpression invalid,
         ExpressGeneratedTypeResolver resolver)
     {
-        var selectType = GetGeneratedTypeName(currentSchema, namedSelect.Declaration);
         var parameter = $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}]";
+        var branches = CreateSelectReadBranches(
+            currentSchema,
+            namedSelect,
+            select,
+            parameter,
+            parameterName,
+            resolver,
+            new HashSet<ExpressBoundSymbol>());
         IfStatement? result = null;
-        foreach (var alternative in resolver.GetSelectAlternatives(select))
+        foreach (var branch in branches)
         {
-            var alternativeName = ExpressEntityProjection.ToPascalCase(alternative.Name);
-            CustomExpression condition;
-            string selectedValue;
-            if (alternative.Kind == ExpressDeclarationKind.Entity)
-            {
-                var entityType = GetGeneratedTypeName(currentSchema, alternative);
-                condition = new(
-                    $"{parameter}.TryGetEntity(out var {parameterName}{alternativeName}Entity) "
-                    + $"&& {parameterName}{alternativeName}Entity is {entityType} {parameterName}{alternativeName}");
-                selectedValue = parameterName + alternativeName;
-            }
-            else
-            {
-                var typeName = $"{parameterName}{alternativeName}Type";
-                var innerName = $"{parameterName}{alternativeName}Inner";
-                var rawName = $"{parameterName}{alternativeName}Raw";
-                var alternativeType = CreateNamedType(alternative);
-                condition = new(
-                    $"{parameter}.TryGetTyped(out var {typeName}, out var {innerName}) "
-                    + $"&& {typeName} == \"{alternative.Name.ToUpperInvariant()}\" "
-                    + $"&& {CreateReadCondition(alternativeType, innerName, rawName, resolver)}");
-                selectedValue = CreateReadValueExpression(currentSchema, alternativeType, rawName, resolver);
-            }
-
-            var assignment = new CustomExpression(
-                $"{target} = {selectType}.From{alternativeName}({selectedValue})");
+            var assignment = new CustomExpression($"{target} = {branch.Value}");
             if (result is null)
             {
-                result = new IfStatement(condition).AddStatement(assignment);
+                result = new IfStatement(new CustomExpression(branch.Condition)).AddStatement(assignment);
             }
             else
             {
-                result.ElseIf(condition).AddStatement(assignment);
+                result.ElseIf(new CustomExpression(branch.Condition)).AddStatement(assignment);
             }
         }
 
@@ -1356,13 +1442,25 @@ internal static class ExpressSchemaDescriptorEmitter
                 var alternativeName = ExpressEntityProjection.ToPascalCase(alternative.Name);
                 var selectedName = $"selected{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
                     + alternativeIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var projected = CreateProjectedValue(
-                    currentSchema,
-                    CreateNamedType(alternative),
-                    selectedName,
-                    (index * 100) + alternativeIndex,
-                    resolver);
-                if (alternative.Kind != ExpressDeclarationKind.Entity)
+                var alternativeType = CreateNamedType(alternative);
+                var underlying = alternative.Kind == ExpressDeclarationKind.Entity
+                    ? null
+                    : resolver.GetDefinedType(alternative).UnderlyingType;
+                var projected = underlying is ExpressBoundSelectType nested
+                    ? CreateProjectedSelect(
+                        currentSchema,
+                        nested,
+                        selectedName,
+                        checked(((index + 1) * 100) + alternativeIndex),
+                        resolver)
+                    : CreateProjectedValue(
+                        currentSchema,
+                        alternativeType,
+                        selectedName,
+                        (index * 100) + alternativeIndex,
+                        resolver);
+                if (alternative.Kind != ExpressDeclarationKind.Entity
+                    && underlying is not ExpressBoundSelectType)
                 {
                     projected = "global::TedToolkit.Step21.ParameterValue.FromTyped("
                         + $"\"{alternative.Name.ToUpperInvariant()}\", {projected})";
@@ -1372,6 +1470,93 @@ internal static class ExpressSchemaDescriptorEmitter
             });
         return string.Concat(alternatives)
             + "throw new global::System.InvalidOperationException()";
+    }
+
+    private static List<SelectReadBranch> CreateSelectReadBranches(
+        ExpressBoundSchemaIdentity currentSchema,
+        ExpressBoundNamedType namedSelect,
+        ExpressBoundSelectType select,
+        string parameter,
+        string prefix,
+        ExpressGeneratedTypeResolver resolver,
+        HashSet<ExpressBoundSymbol> path)
+    {
+        if (!path.Add(namedSelect.Declaration))
+        {
+            return [];
+        }
+
+        var selectType = GetGeneratedTypeName(currentSchema, namedSelect.Declaration);
+        var result = new List<SelectReadBranch>();
+        foreach (var alternative in resolver.GetSelectAlternatives(select))
+        {
+            var alternativeName = ExpressEntityProjection.ToPascalCase(alternative.Name);
+            var selectedPrefix = prefix + alternativeName;
+            if (alternative.Kind == ExpressDeclarationKind.Entity)
+            {
+                var entityType = GetGeneratedTypeName(currentSchema, alternative);
+                result.Add(new(
+                    $"{parameter}.TryGetEntity(out var {selectedPrefix}Entity) "
+                        + $"&& {selectedPrefix}Entity is {entityType} {selectedPrefix}",
+                    $"{selectType}.From{alternativeName}({selectedPrefix})"));
+                continue;
+            }
+
+            var alternativeType = CreateNamedType(alternative);
+            var underlying = resolver.GetDefinedType(alternative).UnderlyingType;
+            if (underlying is ExpressBoundSelectType nestedSelect)
+            {
+                foreach (var nested in CreateSelectReadBranches(
+                             currentSchema,
+                             alternativeType,
+                             nestedSelect,
+                             parameter,
+                             selectedPrefix,
+                             resolver,
+                             new HashSet<ExpressBoundSymbol>(path)))
+                {
+                    result.Add(new(
+                        nested.Condition,
+                        $"{selectType}.From{alternativeName}({nested.Value})"));
+                }
+
+                continue;
+            }
+
+            var innerName = selectedPrefix + "Inner";
+            var rawName = selectedPrefix + "Raw";
+            if (GetTerminalType(alternativeType, resolver) is ExpressBoundScalarType
+                {
+                    Kind: ExpressScalarKind.Number,
+                })
+            {
+                var numberCondition = $"{parameter}.TryGetTyped(out var {selectedPrefix}Type, out var {innerName}) "
+                    + $"&& {selectedPrefix}Type == \"{alternative.Name.ToUpperInvariant()}\" "
+                    + $"&& ({innerName}.TryGetInteger(out _) || {innerName}.TryGetReal(out _))";
+                var number = $"{innerName}.TryGetInteger(out var {rawName}Integer) "
+                    + $"? global::TedToolkit.Step21.NumberValue.FromInteger({rawName}Integer) "
+                    + $": {innerName}.TryGetReal(out var {rawName}Real) "
+                    + $"? global::TedToolkit.Step21.NumberValue.FromReal({rawName}Real) "
+                    + ": throw new global::System.InvalidOperationException()";
+                var selectedValue = CreateReadValueExpression(
+                    currentSchema,
+                    alternativeType,
+                    number,
+                    resolver);
+                result.Add(new(
+                    numberCondition,
+                    $"{selectType}.From{alternativeName}({selectedValue})"));
+                continue;
+            }
+
+            var condition = $"{parameter}.TryGetTyped(out var {selectedPrefix}Type, out var {innerName}) "
+                + $"&& {selectedPrefix}Type == \"{alternative.Name.ToUpperInvariant()}\" "
+                + $"&& {CreateReadCondition(alternativeType, innerName, rawName, resolver)}";
+            var value = CreateReadValueExpression(currentSchema, alternativeType, rawName, resolver);
+            result.Add(new(condition, $"{selectType}.From{alternativeName}({value})"));
+        }
+
+        return result;
     }
 
     private static string CreateProjectedNumber(string value, int index)
@@ -1387,6 +1572,13 @@ internal static class ExpressSchemaDescriptorEmitter
     private static ExpressBoundNamedType CreateNamedType(ExpressBoundSymbol symbol)
     {
         return new(symbol, symbol.Span);
+    }
+
+    private sealed class SelectReadBranch(string condition, string value)
+    {
+        internal string Condition { get; } = condition;
+
+        internal string Value { get; } = value;
     }
 
     private static void AddSummary(IRootDescription target, string text)

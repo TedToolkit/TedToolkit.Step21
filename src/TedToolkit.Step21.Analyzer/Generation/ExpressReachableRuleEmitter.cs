@@ -1529,6 +1529,13 @@ internal static class ExpressReachableRuleEmitter
                     fallingScalarNarrowings.Add(otherwiseScalarNarrowings);
                 }
             }
+            else if (plan.IsExhaustiveCase(operation))
+            {
+                var unmatched = conditionalCase?.Else()
+                    ?? throw new InvalidOperationException("CASE requires at least one action.");
+                unmatched.AddStatement(new CustomExpression(
+                    "throw new global::System.InvalidOperationException(\"An exhaustive EXPRESS CASE was unmatched.\")"));
+            }
             else
             {
                 fallingSafeIndices.Add(incomingSafeIndices);
@@ -4436,7 +4443,12 @@ internal static class ExpressReachableRuleEmitter
                                 $"{DerivedMethodName(owner, candidate)}({variable}, {populationExpression})",
                             ExpressAttributeKind.Inverse =>
                                 $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({variable}), {populationExpression})",
-                            _ => $"{variable}.{ExpressEntityProjection.ToPascalCase(candidate.Name)}",
+                            _ => ResolveExplicitAttribute(
+                                plan,
+                                projection,
+                                candidate,
+                                variable,
+                                populationExpression),
                         };
                     }
                     else
@@ -4543,7 +4555,91 @@ internal static class ExpressReachableRuleEmitter
                 + $"(global::TedToolkit.Step21.Entity)({source}), {populationExpression})";
         }
 
+        if (attribute?.Kind == ExpressAttributeKind.Explicit)
+        {
+            var sourceProjection = GetSourceProjection(plan, sourceExpression);
+            return ResolveExplicitAttribute(
+                plan,
+                sourceProjection,
+                attribute,
+                source,
+                populationExpression);
+        }
+
         return $"({source}).{ExpressEntityProjection.ToPascalCase(reference.Name)}";
+    }
+
+    private static string ResolveExplicitAttribute(
+        ExpressReachableRulePlan plan,
+        ExpressEntityProjection? sourceProjection,
+        ExpressBoundAttribute attribute,
+        string source,
+        string populationExpression)
+    {
+        var property = ExpressEntityProjection.ToPascalCase(attribute.Name);
+        var derivedOverrides = GetDerivedOverrides(plan, sourceProjection, attribute);
+        if (derivedOverrides.Length == 0)
+        {
+            return $"({source}).{property}";
+        }
+
+        var cases = derivedOverrides.Select((item, index) =>
+        {
+            var ownerType = "global::TedToolkit.Step21.Generated."
+                + ExpressEntityProjection.ToPascalCase(item.Owner.Symbol.DeclaringSchema.Name)
+                + ".I"
+                + ExpressEntityProjection.ToPascalCase(item.Owner.Name);
+            var variable = $"__derived{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            return $"{ownerType} {variable} => "
+                + $"{DerivedMethodName(item.Owner, item.Attribute)}({variable}, {populationExpression})";
+        });
+        return $"({source}) switch {{ {string.Join(", ", cases)}, _ => ({source}).{property} }}";
+    }
+
+    private static ExpressEntityProjection? GetSourceProjection(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression? sourceExpression)
+    {
+        while (sourceExpression?.Kind == ExpressExpressionKind.GroupQualifier)
+        {
+            sourceExpression = sourceExpression.Children.Count == 0
+                ? null
+                : sourceExpression.Children[0];
+        }
+
+        var namedSource = sourceExpression?.Type.DeclaredType as ExpressBoundNamedType;
+        return namedSource?.Declaration.Kind == ExpressDeclarationKind.Entity
+            ? plan.EntityProjections.SingleOrDefault(projection =>
+                ReferenceEquals(projection.Entity.Symbol, namedSource.Declaration))
+            : null;
+    }
+
+    private static (ExpressBoundEntity Owner, ExpressBoundAttribute Attribute)[] GetDerivedOverrides(
+        ExpressReachableRulePlan plan,
+        ExpressEntityProjection? sourceProjection,
+        ExpressBoundAttribute attribute)
+    {
+        if (sourceProjection is null)
+        {
+            return Array.Empty<(ExpressBoundEntity Owner, ExpressBoundAttribute Attribute)>();
+        }
+
+        return plan.EntityProjections
+            .Where(projection => (sourceProjection.PhysicalComponents.Contains(projection.Entity)
+                    || plan.ComplexEntityProjections.Any(complex =>
+                        complex.Leaves.Any(leaf => leaf.PhysicalComponents.Contains(sourceProjection.Entity))
+                        && complex.Leaves.Any(leaf => leaf.PhysicalComponents.Contains(projection.Entity))))
+                && projection.DerivedRedeclaredAttributes.Any(candidate =>
+                    ReferenceEquals(candidate.Attribute, attribute)))
+            .SelectMany(projection => projection.Entity.Attributes
+                .Where(candidate => candidate.Kind == ExpressAttributeKind.Derived
+                    && StringComparer.OrdinalIgnoreCase.Equals(candidate.Name, attribute.Name))
+                .Select(candidate => (Owner: projection.Entity, Attribute: candidate)))
+            .OrderByDescending(item => plan.EntityProjections.Single(projection =>
+                    ReferenceEquals(projection.Entity, item.Owner))
+                .PhysicalComponents.Count)
+            .ThenBy(item => item.Owner.Name, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string ConstantMethodName(ExpressBoundSymbol symbol)

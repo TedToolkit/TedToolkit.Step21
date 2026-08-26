@@ -26,7 +26,7 @@ internal sealed class ExpressEntityProjection
         IEnumerable<ExpressEntityAttributeProjection> flattenedAttributes,
         IEnumerable<ExpressEntityAttributeProjection> effectiveAttributes,
         IEnumerable<ExpressBoundEntity> physicalComponents,
-        bool hasDerivedRedeclaration)
+        IEnumerable<ExpressEntityAttributeProjection> derivedRedeclaredAttributes)
     {
         Schema = schema;
         Entity = entity;
@@ -35,7 +35,8 @@ internal sealed class ExpressEntityProjection
         FlattenedAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(flattenedAttributes.ToArray());
         EffectiveAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(effectiveAttributes.ToArray());
         PhysicalComponents = new ReadOnlyCollection<ExpressBoundEntity>(physicalComponents.ToArray());
-        HasDerivedRedeclaration = hasDerivedRedeclaration;
+        DerivedRedeclaredAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(
+            derivedRedeclaredAttributes.ToArray());
     }
 
     /// <summary>
@@ -74,9 +75,19 @@ internal sealed class ExpressEntityProjection
     internal IReadOnlyList<ExpressBoundEntity> PhysicalComponents { get; }
 
     /// <summary>
-    /// Gets a value indicating whether this entity closure contains a derived redeclaration of an explicit slot.
+    /// Gets the physical explicit slots replaced by derived redeclarations in this entity closure.
     /// </summary>
-    internal bool HasDerivedRedeclaration { get; }
+    internal IReadOnlyList<ExpressEntityAttributeProjection> DerivedRedeclaredAttributes { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the physical explicit slot is represented by a derived marker.
+    /// </summary>
+    /// <param name="attribute">The effective physical slot.</param>
+    /// <returns><see langword="true"/> when external mapping must use <c>*</c>.</returns>
+    internal bool IsDerivedRedeclared(ExpressEntityAttributeProjection attribute)
+    {
+        return DerivedRedeclaredAttributes.Contains(attribute);
+    }
 
     /// <summary>
     /// Creates projections for every entity in a valid closed schema compilation.
@@ -134,10 +145,10 @@ internal sealed class ExpressEntityProjection
         }
 
         var components = CreatePhysicalComponents(entity, entityBySymbol);
-        var hasDerivedRedeclaration = ComputeHasDerivedRedeclaration(
+        var derivedRedeclaredAttributes = FindDerivedRedeclaredAttributes(
             entity,
             entityBySymbol,
-            new HashSet<ExpressBoundSymbol>());
+            effectiveAttributes);
         return new(
             schema,
             entity,
@@ -145,29 +156,52 @@ internal sealed class ExpressEntityProjection
             flattenedAttributes,
             effectiveAttributes,
             components,
-            hasDerivedRedeclaration);
+            derivedRedeclaredAttributes);
     }
 
-    private static bool ComputeHasDerivedRedeclaration(
+    private static ExpressEntityAttributeProjection[] FindDerivedRedeclaredAttributes(
         ExpressBoundEntity entity,
         IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
-        ISet<ExpressBoundSymbol> visited)
+        IReadOnlyList<ExpressEntityAttributeProjection> effectiveAttributes)
+    {
+        var storageNames = new List<(string Entity, string Attribute)>();
+        AddDerivedStorageNames(entity, entityBySymbol, new HashSet<ExpressBoundSymbol>(), storageNames);
+        return effectiveAttributes.Where(attribute => storageNames.Any(storage =>
+                StringComparer.OrdinalIgnoreCase.Equals(storage.Entity, attribute.StorageEntity.Name)
+                && StringComparer.OrdinalIgnoreCase.Equals(storage.Attribute, attribute.StorageAttributeName)))
+            .ToArray();
+    }
+
+    private static void AddDerivedStorageNames(
+        ExpressBoundEntity entity,
+        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ISet<ExpressBoundSymbol> visited,
+        ICollection<(string Entity, string Attribute)> storageNames)
     {
         if (!visited.Add(entity.Symbol))
         {
-            return false;
+            return;
         }
 
-        if (entity.Syntax.DescendantsAndSelf().Any(rule =>
-                rule.Production == "derivedAttr"
-                && rule.DescendantsAndSelf()
-                .Any(descendant => descendant.Production == "redeclaredAttribute")))
+        foreach (var supertype in entity.DirectSupertypes)
         {
-            return true;
+            AddDerivedStorageNames(entityBySymbol[supertype].Entity, entityBySymbol, visited, storageNames);
         }
 
-        return entity.DirectSupertypes.Any(supertype =>
-            ComputeHasDerivedRedeclaration(entityBySymbol[supertype].Entity, entityBySymbol, visited));
+        foreach (var derived in entity.Syntax.DescendantsAndSelf()
+                     .Where(rule => rule.Production == "derivedAttr"))
+        {
+            var redeclared = derived.DescendantsAndSelf()
+                .SingleOrDefault(rule => rule.Production == "redeclaredAttribute");
+            var names = redeclared?.DescendantTokens()
+                .Where(token => token.TokenName == "SimpleId")
+                .Select(token => token.Text)
+                .ToArray();
+            if (names is { Length: 2, })
+            {
+                storageNames.Add((names[0], names[1]));
+            }
+        }
     }
 
     private static ExpressBoundEntity[] CreatePhysicalComponents(

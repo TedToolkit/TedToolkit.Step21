@@ -79,11 +79,39 @@ internal sealed class PackageTests
             var runOutput = await RunDotNet(
                 repositoryRoot,
                 Path.Combine(consumer.OutputDirectory, "TedToolkit.Step21.PackedConsumer.dll"));
+            var fixtureConsumer = await BuildConsumer(
+                repositoryRoot,
+                consumerProject,
+                packageDirectory,
+                Path.Combine(temporaryRoot, "fixture-consumer"),
+                "--property:Ap203PackageProof=true",
+                "--property:Ap203FixtureProof=true");
+            var fixtureOutput = await RunDotNet(
+                repositoryRoot,
+                Path.Combine(fixtureConsumer.OutputDirectory, "TedToolkit.Step21.PackedConsumer.dll"),
+                Path.Combine(
+                    repositoryRoot,
+                    "tests",
+                    "TedToolkit.Step21.IntegrationTests",
+                    "TestData",
+                    "Ap203",
+                    "occt-box-10x20x30-ap203.step"),
+                Path.Combine(
+                    repositoryRoot,
+                    "tests",
+                    "TedToolkit.Step21.IntegrationTests",
+                    "TestData",
+                    "Ap203",
+                    "occt-unsupported-extension-ap203.step"));
             var generatedRoot = Path.Combine(consumer.IntermediateDirectory, "Generated");
 
             using (Assert.Multiple())
             {
                 await Assert.That(runOutput).Contains("PACKED_AP203_OK");
+                await Assert.That(fixtureOutput).Contains(
+                    "AP203_FIXTURE_OK entities=200 products=1 faces=6 edges=12 vertices=8 points=27 units=3");
+                await Assert.That(fixtureOutput).Contains(
+                    "AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6");
                 await Assert.That(Directory.Exists(generatedRoot)
                     && Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories).Any()).IsFalse();
                 await Assert.That(packageEntries).Contains("lib/net10.0/TedToolkit.Step21.Ap203.dll");

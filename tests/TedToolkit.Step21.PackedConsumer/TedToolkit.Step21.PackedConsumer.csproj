@@ -25,11 +25,17 @@
 
   <ItemGroup>
     <Compile Remove="Ap203Program.cs" />
+    <Compile Remove="Ap203FixtureProgram.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true'">
+  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' != 'true'">
     <Compile Remove="Program.cs" />
     <Compile Include="Ap203Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' == 'true'">
+    <Compile Remove="Program.cs" />
+    <Compile Include="Ap203FixtureProgram.cs" />
   </ItemGroup>
 
 </Project>

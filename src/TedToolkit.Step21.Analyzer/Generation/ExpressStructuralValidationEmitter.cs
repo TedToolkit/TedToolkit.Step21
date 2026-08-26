@@ -787,6 +787,11 @@ internal static class ExpressStructuralValidationEmitter
         Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
         for (var index = 0; index < entity.EffectiveAttributes.Count; index++)
         {
+            if (entity.IsDerivedRedeclared(entity.EffectiveAttributes[index]))
+            {
+                continue;
+            }
+
             AddAttributeValidation(
                 method,
                 entity,
@@ -842,6 +847,11 @@ internal static class ExpressStructuralValidationEmitter
         Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
         for (var index = 0; index < attributes.Length; index++)
         {
+            if (entity.IsDerivedRedeclared(attributes[index]))
+            {
+                continue;
+            }
+
             AddAttributeValidation(method, context, attributes[index], index, resolver, ref variable);
             AddAttributeTypeWhereValidation(
                 method,

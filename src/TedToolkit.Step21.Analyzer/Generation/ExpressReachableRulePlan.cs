@@ -24,6 +24,7 @@ internal sealed class ExpressReachableRulePlan
         ExpressGeneratedTypeResolver resolver,
         IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations,
         IReadOnlyList<ExpressEntityProjection> entityProjections,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntityProjections,
         IEnumerable<ExpressBoundDeclaration> reachableDeclarations,
         IEnumerable<ExpressBoundAttribute> reachableDerivedAttributes,
         IEnumerable<ExpressRuleSyntax> reachableRules,
@@ -34,6 +35,7 @@ internal sealed class ExpressReachableRulePlan
         Resolver = resolver;
         _declarations = declarations;
         EntityProjections = entityProjections;
+        ComplexEntityProjections = complexEntityProjections;
         ReachableDeclarations = new ReadOnlyCollection<ExpressBoundDeclaration>(
             reachableDeclarations.ToArray());
         ReachableDerivedAttributes = new ReadOnlyCollection<ExpressBoundAttribute>(
@@ -57,6 +59,11 @@ internal sealed class ExpressReachableRulePlan
     /// Gets the generated entity storage projections available to private rule lowering.
     /// </summary>
     internal IReadOnlyList<ExpressEntityProjection> EntityProjections { get; }
+
+    /// <summary>
+    /// Gets generated complex projections that can make sibling-derived overrides applicable.
+    /// </summary>
+    internal IReadOnlyList<ExpressComplexEntityProjection> ComplexEntityProjections { get; }
 
     /// <summary>
     /// Gets reachable constant and function declarations in deterministic source order.
@@ -89,15 +96,22 @@ internal sealed class ExpressReachableRulePlan
     /// <param name="schema">The bound schema.</param>
     /// <param name="resolver">The generated value-type resolver.</param>
     /// <param name="entityProjections">The generated entity storage projections.</param>
+    /// <param name="complexEntityProjections">The generated complex entity projections.</param>
     /// <returns>The immutable rule plan.</returns>
     internal static ExpressReachableRulePlan Create(
         ExpressBoundSchema schema,
         ExpressGeneratedTypeResolver resolver,
-        IReadOnlyList<ExpressEntityProjection> entityProjections)
+        IReadOnlyList<ExpressEntityProjection> entityProjections,
+        IReadOnlyList<ExpressComplexEntityProjection>? complexEntityProjections = null)
     {
         var declarations = schema.Declarations.Concat(schema.NestedDeclarations)
             .ToDictionary(declaration => declaration.Symbol);
-        var builder = new Builder(schema, declarations, resolver, entityProjections);
+        var builder = new Builder(
+            schema,
+            declarations,
+            resolver,
+            entityProjections,
+            complexEntityProjections ?? []);
         return builder.Create();
     }
 
@@ -147,6 +161,44 @@ internal sealed class ExpressReachableRulePlan
                 candidate.RequiredChild("attributeDecl").Span,
                 attribute.Span));
         return GetExpression(syntax.RequiredChild("expression"));
+    }
+
+    /// <summary>
+    /// Determines whether a CASE covers every value of a closed enumeration selector.
+    /// </summary>
+    /// <param name="caseStatement">The CASE statement syntax.</param>
+    /// <returns><see langword="true" /> when every enumeration value has a case label.</returns>
+    internal bool IsExhaustiveCase(ExpressRuleSyntax caseStatement)
+    {
+        return IsExhaustiveCase(Schema, Resolver, caseStatement);
+    }
+
+    private static bool IsExhaustiveCase(
+        ExpressBoundSchema schema,
+        ExpressGeneratedTypeResolver resolver,
+        ExpressRuleSyntax caseStatement)
+    {
+        var selectorSyntax = caseStatement.RequiredChild("selector").RequiredChild("expression");
+        ExpressBoundType? type = schema.Expressions.Single(expression =>
+            SameSpan(expression.Span, selectorSyntax.Span)).Type.DeclaredType;
+        while (type is ExpressBoundNamedType named
+               && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            type = resolver.GetDefinedType(named.Declaration).UnderlyingType;
+        }
+
+        if (type is not ExpressBoundEnumerationType { IsExtensible: false, } enumeration)
+        {
+            return false;
+        }
+
+        var labels = new HashSet<string>(caseStatement.ChildRules("caseAction")
+            .SelectMany(action => action.ChildRules("caseLabel"))
+            .Select(label => label.RequiredChild("expression"))
+            .Select(label => schema.Expressions.Single(expression =>
+                SameSpan(expression.Span, label.Span)).Reference?.Name)
+            .OfType<string>(), StringComparer.OrdinalIgnoreCase);
+        return resolver.GetEnumerationValues(enumeration).All(labels.Contains);
     }
 
     /// <summary>
@@ -201,6 +253,8 @@ internal sealed class ExpressReachableRulePlan
 
         private readonly IReadOnlyList<ExpressEntityProjection> _entityProjections;
 
+        private readonly IReadOnlyList<ExpressComplexEntityProjection> _complexEntityProjections;
+
         private readonly HashSet<ExpressBoundDeclaration> _reachableDeclarations = [];
 
         private readonly HashSet<ExpressBoundAttribute> _reachableDerivedAttributes = [];
@@ -219,12 +273,14 @@ internal sealed class ExpressReachableRulePlan
             ExpressBoundSchema schema,
             IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations,
             ExpressGeneratedTypeResolver resolver,
-            IReadOnlyList<ExpressEntityProjection> entityProjections)
+            IReadOnlyList<ExpressEntityProjection> entityProjections,
+            IReadOnlyList<ExpressComplexEntityProjection> complexEntityProjections)
         {
             _schema = schema;
             _declarations = declarations;
             _resolver = resolver;
             _entityProjections = entityProjections;
+            _complexEntityProjections = complexEntityProjections;
         }
 
         internal ExpressReachableRulePlan Create()
@@ -276,6 +332,7 @@ internal sealed class ExpressReachableRulePlan
                 _resolver,
                 _declarations,
                 _entityProjections,
+                _complexEntityProjections,
                 orderedDeclarations,
                 orderedAttributes,
                 orderedRules,
@@ -478,7 +535,6 @@ internal sealed class ExpressReachableRulePlan
                     var incompatible = target is not
                     {
                         Entity.IsAbstract: false,
-                        HasDerivedRedeclaration: false,
                     };
                     foreach (var component in components)
                     {
@@ -571,6 +627,16 @@ internal sealed class ExpressReachableRulePlan
                     VisitDerived(attribute, root);
                 }
 
+                foreach (var attribute in reference?.AttributeCandidates
+                             .Where(candidate => candidate.Kind == ExpressAttributeKind.Explicit)
+                         ?? [])
+                {
+                    foreach (var derived in FindDerivedOverrides(node, attribute))
+                    {
+                        VisitDerived(derived, root);
+                    }
+                }
+
                 if (reference?.SchemaDeclaration is { } symbol
                     && symbol.Kind is ExpressDeclarationKind.Constant or ExpressDeclarationKind.Function
                     && _declarations.TryGetValue(symbol, out var declaration))
@@ -585,6 +651,81 @@ internal sealed class ExpressReachableRulePlan
                         $"Validation-reachable cross-schema dependency '{reference.Name}' requires "
                         + "the multi-schema execution boundary.");
                 }
+            }
+        }
+
+        private IEnumerable<ExpressBoundAttribute> FindDerivedOverrides(
+            ExpressBoundExpression expression,
+            ExpressBoundAttribute attribute)
+        {
+            var source = expression.Children.Count == 0 ? null : expression.Children[0];
+            while (source?.Kind == ExpressExpressionKind.GroupQualifier)
+            {
+                source = source.Children.Count == 0 ? null : source.Children[0];
+            }
+
+            var sourceProjections = GetSourceProjections(source?.Type.DeclaredType).ToArray();
+            if (sourceProjections.Length == 0)
+            {
+                return [];
+            }
+
+            return _entityProjections
+                .Where(projection => sourceProjections.Any(sourceProjection =>
+                        sourceProjection.PhysicalComponents.Contains(projection.Entity)
+                        || _complexEntityProjections.Any(complex =>
+                            complex.Leaves.Any(leaf =>
+                                leaf.PhysicalComponents.Contains(sourceProjection.Entity))
+                            && complex.Leaves.Any(leaf =>
+                                leaf.PhysicalComponents.Contains(projection.Entity))))
+                    && projection.DerivedRedeclaredAttributes.Any(candidate =>
+                        ReferenceEquals(candidate.Attribute, attribute)))
+                .SelectMany(projection => projection.Entity.Attributes.Where(candidate =>
+                    candidate.Kind == ExpressAttributeKind.Derived
+                    && StringComparer.OrdinalIgnoreCase.Equals(candidate.Name, attribute.Name)))
+                .Distinct();
+        }
+
+        private IEnumerable<ExpressEntityProjection> GetSourceProjections(ExpressBoundType? type)
+        {
+            var visited = new HashSet<ExpressBoundSymbol>();
+            var pending = new Stack<ExpressBoundType>();
+            if (type is not null)
+            {
+                pending.Push(type);
+            }
+
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (current is ExpressBoundSelectType directSelect)
+                {
+                    foreach (var alternative in _resolver.GetSelectAlternatives(directSelect))
+                    {
+                        pending.Push(new ExpressBoundNamedType(alternative, current.Span));
+                    }
+
+                    continue;
+                }
+
+                if (current is not ExpressBoundNamedType named || !visited.Add(named.Declaration))
+                {
+                    continue;
+                }
+
+                if (named.Declaration.Kind == ExpressDeclarationKind.Entity)
+                {
+                    var projection = _entityProjections.SingleOrDefault(candidate =>
+                        ReferenceEquals(candidate.Entity.Symbol, named.Declaration));
+                    if (projection is not null)
+                    {
+                        yield return projection;
+                    }
+
+                    continue;
+                }
+
+                pending.Push(_resolver.GetDefinedType(named.Declaration).UnderlyingType);
             }
         }
 
@@ -994,7 +1135,7 @@ internal sealed class ExpressReachableRulePlan
                 $"Reachable EXPRESS function '{declaration.Name}' uses an algorithm statement shape that has no static generator."));
         }
 
-        private static bool AlwaysReturns(ExpressRuleSyntax statement)
+        private bool AlwaysReturns(ExpressRuleSyntax statement)
         {
             var operation = statement.Production == "stmt"
                 ? statement.ChildRules().Single()
@@ -1013,8 +1154,9 @@ internal sealed class ExpressReachableRulePlan
             if (operation.Production == "caseStmt")
             {
                 var otherwise = operation.ChildRules("stmt").SingleOrDefault();
-                return otherwise is not null
-                    && AlwaysReturns(otherwise)
+                return ((otherwise is not null && AlwaysReturns(otherwise))
+                        || (otherwise is null
+                            && ExpressReachableRulePlan.IsExhaustiveCase(_schema, _resolver, operation)))
                     && operation.ChildRules("caseAction").All(action =>
                         AlwaysReturns(action.RequiredChild("stmt")));
             }

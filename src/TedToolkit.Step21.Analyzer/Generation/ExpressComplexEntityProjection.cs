@@ -19,6 +19,8 @@ internal sealed class ExpressComplexEntityProjection
 {
     private const int MAX_FLAT_ANDOR_FACTORS = 8;
 
+    private const int MAX_COMPLEX_COMBINATIONS_PER_ROOT = 256;
+
     private ExpressComplexEntityProjection(
         ExpressBoundSchema schema,
         string name,
@@ -59,12 +61,28 @@ internal sealed class ExpressComplexEntityProjection
     internal IReadOnlyList<ExpressEntityAttributeProjection> Properties { get; }
 
     /// <summary>
+    /// Gets a value indicating whether any selected leaf derives the physical explicit slot.
+    /// </summary>
+    /// <param name="attribute">The physical explicit slot.</param>
+    /// <returns><see langword="true" /> when external mapping must use <c>*</c>.</returns>
+    internal bool IsDerivedRedeclared(ExpressEntityAttributeProjection attribute)
+    {
+        return Leaves.SelectMany(leaf => leaf.DerivedRedeclaredAttributes)
+            .Any(derived => ReferenceEquals(derived.StorageEntity.Symbol, attribute.StorageEntity.Symbol)
+                && StringComparer.OrdinalIgnoreCase.Equals(
+                    derived.StorageAttributeName,
+                    attribute.StorageAttributeName));
+    }
+
+    /// <summary>
     /// Creates supported flat-ANDOR multi-leaf projections.
     /// </summary>
     /// <param name="projections">The generated entity projections.</param>
+    /// <param name="resolver">The generated type resolver.</param>
     /// <returns>The supported synthetic complex entity projections.</returns>
     internal static IReadOnlyList<ExpressComplexEntityProjection> Create(
-        IReadOnlyList<ExpressEntityProjection> projections)
+        IReadOnlyList<ExpressEntityProjection> projections,
+        ExpressGeneratedTypeResolver resolver)
     {
         var bySymbol = projections.ToDictionary(projection => projection.Entity.Symbol);
         var result = new List<ExpressComplexEntityProjection>();
@@ -72,52 +90,30 @@ internal sealed class ExpressComplexEntityProjection
         {
             var expression = root.Entity.Syntax.DescendantsAndSelf()
                 .FirstOrDefault(rule => rule.Production == "supertypeExpression");
-            if (expression is null)
+            var leafSets = expression is null
+                ? CreateUnconstrainedSiblingSets(root, projections)
+                : EvaluateSupertypeExpression(expression);
+            if (leafSets.Count > MAX_COMPLEX_COMBINATIONS_PER_ROOT)
             {
                 continue;
             }
 
-            if (!expression.Children.OfType<ExpressTokenSyntax>()
-                    .Any(token => token.TokenName == "ANDOR"))
+            foreach (var leafSet in leafSets.Where(set => set.Count >= 2))
             {
-                continue;
-            }
-
-            var factors = expression.ChildRules("supertypeFactor").ToArray();
-            var leaves = factors.Select(factor => factor.DescendantsAndSelf()
-                    .Where(rule => rule.Production == "entityRef")
-                    .Select(rule => rule.IdentifierToken().Text)
-                    .ToArray())
-                .ToArray();
-            if (leaves.Any(names => names.Length != 1))
-            {
-                continue;
-            }
-
-            var candidates = leaves
-                .Select(names => projections.SingleOrDefault(candidate =>
-                    ReferenceEquals(candidate.Schema, root.Schema)
-                    && StringComparer.OrdinalIgnoreCase.Equals(candidate.Entity.Name, names[0])
-                    && candidate.Entity.DirectSupertypes.Contains(root.Entity.Symbol)))
-                .ToArray();
-            if (candidates.Any(candidate => candidate is null)
-                || candidates.Length > MAX_FLAT_ANDOR_FACTORS)
-            {
-                continue;
-            }
-
-            var concrete = candidates.Select(candidate => candidate!).ToArray();
-            for (var mask = 1; mask < 1 << concrete.Length; mask++)
-            {
-                var selected = concrete.Where((_, index) => (mask & 1 << index) != 0).ToArray();
-                if (selected.Length < 2
-                    || selected.Any(candidate =>
-                        candidate.Entity.IsAbstract || candidate.HasDerivedRedeclaration))
+                var selected = leafSet.Select(name => projections.SingleOrDefault(candidate =>
+                        ReferenceEquals(candidate.Schema, root.Schema)
+                        && StringComparer.OrdinalIgnoreCase.Equals(candidate.Entity.Name, name)))
+                    .ToArray();
+                if (selected.Any(candidate => candidate is null)
+                    || selected.Length > MAX_FLAT_ANDOR_FACTORS
+                    || selected.Any(candidate => candidate!.Entity.IsAbstract))
                 {
                     continue;
                 }
 
-                var componentSymbols = selected
+                var concrete = selected.Select(candidate => candidate!).ToArray();
+
+                var componentSymbols = concrete
                     .SelectMany(candidate => candidate.PhysicalComponents.Select(component => component.Symbol))
                     .Distinct()
                     .ToArray();
@@ -125,7 +121,7 @@ internal sealed class ExpressComplexEntityProjection
                     .Select(symbol => bySymbol[symbol])
                     .OrderBy(candidate => candidate.Entity.Name.ToUpperInvariant(), StringComparer.Ordinal)
                     .ToArray();
-                var properties = selected.SelectMany(candidate => candidate.FlattenedAttributes)
+                var properties = concrete.SelectMany(candidate => candidate.FlattenedAttributes)
                     .GroupBy(attribute => attribute.Name, StringComparer.Ordinal)
                     .Where(group => group.Select(attribute =>
                             (
@@ -138,25 +134,126 @@ internal sealed class ExpressComplexEntityProjection
                     .Select(group => group.First())
                     .ToArray();
                 if (properties.Select(attribute => attribute.Name).Distinct(StringComparer.Ordinal).Count()
-                    != selected.SelectMany(candidate => candidate.FlattenedAttributes)
+                    != concrete.SelectMany(candidate => candidate.FlattenedAttributes)
                         .Select(attribute => attribute.Name)
                         .Distinct(StringComparer.Ordinal)
-                        .Count())
+                        .Count()
+                    || properties.Any(attribute =>
+                        !ExpressSchemaDescriptorEmitter.CanMapType(attribute.Type, resolver)))
                 {
                     continue;
                 }
 
-                var name = "__Complex_" + string.Join("_", selected
+                var name = "__Complex_" + string.Join("_", concrete
                     .Select(candidate => candidate.Entity.Name.ToUpperInvariant())
                     .OrderBy(value => value, StringComparer.Ordinal)
                     .Select(ExpressEntityProjection.ToPascalCase));
-                result.Add(new(root.Schema, name, selected, components, properties));
+                result.Add(new(root.Schema, name, concrete, components, properties));
             }
         }
 
         return new ReadOnlyCollection<ExpressComplexEntityProjection>(result
             .OrderBy(item => item.Name, StringComparer.Ordinal)
+            .GroupBy(item => item.Name, StringComparer.Ordinal)
+            .Select(group => group.First())
             .ToArray());
+    }
+
+    private static List<IReadOnlyList<string>> CreateUnconstrainedSiblingSets(
+        ExpressEntityProjection root,
+        IReadOnlyList<ExpressEntityProjection> projections)
+    {
+        var siblings = projections.Where(candidate =>
+                ReferenceEquals(candidate.Schema, root.Schema)
+                && candidate.Entity.DirectSupertypes.Contains(root.Entity.Symbol)
+                && !candidate.Entity.IsAbstract)
+            .Select(candidate => candidate.Entity.Name)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (siblings.Length is < 2 or > MAX_FLAT_ANDOR_FACTORS)
+        {
+            return new();
+        }
+
+        var result = new List<IReadOnlyList<string>>();
+        for (var mask = 1; mask < 1 << siblings.Length; mask++)
+        {
+            var selected = siblings.Where((_, index) => (mask & 1 << index) != 0).ToArray();
+            if (selected.Length >= 2)
+            {
+                result.Add(selected);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<IReadOnlyList<string>> EvaluateSupertypeExpression(ExpressRuleSyntax expression)
+    {
+        var factors = expression.ChildRules("supertypeFactor")
+            .Select(EvaluateSupertypeFactor)
+            .ToArray();
+        var result = new List<IReadOnlyList<string>>();
+        foreach (var factor in factors)
+        {
+            var previous = result.ToArray();
+            result.AddRange(factor);
+            result.AddRange(previous.SelectMany(left => factor.Select(right => Merge(left, right))));
+            result = DistinctSets(result);
+            if (result.Count > MAX_COMPLEX_COMBINATIONS_PER_ROOT)
+            {
+                return result;
+            }
+        }
+
+        return result;
+    }
+
+    private static List<IReadOnlyList<string>> EvaluateSupertypeFactor(ExpressRuleSyntax factor)
+    {
+        var result = new List<IReadOnlyList<string>>() { Array.Empty<string>(), };
+        foreach (var term in factor.ChildRules("supertypeTerm"))
+        {
+            var alternatives = EvaluateSupertypeTerm(term);
+            result = DistinctSets(result.SelectMany(left => alternatives.Select(right => Merge(left, right))));
+        }
+
+        return result;
+    }
+
+    private static List<IReadOnlyList<string>> EvaluateSupertypeTerm(ExpressRuleSyntax term)
+    {
+        var reference = term.ChildRules("entityRef").SingleOrDefault();
+        if (reference is not null)
+        {
+            return new() { new[] { reference.IdentifierToken().Text, }, };
+        }
+
+        var oneOf = term.ChildRules("oneOf").SingleOrDefault();
+        if (oneOf is not null)
+        {
+            return DistinctSets(oneOf.ChildRules("supertypeExpression")
+                .SelectMany(EvaluateSupertypeExpression));
+        }
+
+        var nested = term.ChildRules("supertypeExpression").Single();
+        return EvaluateSupertypeExpression(nested);
+    }
+
+    private static string[] Merge(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        return left.Concat(right)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static List<IReadOnlyList<string>> DistinctSets(IEnumerable<IReadOnlyList<string>> sets)
+    {
+        return sets.GroupBy(set => string.Join("\0", set.OrderBy(name => name, StringComparer.OrdinalIgnoreCase)),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
     }
 
     /// <summary>

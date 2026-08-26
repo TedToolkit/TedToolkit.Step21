@@ -1952,12 +1952,12 @@ internal static class ExpressExpressionEmitter
         const string trueValue = "global::TedToolkit.Step21.LogicalValue.True";
         return operation switch
         {
-            "AND" => $"((({left}), ({right})) switch {{ "
-                + $"({falseValue}, _) or (_, {falseValue}) => {falseValue}, "
-                + $"({trueValue}, {trueValue}) => {trueValue}, _ => {unknownValue} }})",
-            "OR" => $"((({left}), ({right})) switch {{ "
-                + $"({trueValue}, _) or (_, {trueValue}) => {trueValue}, "
-                + $"({falseValue}, {falseValue}) => {falseValue}, _ => {unknownValue} }})",
+            "AND" => $"(({left}) switch {{ "
+                + $"{falseValue} => {falseValue}, {trueValue} => ({right}), "
+                + $"_ => ({right}) switch {{ {falseValue} => {falseValue}, _ => {unknownValue} }} }})",
+            "OR" => $"(({left}) switch {{ "
+                + $"{trueValue} => {trueValue}, {falseValue} => ({right}), "
+                + $"_ => ({right}) switch {{ {trueValue} => {trueValue}, _ => {unknownValue} }} }})",
             "XOR" => $"((({left}), ({right})) switch {{ "
                 + $"({unknownValue}, _) or (_, {unknownValue}) => {unknownValue}, "
                 + $"({trueValue}, {falseValue}) or ({falseValue}, {trueValue}) => {trueValue}, "

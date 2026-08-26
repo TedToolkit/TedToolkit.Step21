@@ -1037,9 +1037,13 @@ internal static class ExchangeStructureReader
 
     private static RealValue ParseReal(string text)
     {
-        if (!NumberValue.TryParse(text, out var number) || !number.TryGetReal(out var value))
+        var isNegative = text.Length > 0 && text[0] == '-';
+        var unsignedText = (text.Length > 0 && text[0] == '+') || isNegative
+            ? text[1..]
+            : text;
+        if (!NumberValue.TryParse(unsignedText, out var number) || !number.TryGetReal(out var value))
             throw new InvalidOperationException($"The parser published invalid REAL text '{text}'.");
-        return value;
+        return isNegative ? -value : value;
     }
 
     private sealed class EntityAllocation(
