@@ -31,7 +31,8 @@ internal sealed class ReadTests
     }
 
     /// <summary>
-    /// Verifies other protocols, close names, and malformed object-identifier suffixes fail schema binding atomically.
+    /// Verifies other protocols, close names, unsupported ASN.1 forms, and malformed object-identifier suffixes fail
+    /// schema binding atomically.
     /// </summary>
     [Test]
     [Arguments("AUTOMOTIVE_DESIGN")]
@@ -39,6 +40,7 @@ internal sealed class ReadTests
     [Arguments("UNKNOWN_SCHEMA")]
     [Arguments("CONFIG_CONTROL_DESIGNER")]
     [Arguments("CONFIG_CONTROL_DESIGN { }")]
+    [Arguments("CONFIG_CONTROL_DESIGN { iso(1) standard(0) 10303 203 1 1 1 }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1 0 AP203 }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1.0.10303.203 }")]
     [Arguments("CONFIG_CONTROL_DESIGN { 1 }")]

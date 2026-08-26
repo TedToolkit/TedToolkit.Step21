@@ -1,9 +1,14 @@
 # Multi-schema binding and schema instance populations
 
 `ExchangeStructure.Read` accepts a closed set of generated `SchemaDescriptor` instances and binds every data section
-under the descriptor whose nominal EXPRESS identifier matches its governing schema. Descriptor selection is
-case-insensitive and ignores only a valid numeric object-identifier suffix while retaining the supplied schema text.
-It does not discover schemas, load external metadata, or attach descriptor state to entities or `DataSection` objects.
+under the descriptor whose nominal EXPRESS identifier matches its governing schema. Standard physical schema names
+use uppercase EXPRESS spelling. Descriptor selection additionally uses case-insensitive matching as an explicit
+interoperability tolerance; lowercase or mixed-case input and its retained writeback are not ISO 10303-21
+syntax-conforming spellings. Selection ignores only the supported canonical space-delimited numeric-arc OID suffix
+subset while retaining the supplied schema text. Legal ASN.1 forms outside that subset, including named arcs, are
+unsupported. An accepted OID is syntax-checked and retained, not validated as the AP203 package or schema-baseline
+identity. The reader does not discover schemas, load external metadata, or attach descriptor state to entities or
+`DataSection` objects.
 
 This boundary implements the schema-population and cross-schema rules in ISO 10303-21:2016 Edition 3 Annex E. The
 repository's [normative source](https://www.steptools.com/stds/step/IS_final_p21e3.html) supplies the clause text.
