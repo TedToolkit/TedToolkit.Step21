@@ -139,7 +139,7 @@ internal sealed class ExpressComplexEntityProjection
                         .Distinct(StringComparer.Ordinal)
                         .Count()
                     || properties.Any(attribute =>
-                        !ExpressSchemaDescriptorEmitter.CanMapType(attribute.Type, resolver)))
+                        !ExpressDescriptorTypeSupport.CanMap(attribute.Type, resolver)))
                 {
                     continue;
                 }

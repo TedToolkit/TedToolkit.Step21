@@ -9,6 +9,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -1439,7 +1440,7 @@ internal static class ExpressExpressionEmitter
         if (left.Type.DeclaredType is ExpressBoundAggregateType aggregate
             && aggregate.Kind == ExpressAggregateKind.Array
             && aggregate.IsOptional
-            && !RequiresSchemaValueEquality(aggregate.ElementType))
+            && !ExpressTypeAnalysis.RequiresSchemaValueEquality(aggregate.ElementType))
         {
             return EmitOptionalArrayValueComparison(
                 expression,
@@ -1449,7 +1450,8 @@ internal static class ExpressExpressionEmitter
                 negated);
         }
 
-        if (RequiresSchemaValueEquality(left.Type) || RequiresSchemaValueEquality(right.Type))
+        if (ExpressTypeAnalysis.RequiresSchemaValueEquality(left.Type)
+            || ExpressTypeAnalysis.RequiresSchemaValueEquality(right.Type))
         {
             var equality = context.ResolveValueEquality is null
                 ? throw GenerationError(
@@ -1627,39 +1629,6 @@ internal static class ExpressExpressionEmitter
         return left.Type.Kind == ExpressExpressionTypeKind.Aggregate
             ? ValueEqualityCore(left, leftCode, right, rightCode)
             : ValueEqualityCore(left, leftCode, right, rightCode);
-    }
-
-    /// <summary>
-    /// Determines whether an expression type requires generated schema-aware value equality.
-    /// </summary>
-    /// <param name="type">The bound expression type.</param>
-    /// <returns><see langword="true"/> when entity values occur in the type.</returns>
-    internal static bool RequiresSchemaValueEquality(ExpressExpressionType type)
-    {
-        if (type.Kind is ExpressExpressionTypeKind.Entity or ExpressExpressionTypeKind.Select)
-        {
-            return true;
-        }
-
-        return type.DeclaredType is ExpressBoundAggregateType aggregate
-            && RequiresSchemaValueEquality(aggregate.ElementType);
-    }
-
-    /// <summary>
-    /// Determines whether a declared type requires generated schema-aware value equality.
-    /// </summary>
-    /// <param name="type">The bound declared type.</param>
-    /// <returns><see langword="true"/> when entity values occur in the type.</returns>
-    internal static bool RequiresSchemaValueEquality(ExpressBoundType type)
-    {
-        return type switch
-        {
-            ExpressBoundAggregateType aggregate => RequiresSchemaValueEquality(aggregate.ElementType),
-            ExpressBoundGenericType { IsEntity: true, } => true,
-            ExpressBoundNamedType named => named.Declaration.Kind == ExpressDeclarationKind.Entity,
-            ExpressBoundSelectType => true,
-            _ => false,
-        };
     }
 
     private static string OrderedComparison(
@@ -2037,44 +2006,6 @@ internal static class ExpressExpressionEmitter
             _ => throw new InvalidOperationException(
                 $"Bound type '{type.GetType().Name}' has no static C# expression type."),
         };
-    }
-
-    /// <summary>
-    /// Collects labeled generic variables from bound aggregate trees in stable first-declaration order.
-    /// </summary>
-    /// <param name="types">The formal, result, or local bound types.</param>
-    /// <returns>The distinct EXPRESS type labels.</returns>
-    internal static IReadOnlyList<string> GenericTypeLabels(IEnumerable<ExpressBoundType> types)
-    {
-        var labels = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in types)
-        {
-            var type = root;
-            while (true)
-            {
-                if (type is ExpressBoundAggregateType aggregate)
-                {
-                    if (aggregate.TypeLabel is { } aggregateLabel && seen.Add(aggregateLabel))
-                    {
-                        labels.Add(aggregateLabel);
-                    }
-
-                    type = aggregate.ElementType;
-                    continue;
-                }
-
-                if (type is ExpressBoundGenericType { TypeLabel: { } genericLabel, }
-                    && seen.Add(genericLabel))
-                {
-                    labels.Add(genericLabel);
-                }
-
-                break;
-            }
-        }
-
-        return labels;
     }
 
     private static string GeneratedTypeName(ExpressBoundSymbol symbol, bool entityInterface)

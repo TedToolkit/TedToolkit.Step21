@@ -648,7 +648,7 @@ internal sealed class ExpressReachableRulePlan
                 if (node.Kind == ExpressExpressionKind.Binary
                     && ((node.Operation is "=" or "<>"
                             && node.Children.Any(child =>
-                                ExpressExpressionEmitter.RequiresSchemaValueEquality(child.Type)))
+                                ExpressTypeAnalysis.RequiresSchemaValueEquality(child.Type)))
                         || (node.Operation == "IN"
                             && (node.Children[0].Type.Kind is ExpressExpressionTypeKind.Entity
                                 or ExpressExpressionTypeKind.Select)
@@ -859,10 +859,10 @@ internal sealed class ExpressReachableRulePlan
                         node => node.ChildRules("typeLabel").Single().Identifier!,
                         StringComparer.OrdinalIgnoreCase)
                     .Any(group => group.Select(node => node.Role).Distinct(StringComparer.Ordinal).Count() > 1);
-                var resultLabels = ExpressExpressionEmitter.GenericTypeLabels([declaredType,]);
-                var formalLabels = ExpressExpressionEmitter.GenericTypeLabels(formalTypes);
-                var localLabels = ExpressExpressionEmitter.GenericTypeLabels(localTypes);
-                var scopeLabels = ExpressExpressionEmitter.GenericTypeLabels(
+                var resultLabels = ExpressTypeAnalysis.GenericTypeLabels([declaredType,]);
+                var formalLabels = ExpressTypeAnalysis.GenericTypeLabels(formalTypes);
+                var localLabels = ExpressTypeAnalysis.GenericTypeLabels(localTypes);
+                var scopeLabels = ExpressTypeAnalysis.GenericTypeLabels(
                     formalTypes.Concat([declaredType,]).Concat(localTypes));
                 var lexicalBounds = _schema.NameReferences
                     .Select(reference => reference.Target)
@@ -899,7 +899,7 @@ internal sealed class ExpressReachableRulePlan
                             return false;
                         }
 
-                        var callLabels = ExpressExpressionEmitter.GenericTypeLabels([callType,]);
+                        var callLabels = ExpressTypeAnalysis.GenericTypeLabels([callType,]);
                         var callElement = callType;
                         while (callElement is ExpressBoundAggregateType nestedCallAggregate)
                         {
@@ -966,11 +966,11 @@ internal sealed class ExpressReachableRulePlan
                                 .SingleOrDefault()?.Type)
                             .OfType<ExpressBoundType>()
                             .ToArray();
-                        var callerFormalLabels = ExpressExpressionEmitter.GenericTypeLabels(callerFormalTypes);
-                        var callerResultLabels = ExpressExpressionEmitter.GenericTypeLabels(
+                        var callerFormalLabels = ExpressTypeAnalysis.GenericTypeLabels(callerFormalTypes);
+                        var callerResultLabels = ExpressTypeAnalysis.GenericTypeLabels(
                             [caller.DeclaredType,]);
-                        var callerLocalLabels = ExpressExpressionEmitter.GenericTypeLabels(callerLocalTypes);
-                        var callerScopeLabels = ExpressExpressionEmitter.GenericTypeLabels(
+                        var callerLocalLabels = ExpressTypeAnalysis.GenericTypeLabels(callerLocalTypes);
+                        var callerScopeLabels = ExpressTypeAnalysis.GenericTypeLabels(
                             callerFormalTypes.Concat([caller.DeclaredType,]).Concat(callerLocalTypes));
                         return callLabels.All(label => callerScopeLabels.Contains(
                                 label,

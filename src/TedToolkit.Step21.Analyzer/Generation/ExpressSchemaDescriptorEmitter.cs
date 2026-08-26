@@ -508,7 +508,8 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressEntityProjection entity,
         ExpressGeneratedTypeResolver resolver)
     {
-        return entity.EffectiveAttributes.All(attribute => CanMapType(attribute.Type, resolver));
+        return entity.EffectiveAttributes.All(attribute =>
+            ExpressDescriptorTypeSupport.CanMap(attribute.Type, resolver));
     }
 
     private static IfStatement CreateScalarHydrationBranch(
@@ -656,7 +657,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 resolver);
         }
 
-        var terminalType = GetTerminalType(attribute.Type, resolver);
+        var terminalType = ExpressDescriptorTypeSupport.GetTerminalType(attribute.Type, resolver);
         if (terminalType is ExpressBoundAggregateType aggregate)
         {
             return CreateAggregateHydrationBranch(
@@ -801,7 +802,10 @@ internal static class ExpressSchemaDescriptorEmitter
         CustomExpression invalid,
         ExpressGeneratedTypeResolver resolver)
     {
-        if (!TryGetAggregateBounds(aggregate, out var lowerBound, out var upperBound))
+        if (!ExpressDescriptorTypeSupport.TryGetAggregateBounds(
+                aggregate,
+                out var lowerBound,
+                out var upperBound))
         {
             throw new InvalidOperationException("Aggregate mapping requires literal bounds.");
         }
@@ -893,7 +897,10 @@ internal static class ExpressSchemaDescriptorEmitter
         int index,
         ExpressGeneratedTypeResolver resolver)
     {
-        if (!TryGetAggregateBounds(aggregate, out var lowerBound, out var upperBound))
+        if (!ExpressDescriptorTypeSupport.TryGetAggregateBounds(
+                aggregate,
+                out var lowerBound,
+                out var upperBound))
         {
             throw new InvalidOperationException("Aggregate projection requires literal bounds.");
         }
@@ -978,7 +985,7 @@ internal static class ExpressSchemaDescriptorEmitter
             return $"({string.Join(" || ", branches.Select(branch => $"({branch.Condition})"))})";
         }
 
-        var terminal = GetTerminalType(type, resolver);
+        var terminal = ExpressDescriptorTypeSupport.GetTerminalType(type, resolver);
         if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, })
         {
             return $"({parameter}.TryGetInteger(out _) || {parameter}.TryGetReal(out _))";
@@ -1029,7 +1036,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 + "throw new global::System.InvalidOperationException()";
         }
 
-        var terminal = GetTerminalType(type, resolver);
+        var terminal = ExpressDescriptorTypeSupport.GetTerminalType(type, resolver);
         if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, })
         {
             var number = $"{parameter}.TryGetInteger(out var {rawName}Integer) "
@@ -1100,105 +1107,6 @@ internal static class ExpressSchemaDescriptorEmitter
         };
     }
 
-    private static bool CanMapAggregate(
-        ExpressBoundAggregateType aggregate,
-        ExpressGeneratedTypeResolver resolver)
-    {
-        return aggregate.Kind is ExpressAggregateKind.Array
-                or ExpressAggregateKind.Bag
-                or ExpressAggregateKind.List
-                or ExpressAggregateKind.Set
-            && TryGetAggregateBounds(aggregate, out _, out _)
-            && aggregate.ElementType is not ExpressBoundAggregateType
-            && CanMapAggregateElement(aggregate.ElementType, resolver);
-    }
-
-    private static bool CanMapAggregateElement(
-        ExpressBoundType type,
-        ExpressGeneratedTypeResolver resolver)
-    {
-        if (type is ExpressBoundNamedType named
-            && named.Declaration.Kind == ExpressDeclarationKind.Entity)
-        {
-            return true;
-        }
-
-        if (type is ExpressBoundNamedType namedSelect
-            && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType)
-        {
-            return CanMapType(type, resolver);
-        }
-
-        var terminal = GetTerminalType(type, resolver);
-        return terminal is ExpressBoundScalarType or ExpressBoundEnumerationType;
-    }
-
-    private static bool TryGetAggregateBounds(
-        ExpressBoundAggregateType aggregate,
-        out int lowerBound,
-        out int? upperBound)
-    {
-        lowerBound = 0;
-        upperBound = null;
-        var lowerText = aggregate.ResolvedLowerBoundText ?? aggregate.LowerBoundText;
-        var upperText = aggregate.ResolvedUpperBoundText ?? aggregate.UpperBoundText;
-        if (lowerText is not null
-            && !int.TryParse(
-                lowerText,
-                System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out lowerBound))
-        {
-            return false;
-        }
-
-        if (upperText is not null && upperText != "?")
-        {
-            if (!int.TryParse(
-                upperText,
-                System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out var parsedUpperBound))
-            {
-                return false;
-            }
-
-            upperBound = parsedUpperBound;
-        }
-
-        if (aggregate.Kind == ExpressAggregateKind.Array)
-        {
-            if (!upperBound.HasValue)
-            {
-                return false;
-            }
-
-            var length = (long)upperBound.Value - lowerBound + 1;
-            return length is > 0 and <= int.MaxValue;
-        }
-
-        return lowerBound >= 0 && (!upperBound.HasValue || upperBound.Value >= lowerBound);
-    }
-
-    private static ExpressBoundType GetTerminalType(
-        ExpressBoundType type,
-        ExpressGeneratedTypeResolver resolver)
-    {
-        while (type is ExpressBoundNamedType named
-            && named.Declaration.Kind != ExpressDeclarationKind.Entity)
-        {
-            var underlying = resolver.GetDefinedType(named.Declaration).UnderlyingType;
-            if (underlying is ExpressBoundEnumerationType)
-            {
-                return underlying;
-            }
-
-            type = underlying;
-        }
-
-        return type;
-    }
-
     private static string GetGeneratedTypeName(
         ExpressBoundSchemaIdentity currentSchema,
         ExpressBoundSymbol symbol)
@@ -1213,31 +1121,6 @@ internal static class ExpressSchemaDescriptorEmitter
             ? generatedName
             : "global::TedToolkit.Step21.Generated."
                 + $"{ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name)}.{generatedName}";
-    }
-
-    /// <summary>
-    /// Determines whether a bound type can participate in a generated schema descriptor.
-    /// </summary>
-    /// <param name="type">The bound type.</param>
-    /// <param name="resolver">The generated type resolver.</param>
-    /// <returns><see langword="true" /> when the type can be mapped; otherwise, <see langword="false" />.</returns>
-    internal static bool CanMapType(ExpressBoundType type, ExpressGeneratedTypeResolver resolver)
-    {
-        if (type is ExpressBoundNamedType namedSelect
-            && namedSelect.Declaration.Kind != ExpressDeclarationKind.Entity
-            && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
-        {
-            return resolver.GetSelectAlternatives(select).All(alternative =>
-                alternative.Kind == ExpressDeclarationKind.Entity
-                || CanMapSelectAlternative(alternative, resolver));
-        }
-
-        var terminal = GetTerminalType(type, resolver);
-        return terminal is ExpressBoundScalarType or ExpressBoundEnumerationType
-            || (terminal is ExpressBoundNamedType named
-                && named.Declaration.Kind == ExpressDeclarationKind.Entity)
-            || (terminal is ExpressBoundAggregateType aggregate
-                && CanMapAggregate(aggregate, resolver));
     }
 
     private static string? CreateIncompatibleReferenceCondition(
@@ -1326,22 +1209,6 @@ internal static class ExpressSchemaDescriptorEmitter
         return result.Distinct().ToArray();
     }
 
-    private static bool CanMapSelectAlternative(
-        ExpressBoundSymbol alternative,
-        ExpressGeneratedTypeResolver resolver)
-    {
-        var underlying = resolver.GetDefinedType(alternative).UnderlyingType;
-        if (underlying is ExpressBoundSelectType nestedSelect)
-        {
-            return resolver.GetSelectAlternatives(nestedSelect)
-                .All(nested => nested.Kind == ExpressDeclarationKind.Entity
-                    || CanMapSelectAlternative(nested, resolver));
-        }
-
-        var terminal = GetTerminalType(underlying, resolver);
-        return terminal is ExpressBoundScalarType or ExpressBoundEnumerationType;
-    }
-
     private static IfStatement CreateSelectHydrationBranch(
         ExpressBoundSchemaIdentity currentSchema,
         ExpressBoundNamedType namedSelect,
@@ -1386,7 +1253,7 @@ internal static class ExpressSchemaDescriptorEmitter
         string rawName,
         ExpressGeneratedTypeResolver resolver)
     {
-        var terminal = GetTerminalType(type, resolver);
+        var terminal = ExpressDescriptorTypeSupport.GetTerminalType(type, resolver);
         if (terminal is ExpressBoundScalarType scalar)
         {
             if (scalar.Kind == ExpressScalarKind.Boolean)
@@ -1525,7 +1392,7 @@ internal static class ExpressSchemaDescriptorEmitter
 
             var innerName = selectedPrefix + "Inner";
             var rawName = selectedPrefix + "Raw";
-            if (GetTerminalType(alternativeType, resolver) is ExpressBoundScalarType
+            if (ExpressDescriptorTypeSupport.GetTerminalType(alternativeType, resolver) is ExpressBoundScalarType
                 {
                     Kind: ExpressScalarKind.Number,
                 })

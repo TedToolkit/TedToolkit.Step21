@@ -188,7 +188,7 @@ internal static class ExpressReachableRuleEmitter
                     pathNarrowings),
             safeIndices: safeIndices,
             resolveLexicalBound: ResolveLexicalBound,
-            genericTypeLabels: ExpressExpressionEmitter.GenericTypeLabels(
+            genericTypeLabels: ExpressTypeAnalysis.GenericTypeLabels(
                 lexicalNames?.Values.Select(lexical => lexical.Type) ?? []),
             allocateTemporaryName: allocateTemporaryName,
             isKnownDeterminate: expression => (expression.Kind == ExpressExpressionKind.Reference
@@ -436,7 +436,7 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundOpaqueDeclaration declaration,
         ExpressGeneratedTypeResolver resolver)
     {
-        var resultGenericLabels = ExpressExpressionEmitter.GenericTypeLabels([declaration.DeclaredType!,]);
+        var resultGenericLabels = ExpressTypeAnalysis.GenericTypeLabels([declaration.DeclaredType!,]);
         var returnType = resultGenericLabels.Count == 0
             ? resolver.Resolve(plan.Schema.Identity, declaration.DeclaredType!).DataType
             : new DataType(ExpressExpressionEmitter.BoundTypeName(declaration.DeclaredType!));
@@ -531,7 +531,7 @@ internal static class ExpressReachableRuleEmitter
             }
         }
 
-        foreach (var label in ExpressExpressionEmitter.GenericTypeLabels(
+        foreach (var label in ExpressTypeAnalysis.GenericTypeLabels(
                      formalTypes.Concat([declaration.DeclaredType!,]).Concat(localTypes)))
         {
             method.AddTypeParameter(SourceComposer.TypeParameter(
@@ -3029,7 +3029,7 @@ internal static class ExpressReachableRuleEmitter
         var symbol = expression.Reference!.SchemaDeclaration!;
         var declaration = plan.GetDeclaration(symbol);
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
-            && ExpressExpressionEmitter.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
+            && ExpressTypeAnalysis.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
         {
             return $"{FunctionMethodName(symbol)}({string.Join(", ", arguments.Append(populationExpression))})";
         }

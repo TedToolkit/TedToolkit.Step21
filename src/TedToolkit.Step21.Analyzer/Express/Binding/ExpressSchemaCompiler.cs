@@ -5,37 +5,14 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Analyzer.Express.Analysis;
-
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
 /// Compiles exactly the supplied EXPRESS sources through the deterministic compiler pipeline.
 /// </summary>
-internal static class ExpressSchemaCompiler
+internal static partial class ExpressSchemaCompiler
 {
     private static readonly StringComparer _nameComparer = StringComparer.OrdinalIgnoreCase;
-
-    /// <summary>
-    /// Compiles the supplied sources without reading their logical paths or consulting external state.
-    /// </summary>
-    /// <param name="sources">The complete closed source set.</param>
-    /// <returns>The valid independent schemas and complete deterministic diagnostics.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="sources"/> or one of its elements is null.</exception>
-    internal static ExpressSchemaCompilation Compile(IEnumerable<ExpressSchemaSource> sources)
-    {
-        return Analyze(sources).Compilation;
-    }
-
-    /// <summary>
-    /// Compiles the supplied sources and retains syntax-detached analysis output for generation.
-    /// </summary>
-    /// <param name="sources">The complete closed source set.</param>
-    /// <returns>The analyzed compilation and semantic lowering input.</returns>
-    internal static ExpressAnalyzedCompilation Analyze(IEnumerable<ExpressSchemaSource> sources)
-    {
-        return ExpressCompilerPipeline.Analyze(sources);
-    }
 
     /// <summary>
     /// Binds every independently valid parsed schema without performing expression or flow analysis.
