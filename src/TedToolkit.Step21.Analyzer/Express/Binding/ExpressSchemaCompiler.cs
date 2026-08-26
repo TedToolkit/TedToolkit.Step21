@@ -8,7 +8,7 @@
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
-/// Parses and binds exactly the supplied EXPRESS sources as one deterministic closed universe.
+/// Compiles exactly the supplied EXPRESS sources through the deterministic compiler pipeline.
 /// </summary>
 internal static class ExpressSchemaCompiler
 {
@@ -22,29 +22,23 @@ internal static class ExpressSchemaCompiler
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> or one of its elements is null.</exception>
     internal static ExpressSchemaCompilation Compile(IEnumerable<ExpressSchemaSource> sources)
     {
-        if (sources is null)
+        return ExpressCompilerPipeline.Compile(sources);
+    }
+
+    /// <summary>
+    /// Binds every independently valid parsed schema without performing expression or flow analysis.
+    /// </summary>
+    /// <param name="syntaxCompilation">The deterministic syntax-stage output.</param>
+    /// <returns>The closed-set binding output and complete diagnostics.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="syntaxCompilation"/> is null.</exception>
+    internal static ExpressSchemaCompilation BindClosedSet(ExpressSyntaxCompilation syntaxCompilation)
+    {
+        if (syntaxCompilation is null)
         {
-            throw new ArgumentNullException(nameof(sources));
+            throw new ArgumentNullException(nameof(syntaxCompilation));
         }
 
-        var orderedSources = sources
-            .Select(source => source ?? throw new ArgumentNullException(nameof(sources)))
-            .OrderBy(source => source.FilePath, StringComparer.Ordinal)
-            .ThenBy(source => source.Text, StringComparer.Ordinal)
-            .ToArray();
-        var syntaxDiagnostics = new List<ExpressSyntaxDiagnostic>();
-        var schemas = new List<SchemaDraft>();
-        foreach (var source in orderedSources)
-        {
-            var parseResult = ExpressSyntaxParser.Parse(source.FilePath, source.Text);
-            syntaxDiagnostics.AddRange(parseResult.Diagnostics);
-            if (parseResult.Root is null)
-            {
-                continue;
-            }
-
-            schemas.AddRange(parseResult.Root.ChildRules("schemaDecl").Select(CreateSchema));
-        }
+        var schemas = syntaxCompilation.Schemas.Select(CreateSchema).ToArray();
 
         var bindingDiagnostics = new List<ExpressBindingDiagnostic>();
         MarkDuplicateSchemas(schemas, bindingDiagnostics);
@@ -65,19 +59,17 @@ internal static class ExpressSchemaCompiler
 
         return new(
             boundSchemas,
-            OrderSyntaxDiagnostics(syntaxDiagnostics),
+            syntaxCompilation.Diagnostics,
             OrderBindingDiagnostics(bindingDiagnostics));
     }
 
-    private static SchemaDraft CreateSchema(ExpressRuleSyntax syntax)
+    private static SchemaDraft CreateSchema(ExpressParsedSchema syntax)
     {
-        var nameRule = syntax.RequiredChild("schemaId");
-        var nameToken = nameRule.IdentifierToken();
         return new(
-            new ExpressBoundSchemaIdentity(nameToken.Text, syntax.Span),
-            syntax,
-            syntax.RequiredChild("schemaBody"),
-            nameToken);
+            new ExpressBoundSchemaIdentity(syntax.NameToken.Text, syntax.Syntax.Span),
+            syntax.Syntax,
+            syntax.Body,
+            syntax.NameToken);
     }
 
     private static void MarkDuplicateSchemas(
@@ -232,18 +224,15 @@ internal static class ExpressSchemaCompiler
             .ThenBy(declaration => declaration.Syntax.Span.Start.Column)
             .Select(CreateBoundDeclaration)
             .ToArray();
-        var expressionFacts = ExpressExpressionBinder.Bind(
-            declarations,
-            schema.NameReferences);
         return new(
             schema.Identity,
             schema.ResolvedImports,
             declarations,
             nestedDeclarations,
             schema.NameReferences,
-            expressionFacts.Expressions,
-            expressionFacts.IndeterminateFunctions,
-            expressionFacts.IndeterminateLocals);
+            [],
+            [],
+            []);
     }
 
     private static ExpressBoundDeclaration CreateBoundDeclaration(SymbolDraft declaration)
@@ -271,17 +260,6 @@ internal static class ExpressSchemaCompiler
             declaration.Symbol,
             declaration.Syntax,
             declaration.BoundType);
-    }
-
-    private static IEnumerable<ExpressSyntaxDiagnostic> OrderSyntaxDiagnostics(
-        IEnumerable<ExpressSyntaxDiagnostic> diagnostics)
-    {
-        return diagnostics
-            .OrderBy(diagnostic => diagnostic.SourceLocation.FilePath, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.SourceLocation.Line)
-            .ThenBy(diagnostic => diagnostic.SourceLocation.Column)
-            .ThenBy(diagnostic => diagnostic.Code, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.Message, StringComparer.Ordinal);
     }
 
     private static IEnumerable<ExpressBindingDiagnostic> OrderBindingDiagnostics(
