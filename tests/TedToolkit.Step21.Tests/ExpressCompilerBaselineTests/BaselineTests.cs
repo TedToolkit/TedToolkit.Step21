@@ -116,7 +116,6 @@ internal sealed class BaselineTests
             generatedSources,
             result.Diagnostics.Select(DiagnosticSnapshot.From).ToArray(),
             result.OutputCompilation.GetDiagnostics()
-                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error)
                 .Select(DiagnosticSnapshot.From)
                 .ToArray(),
             inputs.Select(input => new WithholdingSnapshot(

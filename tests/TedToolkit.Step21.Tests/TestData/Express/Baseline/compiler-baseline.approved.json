@@ -2008,10 +2008,19 @@
         },
         {
           "path": "schemas/syntax-valid.exp",
-          "sha256": "D6C3C0F780A6BE2126FDFDD65B97F095AFFDA44231BE0F0430BC1C7216DEFA95"
+          "sha256": "00D9A6F3A3A06EB3B3A21F54D3DCAC8E39B53660C31EAE17D2833B0825910AFE"
         }
       ],
-      "generatedSources": [],
+      "generatedSources": [
+        {
+          "hintName": "ExpressEntity_BASELINE_VALID_SAMPLE.g.cs",
+          "sha256": "1E20E66FBAEA540AEA8BA16C03D74EAF3B0AEF1EF5996F95D8B9BB5F78EF9FE8"
+        },
+        {
+          "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
+          "sha256": "EAA8E48199AA7AF0743A978D908AD0DE000DCDC1BBCADF5D96D7B62563E01050"
+        }
+      ],
       "generatorDiagnostics": [
         {
           "id": "STEP21EXP001",
@@ -2022,16 +2031,6 @@
           "startColumn": 0,
           "endLine": 3,
           "endColumn": 0
-        },
-        {
-          "id": "STEP21EXP001",
-          "severity": "Error",
-          "message": "EXPRESS-SYNTAX: mismatched input \u0027value\u0027 expecting \u0027END_ENTITY\u0027",
-          "path": "schemas/syntax-valid.exp",
-          "startLine": 2,
-          "startColumn": 2,
-          "endLine": 2,
-          "endColumn": 2
         }
       ],
       "compilerDiagnostics": [],
@@ -2042,7 +2041,7 @@
         },
         {
           "path": "schemas/syntax-valid.exp",
-          "emitted": false
+          "emitted": true
         }
       ]
     },
@@ -2059,21 +2058,20 @@
         },
         {
           "path": "schemas/binding-valid.exp",
-          "sha256": "D6C3C0F780A6BE2126FDFDD65B97F095AFFDA44231BE0F0430BC1C7216DEFA95"
+          "sha256": "00D9A6F3A3A06EB3B3A21F54D3DCAC8E39B53660C31EAE17D2833B0825910AFE"
         }
       ],
-      "generatedSources": [],
-      "generatorDiagnostics": [
+      "generatedSources": [
         {
-          "id": "STEP21EXP001",
-          "severity": "Error",
-          "message": "EXPRESS-SYNTAX: mismatched input \u0027value\u0027 expecting \u0027END_ENTITY\u0027",
-          "path": "schemas/binding-valid.exp",
-          "startLine": 2,
-          "startColumn": 2,
-          "endLine": 2,
-          "endColumn": 2
+          "hintName": "ExpressEntity_BASELINE_VALID_SAMPLE.g.cs",
+          "sha256": "1E20E66FBAEA540AEA8BA16C03D74EAF3B0AEF1EF5996F95D8B9BB5F78EF9FE8"
         },
+        {
+          "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
+          "sha256": "04B59F2FD92FC519CB110181730B61415AF02B5621F11F634907653B8C9F591E"
+        }
+      ],
+      "generatorDiagnostics": [
         {
           "id": "STEP21EXP002",
           "severity": "Error",
@@ -2137,7 +2135,7 @@
         },
         {
           "path": "schemas/binding-valid.exp",
-          "emitted": false
+          "emitted": true
         }
       ]
     },
@@ -2154,21 +2152,20 @@
         },
         {
           "path": "schemas/generation-valid.exp",
-          "sha256": "D6C3C0F780A6BE2126FDFDD65B97F095AFFDA44231BE0F0430BC1C7216DEFA95"
+          "sha256": "00D9A6F3A3A06EB3B3A21F54D3DCAC8E39B53660C31EAE17D2833B0825910AFE"
         }
       ],
-      "generatedSources": [],
-      "generatorDiagnostics": [
+      "generatedSources": [
         {
-          "id": "STEP21EXP001",
-          "severity": "Error",
-          "message": "EXPRESS-SYNTAX: mismatched input \u0027value\u0027 expecting \u0027END_ENTITY\u0027",
-          "path": "schemas/generation-valid.exp",
-          "startLine": 2,
-          "startColumn": 2,
-          "endLine": 2,
-          "endColumn": 2
+          "hintName": "ExpressEntity_BASELINE_VALID_SAMPLE.g.cs",
+          "sha256": "1E20E66FBAEA540AEA8BA16C03D74EAF3B0AEF1EF5996F95D8B9BB5F78EF9FE8"
         },
+        {
+          "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
+          "sha256": "F702D6BCD824BFE38DB3BFDF37048E948BBBE4F4CF0DA54AF8B98C4E32B092AF"
+        }
+      ],
+      "generatorDiagnostics": [
         {
           "id": "STEP21EXP004",
           "severity": "Error",
@@ -2222,7 +2219,7 @@
         },
         {
           "path": "schemas/generation-valid.exp",
-          "emitted": false
+          "emitted": true
         }
       ]
     },
@@ -2235,21 +2232,20 @@
         },
         {
           "path": "schemas/flow-valid.exp",
-          "sha256": "D6C3C0F780A6BE2126FDFDD65B97F095AFFDA44231BE0F0430BC1C7216DEFA95"
+          "sha256": "00D9A6F3A3A06EB3B3A21F54D3DCAC8E39B53660C31EAE17D2833B0825910AFE"
         }
       ],
-      "generatedSources": [],
-      "generatorDiagnostics": [
+      "generatedSources": [
         {
-          "id": "STEP21EXP001",
-          "severity": "Error",
-          "message": "EXPRESS-SYNTAX: mismatched input \u0027value\u0027 expecting \u0027END_ENTITY\u0027",
-          "path": "schemas/flow-valid.exp",
-          "startLine": 2,
-          "startColumn": 2,
-          "endLine": 2,
-          "endColumn": 2
+          "hintName": "ExpressEntity_BASELINE_VALID_SAMPLE.g.cs",
+          "sha256": "1E20E66FBAEA540AEA8BA16C03D74EAF3B0AEF1EF5996F95D8B9BB5F78EF9FE8"
         },
+        {
+          "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
+          "sha256": "5CEAD4C171A7343DA6DCCE8235E676127679EA46D7C001F63BCF7E8F77E771BD"
+        }
+      ],
+      "generatorDiagnostics": [
         {
           "id": "STEP21EXP006",
           "severity": "Error",
@@ -2269,7 +2265,7 @@
         },
         {
           "path": "schemas/flow-valid.exp",
-          "emitted": false
+          "emitted": true
         }
       ]
     }
