@@ -39,52 +39,8 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(expressInputs, static (productionContext, result) =>
         {
-            ExpressGeneratorDiagnostics.Report(productionContext, result);
-            var valueResolver = ExpressGeneratedTypeResolver.Create(result.Compilation);
-            var valueProjections = ExpressValueProjection.Create(result.Compilation, valueResolver);
-            var plan = ExpressEntityGenerationPlan.Create(result.Compilation, valueResolver);
-            var complexProjections = ExpressComplexEntityProjection.Create(plan.Projections, valueResolver);
-            var rulePlans = result.Compilation.Schemas.ToDictionary(
-                schema => schema,
-                schema => ExpressReachableRulePlan.Create(
-                    schema,
-                    valueResolver,
-                    plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
-                    complexProjections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray()));
-            var ruleFailures = rulePlans.Values.SelectMany(rulePlan => rulePlan.Failures).ToArray();
-            var invalidSchemas = new HashSet<ExpressBoundSchema>(plan.InvalidSchemas);
-            invalidSchemas.UnionWith(ruleFailures.Select(failure => failure.Schema));
-            ExpressGeneratorDiagnostics.ReportNameCollisions(productionContext, result, plan.Collisions);
-            ExpressGeneratorDiagnostics.ReportGenerationFailures(productionContext, result, plan.Failures);
-            ExpressGeneratorDiagnostics.ReportReachableRuleFailures(productionContext, result, ruleFailures);
-            foreach (var projection in valueProjections
-                         .Where(projection => !invalidSchemas.Contains(projection.Schema)))
-            {
-                ExpressValueEmitter.Emit(productionContext, projection);
-            }
-
-            foreach (var projection in plan.Projections
-                         .Where(projection => !invalidSchemas.Contains(projection.Schema)))
-            {
-                ExpressEntityEmitter.Emit(productionContext, projection, valueResolver);
-            }
-
-            foreach (var projection in complexProjections
-                         .Where(projection => !invalidSchemas.Contains(projection.Schema)))
-            {
-                ExpressComplexEntityEmitter.Emit(productionContext, projection, valueResolver);
-            }
-
-            foreach (var schema in result.Compilation.Schemas.Where(schema => !invalidSchemas.Contains(schema)))
-            {
-                ExpressSchemaDescriptorEmitter.Emit(
-                    productionContext,
-                    schema,
-                    plan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
-                    complexProjections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
-                    valueResolver,
-                    rulePlans[schema]);
-            }
+            var plan = ExpressGenerationPlan.Create(result.Compilation);
+            ExpressSourceEmissionStage.Emit(productionContext, result, plan);
         });
     }
 
