@@ -7,6 +7,12 @@
 
 namespace TedToolkit.Step21.Tests.ExpressCompilerArchitectureTests;
 
+using System.Reflection;
+
+using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Binding;
+using TedToolkit.Step21.Analyzer.Generation;
+
 internal sealed class StageBoundaryTests
 {
     private static readonly string[] SyntaxOwners =
@@ -98,12 +104,117 @@ internal sealed class StageBoundaryTests
         await Assert.That(violations).IsEmpty();
     }
 
+    /// <summary>
+    /// Verifies that the planning handoff cannot reach parser syntax through its semantic object graph.
+    /// </summary>
+    [Test]
+    public async Task Should_not_reach_syntax_when_planning_handoff_types_are_traversed()
+    {
+        var violations = ReachableAnalyzerTypes(typeof(ExpressGenerationPlan))
+            .Where(path => path.Type == typeof(ExpressRuleSyntax)
+                || path.Type == typeof(ExpressTokenSyntax))
+            .Select(path => path.Path)
+            .ToArray();
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    /// Verifies that every entity-attribute projection is final when emission receives it.
+    /// </summary>
+    [Test]
+    public async Task Should_expose_immutable_entity_attribute_projections()
+    {
+        var violations = typeof(ExpressEntityAttributeProjection)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(property => property.SetMethod is not null)
+            .Select(property => property.Name)
+            .ToArray();
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    /// Verifies that binding implementation and pipeline orchestration have distinct type owners.
+    /// </summary>
+    [Test]
+    public async Task Should_keep_binding_implementation_out_of_the_pipeline_facade()
+    {
+        var bindingSource = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "TedToolkit.Step21.Analyzer",
+            "Express",
+            "Binding",
+            "ExpressSchemaBinder.cs"));
+        var facadeSource = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "TedToolkit.Step21.Analyzer",
+            "Express",
+            "ExpressSchemaCompiler.Pipeline.cs"));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(bindingSource).Contains("class ExpressSchemaBinder");
+            await Assert.That(bindingSource).DoesNotContain("partial class ExpressSchemaCompiler");
+            await Assert.That(facadeSource).Contains("class ExpressSchemaCompiler");
+            await Assert.That(facadeSource).DoesNotContain("partial class ExpressSchemaCompiler");
+        }
+    }
+
     private static IEnumerable<string> ForbiddenReferences(string path, params string[] forbidden)
     {
         var source = File.ReadAllText(path);
         return forbidden
             .Where(source.Contains)
             .Select(value => $"{Path.GetFileName(path)} contains forbidden stage reference '{value}'.");
+    }
+
+    private static IReadOnlyList<(Type Type, string Path)> ReachableAnalyzerTypes(Type root)
+    {
+        var result = new List<(Type Type, string Path)>();
+        var visited = new HashSet<Type>();
+        Visit(root, root.Name);
+        return result;
+
+        void Visit(Type candidate, string path)
+        {
+            if (candidate.IsArray)
+            {
+                Visit(candidate.GetElementType()!, path + "[]");
+                return;
+            }
+
+            if (candidate.IsGenericType)
+            {
+                foreach (var argument in candidate.GetGenericArguments())
+                {
+                    Visit(argument, path + $"<{argument.Name}>");
+                }
+            }
+
+            if (candidate.Assembly != root.Assembly || !visited.Add(candidate))
+            {
+                return;
+            }
+
+            result.Add((candidate, path));
+            foreach (var property in candidate.GetProperties(
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (property.GetMethod is not null && property.GetIndexParameters().Length == 0)
+                {
+                    Visit(property.PropertyType, path + "." + property.Name);
+                }
+            }
+
+            foreach (var field in candidate.GetFields(
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                Visit(field.FieldType, path + "." + field.Name);
+            }
+        }
     }
 
     private static string FindRepositoryRoot()
