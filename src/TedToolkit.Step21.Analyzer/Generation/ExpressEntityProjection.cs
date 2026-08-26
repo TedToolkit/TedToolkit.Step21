@@ -22,6 +22,7 @@ internal sealed class ExpressEntityProjection
 
     private ExpressEntityProjection(
         ExpressBoundSchema schema,
+        ExpressSchemaAnalysis analysis,
         ExpressBoundEntity entity,
         IEnumerable<ExpressEntityAttributeProjection> ownAttributes,
         IEnumerable<ExpressEntityAttributeProjection> flattenedAttributes,
@@ -30,6 +31,7 @@ internal sealed class ExpressEntityProjection
         IEnumerable<ExpressEntityAttributeProjection> derivedRedeclaredAttributes)
     {
         Schema = schema;
+        Analysis = analysis;
         Entity = entity;
         Name = ToPascalCase(entity.Name);
         OwnAttributes = new ReadOnlyCollection<ExpressEntityAttributeProjection>(ownAttributes.ToArray());
@@ -44,6 +46,11 @@ internal sealed class ExpressEntityProjection
     /// Gets the declaring schema.
     /// </summary>
     internal ExpressBoundSchema Schema { get; }
+
+    /// <summary>
+    /// Gets the syntax-detached semantic analysis for the declaring schema.
+    /// </summary>
+    internal ExpressSchemaAnalysis Analysis { get; }
 
     /// <summary>
     /// Gets the bound entity.
@@ -103,12 +110,17 @@ internal sealed class ExpressEntityProjection
         var entities = compilation.Schemas
             .SelectMany(schema => schema.Declarations
                 .OfType<ExpressBoundEntity>()
-                .Select(entity => (Schema: schema, Entity: entity)))
+                .Select(entity => (Schema: schema, Analysis: compilation.GetAnalysis(schema), Entity: entity)))
             .ToArray();
         var entityBySymbol = entities.ToDictionary(item => item.Entity.Symbol, item => item);
 
         return entities
-            .Select(item => CreateProjection(item.Schema, item.Entity, entityBySymbol, valueResolver))
+            .Select(item => CreateProjection(
+                item.Schema,
+                item.Analysis,
+                item.Entity,
+                entityBySymbol,
+                valueResolver))
             .ToArray();
     }
 
@@ -126,11 +138,14 @@ internal sealed class ExpressEntityProjection
 
     private static ExpressEntityProjection CreateProjection(
         ExpressBoundSchema schema,
+        ExpressSchemaAnalysis analysis,
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         ExpressGeneratedTypeResolver valueResolver)
     {
-        var ownAttributes = ProjectOwnAttributes(entity, valueResolver).ToArray();
+        var ownAttributes = ProjectOwnAttributes(entity, analysis, valueResolver).ToArray();
         var (flattenedAttributes, effectiveAttributes) = FlattenAttributes(entity, entityBySymbol, valueResolver);
         foreach (var group in flattenedAttributes
                      .GroupBy(attribute => attribute.Name, StringComparer.Ordinal)
@@ -148,10 +163,12 @@ internal sealed class ExpressEntityProjection
         var components = CreatePhysicalComponents(entity, entityBySymbol);
         var derivedRedeclaredAttributes = FindDerivedRedeclaredAttributes(
             entity,
+            analysis,
             entityBySymbol,
             effectiveAttributes);
         return new(
             schema,
+            analysis,
             entity,
             ownAttributes,
             flattenedAttributes,
@@ -162,11 +179,19 @@ internal sealed class ExpressEntityProjection
 
     private static ExpressEntityAttributeProjection[] FindDerivedRedeclaredAttributes(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ExpressSchemaAnalysis analysis,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         IReadOnlyList<ExpressEntityAttributeProjection> effectiveAttributes)
     {
         var storageNames = new List<(string Entity, string Attribute)>();
-        AddDerivedStorageNames(entity, entityBySymbol, new HashSet<ExpressBoundSymbol>(), storageNames);
+        AddDerivedStorageNames(
+            entity,
+            analysis,
+            entityBySymbol,
+            new HashSet<ExpressBoundSymbol>(),
+            storageNames);
         return effectiveAttributes.Where(attribute => storageNames.Any(storage =>
                 StringComparer.OrdinalIgnoreCase.Equals(storage.Entity, attribute.StorageEntity.Name)
                 && StringComparer.OrdinalIgnoreCase.Equals(storage.Attribute, attribute.StorageAttributeName)))
@@ -175,7 +200,10 @@ internal sealed class ExpressEntityProjection
 
     private static void AddDerivedStorageNames(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        ExpressSchemaAnalysis analysis,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         ISet<ExpressBoundSymbol> visited,
         ICollection<(string Entity, string Attribute)> storageNames)
     {
@@ -186,19 +214,22 @@ internal sealed class ExpressEntityProjection
 
         foreach (var supertype in entity.DirectSupertypes)
         {
-            AddDerivedStorageNames(entityBySymbol[supertype].Entity, entityBySymbol, visited, storageNames);
+            var inherited = entityBySymbol[supertype];
+            AddDerivedStorageNames(
+                inherited.Entity,
+                inherited.Analysis,
+                entityBySymbol,
+                visited,
+                storageNames);
         }
 
-        foreach (var derived in entity.Syntax.DescendantsAndSelf()
-                     .Where(rule => rule.Production == "derivedAttr"))
+        foreach (var derived in analysis.GetDeclaration(entity).DescendantsAndSelf()
+                     .Where(rule => rule.Role == "derivedAttr"))
         {
             var redeclared = derived.DescendantsAndSelf()
-                .SingleOrDefault(rule => rule.Production == "redeclaredAttribute");
-            var names = redeclared?.DescendantTokens()
-                .Where(token => token.TokenName == "SimpleId")
-                .Select(token => token.Text)
-                .ToArray();
-            if (names is { Length: 2, })
+                .SingleOrDefault(rule => rule.Role == "redeclaredAttribute");
+            var names = redeclared?.Identifiers;
+            if (names is { Count: 2, })
             {
                 storageNames.Add((names[0], names[1]));
             }
@@ -207,7 +238,9 @@ internal sealed class ExpressEntityProjection
 
     private static ExpressBoundEntity[] CreatePhysicalComponents(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol)
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol)
     {
         var closure = new HashSet<ExpressBoundSymbol>();
         AddEntityAndSupertypes(entity, entityBySymbol, closure);
@@ -219,7 +252,9 @@ internal sealed class ExpressEntityProjection
 
     private static void AddEntityAndSupertypes(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         ISet<ExpressBoundSymbol> closure)
     {
         if (!closure.Add(entity.Symbol))
@@ -235,11 +270,12 @@ internal sealed class ExpressEntityProjection
 
     private static IEnumerable<ExpressEntityAttributeProjection> ProjectOwnAttributes(
         ExpressBoundEntity entity,
+        ExpressSchemaAnalysis analysis,
         ExpressGeneratedTypeResolver valueResolver)
     {
         return entity.Attributes
             .Where(attribute => attribute.Kind == ExpressAttributeKind.Explicit)
-            .Select(attribute => CreateAttribute(entity, attribute, valueResolver))
+            .Select(attribute => CreateAttribute(entity, analysis, attribute, valueResolver))
             .Where(attribute => attribute is not null)
             .Select(attribute => attribute!);
     }
@@ -247,7 +283,9 @@ internal sealed class ExpressEntityProjection
     private static (List<ExpressEntityAttributeProjection> Flattened, List<ExpressEntityAttributeProjection> Effective)
         FlattenAttributes(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         ExpressGeneratedTypeResolver valueResolver)
     {
         var result = new List<ExpressEntityAttributeProjection>();
@@ -259,7 +297,9 @@ internal sealed class ExpressEntityProjection
 
     private static void AddAttributes(
         ExpressBoundEntity entity,
-        IReadOnlyDictionary<ExpressBoundSymbol, (ExpressBoundSchema Schema, ExpressBoundEntity Entity)> entityBySymbol,
+        IReadOnlyDictionary<
+            ExpressBoundSymbol,
+            (ExpressBoundSchema Schema, ExpressSchemaAnalysis Analysis, ExpressBoundEntity Entity)> entityBySymbol,
         ExpressGeneratedTypeResolver valueResolver,
         List<ExpressEntityAttributeProjection> result,
         List<ExpressEntityAttributeProjection> effective)
@@ -269,7 +309,10 @@ internal sealed class ExpressEntityProjection
             AddAttributes(entityBySymbol[supertype].Entity, entityBySymbol, valueResolver, result, effective);
         }
 
-        foreach (var attribute in ProjectOwnAttributes(entity, valueResolver))
+        foreach (var attribute in ProjectOwnAttributes(
+                     entity,
+                     entityBySymbol[entity.Symbol].Analysis,
+                     valueResolver))
         {
             var effectiveIndex = FindRedeclaredStorage(effective, attribute);
             if (effectiveIndex >= 0)
@@ -303,6 +346,7 @@ internal sealed class ExpressEntityProjection
 
     private static ExpressEntityAttributeProjection? CreateAttribute(
         ExpressBoundEntity declaringEntity,
+        ExpressSchemaAnalysis analysis,
         ExpressBoundAttribute attribute,
         ExpressGeneratedTypeResolver valueResolver)
     {
@@ -311,15 +355,12 @@ internal sealed class ExpressEntityProjection
             return null;
         }
 
-        var redeclaredAttribute = declaringEntity.Syntax.DescendantsAndSelf()
-            .Where(rule => rule.Production == "attributeDecl")
+        var redeclaredAttribute = analysis.GetDeclaration(declaringEntity).DescendantsAndSelf()
+            .Where(rule => rule.Role == "attributeDecl")
             .SingleOrDefault(rule => SameLocation(rule.Span.Start, attribute.Span.Start))
             ?.DescendantsAndSelf()
-            .SingleOrDefault(rule => rule.Production == "redeclaredAttribute");
-        var redeclaredNames = redeclaredAttribute?.DescendantTokens()
-            .Where(token => token.TokenName == "SimpleId")
-            .Select(token => token.Text)
-            .ToArray();
+            .SingleOrDefault(rule => rule.Role == "redeclaredAttribute");
+        var redeclaredNames = redeclaredAttribute?.Identifiers;
 
         return new(
             declaringEntity,

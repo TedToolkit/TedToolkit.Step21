@@ -11,6 +11,7 @@ using TedToolkit.RoslynHelper;
 using TedToolkit.RoslynHelper.Syntaxes;
 
 using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -173,12 +174,13 @@ internal static class ExpressStructuralValidationEmitter
         foreach (var declaration in rulePlan.Schema.Declarations
                      .Where(candidate => candidate.Kind == ExpressDeclarationKind.Rule))
         {
-            var head = declaration.Syntax.RequiredChild("ruleHead");
+            var declarationRule = rulePlan.GetSemanticDeclaration(declaration);
+            var head = declarationRule.RequiredChild("ruleHead");
             var lexicalNames = new Dictionary<string, (string Code, ExpressBoundType Type)>(
                 StringComparer.OrdinalIgnoreCase);
             foreach (var entityReference in head.ChildRules("entityRef"))
             {
-                var entityName = entityReference.IdentifierToken().Text;
+                var entityName = entityReference.Identifier!;
                 var entity = rulePlan.Schema.Declarations
                     .Select(candidate => candidate.Symbol)
                     .Concat(rulePlan.Schema.Imports.Select(import => import.Declaration))
@@ -192,14 +194,14 @@ internal static class ExpressStructuralValidationEmitter
                         && string.Equals(candidate.Name, entityName, StringComparison.OrdinalIgnoreCase)
                         && string.Equals(
                             candidate.Span.Start.FilePath,
-                            declaration.Syntax.Span.Start.FilePath,
+                            declarationRule.Span.Start.FilePath,
                             StringComparison.Ordinal)
-                        && (candidate.Span.Start.Line > declaration.Syntax.Span.Start.Line
-                            || (candidate.Span.Start.Line == declaration.Syntax.Span.Start.Line
-                                && candidate.Span.Start.Column >= declaration.Syntax.Span.Start.Column))
-                        && (candidate.Span.End.Line < declaration.Syntax.Span.End.Line
-                            || (candidate.Span.End.Line == declaration.Syntax.Span.End.Line
-                                && candidate.Span.End.Column <= declaration.Syntax.Span.End.Column)))
+                        && (candidate.Span.Start.Line > declarationRule.Span.Start.Line
+                            || (candidate.Span.Start.Line == declarationRule.Span.Start.Line
+                                && candidate.Span.Start.Column >= declarationRule.Span.Start.Column))
+                        && (candidate.Span.End.Line < declarationRule.Span.End.Line
+                            || (candidate.Span.End.Line == declarationRule.Span.End.Line
+                                && candidate.Span.End.Column <= declarationRule.Span.End.Column)))
                     .Distinct()
                     .ToArray();
                 if (populations.Length == 0)
@@ -220,7 +222,7 @@ internal static class ExpressStructuralValidationEmitter
                 owner.AddStatement(loop);
             }
 
-            var rules = declaration.Syntax.RequiredChild("whereClause")
+            var rules = declarationRule.RequiredChild("whereClause")
                 .ChildRules("domainRule")
                 .ToArray();
             for (var index = 0; index < rules.Length; index++)
@@ -235,7 +237,7 @@ internal static class ExpressStructuralValidationEmitter
                         "entities",
                         lexicalNames,
                         allocateTemporaryName: allocateTemporaryName));
-                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                     ?? $"RULE_{Invariant(index + 1)}";
                 var code = $"{rulePlan.Schema.Name}.RULE.{declaration.Name}.WHERE.{label}"
                     .ToUpperInvariant();
@@ -270,7 +272,7 @@ internal static class ExpressStructuralValidationEmitter
         var ruleIndex = 0;
         foreach (var entity in entities)
         {
-            var uniqueClause = entity.Entity.Syntax.RequiredChild("entityBody")
+            var uniqueClause = rulePlan.GetSemanticDeclaration(entity.Entity).RequiredChild("entityBody")
                 .ChildRules("uniqueClause")
                 .SingleOrDefault();
             if (uniqueClause is null)
@@ -349,7 +351,7 @@ internal static class ExpressStructuralValidationEmitter
                     + $"(item, itemIndex) => ({determinate}) && global::System.Linq.Enumerable.Any("
                     + $"global::System.Linq.Enumerable.Take({populationName}, itemIndex), "
                     + $"previous => ({previousDeterminate}) && ({equality})))"));
-                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                     ?? $"RULE_{Invariant(index + 1)}";
                 var code = $"{rulePlan.Schema.Name}.{entity.Entity.Name}.UNIQUE.{label}"
                     .ToUpperInvariant();
@@ -663,11 +665,11 @@ internal static class ExpressStructuralValidationEmitter
                     table,
                     schema.Name,
                     entity.Name,
-                    entity.Syntax.RequiredChild("entityBody")
+                    rulePlan.GetSemanticDeclaration(entity).RequiredChild("entityBody")
                         .ChildRules("whereClause")
                         .SingleOrDefault(),
                     rulePlan);
-                var uniqueClause = entity.Syntax.RequiredChild("entityBody")
+                var uniqueClause = rulePlan.GetSemanticDeclaration(entity).RequiredChild("entityBody")
                     .ChildRules("uniqueClause")
                     .SingleOrDefault();
                 if (uniqueClause is not null)
@@ -676,14 +678,14 @@ internal static class ExpressStructuralValidationEmitter
                     for (var index = 0; index < rules.Length; index++)
                     {
                         var rule = rules[index];
-                        var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+                        var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                             ?? $"RULE_{Invariant(index + 1)}";
                         table.AddItem(
                             new DescriptionText(
                                 $"{schema.Name}.{entity.Name}.UNIQUE.{label}".ToUpperInvariant()),
                             new DescriptionText(
                                 "Normalized requirement: the EXPRESS UNIQUE key "
-                                + $"'{rule.TokenText()}' must identify at most one entity candidate. "
+                                + $"'{rule.SourceText}' must identify at most one entity candidate. "
                                 + "Validation boundary: complete typed entity population validation."));
                     }
                 }
@@ -697,7 +699,7 @@ internal static class ExpressStructuralValidationEmitter
                     table,
                     schema.Name,
                     definedType.Name,
-                    definedType.Syntax.ChildRules("whereClause").SingleOrDefault(),
+                    rulePlan.GetSemanticDeclaration(definedType).ChildRules("whereClause").SingleOrDefault(),
                     rulePlan);
                 continue;
             }
@@ -708,7 +710,7 @@ internal static class ExpressStructuralValidationEmitter
                     table,
                     schema.Name,
                     $"RULE.{declaration.Name}",
-                    declaration.Syntax.RequiredChild("whereClause"),
+                    rulePlan.GetSemanticDeclaration(declaration).RequiredChild("whereClause"),
                     rulePlan);
             }
         }
@@ -718,7 +720,7 @@ internal static class ExpressStructuralValidationEmitter
         DescriptionTable table,
         string schemaName,
         string declarationName,
-        ExpressRuleSyntax? whereClause,
+        ExpressSemanticRule? whereClause,
         ExpressReachableRulePlan rulePlan)
     {
         if (whereClause is null)
@@ -735,9 +737,9 @@ internal static class ExpressStructuralValidationEmitter
                 continue;
             }
 
-            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                 ?? $"RULE_{Invariant(index + 1)}";
-            var requirement = rule.RequiredChild("expression").TokenText();
+            var requirement = rule.RequiredChild("expression").SourceText;
             table.AddItem(
                 new DescriptionText(
                     $"{schemaName}.{declarationName}.WHERE.{label}".ToUpperInvariant()),
@@ -885,7 +887,11 @@ internal static class ExpressStructuralValidationEmitter
         Func<string, string> allocateTemporaryName,
         ref int variable)
     {
-        if (!ContainsDefinedTypeWhere(attribute.Type, resolver, new HashSet<ExpressBoundSymbol>()))
+        if (!ContainsDefinedTypeWhere(
+                attribute.Type,
+                resolver,
+                rulePlan,
+                new HashSet<ExpressBoundSymbol>()))
         {
             return;
         }
@@ -950,7 +956,11 @@ internal static class ExpressStructuralValidationEmitter
     {
         if (type is ExpressBoundAggregateType aggregate)
         {
-            if (!ContainsDefinedTypeWhere(aggregate.ElementType, resolver, new HashSet<ExpressBoundSymbol>()))
+            if (!ContainsDefinedTypeWhere(
+                    aggregate.ElementType,
+                    resolver,
+                    rulePlan,
+                    new HashSet<ExpressBoundSymbol>()))
             {
                 return;
             }
@@ -999,6 +1009,7 @@ internal static class ExpressStructuralValidationEmitter
                     if (!ContainsDefinedTypeWhere(
                             alternativeType,
                             resolver,
+                            rulePlan,
                             new HashSet<ExpressBoundSymbol>()))
                     {
                         continue;
@@ -1043,7 +1054,9 @@ internal static class ExpressStructuralValidationEmitter
         ExpressReachableRulePlan rulePlan,
         Func<string, string> allocateTemporaryName)
     {
-        var whereClause = declaration.Syntax.ChildRules("whereClause").SingleOrDefault();
+        var whereClause = rulePlan.GetSemanticDeclaration(declaration)
+            .ChildRules("whereClause")
+            .SingleOrDefault();
         if (whereClause is null)
         {
             return;
@@ -1062,7 +1075,7 @@ internal static class ExpressStructuralValidationEmitter
                     "entities",
                     allocateTemporaryName: allocateTemporaryName));
             var failed = RuleFailureCondition(expression, generated.Code);
-            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                 ?? $"RULE_{Invariant(index + 1)}";
             var code = $"{rulePlan.Schema.Name}.{declaration.Name}.WHERE.{label}".ToUpperInvariant();
             owner.AddStatement(new IfStatement(new CustomExpression(failed))
@@ -1077,11 +1090,12 @@ internal static class ExpressStructuralValidationEmitter
     private static bool ContainsDefinedTypeWhere(
         ExpressBoundType type,
         ExpressGeneratedTypeResolver resolver,
+        ExpressReachableRulePlan rulePlan,
         ISet<ExpressBoundSymbol> visited)
     {
         if (type is ExpressBoundAggregateType aggregate)
         {
-            return ContainsDefinedTypeWhere(aggregate.ElementType, resolver, visited);
+            return ContainsDefinedTypeWhere(aggregate.ElementType, resolver, rulePlan, visited);
         }
 
         if (type is not ExpressBoundNamedType named
@@ -1092,7 +1106,7 @@ internal static class ExpressStructuralValidationEmitter
         }
 
         var declaration = resolver.GetDefinedType(named.Declaration);
-        if (declaration.Syntax.ChildRules("whereClause").Any())
+        if (rulePlan.GetSemanticDeclaration(declaration).ChildRules("whereClause").Any())
         {
             return true;
         }
@@ -1100,9 +1114,13 @@ internal static class ExpressStructuralValidationEmitter
         return declaration.UnderlyingType switch
         {
             ExpressBoundSelectType select => resolver.GetSelectAlternatives(select).Any(alternative =>
-                ContainsDefinedTypeWhere(new ExpressBoundNamedType(alternative, named.Span), resolver, visited)),
+                ContainsDefinedTypeWhere(
+                    new ExpressBoundNamedType(alternative, named.Span),
+                    resolver,
+                    rulePlan,
+                    visited)),
             ExpressBoundEnumerationType => false,
-            _ => ContainsDefinedTypeWhere(declaration.UnderlyingType, resolver, visited),
+            _ => ContainsDefinedTypeWhere(declaration.UnderlyingType, resolver, rulePlan, visited),
         };
     }
 
@@ -1128,7 +1146,7 @@ internal static class ExpressStructuralValidationEmitter
         ExpressReachableRulePlan rulePlan,
         Func<string, string> allocateTemporaryName)
     {
-        var whereClause = governingEntity.Syntax.RequiredChild("entityBody")
+        var whereClause = rulePlan.GetSemanticDeclaration(governingEntity).RequiredChild("entityBody")
             .ChildRules("whereClause")
             .SingleOrDefault();
         if (whereClause is null)
@@ -1150,7 +1168,7 @@ internal static class ExpressStructuralValidationEmitter
                     "entities",
                     allocateTemporaryName: allocateTemporaryName));
             var failed = RuleFailureCondition(expression, generated.Code);
-            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.IdentifierToken().Text
+            var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                 ?? $"RULE_{Invariant(index + 1)}";
             var code = $"{candidateEntity.Schema.Name}.{governingEntity.Name}.WHERE.{label}"
                 .ToUpperInvariant();

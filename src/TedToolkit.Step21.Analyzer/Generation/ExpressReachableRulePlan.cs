@@ -8,6 +8,7 @@
 using System.Collections.ObjectModel;
 
 using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -21,17 +22,20 @@ internal sealed class ExpressReachableRulePlan
 
     private ExpressReachableRulePlan(
         ExpressBoundSchema schema,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver resolver,
         IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations,
         IReadOnlyList<ExpressEntityProjection> entityProjections,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntityProjections,
         IEnumerable<ExpressBoundDeclaration> reachableDeclarations,
         IEnumerable<ExpressBoundAttribute> reachableDerivedAttributes,
-        IEnumerable<ExpressRuleSyntax> reachableRules,
+        IEnumerable<ExpressSemanticRule> reachableRules,
         bool requiresEntityValueEquality,
         IEnumerable<ExpressEntityGenerationFailure> failures)
     {
         Schema = schema;
+        Compilation = compilation;
+        Analysis = compilation.GetAnalysis(schema);
         Resolver = resolver;
         _declarations = declarations;
         EntityProjections = entityProjections;
@@ -40,7 +44,7 @@ internal sealed class ExpressReachableRulePlan
             reachableDeclarations.ToArray());
         ReachableDerivedAttributes = new ReadOnlyCollection<ExpressBoundAttribute>(
             reachableDerivedAttributes.ToArray());
-        ReachableRules = new ReadOnlyCollection<ExpressRuleSyntax>(reachableRules.ToArray());
+        ReachableRules = new ReadOnlyCollection<ExpressSemanticRule>(reachableRules.ToArray());
         RequiresEntityValueEquality = requiresEntityValueEquality;
         Failures = new ReadOnlyCollection<ExpressEntityGenerationFailure>(failures.ToArray());
     }
@@ -49,6 +53,13 @@ internal sealed class ExpressReachableRulePlan
     /// Gets the schema whose private rule closure is represented.
     /// </summary>
     internal ExpressBoundSchema Schema { get; }
+
+    /// <summary>
+    /// Gets syntax-detached semantic rule analysis for the schema.
+    /// </summary>
+    internal ExpressSchemaAnalysis Analysis { get; }
+
+    private ExpressAnalyzedCompilation Compilation { get; }
 
     /// <summary>
     /// Gets the generated value-type resolver retained by this plan.
@@ -78,7 +89,7 @@ internal sealed class ExpressReachableRulePlan
     /// <summary>
     /// Gets the validation-rooted WHERE expressions in deterministic source order.
     /// </summary>
-    internal IReadOnlyList<ExpressRuleSyntax> ReachableRules { get; }
+    internal IReadOnlyList<ExpressSemanticRule> ReachableRules { get; }
 
     /// <summary>
     /// Gets a value indicating whether the reachable closure requires generated entity value equality.
@@ -94,20 +105,24 @@ internal sealed class ExpressReachableRulePlan
     /// Creates the complete validation-rooted dependency plan for one schema.
     /// </summary>
     /// <param name="schema">The bound schema.</param>
+    /// <param name="compilation">The analyzed closed compilation.</param>
     /// <param name="resolver">The generated value-type resolver.</param>
     /// <param name="entityProjections">The generated entity storage projections.</param>
     /// <param name="complexEntityProjections">The generated complex entity projections.</param>
     /// <returns>The immutable rule plan.</returns>
     internal static ExpressReachableRulePlan Create(
         ExpressBoundSchema schema,
+        ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver resolver,
         IReadOnlyList<ExpressEntityProjection> entityProjections,
         IReadOnlyList<ExpressComplexEntityProjection>? complexEntityProjections = null)
     {
+        var analysis = compilation.GetAnalysis(schema);
         var declarations = schema.Declarations.Concat(schema.NestedDeclarations)
             .ToDictionary(declaration => declaration.Symbol);
         var builder = new Builder(
             schema,
+            compilation,
             declarations,
             resolver,
             entityProjections,
@@ -126,11 +141,23 @@ internal sealed class ExpressReachableRulePlan
     }
 
     /// <summary>
+    /// Gets syntax-detached semantic structure for any declaration in the closed compilation.
+    /// </summary>
+    /// <param name="declaration">The analyzed declaration.</param>
+    /// <returns>The declaration's semantic rule model.</returns>
+    internal ExpressSemanticRule GetSemanticDeclaration(ExpressBoundDeclaration declaration)
+    {
+        var schema = Compilation.Schemas.Single(candidate =>
+            ReferenceEquals(candidate.Identity, declaration.DeclaringSchema));
+        return Compilation.GetAnalysis(schema).GetDeclaration(declaration);
+    }
+
+    /// <summary>
     /// Gets the bound expression corresponding exactly to retained expression syntax.
     /// </summary>
     /// <param name="syntax">The retained expression syntax.</param>
     /// <returns>The typed expression.</returns>
-    internal ExpressBoundExpression GetExpression(ExpressRuleSyntax syntax)
+    internal ExpressBoundExpression GetExpression(ExpressSemanticRule syntax)
     {
         return Schema.Expressions.Single(expression => SameSpan(expression.Span, syntax.Span));
     }
@@ -155,8 +182,8 @@ internal sealed class ExpressReachableRulePlan
     internal ExpressBoundExpression GetDerivedExpression(ExpressBoundAttribute attribute)
     {
         var owner = GetAttributeOwner(attribute);
-        var syntax = owner.Syntax.DescendantsAndSelf()
-            .Where(candidate => candidate.Production == "derivedAttr")
+        var syntax = Analysis.GetDeclaration(owner).DescendantsAndSelf()
+            .Where(candidate => candidate.Role == "derivedAttr")
             .Single(candidate => SameStart(
                 candidate.RequiredChild("attributeDecl").Span,
                 attribute.Span));
@@ -168,7 +195,7 @@ internal sealed class ExpressReachableRulePlan
     /// </summary>
     /// <param name="caseStatement">The CASE statement syntax.</param>
     /// <returns><see langword="true" /> when every enumeration value has a case label.</returns>
-    internal bool IsExhaustiveCase(ExpressRuleSyntax caseStatement)
+    internal bool IsExhaustiveCase(ExpressSemanticRule caseStatement)
     {
         return IsExhaustiveCase(Schema, Resolver, caseStatement);
     }
@@ -176,7 +203,7 @@ internal sealed class ExpressReachableRulePlan
     private static bool IsExhaustiveCase(
         ExpressBoundSchema schema,
         ExpressGeneratedTypeResolver resolver,
-        ExpressRuleSyntax caseStatement)
+        ExpressSemanticRule caseStatement)
     {
         var selectorSyntax = caseStatement.RequiredChild("selector").RequiredChild("expression");
         ExpressBoundType? type = schema.Expressions.Single(expression =>
@@ -206,7 +233,7 @@ internal sealed class ExpressReachableRulePlan
     /// </summary>
     /// <param name="syntax">The referenced attribute syntax.</param>
     /// <returns>The bound attribute.</returns>
-    internal ExpressBoundAttribute GetReferencedAttribute(ExpressRuleSyntax syntax)
+    internal ExpressBoundAttribute GetReferencedAttribute(ExpressSemanticRule syntax)
     {
         return Schema.NameReferences
             .Where(reference => reference.Target.Attribute is not null
@@ -247,6 +274,10 @@ internal sealed class ExpressReachableRulePlan
     {
         private readonly ExpressBoundSchema _schema;
 
+        private readonly ExpressSchemaAnalysis _analysis;
+
+        private readonly ExpressAnalyzedCompilation _compilation;
+
         private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
 
         private readonly ExpressGeneratedTypeResolver _resolver;
@@ -259,7 +290,7 @@ internal sealed class ExpressReachableRulePlan
 
         private readonly HashSet<ExpressBoundAttribute> _reachableDerivedAttributes = [];
 
-        private readonly HashSet<ExpressRuleSyntax> _reachableRules = [];
+        private readonly HashSet<ExpressSemanticRule> _reachableRules = [];
 
         private readonly Dictionary<object, VisitState> _states = [];
 
@@ -271,12 +302,15 @@ internal sealed class ExpressReachableRulePlan
 
         internal Builder(
             ExpressBoundSchema schema,
+            ExpressAnalyzedCompilation compilation,
             IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> declarations,
             ExpressGeneratedTypeResolver resolver,
             IReadOnlyList<ExpressEntityProjection> entityProjections,
             IReadOnlyList<ExpressComplexEntityProjection> complexEntityProjections)
         {
             _schema = schema;
+            _compilation = compilation;
+            _analysis = compilation.GetAnalysis(schema);
             _declarations = declarations;
             _resolver = resolver;
             _entityProjections = entityProjections;
@@ -311,8 +345,8 @@ internal sealed class ExpressReachableRulePlan
                     ValidateRuleShape(declaration);
                 }
 
-                foreach (var rule in declaration.Syntax.DescendantsAndSelf()
-                             .Where(candidate => candidate.Production == "domainRule"))
+                foreach (var rule in _analysis.GetDeclaration(declaration).DescendantsAndSelf()
+                             .Where(candidate => candidate.Role == "domainRule"))
                 {
                     VisitRule(rule);
                 }
@@ -325,10 +359,11 @@ internal sealed class ExpressReachableRulePlan
                 .SelectMany(entity => entity.Attributes)
                 .Where(_reachableDerivedAttributes.Contains);
             var orderedRules = _schema.Declarations.Concat(_schema.NestedDeclarations)
-                .SelectMany(declaration => declaration.Syntax.DescendantsAndSelf())
-                .Where(candidate => candidate.Production == "domainRule" && _reachableRules.Contains(candidate));
+                .SelectMany(declaration => _analysis.GetDeclaration(declaration).DescendantsAndSelf())
+                .Where(candidate => candidate.Role == "domainRule" && _reachableRules.Contains(candidate));
             return new(
                 _schema,
+                _compilation,
                 _resolver,
                 _declarations,
                 _entityProjections,
@@ -361,7 +396,7 @@ internal sealed class ExpressReachableRulePlan
                 || declaration is not ExpressBoundDefinedType defined)
             {
                 var imported = _resolver.GetDefinedType(named.Declaration);
-                if (imported.Syntax.ChildRules("whereClause").Any())
+                if (AnalysisFor(imported).GetDeclaration(imported).ChildRules("whereClause").Any())
                 {
                     AddFailure(
                         named.Span,
@@ -372,7 +407,7 @@ internal sealed class ExpressReachableRulePlan
                 return;
             }
 
-            foreach (var rule in defined.Syntax.ChildRules("whereClause")
+            foreach (var rule in _analysis.GetDeclaration(defined).ChildRules("whereClause")
                          .SelectMany(clause => clause.ChildRules("domainRule")))
             {
                 VisitRule(rule);
@@ -394,7 +429,14 @@ internal sealed class ExpressReachableRulePlan
             }
         }
 
-        private void VisitRule(ExpressRuleSyntax rule)
+        private ExpressSchemaAnalysis AnalysisFor(ExpressBoundDeclaration declaration)
+        {
+            var schema = _compilation.Schemas.Single(candidate =>
+                ReferenceEquals(candidate.Identity, declaration.DeclaringSchema));
+            return _compilation.GetAnalysis(schema);
+        }
+
+        private void VisitRule(ExpressSemanticRule rule)
         {
             _reachableRules.Add(rule);
             VisitExpression(GetExpression(rule.RequiredChild("expression")), root: null);
@@ -402,7 +444,7 @@ internal sealed class ExpressReachableRulePlan
 
         private void VisitUniqueDependencies(ExpressBoundEntity entity)
         {
-            var uniqueClause = entity.Syntax.RequiredChild("entityBody")
+            var uniqueClause = _analysis.GetDeclaration(entity).RequiredChild("entityBody")
                 .ChildRules("uniqueClause")
                 .SingleOrDefault();
             if (uniqueClause is null)
@@ -411,7 +453,7 @@ internal sealed class ExpressReachableRulePlan
             }
 
             foreach (var referencedAttribute in uniqueClause.DescendantsAndSelf()
-                         .Where(candidate => candidate.Production == "referencedAttribute"))
+                         .Where(candidate => candidate.Role == "referencedAttribute"))
             {
                 var attribute = _schema.NameReferences
                     .Where(reference => reference.Target.Attribute is not null
@@ -749,8 +791,8 @@ internal sealed class ExpressReachableRulePlan
             }
 
             _reachableDerivedAttributes.Add(attribute);
-            var syntax = owner.Syntax.DescendantsAndSelf()
-                .Where(candidate => candidate.Production == "derivedAttr")
+            var syntax = _analysis.GetDeclaration(owner).DescendantsAndSelf()
+                .Where(candidate => candidate.Role == "derivedAttr")
                 .Single(candidate => SameStart(
                     candidate.RequiredChild("attributeDecl").Span,
                     attribute.Span));
@@ -770,7 +812,7 @@ internal sealed class ExpressReachableRulePlan
             if (declaration is ExpressBoundOpaqueDeclaration { DeclaredType: { } declaredType, } opaque)
             {
                 var functionHead = declaration.Kind == ExpressDeclarationKind.Function
-                    ? declaration.Syntax.RequiredChild("functionHead")
+                    ? _analysis.GetDeclaration(declaration).RequiredChild("functionHead")
                     : null;
                 var formalTypes = functionHead?.ChildRules("formalParameter")
                     .SelectMany(formal => formal.ChildRules("parameterId"))
@@ -782,7 +824,7 @@ internal sealed class ExpressReachableRulePlan
                     .OfType<ExpressBoundType>()
                     .ToArray() ?? Array.Empty<ExpressBoundType>();
                 var localTypes = declaration.Kind == ExpressDeclarationKind.Function
-                    ? declaration.Syntax.RequiredChild("algorithmHead")
+                    ? _analysis.GetDeclaration(declaration).RequiredChild("algorithmHead")
                         .ChildRules("localDecl")
                         .SelectMany(local => local.ChildRules("localVariable"))
                         .SelectMany(local => local.ChildRules("variableId"))
@@ -801,22 +843,22 @@ internal sealed class ExpressReachableRulePlan
                         declaration.Symbol))
                     .ToArray();
                 var genericNodes = declaration.Kind == ExpressDeclarationKind.Function
-                    ? declaration.Syntax.DescendantsAndSelf()
-                        .Where(node => node.Production is "genericType" or "genericEntityType")
+                    ? _analysis.GetDeclaration(declaration).DescendantsAndSelf()
+                        .Where(node => node.Role is "genericType" or "genericEntityType")
                         .ToArray()
                     : [];
                 var genericLabels = genericNodes
                     .SelectMany(node => node.ChildRules("typeLabel"))
-                    .Select(node => node.IdentifierToken().Text)
+                    .Select(node => node.Identifier!)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var hasUnlabeledGeneric = genericNodes.Any(node => !node.ChildRules("typeLabel").Any());
                 var hasConflictingGeneric = genericNodes
                     .Where(node => node.ChildRules("typeLabel").SingleOrDefault() is not null)
                     .GroupBy(
-                        node => node.ChildRules("typeLabel").Single().IdentifierToken().Text,
+                        node => node.ChildRules("typeLabel").Single().Identifier!,
                         StringComparer.OrdinalIgnoreCase)
-                    .Any(group => group.Select(node => node.Production).Distinct(StringComparer.Ordinal).Count() > 1);
+                    .Any(group => group.Select(node => node.Role).Distinct(StringComparer.Ordinal).Count() > 1);
                 var resultLabels = ExpressExpressionEmitter.GenericTypeLabels([declaredType,]);
                 var formalLabels = ExpressExpressionEmitter.GenericTypeLabels(formalTypes);
                 var localLabels = ExpressExpressionEmitter.GenericTypeLabels(localTypes);
@@ -825,7 +867,7 @@ internal sealed class ExpressReachableRulePlan
                 var lexicalBounds = _schema.NameReferences
                     .Select(reference => reference.Target)
                     .Where(candidate => candidate.Kind is ExpressBoundNameKind.Parameter or ExpressBoundNameKind.Variable
-                        && Contains(declaration.Syntax.Span, candidate.Span)
+                        && Contains(_analysis.GetDeclaration(declaration).Span, candidate.Span)
                         && candidate.Type is ExpressBoundScalarType
                         {
                             Kind: ExpressScalarKind.Integer or ExpressScalarKind.Number,
@@ -880,23 +922,24 @@ internal sealed class ExpressReachableRulePlan
                         var caller = _schema.Declarations
                             .OfType<ExpressBoundOpaqueDeclaration>()
                             .SingleOrDefault(candidate => candidate.Kind == ExpressDeclarationKind.Function
-                                && Contains(candidate.Syntax.Span, call.Span));
+                                && Contains(AnalysisFor(candidate).GetDeclaration(candidate).Span, call.Span));
                         if (caller?.DeclaredType is null)
                         {
                             return false;
                         }
 
-                        var callerHead = caller.Syntax.RequiredChild("functionHead");
-                        var callerGenericNodes = caller.Syntax.DescendantsAndSelf()
-                            .Where(node => node.Production is "genericType" or "genericEntityType")
+                        var callerRule = AnalysisFor(caller).GetDeclaration(caller);
+                        var callerHead = callerRule.RequiredChild("functionHead");
+                        var callerGenericNodes = callerRule.DescendantsAndSelf()
+                            .Where(node => node.Role is "genericType" or "genericEntityType")
                             .ToArray();
                         if (callerGenericNodes.Any(node => !node.ChildRules("typeLabel").Any())
                             || callerGenericNodes
                                 .Where(node => node.ChildRules("typeLabel").SingleOrDefault() is not null)
                                 .GroupBy(
-                                    node => node.ChildRules("typeLabel").Single().IdentifierToken().Text,
+                                    node => node.ChildRules("typeLabel").Single().Identifier!,
                                     StringComparer.OrdinalIgnoreCase)
-                                .Any(group => group.Select(node => node.Production)
+                                .Any(group => group.Select(node => node.Role)
                                     .Distinct(StringComparer.Ordinal)
                                     .Count() > 1))
                         {
@@ -912,7 +955,7 @@ internal sealed class ExpressReachableRulePlan
                                 .SingleOrDefault()?.Type)
                             .OfType<ExpressBoundType>()
                             .ToArray();
-                        var callerLocalTypes = caller.Syntax.RequiredChild("algorithmHead")
+                        var callerLocalTypes = callerRule.RequiredChild("algorithmHead")
                             .ChildRules("localDecl")
                             .SelectMany(local => local.ChildRules("localVariable"))
                             .SelectMany(local => local.ChildRules("variableId"))
@@ -972,7 +1015,7 @@ internal sealed class ExpressReachableRulePlan
                 if (!_resolver.IsSupported(declaredType) && !supportsInferredGenericResult)
                 {
                     AddFailure(
-                        declaration.Syntax.Span,
+                        _analysis.GetDeclaration(declaration).Span,
                         $"Reachable EXPRESS {declaration.Kind.ToString()} '{declaration.Name}' has no generated result type.");
                 }
 
@@ -1024,7 +1067,7 @@ internal sealed class ExpressReachableRulePlan
 
             var span = dependency switch
             {
-                ExpressBoundDeclaration declaration => declaration.Syntax.Span,
+                ExpressBoundDeclaration declaration => AnalysisFor(declaration).GetDeclaration(declaration).Span,
                 ExpressBoundAttribute attribute => attribute.Span,
                 _ => _schema.Identity.Span,
             };
@@ -1053,30 +1096,31 @@ internal sealed class ExpressReachableRulePlan
             ExpressBoundDeclaration declaration)
         {
             return _schema.Expressions
-                .Where(expression => Contains(declaration.Syntax.Span, expression.Span));
+                .Where(expression => Contains(AnalysisFor(declaration).GetDeclaration(declaration).Span, expression.Span));
         }
 
-        private ExpressBoundExpression GetExpression(ExpressRuleSyntax syntax)
+        private ExpressBoundExpression GetExpression(ExpressSemanticRule syntax)
         {
             return _schema.Expressions.Single(expression => SameSpan(expression.Span, syntax.Span));
         }
 
         private void ValidateFunctionShape(ExpressBoundDeclaration declaration)
         {
-            var statements = declaration.Syntax.ChildRules("stmt").ToArray();
-            var operations = declaration.Syntax.DescendantsAndSelf()
-                .Where(candidate => candidate.Production == "stmt")
+            var declarationRule = _analysis.GetDeclaration(declaration);
+            var statements = declarationRule.ChildRules("stmt").ToArray();
+            var operations = declarationRule.DescendantsAndSelf()
+                .Where(candidate => candidate.Role == "stmt")
                 .Select(statement => statement.ChildRules().Single())
                 .ToArray();
             if (statements.Length > 0
                 && operations.All(operation =>
-                    operation.Production is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt" or "repeatStmt" or "returnStmt")
-                && operations.Where(operation => operation.Production == "assignmentStmt")
+                    operation.Role is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt" or "repeatStmt" or "returnStmt")
+                && operations.Where(operation => operation.Role == "assignmentStmt")
                     .All(assignment =>
                     {
                         var qualifiers = assignment.ChildRules("qualifier").ToArray();
                         if (qualifiers.Any(qualifier =>
-                                qualifier.ChildRules().Single().Production == "attributeQualifier"))
+                                qualifier.ChildRules().Single().Role == "attributeQualifier"))
                         {
                             var targetSyntax = assignment.RequiredChild("generalRef");
                             var target = _schema.NameReferences
@@ -1096,7 +1140,7 @@ internal sealed class ExpressReachableRulePlan
                         return qualifiers.All(qualifier =>
                         {
                             var operation = qualifier.ChildRules().Single();
-                            if (operation.Production == "indexQualifier")
+                            if (operation.Role == "indexQualifier")
                             {
                                 return !operation.ChildRules("index2").Any();
                             }
@@ -1105,53 +1149,53 @@ internal sealed class ExpressReachableRulePlan
                                 .Where(reference => Contains(operation.Span, reference.Span))
                                 .Select(reference => reference.Target.Attribute)
                                 .SingleOrDefault(candidate => candidate is not null);
-                            return operation.Production == "attributeQualifier"
+                            return operation.Role == "attributeQualifier"
                                 && attribute?.Kind == ExpressAttributeKind.Explicit;
                         });
                     })
-                && operations.Where(operation => operation.Production == "repeatStmt")
+                && operations.Where(operation => operation.Role == "repeatStmt")
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control
                         && control.ChildRules("incrementControl").Count() == 1
                         && !control.ChildRules("whileControl").Any()
                         && !control.ChildRules("untilControl").Any())
-                && operations.Where(operation => operation.Production == "caseStmt")
+                && operations.Where(operation => operation.Role == "caseStmt")
                     .All(caseStatement => caseStatement.ChildRules("caseAction")
                             .All(action => action.ChildRules("caseLabel").Any()
                                 && action.ChildRules("stmt").Count() == 1)
                         && caseStatement.ChildRules("stmt").Count() <= 1)
-                && operations.Where(operation => operation.Production == "returnStmt")
+                && operations.Where(operation => operation.Role == "returnStmt")
                     .All(returnStatement => returnStatement.ChildRules("expression").Count() == 1)
                 && AlwaysReturns(statements.Last())
-                && !declaration.Syntax.RequiredChild("algorithmHead")
+                && !declarationRule.RequiredChild("algorithmHead")
                     .ChildRules()
-                    .Any(child => child.Production is "constantDecl" or "declaration"))
+                    .Any(child => child.Role is "constantDecl" or "declaration"))
             {
                 return;
             }
 
             _failures.Add(new(
                 _schema,
-                declaration.Syntax.Span.Start,
+                declarationRule.Span.Start,
                 $"Reachable EXPRESS function '{declaration.Name}' uses an algorithm statement shape that has no static generator."));
         }
 
-        private bool AlwaysReturns(ExpressRuleSyntax statement)
+        private bool AlwaysReturns(ExpressSemanticRule statement)
         {
-            var operation = statement.Production == "stmt"
+            var operation = statement.Role == "stmt"
                 ? statement.ChildRules().Single()
                 : statement;
-            if (operation.Production == "returnStmt")
+            if (operation.Role == "returnStmt")
             {
                 return operation.ChildRules("expression").Count() == 1;
             }
 
-            if (operation.Production == "compoundStmt")
+            if (operation.Role == "compoundStmt")
             {
                 var statements = operation.ChildRules("stmt").ToArray();
                 return statements.Length > 0 && AlwaysReturns(statements.Last());
             }
 
-            if (operation.Production == "caseStmt")
+            if (operation.Role == "caseStmt")
             {
                 var otherwise = operation.ChildRules("stmt").SingleOrDefault();
                 return ((otherwise is not null && AlwaysReturns(otherwise))
@@ -1161,31 +1205,14 @@ internal sealed class ExpressReachableRulePlan
                         AlwaysReturns(action.RequiredChild("stmt")));
             }
 
-            if (operation.Production != "ifStmt" || !operation.HasDirectToken("ELSE"))
+            if (operation.Role != "ifStmt" || operation.ElseStatements.Count == 0)
             {
                 return false;
             }
 
-            var thenStatements = new List<ExpressRuleSyntax>();
-            var elseStatements = new List<ExpressRuleSyntax>();
-            var inElse = false;
-            foreach (var child in operation.Children)
-            {
-                if (child is ExpressTokenSyntax token
-                    && string.Equals(token.Text, "ELSE", StringComparison.OrdinalIgnoreCase))
-                {
-                    inElse = true;
-                }
-                else if (child is ExpressRuleSyntax { Production: "stmt", } nested)
-                {
-                    (inElse ? elseStatements : thenStatements).Add(nested);
-                }
-            }
-
-            return thenStatements.Count > 0
-                && elseStatements.Count > 0
-                && AlwaysReturns(thenStatements.Last())
-                && AlwaysReturns(elseStatements.Last());
+            return operation.ThenStatements.Count > 0
+                && AlwaysReturns(operation.ThenStatements[operation.ThenStatements.Count - 1])
+                && AlwaysReturns(operation.ElseStatements[operation.ElseStatements.Count - 1]);
         }
 
         private void ValidateDependencyResult(
@@ -1203,12 +1230,12 @@ internal sealed class ExpressReachableRulePlan
                 $"Reachable EXPRESS dependency '{name}' can evaluate to the indeterminate value but its generated result is mandatory.");
         }
 
-        private static bool IsFunctionReturnExpression(
+        private bool IsFunctionReturnExpression(
             ExpressBoundOpaqueDeclaration declaration,
             ExpressBoundExpression expression)
         {
-            return declaration.Syntax.DescendantsAndSelf()
-                .Where(candidate => candidate.Production == "returnStmt")
+            return _analysis.GetDeclaration(declaration).DescendantsAndSelf()
+                .Where(candidate => candidate.Role == "returnStmt")
                 .SelectMany(candidate => candidate.ChildRules("expression"))
                 .Any(candidate => SameSpan(candidate.Span, expression.Span));
         }
@@ -1235,15 +1262,16 @@ internal sealed class ExpressReachableRulePlan
 
         private void ValidateRuleShape(ExpressBoundDeclaration declaration)
         {
-            if (!declaration.Syntax.RequiredChild("algorithmHead").ChildRules().Any()
-                && !declaration.Syntax.ChildRules("stmt").Any())
+            var declarationRule = _analysis.GetDeclaration(declaration);
+            if (!declarationRule.RequiredChild("algorithmHead").ChildRules().Any()
+                && !declarationRule.ChildRules("stmt").Any())
             {
                 return;
             }
 
             _failures.Add(new(
                 _schema,
-                declaration.Syntax.Span.Start,
+                declarationRule.Span.Start,
                 $"Validation-root EXPRESS RULE '{declaration.Name}' contains algorithm statements that cannot be skipped."));
         }
 

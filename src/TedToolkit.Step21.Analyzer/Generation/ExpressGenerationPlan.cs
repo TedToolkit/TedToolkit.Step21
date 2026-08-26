@@ -93,6 +93,7 @@ internal sealed class ExpressGenerationPlan
             schema => schema,
             schema => ExpressReachableRulePlan.Create(
                 schema,
+                compilation,
                 valueResolver,
                 entityPlan.Projections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray(),
                 complexProjections.Where(projection => ReferenceEquals(projection.Schema, schema)).ToArray()));

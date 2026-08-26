@@ -20,7 +20,7 @@ internal sealed class ExpressSemanticRule
         string role,
         ExpressSourceSpan span,
         string sourceText,
-        string? identifier,
+        IEnumerable<string> identifiers,
         IEnumerable<ExpressSemanticRule> children,
         IEnumerable<ExpressSemanticRule> thenStatements,
         IEnumerable<ExpressSemanticRule> elseStatements)
@@ -28,7 +28,7 @@ internal sealed class ExpressSemanticRule
         Role = role;
         Span = span;
         SourceText = sourceText;
-        Identifier = identifier;
+        Identifiers = new ReadOnlyCollection<string>(identifiers.ToArray());
         Children = new ReadOnlyCollection<ExpressSemanticRule>(children.ToArray());
         ThenStatements = new ReadOnlyCollection<ExpressSemanticRule>(thenStatements.ToArray());
         ElseStatements = new ReadOnlyCollection<ExpressSemanticRule>(elseStatements.ToArray());
@@ -52,7 +52,18 @@ internal sealed class ExpressSemanticRule
     /// <summary>
     /// Gets the declaration identifier when this semantic role carries one.
     /// </summary>
-    internal string? Identifier { get; }
+    internal string? Identifier
+    {
+        get
+        {
+            return Identifiers.Count == 0 ? null : Identifiers[0];
+        }
+    }
+
+    /// <summary>
+    /// Gets source identifiers carried by this semantic role in source order.
+    /// </summary>
+    internal IReadOnlyList<string> Identifiers { get; }
 
     /// <summary>
     /// Gets direct semantic children in source order.
@@ -141,14 +152,15 @@ internal sealed class ExpressSemanticRule
             }
         }
 
-        var identifier = syntax.DescendantTokens()
-            .FirstOrDefault(token => string.Equals(token.TokenName, "SimpleId", StringComparison.Ordinal))
-            ?.Text;
+        var identifiers = syntax.DescendantTokens()
+            .Where(token => string.Equals(token.TokenName, "SimpleId", StringComparison.Ordinal))
+            .Select(token => token.Text)
+            .ToArray();
         return new(
             syntax.Production,
             syntax.Span,
             syntax.TokenText(),
-            identifier,
+            identifiers,
             children,
             thenStatements,
             elseStatements);

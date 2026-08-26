@@ -7,7 +7,7 @@
 
 using System.Collections.ObjectModel;
 
-using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -88,8 +88,8 @@ internal sealed class ExpressComplexEntityProjection
         var result = new List<ExpressComplexEntityProjection>();
         foreach (var root in projections)
         {
-            var expression = root.Entity.Syntax.DescendantsAndSelf()
-                .FirstOrDefault(rule => rule.Production == "supertypeExpression");
+            var expression = root.Analysis.GetDeclaration(root.Entity).DescendantsAndSelf()
+                .FirstOrDefault(rule => rule.Role == "supertypeExpression");
             var leafSets = expression is null
                 ? CreateUnconstrainedSiblingSets(root, projections)
                 : EvaluateSupertypeExpression(expression);
@@ -188,7 +188,7 @@ internal sealed class ExpressComplexEntityProjection
         return result;
     }
 
-    private static List<IReadOnlyList<string>> EvaluateSupertypeExpression(ExpressRuleSyntax expression)
+    private static List<IReadOnlyList<string>> EvaluateSupertypeExpression(ExpressSemanticRule expression)
     {
         var factors = expression.ChildRules("supertypeFactor")
             .Select(EvaluateSupertypeFactor)
@@ -209,7 +209,7 @@ internal sealed class ExpressComplexEntityProjection
         return result;
     }
 
-    private static List<IReadOnlyList<string>> EvaluateSupertypeFactor(ExpressRuleSyntax factor)
+    private static List<IReadOnlyList<string>> EvaluateSupertypeFactor(ExpressSemanticRule factor)
     {
         var result = new List<IReadOnlyList<string>>() { Array.Empty<string>(), };
         foreach (var term in factor.ChildRules("supertypeTerm"))
@@ -221,12 +221,12 @@ internal sealed class ExpressComplexEntityProjection
         return result;
     }
 
-    private static List<IReadOnlyList<string>> EvaluateSupertypeTerm(ExpressRuleSyntax term)
+    private static List<IReadOnlyList<string>> EvaluateSupertypeTerm(ExpressSemanticRule term)
     {
         var reference = term.ChildRules("entityRef").SingleOrDefault();
         if (reference is not null)
         {
-            return new() { new[] { reference.IdentifierToken().Text, }, };
+            return new() { new[] { reference.Identifier!, }, };
         }
 
         var oneOf = term.ChildRules("oneOf").SingleOrDefault();

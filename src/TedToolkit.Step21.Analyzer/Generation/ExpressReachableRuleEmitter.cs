@@ -11,6 +11,7 @@ using TedToolkit.RoslynHelper;
 using TedToolkit.RoslynHelper.Syntaxes;
 
 using TedToolkit.Step21.Analyzer.Express;
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -416,7 +417,8 @@ internal static class ExpressReachableRuleEmitter
         Func<string, string> allocateTemporaryName = prefix => prefix
             + (temporaryOrdinal++).ToString(CultureInfo.InvariantCulture);
         AddPopulationParameter(method);
-        var expression = plan.GetExpression(declaration.Syntax.RequiredChild("expression"));
+        var expression = plan.GetExpression(
+            plan.Analysis.GetDeclaration(declaration).RequiredChild("expression"));
         var generated = ExpressExpressionEmitter.Emit(
             expression,
             CreateContext(
@@ -453,12 +455,13 @@ internal static class ExpressReachableRuleEmitter
         var lexicalNames = new Dictionary<string, (string Code, ExpressBoundType Type)>(
             StringComparer.OrdinalIgnoreCase);
         var formalTypes = new List<ExpressBoundType>();
-        var head = declaration.Syntax.RequiredChild("functionHead");
+        var declarationRule = plan.Analysis.GetDeclaration(declaration);
+        var head = declarationRule.RequiredChild("functionHead");
         foreach (var formal in head.ChildRules("formalParameter"))
         {
             foreach (var parameter in formal.ChildRules("parameterId"))
             {
-                var name = parameter.IdentifierToken().Text;
+                var name = parameter.Identifier!;
                 var boundName = plan.Schema.NameReferences
                     .Select(reference => reference.Target)
                     .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
@@ -478,7 +481,7 @@ internal static class ExpressReachableRuleEmitter
         AddPopulationParameter(method);
         var determinateLexicals = new HashSet<ExpressBoundName>();
         var localTypes = new List<ExpressBoundType>();
-        var algorithmHead = declaration.Syntax.RequiredChild("algorithmHead");
+        var algorithmHead = declarationRule.RequiredChild("algorithmHead");
         foreach (var local in algorithmHead.ChildRules("localDecl")
                      .SelectMany(localDeclaration => localDeclaration.ChildRules("localVariable")))
         {
@@ -540,7 +543,7 @@ internal static class ExpressReachableRuleEmitter
             string,
             (string StorageCode, string Code, ExpressBoundType Type)>(
             StringComparer.OrdinalIgnoreCase);
-        foreach (var statement in declaration.Syntax.ChildRules("stmt"))
+        foreach (var statement in declarationRule.ChildRules("stmt"))
         {
             if (!EmitFunctionStatement(
                 plan,
@@ -564,7 +567,7 @@ internal static class ExpressReachableRuleEmitter
 
     private static bool EmitFunctionStatement(
         ExpressReachableRulePlan plan,
-        ExpressRuleSyntax statement,
+        ExpressSemanticRule statement,
         ExpressBoundType functionResultType,
         bool canReturnIndeterminate,
         IStatementOwner owner,
@@ -579,10 +582,10 @@ internal static class ExpressReachableRuleEmitter
         Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>?
             scalarNarrowings = null)
     {
-        var operation = statement.Production == "stmt"
+        var operation = statement.Role == "stmt"
             ? statement.ChildRules().Single()
             : statement;
-        if (operation.Production == "assignmentStmt")
+        if (operation.Role == "assignmentStmt")
         {
             var targetSyntax = operation.RequiredChild("generalRef");
             var target = plan.Schema.NameReferences
@@ -921,7 +924,7 @@ internal static class ExpressReachableRuleEmitter
             return true;
         }
 
-        if (operation.Production == "returnStmt")
+        if (operation.Role == "returnStmt")
         {
             var boundExpression = plan.GetExpression(operation.RequiredChild("expression"));
             var expression = ExpressExpressionEmitter.Emit(
@@ -1039,11 +1042,11 @@ internal static class ExpressReachableRuleEmitter
             return false;
         }
 
-        if (operation.Production == "repeatStmt")
+        if (operation.Role == "repeatStmt")
         {
             var increment = operation.RequiredChild("repeatControl").RequiredChild("incrementControl");
             var variable = increment.RequiredChild("variableId");
-            var variableName = variable.IdentifierToken().Text;
+            var variableName = variable.Identifier!;
             var generatedName = "__repeat_"
                 + ExpressEntityProjection.ToPascalCase(variableName)
                 + "_"
@@ -1308,7 +1311,7 @@ internal static class ExpressReachableRuleEmitter
             return true;
         }
 
-        if (operation.Production == "compoundStmt")
+        if (operation.Role == "compoundStmt")
         {
             var fallsThrough = true;
             foreach (var nested in operation.ChildRules("stmt"))
@@ -1338,7 +1341,7 @@ internal static class ExpressReachableRuleEmitter
             return fallsThrough;
         }
 
-        if (operation.Production == "caseStmt")
+        if (operation.Role == "caseStmt")
         {
             var selectorSyntax = operation.RequiredChild("selector").RequiredChild("expression");
             var selector = plan.GetExpression(selectorSyntax);
@@ -1704,21 +1707,8 @@ internal static class ExpressReachableRuleEmitter
                 scalarNarrowings));
         var conditionCode = $"({ExpressExpressionEmitter.AsLogical(boundCondition, condition.Code)}) "
             + "== global::TedToolkit.Step21.LogicalValue.True";
-        var thenStatements = new List<ExpressRuleSyntax>();
-        var elseStatements = new List<ExpressRuleSyntax>();
-        var inElse = false;
-        foreach (var child in operation.Children)
-        {
-            if (child is ExpressTokenSyntax token
-                && string.Equals(token.Text, "ELSE", StringComparison.OrdinalIgnoreCase))
-            {
-                inElse = true;
-            }
-            else if (child is ExpressRuleSyntax { Production: "stmt", } nested)
-            {
-                (inElse ? elseStatements : thenStatements).Add(nested);
-            }
-        }
+        var thenStatements = operation.ThenStatements;
+        var elseStatements = operation.ElseStatements;
 
         var thenAliases = sizeAliases is null
             ? null
@@ -3003,7 +2993,7 @@ internal static class ExpressReachableRuleEmitter
         string populationExpression)
     {
         var declaration = (ExpressBoundOpaqueDeclaration)plan.GetDeclaration(symbol);
-        var parameterTypes = declaration.Syntax.RequiredChild("functionHead")
+        var parameterTypes = plan.Analysis.GetDeclaration(declaration).RequiredChild("functionHead")
             .ChildRules("formalParameter")
             .SelectMany(formal => formal.ChildRules("parameterId"))
             .Select(parameter => plan.Schema.NameReferences
@@ -3059,7 +3049,7 @@ internal static class ExpressReachableRuleEmitter
         else
         {
             var function = (ExpressBoundOpaqueDeclaration)declaration;
-            formalTypes = function.Syntax.RequiredChild("functionHead")
+            formalTypes = plan.Analysis.GetDeclaration(function).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
                 .Select(parameter => plan.Schema.NameReferences
