@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -598,7 +599,7 @@ internal sealed class PackageTests
         var lines = new List<string>();
         foreach (var type in assembly.GetExportedTypes().OrderBy(type => type.FullName, StringComparer.Ordinal))
         {
-            lines.Add($"type {FormatType(type)} : {FormatType(type.BaseType)}");
+            lines.Add($"{FormatTypeKind(type)} {FormatType(type)} : {FormatType(type.BaseType)}");
             lines.AddRange(type.GetInterfaces()
                 .OrderBy(FormatType, StringComparer.Ordinal)
                 .Select(contract => $"  interface {FormatType(contract)}"));
@@ -614,7 +615,8 @@ internal sealed class PackageTests
                 .Where(field => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly)
                 .Select(field =>
                     $"  field {FormatVisibility(field)}{(field.IsStatic ? "static " : string.Empty)}"
-                    + $"{FormatType(new NullabilityInfoContext().Create(field))} {field.Name}")
+                    + $"{FormatType(new NullabilityInfoContext().Create(field))} {field.Name}"
+                    + (field.IsLiteral ? $" = {FormatConstant(field.GetRawConstantValue())}" : string.Empty))
                 .OrderBy(value => value, StringComparer.Ordinal));
             lines.AddRange(type.GetProperties(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
@@ -625,7 +627,7 @@ internal sealed class PackageTests
                     var accessor = property.GetAccessors(nonPublic: true).First(IsPublicContract);
                     return $"  property {FormatVisibility(accessor)}{(accessor.IsStatic ? "static " : string.Empty)}"
                         + $"{FormatType(new NullabilityInfoContext().Create(property))} {property.Name}"
-                        + (property.SetMethod is null ? " { get; }" : " { get; set; }");
+                        + FormatAccessors(property);
                 })
                 .OrderBy(value => value, StringComparer.Ordinal));
             lines.AddRange(type.GetMethods(
@@ -651,15 +653,72 @@ internal sealed class PackageTests
     private static string FormatVisibility(FieldInfo field) => field.IsPublic ? string.Empty : "protected ";
 
     private static string FormatParameters(IEnumerable<ParameterInfo> parameters) =>
-        string.Join(", ", parameters.Select(parameter =>
-            $"{FormatType(new NullabilityInfoContext().Create(parameter))} {parameter.Name}"));
+        string.Join(", ", parameters.Select(FormatParameter));
+
+    private static string FormatParameter(ParameterInfo parameter)
+    {
+        var modifier = parameter.IsOut
+            ? "out "
+            : parameter.ParameterType.IsByRef && parameter.IsIn
+                ? "in "
+                : parameter.ParameterType.IsByRef
+                    ? "ref "
+                    : string.Empty;
+        var defaultValue = parameter.HasDefaultValue
+            ? $" = {FormatConstant(parameter.DefaultValue)}"
+            : string.Empty;
+        var nullability = new NullabilityInfoContext().Create(parameter);
+        var parameterType = parameter.ParameterType.IsByRef
+            ? $"{FormatType(parameter.ParameterType.GetElementType())}"
+                + (nullability.ReadState == NullabilityState.Nullable ? "?" : string.Empty)
+            : FormatType(nullability);
+        return $"{modifier}{parameterType} {parameter.Name}{defaultValue}";
+    }
+
+    private static string FormatAccessors(PropertyInfo property)
+    {
+        var accessors = new List<string>();
+        if (property.GetMethod is not null && IsPublicContract(property.GetMethod))
+            accessors.Add($"{FormatVisibility(property.GetMethod)}get;");
+        if (property.SetMethod is not null && IsPublicContract(property.SetMethod))
+            accessors.Add($"{FormatVisibility(property.SetMethod)}set;");
+        return $" {{ {string.Join(' ', accessors)} }}";
+    }
+
+    private static string FormatConstant(object? value) => value switch
+    {
+        null => "null",
+        string text => $"\"{text}\"",
+        char character => $"'{character}'",
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture)!,
+    };
+
+    private static string FormatTypeKind(Type type)
+    {
+        if (type.IsInterface)
+            return "interface";
+        if (type.IsEnum)
+            return "enum";
+        if (type.IsValueType)
+        {
+            var isReadOnly = type.CustomAttributes.Any(attribute =>
+                attribute.AttributeType.FullName == "System.Runtime.CompilerServices.IsReadOnlyAttribute");
+            return isReadOnly ? "readonly struct" : "struct";
+        }
+
+        if (type.IsAbstract && type.IsSealed)
+            return "static class";
+        if (type.IsAbstract)
+            return "abstract class";
+        return type.IsSealed ? "sealed class" : "class";
+    }
 
     private static string FormatType(NullabilityInfo nullability)
     {
         var type = nullability.Type;
         var nullableSuffix = nullability.ReadState == NullabilityState.Nullable ? "?" : string.Empty;
         if (type.IsByRef)
-            return $"{FormatType(type.GetElementType())}&";
+            return $"{FormatType(type.GetElementType())}{nullableSuffix}&";
         if (type.IsArray)
             return $"{FormatType(nullability.ElementType!)}[]{nullableSuffix}";
         if (!type.IsGenericType)

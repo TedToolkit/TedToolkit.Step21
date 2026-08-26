@@ -111,6 +111,7 @@ try {
         'build', $packageProject,
         '--configuration', 'Release',
         '--no-restore',
+        '--no-incremental',
         '--disable-build-servers')
     Invoke-DotNet @(
         'pack', $runtimeProject,
