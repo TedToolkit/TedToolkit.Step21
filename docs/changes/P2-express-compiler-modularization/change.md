@@ -3,12 +3,14 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-preserving-refactor -->
-<!-- change-status: draft -->
+<!-- change-status: approved -->
 <!-- delivery-shape: single -->
 
 - Priority: P2
-<!-- approval-source: none -->
+<!-- approval-source: user-explicit-approval-2026-08-26 -->
 <!-- candidate-binding: none -->
+
+- Approval: 用户于 2026-08-26 明确批准；此前已明确要求按 ADR-0006 → AP203 → compiler modularization 的顺序继续执行。
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
