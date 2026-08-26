@@ -3,12 +3,16 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-preserving-refactor -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: single -->
+
+## Status
+
+Completed
 
 - Priority: P2
 <!-- approval-source: user-explicit-approval-2026-08-26 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:94728d649d63b85633bd375b296b87f808609377 -->
 
 - Approval: 用户于 2026-08-26 明确批准；此前已明确要求按 ADR-0006 → AP203 → compiler modularization 的顺序继续执行。
 
@@ -107,3 +111,12 @@
 ## Completion
 
 完成需要：六项 invariant 与 required structural completion gate 在同一候选 revision 上全部通过；baseline proof-only commit 在首个 production 修改前已独立评审，baseline/candidate 生成与诊断比较可从干净检出重复执行；完整 Release、fast、integration、package 和 AOT gates 为绿色；无 snapshot 被用于掩盖差异；实际内部阶段边界和仍然存在的例外在 maintainer documentation 中准确记录；独立 implementation review 确认无行为、API、package 或 architecture deviation。
+
+## Completion evidence
+
+- Implementation candidate `94728d649d63b85633bd375b296b87f808609377` was independently reviewed Ready with no blocking, important, advisory, or design-deviation finding. The delivery range is `a90ed3f13ce0e543904bbaaa9d0188747d73aef2..94728d649d63b85633bd375b296b87f808609377`.
+- The frozen compiler baseline passed 1/1 with approved manifest SHA-256 `1D22E34A4B9F8F7CF969291745EF79D8D7FF484FDA88BB58F60C34EDB3327D47`; no approved baseline asset was changed to accept the refactor.
+- The non-incremental Release solution build completed with 0 warnings and 0 errors. Fast TUnit passed 351/351; integration passed 7 enabled tests with the single explicitly opt-in external-corpus test skipped by contract.
+- Stage-boundary tests passed 6/6 and prove one-way owners, transitive syntax isolation, immutable projections and concrete handoff collections, and distinct non-partial binder/facade ownership. Maintainer documentation records the actual five-stage inputs and outputs with no approved exception.
+- AP203 offline package verification completed the 200-entity fixture journey, semantic round trip, 9-failure/zero-byte invalid edit rejection, and positioned unsupported-extension rejection. The pinned schema and fixture SHA-256 values remained `19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251` and `2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62`.
+- Generic and AP203 trimmed Native AOT package consumers passed with `win-x64` executables of 3,520,000 and 39,154,176 bytes respectively; the AP203 binary completed the same fixed read/edit/validate/write/reread and rejection journey.
