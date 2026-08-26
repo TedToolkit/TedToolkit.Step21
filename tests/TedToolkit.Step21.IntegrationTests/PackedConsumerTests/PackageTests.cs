@@ -111,6 +111,11 @@ internal sealed class PackageTests
                 await Assert.That(fixtureOutput).Contains(
                     "AP203_FIXTURE_OK entities=200 products=1 faces=6 edges=12 vertices=8 points=27 units=3");
                 await Assert.That(fixtureOutput).Contains(
+                    "AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 "
+                    + "vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3");
+                await Assert.That(fixtureOutput).Contains(
+                    "AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0");
+                await Assert.That(fixtureOutput).Contains(
                     "AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6");
                 await Assert.That(Directory.Exists(generatedRoot)
                     && Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories).Any()).IsFalse();
