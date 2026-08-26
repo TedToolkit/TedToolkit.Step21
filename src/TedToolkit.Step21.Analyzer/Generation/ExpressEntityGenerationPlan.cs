@@ -25,7 +25,7 @@ internal sealed class ExpressEntityGenerationPlan
         IEnumerable<ExpressEntityGenerationFailure> failures)
     {
         Projections = new ReadOnlyCollection<ExpressEntityProjection>(projections.ToArray());
-        InvalidSchemas = new HashSet<ExpressBoundSchema>(invalidSchemas);
+        InvalidSchemas = new ReadOnlyCollection<ExpressBoundSchema>(invalidSchemas.ToArray());
         Collisions = new ReadOnlyCollection<ExpressEntityGenerationCollision>(collisions.ToArray());
         Failures = new ReadOnlyCollection<ExpressEntityGenerationFailure>(failures.ToArray());
     }

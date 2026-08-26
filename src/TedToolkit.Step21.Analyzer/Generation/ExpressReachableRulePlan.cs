@@ -18,7 +18,7 @@ namespace TedToolkit.Step21.Analyzer.Generation;
 /// </summary>
 internal sealed class ExpressReachableRulePlan
 {
-    private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
+    private readonly ReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
 
     private ExpressReachableRulePlan(
         ExpressBoundSchema schema,
@@ -37,9 +37,11 @@ internal sealed class ExpressReachableRulePlan
         Compilation = compilation;
         Analysis = compilation.GetAnalysis(schema);
         Resolver = resolver;
-        _declarations = declarations;
-        EntityProjections = entityProjections;
-        ComplexEntityProjections = complexEntityProjections;
+        _declarations = new(
+            declarations.ToDictionary(pair => pair.Key, pair => pair.Value));
+        EntityProjections = new ReadOnlyCollection<ExpressEntityProjection>(entityProjections.ToArray());
+        ComplexEntityProjections = new ReadOnlyCollection<ExpressComplexEntityProjection>(
+            complexEntityProjections.ToArray());
         ReachableDeclarations = new ReadOnlyCollection<ExpressBoundDeclaration>(
             reachableDeclarations.ToArray());
         ReachableDerivedAttributes = new ReadOnlyCollection<ExpressBoundAttribute>(

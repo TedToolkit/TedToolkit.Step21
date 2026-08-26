@@ -83,7 +83,7 @@ The compiler inside the Analyzer is one deterministic entry composed from five o
 | Stage | Owner | Input | Immutable output | May depend on |
 | --- | --- | --- | --- | --- |
 | Syntax | `ExpressSyntaxStage` | Complete normalized `.exp` source set | `ExpressSyntaxCompilation` with parsed schemas and ordered syntax diagnostics | Parser artifacts and syntax nodes only |
-| Closed-set binding | `ExpressClosedSetBindingStage` | Complete syntax compilation | `ExpressSchemaCompilation` with resolved schemas, declarations, imports, names, types, and ordered binding diagnostics | Syntax output |
+| Closed-set binding | `ExpressClosedSetBindingStage` | Complete syntax compilation | `ExpressBindingCompilation` with a syntax-free `ExpressSchemaCompilation`, ordered diagnostics, and binding-owned declaration syntax consumed by analysis | Syntax output |
 | Expression/flow analysis | `ExpressExpressionFlowAnalysisStage` | Closed-set binding compilation | `ExpressAnalyzedCompilation`, typed expressions, flow facts, and token-free `ExpressSemanticRule` lowering input | Binding output |
 | Generation planning | `ExpressGenerationPlan` and projection/plan types | Analyzed compilation | Complete immutable value, entity, complex-entity, reachable-rule, failure, and withholding plans | Analysis output and syntax-independent mapping support |
 | Source emission | `ExpressSourceEmissionStage` and emitter types | One complete generation plan | Ordered diagnostics and deterministic Roslyn generated sources | Generation plan and RoslynHelper composition |
