@@ -3,9 +3,10 @@
 
 This file is the only mutable work-item status source. Item contracts remain stable after approval.
 
-Status evidence as of this revision: AP203-001 through AP203-005 are integrated with complete proof
-and `Ready` reviews. AP203-005 range `3b4e4b1..2f18b16` supplies the complete package-consumer journey
-to AP203-006; the fixed fixture and supported boundary remain those accepted by AP203-004.
+Status evidence as of this revision: AP203-001 through AP203-006 are integrated with complete proof
+and `Ready` reviews. AP203-006 implementation/remediation revisions `beb7aad` and `027b517` execute the
+AP203-005 journey through repeat clean/offline package and trimmed Native AOT gates and close the
+ADR-0006 compatibility contract; the fixed fixture and supported boundary remain those accepted by AP203-004.
 `Implemented` means the item has complete evidence; `Implementing` means implementation exists or has
 started but its authoritative completion record or review is not yet closed.
 
@@ -16,4 +17,4 @@ started but its authoritative completion record or review is not yet closed.
 | AP203-003 | Match standard schema identifiers without changing retained header text | Owns AC-03 / Owns AC-04 / Owns AC-08 / Supports AC-05 | None | In-memory identifier compatibility contract tests | Implemented | `work-items/AP203-003-schema-identifier-matching.md` |
 | AP203-004 | Read the fixed OCCT AP203 sample atomically through generated types | Owns AC-05 / Owns AC-09 / Supports AC-06 / Supports AC-11 / Supports AC-12 | AP203-001: generated AP203 surface; AP203-002: usable package assembly; AP203-003: verified identifier matching | Checked-in OCCT fixture integration tests | Implemented | `work-items/AP203-004-occt-schema-bound-read.md` |
 | AP203-005 | Preserve AP203 semantics through edit, validation, write, and reread | Owns AC-06 / Owns AC-07 / Supports AC-11 | AP203-004: verified typed fixture graph and observable semantic baseline | Semantic round-trip and atomic-write integration tests | Implemented | `work-items/AP203-005-semantic-round-trip.md` |
-| AP203-006 | Prove the versioned packaged AP203 journey is offline-reproducible and Native AOT safe | Owns AC-11 / Owns AC-12 / Owns AC-13 | AP203-002: package-only consumer boundary; AP203-005: complete verified journey and fixture; Accepted ADR-0006: version compatibility policy | Clean offline package proof, package compatibility audit, and trimmed Native AOT execution | Approved | `work-items/AP203-006-aot-reproducibility-closure.md` |
+| AP203-006 | Prove the versioned packaged AP203 journey is offline-reproducible and Native AOT safe | Owns AC-11 / Owns AC-12 / Owns AC-13 | AP203-002: package-only consumer boundary; AP203-005: complete verified journey and fixture; Accepted ADR-0006: version compatibility policy | Clean offline package proof, package compatibility audit, and trimmed Native AOT execution | Implemented | `work-items/AP203-006-aot-reproducibility-closure.md` |
