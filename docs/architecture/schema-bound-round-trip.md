@@ -78,6 +78,18 @@ The runtime parser internally owns immutable syntax representations for recogniz
 
 The Analyzer converts the EXPRESS parse tree into an immutable semantic IR before generation. The IR resolves schema imports, declarations, defined types, enumerations, selects, aggregates, entity inheritance, redeclarations, explicit/derived/inverse attributes, bounds, optionality, and source locations. Parsing success alone is insufficient; unresolved or contradictory semantics produce Roslyn diagnostics and suppress affected generated declarations.
 
+The compiler inside the Analyzer is one deterministic entry composed from five one-way stages:
+
+| Stage | Owner | Input | Immutable output | May depend on |
+| --- | --- | --- | --- | --- |
+| Syntax | `ExpressSyntaxStage` | Complete normalized `.exp` source set | `ExpressSyntaxCompilation` with parsed schemas and ordered syntax diagnostics | Parser artifacts and syntax nodes only |
+| Closed-set binding | `ExpressClosedSetBindingStage` | Complete syntax compilation | `ExpressSchemaCompilation` with resolved schemas, declarations, imports, names, types, and ordered binding diagnostics | Syntax output |
+| Expression/flow analysis | `ExpressExpressionFlowAnalysisStage` | Closed-set binding compilation | `ExpressAnalyzedCompilation`, typed expressions, flow facts, and token-free `ExpressSemanticRule` lowering input | Binding output |
+| Generation planning | `ExpressGenerationPlan` and projection/plan types | Analyzed compilation | Complete immutable value, entity, complex-entity, reachable-rule, failure, and withholding plans | Analysis output and syntax-independent mapping support |
+| Source emission | `ExpressSourceEmissionStage` and emitter types | One complete generation plan | Ordered diagnostics and deterministic Roslyn generated sources | Generation plan and RoslynHelper composition |
+
+The dependency direction is exactly syntax -> binding -> analysis -> planning -> emission. Syntax nodes and parser tokens stop at expression/flow analysis; planning and emission consume source spans, bound facts, and `ExpressSemanticRule`, never `ExpressRuleSyntax`, `ExpressTokenSyntax`, or a declaration's retained `Syntax`. Stage handoffs expose get-only state and copy incoming collections. Planning does not call emitter helpers; shared type facts live in `ExpressTypeAnalysis`, while descriptor mapping support lives in `ExpressDescriptorTypeSupport`. There are no approved reverse-dependency, mutable-draft, syntax-leak, or emitter-private-representation exceptions. `ExpressIncrementalGenerator` remains the sole Roslyn entry and only composes compilation, planning, and emission.
+
 Generated schema metadata implements a runtime schema contract and provides:
 
 - normalized schema identity and aliases used by `FILE_SCHEMA`;
