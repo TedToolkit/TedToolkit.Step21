@@ -81,6 +81,21 @@ Record the candidate revision, actual changed artifacts, contract IDs, test inpu
 accepted/rejected family, commands, observable assertions, test counts, and the matching guarantee
 supplied to AP203-004.
 
+Completion evidence at candidate `8ac78b00486890660608d673523ab9d6d57b4f05`:
+
+- Commits `193cf87`, `300243b`, and `8ac78b0` change the schema-neutral exchange-structure binding,
+  focused read tests, and the generated/same-schema/multi-schema conformance contracts.
+- AC-03 and AC-04 accept the standard uppercase identifier, the separately documented lower/mixed-case
+  interoperability tolerance, and canonical numeric-arc OID suffixes while retaining exact input and
+  writeback text. AC-08 rejects other protocols, close names, malformed suffixes, normalized collisions,
+  and the legal-but-unsupported ASN.1 named-arc form with atomic `P21-BIND-SCHEMA` evidence.
+- `dotnet build TedToolkit.Step21.slnx --configuration Release --no-incremental` completed with zero
+  warnings and errors. `dotnet run --project tests/TedToolkit.Step21.Tests --configuration Release
+  --no-build` passed 269 of 269 tests with no failures or skips.
+- Independent implementation review of `8970a5b..8ac78b0` concluded `Ready` with no blocking findings or
+  design deviations. AP203-004 may rely on OID-qualified AP203 headers selecting the explicitly supplied
+  nominal descriptor without changing retained header text; the OID is not a package-baseline identity.
+
 ## Risks and implementation notes
 
 Over-broad normalization can silently bind the wrong application protocol. Treat every unproven

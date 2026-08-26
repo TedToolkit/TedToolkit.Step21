@@ -10,13 +10,32 @@
     <PublishAot Condition="'$(NativeAotProof)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true'">
     <PackageReference Include="TedToolkit.Step21" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true'">
+    <PackageReference Include="TedToolkit.Step21.Ap203" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true'">
     <AdditionalFiles Include="catalog-core.exp" />
     <AdditionalFiles Include="catalog-model.exp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Ap203Program.cs" />
+    <Compile Remove="Ap203FixtureProgram.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' != 'true'">
+    <Compile Remove="Program.cs" />
+    <Compile Include="Ap203Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' == 'true'">
+    <Compile Remove="Program.cs" />
+    <Compile Include="Ap203FixtureProgram.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,25 +1,34 @@
 # Multi-schema binding and schema instance populations
 
-`ExchangeStructure.Read` accepts a closed set of generated `SchemaDescriptor` instances and binds every named data
-section under the descriptor whose exact ordinal `SchemaName` occurs both in that section and in `FILE_SCHEMA`. It does
-not discover schemas, load external metadata, or attach descriptor state to entities or `DataSection` objects.
+`ExchangeStructure.Read` accepts a closed set of generated `SchemaDescriptor` instances and binds every data section
+under the descriptor whose nominal EXPRESS identifier matches its governing schema. Standard physical schema names
+use uppercase EXPRESS spelling. Descriptor selection additionally uses case-insensitive matching as an explicit
+interoperability tolerance; lowercase or mixed-case input and its retained writeback are not ISO 10303-21
+syntax-conforming spellings. Selection ignores only the supported canonical space-delimited numeric-arc OID suffix
+subset while retaining the supplied schema text. Legal ASN.1 forms outside that subset, including named arcs, are
+unsupported. An accepted OID is syntax-checked and retained, not validated as the AP203 package or schema-baseline
+identity. The reader does not discover schemas, load external metadata, or attach descriptor state to entities or
+`DataSection` objects.
 
 This boundary implements the schema-population and cross-schema rules in ISO 10303-21:2016 Edition 3 Annex E. The
 repository's [normative source](https://www.steptools.com/stds/step/IS_final_p21e3.html) supplies the clause text.
 
 ## Header and section binding
 
-Every schema identifier in `FILE_SCHEMA` must have one explicitly supplied descriptor. Multiple named data sections
-use the standard form:
+Every schema identifier in `FILE_SCHEMA` must have one explicitly supplied descriptor. Supplied descriptor names that
+normalize to one binding identifier are rejected before source consumption rather than resolved by order. Different
+raw header identifiers with one nominal name fail atomically with `P21-BIND-SCHEMA`; they are not folded. Multiple named
+data sections use the standard form:
 
 ```step
 DATA('section-name',('governing_schema'));
 ```
 
-The governing schema must occur in `FILE_SCHEMA`. Descriptor names, header schema names, and section schema names use
-exact ordinal matching. Missing descriptors, invalid section associations, malformed `FILE_POPULATION` entities,
-duplicate population input names, and absent input sections aggregate as source-located binding diagnostics before a
-model can be returned.
+The governing schema must associate with one identifier in `FILE_SCHEMA` through the same case-insensitive nominal
+rule used for descriptor selection. Named data sections and `FILE_POPULATION` declarations therefore associate with an
+OID-qualified header while retaining their own supplied strings. Missing descriptors, invalid section associations,
+malformed `FILE_POPULATION` entities, duplicate population input names, and absent input sections aggregate as
+source-located binding diagnostics before a model can be returned.
 
 ## `FILE_POPULATION`
 

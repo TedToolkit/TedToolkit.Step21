@@ -5,6 +5,8 @@
 # </copyright>
 # -----------------------------------------------------------------------
 
+param([switch] $Ap203)
+
 $ErrorActionPreference = 'Stop'
 $runtimeIdentifier = 'win-x64'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -23,7 +25,10 @@ $intermediateDirectory = (Join-Path $proofRoot 'obj') + [System.IO.Path]::Direct
 $publishDirectory = Join-Path $proofRoot 'publish'
 $nugetConfigPath = Join-Path $proofRoot 'NuGet.Config'
 $productProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21/TedToolkit.Step21.csproj'
+$ap203Project = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap203/TedToolkit.Step21.Ap203.csproj'
 $consumerProject = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.PackedConsumer/TedToolkit.Step21.PackedConsumer.csproj'
+$fixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-box-10x20x30-ap203.step'
+$extensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-unsupported-extension-ap203.step'
 
 function Invoke-DotNet {
     param(
@@ -60,6 +65,42 @@ function Invoke-DotNet {
     return $output
 }
 
+function Get-GlobalPackagesDirectory {
+    $assetsPath = Join-Path $repositoryRoot 'src/TedToolkit.Step21/obj/project.assets.json'
+    $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
+    return $assets.packageFolders.PSObject.Properties.Name | Select-Object -First 1
+}
+
+function Copy-CachedPackage {
+    param(
+        [Parameter(Mandatory = $true)][string] $Id,
+        [Parameter(Mandatory = $true)][string] $Version)
+
+    $globalPackagesDirectory = Get-GlobalPackagesDirectory
+    $normalizedId = $Id.ToLowerInvariant()
+    $packagePath = Join-Path $globalPackagesDirectory "$normalizedId/$Version/$normalizedId.$Version.nupkg"
+    if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+        throw "Required cached Native AOT toolchain package is missing: $packagePath"
+    }
+
+    Copy-Item -LiteralPath $packagePath -Destination $packageDirectory
+}
+
+function Get-LatestCachedPackageVersion {
+    param([Parameter(Mandatory = $true)][string] $Id)
+
+    $normalizedId = $Id.ToLowerInvariant()
+    $packageRoot = Join-Path (Get-GlobalPackagesDirectory) $normalizedId
+    $versions = Get-ChildItem -LiteralPath $packageRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^10\.' } |
+        Sort-Object { [Version]$_.Name } -Descending
+    if (-not $versions) {
+        throw "No cached .NET 10 package was found for '$Id'. Restore the repository's Native AOT toolchain once before running the offline proof."
+    }
+
+    return $versions[0].Name
+}
+
 New-Item -ItemType Directory -Path $packageDirectory | Out-Null
 $nugetConfig = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -67,17 +108,18 @@ $nugetConfig = @"
   <packageSources>
     <clear />
     <add key="proof" value="$packageDirectory" />
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
 </configuration>
 "@
 [System.IO.File]::WriteAllText($nugetConfigPath, $nugetConfig)
 
 try {
+    $buildProject = if ($Ap203) { $ap203Project } else { $productProject }
     Invoke-DotNet -Arguments @(
         'build',
-        $productProject,
+        $buildProject,
         '--configuration', 'Release',
+        '--no-restore',
         '--disable-build-servers'
     ) | Out-Null
     Invoke-DotNet -Arguments @(
@@ -87,8 +129,38 @@ try {
         '--no-build',
         '--output', $packageDirectory
     ) | Out-Null
+    if ($Ap203) {
+        Invoke-DotNet -Arguments @(
+            'pack',
+            $ap203Project,
+            '--configuration', 'Release',
+            '--no-build',
+            '--no-restore',
+            '--output', $packageDirectory
+        ) | Out-Null
+    }
 
-    $restoreLog = Invoke-DotNet -Arguments @(
+    Copy-CachedPackage -Id 'Antlr4.Runtime.Standard' -Version '4.13.1'
+    $compilerVersion = Get-LatestCachedPackageVersion -Id 'Microsoft.DotNet.ILCompiler'
+    Copy-CachedPackage -Id 'Microsoft.DotNet.ILCompiler' -Version $compilerVersion
+    Copy-CachedPackage -Id "runtime.$runtimeIdentifier.Microsoft.DotNet.ILCompiler" -Version $compilerVersion
+    foreach ($toolchainPackage in @(
+        'Microsoft.NET.ILLink.Tasks',
+        "Microsoft.NETCore.App.Runtime.$runtimeIdentifier",
+        "Microsoft.WindowsDesktop.App.Runtime.$runtimeIdentifier",
+        "Microsoft.AspNetCore.App.Runtime.$runtimeIdentifier",
+        "Microsoft.NETCore.App.Runtime.NativeAOT.$runtimeIdentifier")) {
+        Copy-CachedPackage -Id $toolchainPackage -Version $compilerVersion
+    }
+
+    $ap203Properties = if ($Ap203) {
+        @('--property:Ap203PackageProof=true', '--property:Ap203FixtureProof=true')
+    }
+    else {
+        @()
+    }
+
+    $restoreArguments = @(
         'restore',
         $consumerProject,
         '--runtime', $runtimeIdentifier,
@@ -99,7 +171,9 @@ try {
         "--property:BaseIntermediateOutputPath=$intermediateDirectory",
         "--property:MSBuildProjectExtensionsPath=$intermediateDirectory"
     )
-    $publishLog = Invoke-DotNet -Arguments @(
+    $restoreArguments += $ap203Properties
+    $restoreLog = Invoke-DotNet -Arguments $restoreArguments
+    $publishArguments = @(
         'publish',
         $consumerProject,
         '--configuration', 'Release',
@@ -112,6 +186,8 @@ try {
         "--property:BaseIntermediateOutputPath=$intermediateDirectory",
         "--property:MSBuildProjectExtensionsPath=$intermediateDirectory"
     )
+    $publishArguments += $ap203Properties
+    $publishLog = Invoke-DotNet -Arguments $publishArguments
 
     $analysisWarnings = ($restoreLog + [Environment]::NewLine + $publishLog) |
         Select-String -Pattern '\bwarning\s+(?:IL|ILC|AOT)\d+\b' -AllMatches
@@ -130,13 +206,25 @@ try {
         throw "Native executable was not produced at '$executablePath'."
     }
 
-    $runOutput = @(& $executablePath 2>&1)
+    $runArguments = if ($Ap203) { @($fixturePath, $extensionFixturePath) } else { @() }
+    $runOutput = @(& $executablePath @runArguments 2>&1)
     $runExitCode = $LASTEXITCODE
     foreach ($line in $runOutput) {
         Write-Host $line
     }
 
-    if ($runExitCode -ne 0 -or ($runOutput -join [Environment]::NewLine) -notmatch 'PACKED_AOT_OK') {
+    $joinedOutput = $runOutput -join [Environment]::NewLine
+    $expectedOutput = if ($Ap203) {
+        @(
+            'AP203_FIXTURE_OK entities=200 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
+            'AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
+            'AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0',
+            'AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6')
+    }
+    else {
+        @('PACKED_AOT_OK')
+    }
+    if ($runExitCode -ne 0 -or ($expectedOutput | Where-Object { -not $joinedOutput.Contains($_, [StringComparison]::Ordinal) })) {
         throw "Native packed consumer failed with exit code $runExitCode."
     }
 
@@ -148,10 +236,16 @@ try {
         throw "Forbidden runtime artifacts were published: $($forbiddenArtifacts.Name -join ', ')"
     }
 
-    Write-Host "NATIVE_AOT_PACKAGE_PROOF_OK $runtimeIdentifier"
+    $executableBytes = (Get-Item -LiteralPath $executablePath).Length
+    $proofName = if ($Ap203) { 'AP203_NATIVE_AOT_PACKAGE_PROOF_OK' } else { 'NATIVE_AOT_PACKAGE_PROOF_OK' }
+    Write-Host "$proofName $runtimeIdentifier executable-bytes=$executableBytes compiler-package=$compilerVersion"
 }
 finally {
-    if (Test-Path -LiteralPath $proofRoot) {
-        Remove-Item -LiteralPath $proofRoot -Recurse -Force
+    $resolvedProofRoot = Resolve-Path -LiteralPath $proofRoot -ErrorAction SilentlyContinue
+    $temporaryDirectory = [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+    if ($resolvedProofRoot -and $resolvedProofRoot.Path.StartsWith(
+        "$temporaryDirectory\TedToolkit.Step21.NativeAot.",
+        [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $resolvedProofRoot.Path -Recurse -Force
     }
 }

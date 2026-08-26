@@ -1,3 +1,5 @@
 /build/*.sh text eol=lf
+/schemas/**/*.exp text eol=lf
+/tests/TedToolkit.Step21.Tests/TestData/Express/Baseline/** text eol=lf
 /src/TedToolkit.Step21/Generated/** text eol=lf
 /src/TedToolkit.Step21.Analyzer/Generated/** text eol=lf

@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="ExpressSchemaCompiler.cs" company="TedToolkit">
+// <copyright file="ExpressSchemaBinder.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
 // </copyright>
@@ -8,43 +8,26 @@
 namespace TedToolkit.Step21.Analyzer.Express.Binding;
 
 /// <summary>
-/// Parses and binds exactly the supplied EXPRESS sources as one deterministic closed universe.
+/// Binds exactly the supplied parsed EXPRESS schemas as one deterministic closed set.
 /// </summary>
-internal static class ExpressSchemaCompiler
+internal static class ExpressSchemaBinder
 {
     private static readonly StringComparer _nameComparer = StringComparer.OrdinalIgnoreCase;
 
     /// <summary>
-    /// Compiles the supplied sources without reading their logical paths or consulting external state.
+    /// Binds every independently valid parsed schema without performing expression or flow analysis.
     /// </summary>
-    /// <param name="sources">The complete closed source set.</param>
-    /// <returns>The valid independent schemas and complete deterministic diagnostics.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="sources"/> or one of its elements is null.</exception>
-    internal static ExpressSchemaCompilation Compile(IEnumerable<ExpressSchemaSource> sources)
+    /// <param name="syntaxCompilation">The deterministic syntax-stage output.</param>
+    /// <returns>The closed-set binding output and complete diagnostics.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="syntaxCompilation"/> is null.</exception>
+    internal static ExpressBindingCompilation BindClosedSet(ExpressSyntaxCompilation syntaxCompilation)
     {
-        if (sources is null)
+        if (syntaxCompilation is null)
         {
-            throw new ArgumentNullException(nameof(sources));
+            throw new ArgumentNullException(nameof(syntaxCompilation));
         }
 
-        var orderedSources = sources
-            .Select(source => source ?? throw new ArgumentNullException(nameof(sources)))
-            .OrderBy(source => source.FilePath, StringComparer.Ordinal)
-            .ThenBy(source => source.Text, StringComparer.Ordinal)
-            .ToArray();
-        var syntaxDiagnostics = new List<ExpressSyntaxDiagnostic>();
-        var schemas = new List<SchemaDraft>();
-        foreach (var source in orderedSources)
-        {
-            var parseResult = ExpressSyntaxParser.Parse(source.FilePath, source.Text);
-            syntaxDiagnostics.AddRange(parseResult.Diagnostics);
-            if (parseResult.Root is null)
-            {
-                continue;
-            }
-
-            schemas.AddRange(parseResult.Root.ChildRules("schemaDecl").Select(CreateSchema));
-        }
+        var schemas = syntaxCompilation.Schemas.Select(CreateSchema).ToArray();
 
         var bindingDiagnostics = new List<ExpressBindingDiagnostic>();
         MarkDuplicateSchemas(schemas, bindingDiagnostics);
@@ -57,27 +40,28 @@ internal static class ExpressSchemaCompiler
         var resolver = new Resolver(schemas, bindingDiagnostics);
         resolver.ResolveAll();
         resolver.ValidateCycles();
+        var declarationSyntax = new Dictionary<ExpressBoundDeclaration, ExpressRuleSyntax>();
         var boundSchemas = schemas
             .Where(schema => !schema.IsInvalid)
             .OrderBy(SchemaSortKey, StringComparer.OrdinalIgnoreCase)
-            .Select(CreateBoundSchema)
+            .Select(schema => CreateBoundSchema(schema, declarationSyntax))
             .ToArray();
 
         return new(
-            boundSchemas,
-            OrderSyntaxDiagnostics(syntaxDiagnostics),
-            OrderBindingDiagnostics(bindingDiagnostics));
+            new ExpressSchemaCompilation(
+                boundSchemas,
+                syntaxCompilation.Diagnostics,
+                OrderBindingDiagnostics(bindingDiagnostics)),
+            declarationSyntax);
     }
 
-    private static SchemaDraft CreateSchema(ExpressRuleSyntax syntax)
+    private static SchemaDraft CreateSchema(ExpressParsedSchema syntax)
     {
-        var nameRule = syntax.RequiredChild("schemaId");
-        var nameToken = nameRule.IdentifierToken();
         return new(
-            new ExpressBoundSchemaIdentity(nameToken.Text, syntax.Span),
-            syntax,
-            syntax.RequiredChild("schemaBody"),
-            nameToken);
+            new ExpressBoundSchemaIdentity(syntax.NameToken.Text, syntax.Syntax.Span),
+            syntax.Syntax,
+            syntax.Body,
+            syntax.NameToken);
     }
 
     private static void MarkDuplicateSchemas(
@@ -224,62 +208,58 @@ internal static class ExpressSchemaCompiler
         return new(source, local, syntax.Span);
     }
 
-    private static ExpressBoundSchema CreateBoundSchema(SchemaDraft schema)
+    private static ExpressBoundSchema CreateBoundSchema(
+        SchemaDraft schema,
+        IDictionary<ExpressBoundDeclaration, ExpressRuleSyntax> declarationSyntax)
     {
-        var declarations = schema.Declarations.Select(CreateBoundDeclaration).ToArray();
+        var declarations = schema.Declarations
+            .Select(declaration => CreateBoundDeclaration(declaration, declarationSyntax))
+            .ToArray();
         var nestedDeclarations = schema.NestedDeclarations
             .OrderBy(declaration => declaration.Syntax.Span.Start.Line)
             .ThenBy(declaration => declaration.Syntax.Span.Start.Column)
-            .Select(CreateBoundDeclaration)
+            .Select(declaration => CreateBoundDeclaration(declaration, declarationSyntax))
             .ToArray();
-        var expressions = ExpressExpressionBinder.Bind(
-            declarations,
-            schema.NameReferences);
         return new(
             schema.Identity,
             schema.ResolvedImports,
             declarations,
             nestedDeclarations,
             schema.NameReferences,
-            expressions);
+            [],
+            [],
+            []);
     }
 
-    private static ExpressBoundDeclaration CreateBoundDeclaration(SymbolDraft declaration)
+    private static ExpressBoundDeclaration CreateBoundDeclaration(
+        SymbolDraft declaration,
+        IDictionary<ExpressBoundDeclaration, ExpressRuleSyntax> declarationSyntax)
     {
+        ExpressBoundDeclaration result;
         if (declaration.Symbol.Kind == ExpressDeclarationKind.Entity)
         {
-            return new ExpressBoundEntity(
+            result = new ExpressBoundEntity(
                 declaration.Symbol,
-                declaration.Syntax,
                 declaration.IsAbstract,
                 declaration.Supertypes,
                 declaration.Attributes);
         }
-
-        if (declaration.Symbol.Kind == ExpressDeclarationKind.Type)
+        else if (declaration.Symbol.Kind == ExpressDeclarationKind.Type)
         {
-            return new ExpressBoundDefinedType(
+            result = new ExpressBoundDefinedType(
                 declaration.Symbol,
-                declaration.Syntax,
                 declaration.BoundType
                 ?? throw new InvalidOperationException("A valid type declaration must have a bound type."));
         }
+        else
+        {
+            result = new ExpressBoundOpaqueDeclaration(
+                declaration.Symbol,
+                declaration.BoundType);
+        }
 
-        return new ExpressBoundOpaqueDeclaration(
-            declaration.Symbol,
-            declaration.Syntax,
-            declaration.BoundType);
-    }
-
-    private static IEnumerable<ExpressSyntaxDiagnostic> OrderSyntaxDiagnostics(
-        IEnumerable<ExpressSyntaxDiagnostic> diagnostics)
-    {
-        return diagnostics
-            .OrderBy(diagnostic => diagnostic.SourceLocation.FilePath, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.SourceLocation.Line)
-            .ThenBy(diagnostic => diagnostic.SourceLocation.Column)
-            .ThenBy(diagnostic => diagnostic.Code, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.Message, StringComparer.Ordinal);
+        declarationSyntax.Add(result, declaration.Syntax);
+        return result;
     }
 
     private static IEnumerable<ExpressBindingDiagnostic> OrderBindingDiagnostics(
@@ -713,6 +693,24 @@ internal static class ExpressSchemaCompiler
                 schemaScope.TryAdd(CreateSchemaName(symbol.Value, symbol.Key));
             }
 
+            foreach (var item in schema.Declarations
+                         .Where(declaration => declaration.BoundType is ExpressBoundEnumerationType)
+                         .SelectMany(declaration => declaration.Syntax.DescendantsAndSelf()
+                             .Where(node => node.Production == "enumerationId")
+                             .Select(node => (Declaration: declaration, Item: node)))
+                         .GroupBy(pair => pair.Item.IdentifierToken().Text, _nameComparer)
+                         .Where(group => group.Count() == 1)
+                         .Select(group => group.Single()))
+            {
+                var token = item.Item.IdentifierToken();
+                schemaScope.TryAdd(new ExpressBoundName(
+                    token.Text,
+                    ExpressBoundNameKind.Enumeration,
+                    new ExpressBoundNamedType(item.Declaration.Symbol, item.Item.Span),
+                    schemaDeclaration: null,
+                    item.Item.Span));
+            }
+
             foreach (var declaration in schema.Declarations)
             {
                 BindDeclarationNames(schema, declaration.Syntax, schemaScope);
@@ -1022,6 +1020,50 @@ internal static class ExpressSchemaCompiler
                     BindRestrictedName(schema, syntax, scope, expectedKind: null);
                     return;
 
+                case "assignmentStmt":
+                    var assignmentTarget = BindRestrictedName(
+                        schema,
+                        syntax.RequiredChild("generalRef"),
+                        scope,
+                        expectedKind: null);
+                    foreach (var qualifier in syntax.ChildRules("qualifier"))
+                    {
+                        var child = qualifier.ChildRules().Single();
+                        if (child.Production == "attributeQualifier")
+                        {
+                            assignmentTarget = BindMemberName(schema, child, assignmentTarget);
+                        }
+                        else if (child.Production == "groupQualifier")
+                        {
+                            assignmentTarget = BindRestrictedName(
+                                schema,
+                                child.RequiredChild("entityRef"),
+                                scope,
+                                ExpressBoundNameKind.Entity);
+                        }
+                        else if (child.Production == "indexQualifier"
+                                 && assignmentTarget?.Type is ExpressBoundAggregateType aggregate)
+                        {
+                            VisitNames(schema, child, scope);
+                            assignmentTarget = new(
+                                assignmentTarget.Name,
+                                assignmentTarget.Kind,
+                                aggregate.ElementType,
+                                assignmentTarget.SchemaDeclaration,
+                                assignmentTarget.Span,
+                                assignmentTarget.IsOptional,
+                                assignmentTarget.Attribute,
+                                assignmentTarget.AttributeCandidates);
+                        }
+                        else
+                        {
+                            VisitNames(schema, child, scope);
+                        }
+                    }
+
+                    VisitNames(schema, syntax.RequiredChild("expression"), scope);
+                    return;
+
                 case "procedureCallStmt":
                     var procedure = syntax.ChildRules("procedureRef").SingleOrDefault();
                     if (procedure is not null)
@@ -1125,6 +1167,20 @@ internal static class ExpressSchemaCompiler
                         scope,
                         ExpressBoundNameKind.Entity);
                 }
+                else if (child.Production == "indexQualifier"
+                         && target?.Type is ExpressBoundAggregateType aggregate)
+                {
+                    VisitNames(schema, child, scope);
+                    target = new(
+                        target.Name,
+                        target.Kind,
+                        aggregate.ElementType,
+                        target.SchemaDeclaration,
+                        target.Span,
+                        target.IsOptional,
+                        target.Attribute,
+                        target.AttributeCandidates);
+                }
                 else
                 {
                     VisitNames(schema, child, scope);
@@ -1157,8 +1213,8 @@ internal static class ExpressSchemaCompiler
                 return null;
             }
 
-            var declaration = source.SchemaDeclaration
-                ?? (source.Type as ExpressBoundNamedType)?.Declaration;
+            var declaration = (source.Type as ExpressBoundNamedType)?.Declaration
+                ?? source.SchemaDeclaration;
             if (declaration is null)
             {
                 return null;
@@ -1166,36 +1222,41 @@ internal static class ExpressSchemaCompiler
 
             var draft = FindSymbol(declaration);
             ExpressBoundName? target = null;
-            if (draft?.Symbol.Kind == ExpressDeclarationKind.Entity)
+            var attributes = EnumerateAttributes(
+                    source.Type,
+                    new HashSet<ExpressBoundSymbol>(),
+                    includeSubtypes: false)
+                .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
+                .Distinct()
+                .ToArray();
+            if (attributes.Length == 0)
             {
-                var attributes = draft.Attributes
+                attributes = EnumerateAttributes(
+                        source.Type,
+                        new HashSet<ExpressBoundSymbol>(),
+                        includeSubtypes: true)
                     .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
+                    .Distinct()
                     .ToArray();
-                if (attributes.Length == 0)
-                {
-                    attributes = draft.Supertypes
-                        .Select(FindSymbol)
-                        .Where(candidate => candidate is not null)
-                        .SelectMany(candidate => EnumerateAttributes(
-                            candidate!,
-                            new HashSet<ExpressBoundSymbol>()))
-                        .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
-                        .Distinct()
-                        .ToArray();
-                }
+            }
 
-                if (attributes.Length == 1)
-                {
-                    var attribute = attributes[0];
-                    target = new(
-                        attribute.Name,
-                        ExpressBoundNameKind.Attribute,
-                        attribute.Type,
-                        schemaDeclaration: null,
-                        attribute.Span,
-                        attribute.IsOptional,
-                        attribute);
-                }
+            var compatibleAttributes = attributes.Length > 0
+                && attributes.All(candidate => ReferenceEquals(candidate.Type, attributes[0].Type)
+                    || (candidate.Type is ExpressBoundNamedType candidateNamed
+                        && attributes[0].Type is ExpressBoundNamedType firstNamed
+                        && ReferenceEquals(candidateNamed.Declaration, firstNamed.Declaration)));
+            if (compatibleAttributes)
+            {
+                var attribute = attributes[0];
+                target = new(
+                    attribute.Name,
+                    ExpressBoundNameKind.Attribute,
+                    attribute.Type,
+                    schemaDeclaration: null,
+                    attribute.Span,
+                    attribute.IsOptional,
+                    attribute,
+                    attributes);
             }
             else if (draft?.BoundType is ExpressBoundEnumerationType)
             {
@@ -1227,6 +1288,93 @@ internal static class ExpressSchemaCompiler
 
             schema.NameReferences.Add(new ExpressBoundNameReference(target, isApplication: false, span));
             return target;
+        }
+
+        private IEnumerable<ExpressBoundAttribute> EnumerateAttributes(
+            ExpressBoundType? type,
+            ISet<ExpressBoundSymbol> visited,
+            bool includeSubtypes)
+        {
+            if (type is ExpressBoundNamedType named)
+            {
+                var draft = FindSymbol(named.Declaration);
+                if (draft?.Symbol.Kind == ExpressDeclarationKind.Entity)
+                {
+                    foreach (var attribute in EnumerateAttributes(draft, visited))
+                    {
+                        yield return attribute;
+                    }
+
+                    if (includeSubtypes)
+                    {
+                        var declarations = FindSchema(named.Declaration.DeclaringSchema).Declarations;
+                        var subtypes = new Queue<SymbolDraft>(declarations.Where(candidate =>
+                            candidate.Symbol.Kind == ExpressDeclarationKind.Entity
+                            && candidate.Supertypes.Contains(named.Declaration)));
+                        while (subtypes.Count > 0)
+                        {
+                            var subtype = subtypes.Dequeue();
+                            if (!visited.Add(subtype.Symbol))
+                            {
+                                continue;
+                            }
+
+                            foreach (var attribute in subtype.Attributes)
+                            {
+                                yield return attribute;
+                            }
+
+                            foreach (var candidate in declarations.Where(candidate =>
+                                         candidate.Symbol.Kind == ExpressDeclarationKind.Entity
+                                         && candidate.Supertypes.Contains(subtype.Symbol)))
+                            {
+                                subtypes.Enqueue(candidate);
+                            }
+                        }
+                    }
+
+                    yield break;
+                }
+
+                if (!visited.Add(named.Declaration) || draft?.BoundType is null)
+                {
+                    yield break;
+                }
+
+                foreach (var attribute in EnumerateAttributes(draft.BoundType, visited, includeSubtypes))
+                {
+                    yield return attribute;
+                }
+
+                yield break;
+            }
+
+            if (type is not ExpressBoundSelectType select)
+            {
+                yield break;
+            }
+
+            if (select.BaseType is not null)
+            {
+                foreach (var attribute in EnumerateAttributes(
+                             new ExpressBoundNamedType(select.BaseType, select.Span),
+                             visited,
+                             includeSubtypes))
+                {
+                    yield return attribute;
+                }
+            }
+
+            foreach (var alternative in select.Alternatives)
+            {
+                foreach (var attribute in EnumerateAttributes(
+                             new ExpressBoundNamedType(alternative, select.Span),
+                             visited,
+                             includeSubtypes))
+                {
+                    yield return attribute;
+                }
+            }
         }
 
         private ExpressRuleSyntax? FindEnumerationItem(
@@ -1635,7 +1783,9 @@ internal static class ExpressSchemaCompiler
                 syntax.RequiredChild("attributeDecl"),
                 ExpressAttributeKind.Inverse,
                 type,
-                isOptional: false);
+                isOptional: false,
+                entity,
+                syntax.RequiredChild("attributeRef").IdentifierToken().Text);
         }
 
         private void AddAttribute(
@@ -1644,7 +1794,9 @@ internal static class ExpressSchemaCompiler
             ExpressRuleSyntax attributeDeclaration,
             ExpressAttributeKind kind,
             ExpressBoundType type,
-            bool isOptional)
+            bool isOptional,
+            ExpressBoundSymbol? inverseEntity = null,
+            string? inverseAttributeName = null)
         {
             var nameToken = attributeDeclaration.DescendantTokens()
                 .Last(token => token.TokenName == "SimpleId");
@@ -1664,7 +1816,9 @@ internal static class ExpressSchemaCompiler
                 kind,
                 type,
                 isOptional,
-                attributeDeclaration.Span));
+                attributeDeclaration.Span,
+                inverseEntity,
+                inverseAttributeName));
         }
 
         private void BindContainedTypes(

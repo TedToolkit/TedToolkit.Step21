@@ -1,0 +1,6 @@
+SCHEMA generation_invalid;
+ENTITY foo_bar;
+END_ENTITY;
+ENTITY foo__bar;
+END_ENTITY;
+END_SCHEMA;

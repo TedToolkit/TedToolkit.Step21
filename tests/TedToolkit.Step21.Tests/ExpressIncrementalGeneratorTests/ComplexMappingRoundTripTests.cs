@@ -47,6 +47,149 @@ public sealed class ComplexMappingRoundTripTests
         END_SCHEMA;
         """;
 
+    private const string AGGREGATE_SELECT_SCHEMA = """
+        SCHEMA aggregate_select;
+        TYPE item_select = SELECT (first_item, second_item);
+        END_TYPE;
+        ENTITY first_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY second_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY container;
+          items : LIST [1:?] OF item_select;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string NESTED_SELECT_SCHEMA = """
+        SCHEMA nested_select;
+        TYPE inner_select = SELECT (first_item, second_item);
+        END_TYPE;
+        TYPE outer_select = SELECT (inner_select, third_item);
+        END_TYPE;
+        ENTITY first_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY second_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY third_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY holder;
+          item : outer_select;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string NUMBER_SELECT_SCHEMA = """
+        SCHEMA number_select;
+        TYPE real_quantity = REAL;
+        END_TYPE;
+        TYPE count_quantity = NUMBER;
+        END_TYPE;
+        TYPE quantity = SELECT (real_quantity, count_quantity);
+        END_TYPE;
+        ENTITY holder;
+          item : quantity;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string COMPLEX_DERIVED_REDECLARATION_SCHEMA = """
+        SCHEMA complex_derived_redeclaration;
+        ENTITY root SUPERTYPE OF (left ANDOR right);
+          amount : INTEGER;
+        END_ENTITY;
+        ENTITY left SUBTYPE OF (root);
+        DERIVE
+          SELF\root.amount : INTEGER := 1;
+        WHERE
+          wr1: SELF\root.amount = 1;
+        END_ENTITY;
+        ENTITY right SUBTYPE OF (root);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string SAFE_GROUP_SCHEMA = """
+        SCHEMA safe_group;
+        ENTITY surface SUPERTYPE OF (ONEOF (plane, swept_surface));
+        END_ENTITY;
+        ENTITY plane SUBTYPE OF (surface);
+        END_ENTITY;
+        ENTITY swept_surface SUBTYPE OF (surface);
+          swept_value : INTEGER;
+        END_ENTITY;
+        ENTITY face;
+          geometry : surface;
+        WHERE
+          wr1: (NOT ('SAFE_GROUP.SWEPT_SURFACE' IN TYPEOF(geometry)))
+            OR (geometry\swept_surface.swept_value = 1);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    /// <summary>Maps a legal multi-leaf member selected by a nested ONEOF/ANDOR constraint.</summary>
+    [Test]
+    public async Task Should_read_a_nested_andor_complex_mapping()
+    {
+        const string schema = """
+            SCHEMA nested_andor;
+            ENTITY root SUPERTYPE OF (ONEOF (left, right) ANDOR marker);
+            END_ENTITY;
+            ENTITY left SUBTYPE OF (root);
+            END_ENTITY;
+            ENTITY right SUBTYPE OF (root);
+            END_ENTITY;
+            ENTITY marker SUBTYPE OF (root);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+
+        var descriptor = CreateDescriptor(schema, "NestedAndor");
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateExchange("#1=(LEFT()MARKER()ROOT());")
+                .Replace("complex_mapping", "nested_andor", StringComparison.Ordinal)),
+            [descriptor]);
+        var entity = structure.Entities.Single();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(entity.GetType().Name).IsEqualTo("__Complex_Left_Marker");
+            await Assert.That(entity.GetType().GetInterface(
+                "TedToolkit.Step21.Generated.NestedAndor.ILeft")).IsNotNull();
+            await Assert.That(entity.GetType().GetInterface(
+                "TedToolkit.Step21.Generated.NestedAndor.IMarker")).IsNotNull();
+        }
+    }
+
+    /// <summary>Maps independent concrete siblings under an unconstrained supertype.</summary>
+    [Test]
+    public async Task Should_read_an_unconstrained_sibling_complex_mapping()
+    {
+        const string schema = """
+            SCHEMA unconstrained_siblings;
+            ENTITY root;
+            END_ENTITY;
+            ENTITY left SUBTYPE OF (root);
+            END_ENTITY;
+            ENTITY right SUBTYPE OF (root);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var descriptor = CreateDescriptor(schema, "UnconstrainedSiblings");
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateExchange("#1=(LEFT()RIGHT()ROOT());")
+                .Replace("complex_mapping", "unconstrained_siblings", StringComparison.Ordinal)),
+            [descriptor]);
+
+        await Assert.That(structure.Entities.Single().GetType().Name)
+            .IsEqualTo("__Complex_Left_Right");
+    }
+
     /// <summary>Maps inherited, redeclared, aggregate, optional, and reference values through ordered components.</summary>
     [Test]
     public async Task Should_read_write_and_reread_the_same_complex_semantic_graph()
@@ -187,9 +330,9 @@ public sealed class ComplexMappingRoundTripTests
         }
     }
 
-    /// <summary>Rejects derived-redeclaration mapping rather than treating its required marker as explicit storage.</summary>
+    /// <summary>Preserves a derived-redeclaration marker without treating it as explicit storage.</summary>
     [Test]
-    public async Task Should_reject_a_derived_redeclaration_outside_the_supported_mapping_boundary()
+    public async Task Should_read_and_write_a_derived_redeclaration_marker()
     {
         var descriptor = CreateDescriptor(DERIVED_REDECLARATION_SCHEMA, "DerivedRedeclaration");
         const string source = """
@@ -205,11 +348,176 @@ public sealed class ComplexMappingRoundTripTests
             END-ISO-10303-21;
             """;
 
-        var exception = Assert.Throws<ExchangeStructureBindingException>(() =>
-            ExchangeStructure.Read(new StringReader(source), [descriptor]));
+        ExchangeStructure structure;
+        try
+        {
+            structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        }
+        catch (ExchangeStructureReadValidationException exception)
+        {
+            throw new InvalidOperationException(
+                string.Join(Environment.NewLine, exception.ValidationResult.Failures.Select(failure =>
+                    $"{failure.Code} {failure.Path}: {failure.Message}")),
+                exception);
+        }
+        var output = new StringWriter();
 
-        await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
-            .Contains("P21-BIND-ENTITY");
+        structure.Write(output);
+
+        await Assert.That(output.ToString()).Contains("#1=CHILD(*);");
+    }
+
+    /// <summary>Reads and writes direct entity alternatives contained in an aggregate of SELECT.</summary>
+    [Test]
+    public async Task Should_read_and_write_an_aggregate_of_select_values()
+    {
+        var descriptor = CreateDescriptor(AGGREGATE_SELECT_SCHEMA, "AggregateSelect");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('aggregate select'),'3;1');
+            FILE_NAME('aggregate-select.p21','2026-08-26T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('aggregate_select'));
+            ENDSEC;
+            DATA;
+            #1=FIRST_ITEM('first');
+            #2=SECOND_ITEM('second');
+            #3=CONTAINER((#1,#2));
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        var structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        var output = new StringWriter();
+
+        structure.Write(output);
+
+        await Assert.That(output.ToString()).Contains("#3=CONTAINER((#1,#2));");
+    }
+
+    /// <summary>Traverses nested SELECT declarations while preserving their generated nominal wrappers.</summary>
+    [Test]
+    public async Task Should_read_and_write_a_nested_select_leaf()
+    {
+        var descriptor = CreateDescriptor(NESTED_SELECT_SCHEMA, "NestedSelect");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('nested select'),'3;1');
+            FILE_NAME('nested-select.p21','2026-08-26T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('nested_select'));
+            ENDSEC;
+            DATA;
+            #1=FIRST_ITEM('first');
+            #2=HOLDER(#1);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        ExchangeStructure structure;
+        try
+        {
+            structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        }
+        catch (ExchangeStructureReadValidationException exception)
+        {
+            throw new InvalidOperationException(
+                string.Join(Environment.NewLine, exception.ValidationResult.Failures.Select(failure =>
+                    $"{failure.Code} {failure.Path}: {failure.Message}")),
+                exception);
+        }
+        var output = new StringWriter();
+
+        structure.Write(output);
+
+        await Assert.That(output.ToString()).Contains("#2=HOLDER(#1);");
+    }
+
+    /// <summary>Reads and writes a SELECT whose alternatives include NUMBER.</summary>
+    [Test]
+    public async Task Should_read_and_write_a_number_select_alternative()
+    {
+        var descriptor = CreateDescriptor(NUMBER_SELECT_SCHEMA, "NumberSelect");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('number select'),'3;1');
+            FILE_NAME('number-select.p21','2026-08-26T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('number_select'));
+            ENDSEC;
+            DATA;
+            #1=HOLDER(REAL_QUANTITY(1.E-7));
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+        var structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        var output = new StringWriter();
+
+        structure.Write(output);
+
+        await Assert.That(output.ToString()).Contains("#1=HOLDER(REAL_QUANTITY(1.E-7));");
+    }
+
+    /// <summary>Uses the derived marker when one selected complex leaf redeclares a shared physical slot.</summary>
+    [Test]
+    public async Task Should_read_and_write_a_complex_derived_redeclaration_marker()
+    {
+        var descriptor = CreateDescriptor(
+            COMPLEX_DERIVED_REDECLARATION_SCHEMA,
+            "ComplexDerivedRedeclaration");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('complex derived'),'3;1');
+            FILE_NAME('complex-derived.p21','2026-08-26T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('complex_derived_redeclaration'));
+            ENDSEC;
+            DATA;
+            #1=(LEFT()RIGHT()ROOT(*));
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+        ExchangeStructure structure;
+        try
+        {
+            structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        }
+        catch (ExchangeStructureBindingException exception)
+        {
+            throw new InvalidOperationException(
+                string.Join(Environment.NewLine, exception.Diagnostics.Select(diagnostic =>
+                    $"{diagnostic.Code}: {diagnostic.Message}")),
+                exception);
+        }
+        var output = new StringWriter();
+
+        structure.Write(output);
+
+        await Assert.That(output.ToString()).Contains("#1=(LEFT()RIGHT()ROOT(*));");
+    }
+
+    /// <summary>Treats an inapplicable group qualifier as indeterminate instead of throwing a CLR cast.</summary>
+    [Test]
+    public async Task Should_safely_evaluate_an_inapplicable_group_qualifier()
+    {
+        var descriptor = CreateDescriptor(SAFE_GROUP_SCHEMA, "SafeGroup");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('safe group'),'3;1');
+            FILE_NAME('safe-group.p21','2026-08-26T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('safe_group'));
+            ENDSEC;
+            DATA;
+            #1=PLANE();
+            #2=FACE(#1);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        var structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+
+        await Assert.That(structure.Entities).Count().IsEqualTo(2);
     }
 
     /// <summary>Reports one inherited structural failure for a multi-leaf value.</summary>

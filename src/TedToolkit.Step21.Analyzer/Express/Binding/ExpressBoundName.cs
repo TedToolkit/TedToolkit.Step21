@@ -22,6 +22,7 @@ internal sealed class ExpressBoundName
     /// <param name="span">The declaration span.</param>
     /// <param name="isOptional">Whether this value name can denote the EXPRESS indeterminate value.</param>
     /// <param name="attribute">The exact entity attribute declaration, when applicable.</param>
+    /// <param name="attributeCandidates">The compatible subtype attributes selected by a generalized qualifier.</param>
     internal ExpressBoundName(
         string name,
         ExpressBoundNameKind kind,
@@ -29,7 +30,8 @@ internal sealed class ExpressBoundName
         ExpressBoundSymbol? schemaDeclaration,
         ExpressSourceSpan span,
         bool isOptional = false,
-        ExpressBoundAttribute? attribute = null)
+        ExpressBoundAttribute? attribute = null,
+        IReadOnlyList<ExpressBoundAttribute>? attributeCandidates = null)
     {
         Name = name;
         Kind = kind;
@@ -38,6 +40,7 @@ internal sealed class ExpressBoundName
         Span = span;
         IsOptional = isOptional;
         Attribute = attribute;
+        AttributeCandidates = attributeCandidates ?? (attribute is null ? [] : [attribute,]);
     }
 
     /// <summary>
@@ -74,4 +77,9 @@ internal sealed class ExpressBoundName
     /// Gets the exact entity attribute declaration, when this name identifies an attribute.
     /// </summary>
     internal ExpressBoundAttribute? Attribute { get; }
+
+    /// <summary>
+    /// Gets the compatible concrete attributes available through a generalized entity qualifier.
+    /// </summary>
+    internal IReadOnlyList<ExpressBoundAttribute> AttributeCandidates { get; }
 }

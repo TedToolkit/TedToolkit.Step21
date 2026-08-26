@@ -16,13 +16,11 @@ internal sealed class ExpressBoundDefinedType : ExpressBoundDeclaration
     /// Initializes a bound defined type.
     /// </summary>
     /// <param name="symbol">The type identity.</param>
-    /// <param name="syntax">The preserved declaration syntax.</param>
     /// <param name="underlyingType">The recursively bound underlying type.</param>
     internal ExpressBoundDefinedType(
         ExpressBoundSymbol symbol,
-        ExpressRuleSyntax syntax,
         ExpressBoundType underlyingType)
-        : base(symbol, syntax)
+        : base(symbol)
     {
         UnderlyingType = underlyingType;
     }

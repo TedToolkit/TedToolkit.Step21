@@ -3,15 +3,15 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: approved -->
+<!-- change-status: completed -->
 
 ## 📌 Status
 
-Approved revision
+Completed
 
 - Prior approval evidence: 用户于 2026-08-23 批准原始变更，并于 2026-08-24 批准重复 nominal schema name 必须以 `P21-BIND-SCHEMA` 拒绝。该批准仍解释已完成候选实现的历史授权，不等于批准本次修订。
 - Revision approval: 用户于 2026-08-26 先批准按 ADR-0006 → AP203 → Compiler modularization 的顺序执行，随后明确批准 ADR-0006 的 package/runtime/generated-surface 兼容策略；此前独立设计复审确认除 ADR 接受外无剩余文档缺陷。本 revision 因此获准成为新的 AP203 交付基线。
-- Current delivery evidence: 候选集成 revision `f66c33d` 已包含 AP203-001、AP203-002、AP203-003 的实现并开始 AP203-004；该候选尚未集成到当前主分支，AP203-005 与修订后的 AP203-006 尚未完成。
+- Completion evidence: AP203-001 through AP203-006 are integrated and independently reviewed Ready. The final delivery revision is `2a0b4ce`; all AC-01 through AC-13 and the accepted ADR-0006 compatibility policy are closed with executable evidence.
 
 ## 🚦 Change priority
 
@@ -130,6 +130,13 @@ Rejected alternatives:
 
 Target delivery artifacts: code, tests, configuration/build metadata, package contents, and consumer documentation.
 
+<!-- section: start-conditions -->
+## Start conditions
+
+<!-- change-prerequisite: none -->
+
+None. This delivery did not consume another repository change outcome.
+
 ## 🔀 Delivery disposition and operational handoffs
 
 - Target delivery artifacts: code, tests, configuration, build automation, package contents, documentation.
@@ -141,6 +148,8 @@ Target delivery artifacts: code, tests, configuration/build metadata, package co
 
 <!-- section: behavior-contract -->
 ## 🧪 Behavior cases
+
+<!-- acceptance-case: AC-12 -->
 
 | ID | Preconditions and input | Action | Expected observable behavior |
 | --- | --- | --- | --- |
@@ -190,6 +199,16 @@ in `finally`; tests do not use `[DependsOn]` or shared mutable model state.
 - ADR-0006 已 Accepted，包/runtime/generated-surface 兼容策略已记录，并由候选包元数据、API 对照和消费者文档共同证明。
 - 依赖审计证明不将 Analyzer-only、RoslynHelper、JSON/XML 或反射发现资产引入运行时图。
 
+## 📋 Completion evidence
+
+- All six approved work items are `Implemented`; their contract tables assign AC-01 through AC-13 exactly once, and each item records a Ready implementation review. The final parent review traced the complete delivery history `c463d03..2a0b4ce` and found no blocking or advisory issue, no unapproved behavior, and no unresolved operational handoff.
+- `TedToolkit.Step21.Ap203` 1.0.0 exposes the generated `config_control_design` descriptor/types from the pinned AP203 Amendment 1 long form, declares core runtime range `[1.0.0,2.0.0)`, and retains explicit descriptor selection with no runtime discovery or duplicate reader/writer stack.
+- The checked-in OCCT sample executes package-only read, typed navigation, concrete edit, validation, canonical write, descriptor-bound reread, semantic comparison, invalid-edit aggregation, zero-byte write rejection, and positioned unsupported-extension rejection. Its supported observations remain 200 entities, 1 product, 6 faces, 12 edges, 8 vertices, 27 points, and metre/radian/steradian units.
+- Two forced non-incremental offline package proofs produced the same normalized package SHA-256 `2BEBC39E95BE86145DC35C85743ED522AC53141AE406136EA7B99180FF77996E`; schema and fixture hashes match their provenance records. The actual packaged generated API matches nullable-aware approved SHA-256 `CD3FE5BEC20E5990451DA1428E758889702EF1C768D90581308305EE7C45F1A8`.
+- The package is 1,924,060 bytes and its generated assembly is 14,647,296 bytes. The trimmed `win-x64` Native AOT package consumer is 39,154,176 bytes, emitted no attributable trim/AOT warning, and completed the full fixed AP203 journey. The generic AOT proof remains green.
+- Final verification passed fast TUnit 344/344, integration 7/7 enabled tests with the one opt-in external-network corpus test explicitly skipped, and the Release solution build with 0 warnings and 0 errors. The package/runtime graph contains one core runtime and no Analyzer-only, RoslynHelper, JSON/XML, reflection discovery, or second parser/writer runtime edge.
+- Durable package README, schema/fixture provenance, architecture, principles, and Accepted ADR-0006 remain in place. This completed Controlled change and its work items are retained as delivery history; AP214/AP242 remain separate future changes rather than implicit AP203 scope.
+
 ## ⏱️ Workload estimate
 
 - Person-month basis: 一名熟悉 .NET、Roslyn source generator 和 schema-driven 测试的全职开发者的一个月；不换算为工作日/小时。
@@ -208,7 +227,7 @@ Documentation forecast: package/API 指南、schema 来源/许可、互操作和
 | ID | Blocking item | Blocks | Next action | Status |
 | --- | --- | --- | --- | --- |
 | AP203-DB-01 | ADR-0006 与首次公开发布的 package/runtime/generated-surface 版本兼容策略必须成为 Accepted 决策 | 本修订的批准、AP203-006 启动和 change closure | 已在 `3eb14b4d8657f77da8f686d3f2ee0c25fbaa3179` 接受并固定 | Closed |
-| AP203-DB-02 | 候选集成 revision `f66c33d` 的实现状态与证据尚未合入当前主分支并与本修订后的 delivery map 对齐 | AP203-004 后续交付和最终实现评审 | 合入或等价迁移候选证据，更新唯一 work-item status source 后再继续 | Open |
+| AP203-DB-02 | 早期候选 `f66c33d` 的实现状态与证据需要迁移到当前 delivery baseline | AP203-004 后续交付和最终实现评审 | 已以 `57fea41..3b84aa3` 等价迁移、补齐证明并更新唯一 work-item status source | Closed |
 
 ## ⚠️ Risks and coordination
 

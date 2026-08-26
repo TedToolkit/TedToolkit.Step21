@@ -7,6 +7,7 @@
 
 using TedToolkit.RoslynHelper.Syntaxes;
 
+using TedToolkit.Step21.Analyzer.Express.Analysis;
 using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
@@ -43,7 +44,7 @@ internal sealed class ExpressGeneratedTypeResolver
     /// </summary>
     /// <param name="compilation">The closed bound schema compilation.</param>
     /// <returns>The resolver and its stable supported-type set.</returns>
-    internal static ExpressGeneratedTypeResolver Create(ExpressSchemaCompilation compilation)
+    internal static ExpressGeneratedTypeResolver Create(ExpressAnalyzedCompilation compilation)
     {
         var definedTypes = compilation.Schemas
             .SelectMany(schema => schema.Declarations.OfType<ExpressBoundDefinedType>())
@@ -56,7 +57,7 @@ internal sealed class ExpressGeneratedTypeResolver
     /// </summary>
     /// <param name="compilation">The compilation whose order governs generation.</param>
     /// <returns>The supported declarations.</returns>
-    internal IReadOnlyList<ExpressBoundDefinedType> GetSupportedDeclarations(ExpressSchemaCompilation compilation)
+    internal IReadOnlyList<ExpressBoundDefinedType> GetSupportedDeclarations(ExpressAnalyzedCompilation compilation)
     {
         return compilation.Schemas
             .SelectMany(schema => schema.Declarations.OfType<ExpressBoundDefinedType>())

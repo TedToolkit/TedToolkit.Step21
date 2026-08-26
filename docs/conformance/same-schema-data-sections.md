@@ -18,7 +18,13 @@ DATA('section-name',('schema_name'));
 The first value is a unique decoded STRING section name. The second is a list containing exactly one decoded STRING,
 which must occur in `FILE_SCHEMA`; in a same-schema structure every section selects that same descriptor.
 The reader preserves each valid name as runtime-internal write context while public `DataSection` continues to expose
-only its ISO governing `SchemaName`, never a generated descriptor relationship.
+only its ISO governing `SchemaName`, never a generated descriptor relationship. Standard physical schema names use
+uppercase EXPRESS spelling. Descriptor selection additionally compares nominal identifiers case-insensitively as an
+explicit interoperability tolerance; lowercase or mixed-case input and retained writeback are not ISO 10303-21
+syntax-conforming spellings. Selection ignores only the supported canonical space-delimited numeric-arc OID suffix
+subset. Legal ASN.1 forms outside that subset, including named arcs, are unsupported. An accepted OID is syntax-checked
+and retained rather than validated as the AP203 package or schema-baseline identity. The public schema name and
+complete `FILE_SCHEMA` identifier retain their supplied spelling.
 
 Malformed parameter counts/types, duplicate section names, and a section schema absent from `FILE_SCHEMA` aggregate as
 source-located `P21-BIND-DATA-SECTION` diagnostics. Structures with different governing descriptors and explicit

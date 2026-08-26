@@ -1,0 +1,5 @@
+SCHEMA generation_dependent;
+USE FROM generation_invalid (foo_bar);
+ENTITY child SUBTYPE OF (foo_bar);
+END_ENTITY;
+END_SCHEMA;

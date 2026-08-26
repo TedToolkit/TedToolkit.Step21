@@ -1,0 +1,7 @@
+SCHEMA binding_invalid;
+USE FROM absent_schema (missing_type);
+ENTITY broken;
+  first : unknown_type;
+  second : another_unknown_type;
+END_ENTITY;
+END_SCHEMA;

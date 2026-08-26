@@ -23,13 +23,17 @@ internal sealed class ExpressBoundSchema
     /// <param name="nestedDeclarations">The declarations owned by nested algorithm scopes.</param>
     /// <param name="nameReferences">The resolved expression and statement names.</param>
     /// <param name="expressions">The immutable typed outermost expression trees.</param>
+    /// <param name="indeterminateFunctions">Functions whose result can be indeterminate.</param>
+    /// <param name="indeterminateLocals">Local variables that can hold an indeterminate value.</param>
     internal ExpressBoundSchema(
         ExpressBoundSchemaIdentity identity,
         IEnumerable<ExpressBoundImport> imports,
         IEnumerable<ExpressBoundDeclaration> declarations,
         IEnumerable<ExpressBoundDeclaration> nestedDeclarations,
         IEnumerable<ExpressBoundNameReference> nameReferences,
-        IEnumerable<ExpressBoundExpression> expressions)
+        IEnumerable<ExpressBoundExpression> expressions,
+        IEnumerable<ExpressBoundSymbol> indeterminateFunctions,
+        IEnumerable<ExpressBoundName> indeterminateLocals)
     {
         Identity = identity;
         Imports = new ReadOnlyCollection<ExpressBoundImport>(imports.ToArray());
@@ -37,6 +41,8 @@ internal sealed class ExpressBoundSchema
         NestedDeclarations = new ReadOnlyCollection<ExpressBoundDeclaration>(nestedDeclarations.ToArray());
         NameReferences = new ReadOnlyCollection<ExpressBoundNameReference>(nameReferences.ToArray());
         Expressions = new ReadOnlyCollection<ExpressBoundExpression>(expressions.ToArray());
+        IndeterminateFunctions = new ReadOnlyCollection<ExpressBoundSymbol>(indeterminateFunctions.ToArray());
+        IndeterminateLocals = new ReadOnlyCollection<ExpressBoundName>(indeterminateLocals.ToArray());
     }
 
     /// <summary>
@@ -79,4 +85,14 @@ internal sealed class ExpressBoundSchema
     /// Gets the immutable typed outermost expression trees in source order.
     /// </summary>
     internal IReadOnlyList<ExpressBoundExpression> Expressions { get; }
+
+    /// <summary>
+    /// Gets functions whose generated result must represent the EXPRESS indeterminate value.
+    /// </summary>
+    internal IReadOnlyCollection<ExpressBoundSymbol> IndeterminateFunctions { get; }
+
+    /// <summary>
+    /// Gets local variables whose generated storage must represent the EXPRESS indeterminate value.
+    /// </summary>
+    internal IReadOnlyCollection<ExpressBoundName> IndeterminateLocals { get; }
 }
