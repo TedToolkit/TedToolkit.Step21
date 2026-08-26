@@ -85,3 +85,32 @@ Runtime reflection and dynamic discovery hide dependency edges from the compiler
 ### Exception route
 
 A runtime dependency or behavior that cannot satisfy the Native AOT proof requires an accepted ADR identifying the affected public paths, why no static/source-generated alternative is viable, the warning or runtime consequences, and an objective removal trigger. Warning suppression or linker-root configuration alone is not proof of compatibility.
+
+## EP-004: Make conformance claims explicit and evidence-backed
+
+- Status: Active
+- Strength: Required
+- Scope: syntax recognition, schema binding, generated mappings, validation, writing, diagnostics, interoperability claims, and conformance documentation
+- Owner: repository maintainer
+- Review trigger: a syntax, mapping, validation, writing, or interoperability capability is added, broadened, narrowed, or reclassified
+
+### Default
+
+State syntax recognition, implemented operational semantics, and independently observed interoperability as separate claims. Every conformance claim must identify its normative basis and focused repository evidence. A recognized construct whose required operation is unsupported must fail explicitly at the first applicable public boundary; it must not be guessed, silently omitted, repaired, or described as conforming because one corpus accepts it.
+
+### Rationale
+
+ISO 10303-21 syntax, EXPRESS schema semantics, and vendor interoperability answer different questions. Combining them can turn permissive parsing or one successful sample into a false conformance promise, while silent approximation can corrupt an exchange structure that still appears valid. Explicit staged claims let consumers distinguish what the library can recognize, bind, validate, and write, and they let maintainers extend one stage without overstating another.
+
+### Practical implications
+
+- A syntax claim cites the governing ISO production or clause and focused positive and negative fixtures.
+- A schema-binding, mapping, validation, or writing claim links the implemented boundary to tests that exercise the public observable result.
+- External NIST, buildingSMART, CAD, BIM, or vendor corpora are labeled interoperability evidence; they supplement but do not replace normative evidence.
+- Recognized syntax with unavailable operational semantics produces a stable capability or stage-specific diagnostic before a partial model is published or domain-controlled output is written.
+- Unsupported, ambiguous, or invalid mappings are never guessed, silently dropped, normalized into a different meaning, or reported only through documentation.
+- `docs/conformance/` distinguishes delivered, syntax-only, unsupported, and excluded behavior and changes with the capability it describes.
+
+### Exception route
+
+A deliberate compatibility extension or provisional conformance claim requires an accepted ADR defining its narrower scope, evidence, diagnostic or opt-in boundary, compatibility consequences, and objective removal or standardization trigger. Corpus prevalence alone is not sufficient justification.

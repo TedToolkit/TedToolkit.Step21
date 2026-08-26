@@ -9,7 +9,7 @@ TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and wri
 - [Package and API guide](src/TedToolkit.Step21/README.md) — install, add an EXPRESS schema, read or construct a model, validate, and write it.
 - [Conformance and capability matrix](docs/conformance/README.md) — delivered syntax/operations, syntax-only facilities, exclusions, and their evidence.
 - [Product intent](docs/product/README.md) — consumers, value, and non-goals.
-- [Architecture](docs/architecture/schema-bound-round-trip.md) and [design principles](docs/principles/README.md) — dependency and governance decisions.
+- [Architecture overview](docs/architecture/README.md), [detailed architecture](docs/architecture/schema-bound-round-trip.md), and [design principles](docs/principles/README.md) — boundaries, dependency direction, and governance decisions.
 
 ## Repository map
 

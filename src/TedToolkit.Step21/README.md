@@ -101,7 +101,7 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 ## Delivered boundary
 
 - Complete ISO 10303-21:2016 Edition 3 clear-text syntax and ISO 10303-11:2004 Edition 2 EXPRESS syntax.
-- Closed-set schema binding, generated scalar/nominal/SELECT/aggregate/entity types, descriptor-based hydration/projection, and validation-reachable static EXPRESS execution.
+- Closed-set schema binding, generated scalar/nominal/SELECT/aggregate/entity types, descriptor-based hydration/projection, and the documented statically generated validation-reachable EXPRESS subset.
 - Simple mappings plus the documented supported flat `ANDOR` complex mapping, including inherited/redeclared components.
 - Named same-schema and governed multi-schema populations, local cross-section references, deterministic canonical writing, and semantic read-write-read equivalence.
 - A reflection-free, dynamic-code-free package graph verified by a real `win-x64` Native AOT consumer publish/run.
@@ -110,7 +110,7 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 
 - Anchors, external resource acquisition/resolution, and signature verification are syntactically recognized but return explicit unsupported evidence when their operation is required. A declared external entity occurrence used by a model is reported specifically as `P21.READ.REFERENCE.EXTERNAL`.
 - Complex mappings outside the documented flat `ANDOR` form and SDAI domain-equivalence metadata are unsupported.
-- This is not a general EXPRESS interpreter and exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
+- This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.
 - Writing is canonical and semantically equivalent; it is not byte-preserving and does not retain comments or original formatting.
 

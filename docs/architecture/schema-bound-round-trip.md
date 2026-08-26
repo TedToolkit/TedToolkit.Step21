@@ -5,27 +5,8 @@
 - Scope and system boundary: the long-lived boundary among ISO 10303-21 parsing/writing, EXPRESS schema compilation, generated .NET types, and schema-bound model navigation
 - Applicable product intent: [`docs/product/README.md`](../product/README.md), approved at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`
 - Governing principles: [`docs/principles/architecture.md`](../principles/architecture.md) and [`docs/principles/engineering.md`](../principles/engineering.md), active; dependent delivery records pin the applicable committed revision
-- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), superseded; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md) and [`ADR-0005`](../adr/ADR-0005-explicit-section-graph-registration.md), accepted
-- Last approved revision: approved by the repository maintainer on 2026-08-21; dependent delivery records pin the committed revision
-
-## 📝 Clarification and decision log
-
-| ID | Question and why it mattered | Recommended answer | User decision and source | Affected sections | Status |
-| --- | --- | --- | --- | --- | --- |
-| AD-01 | Whether the core follows ISO 10303-21 or a domain format | Follow ISO 10303-21 | The maintainer confirmed the repository-wide ISO scope on 2026-08-21 | All boundaries and terminology | Resolved |
-| AD-02 | Which serialization contract generated objects require | ISO 10303-21 writing only | The maintainer excluded JSON/XML and their extension dependencies on 2026-08-21 | Runtime model, writer, non-goals | Resolved |
-| AD-03 | How generated C# is composed | Use TedToolkit.RoslynHelper structurally | The maintainer mandated TedToolkit.RoslynHelper on 2026-08-21; NuGet availability through version 2026.7.15 was verified the same day | Generator boundary and packaging | Resolved |
-| AD-04 | How generated declarations represent EXPRESS entities and inheritance | Generate one interface and one mutable reference-identity class for every EXPRESS entity; express all schema inheritance through interfaces; generated classes inherit only runtime `Entity` | The maintainer originally selected records, then retained mutable classes through ADR-0005 on 2026-08-21 | Generated model shape | Resolved |
-| AD-05 | Whether generated entity properties expose references or entities | Expose the generated entity interface directly and bind it in a second phase | The maintainer rejected `EntityRef<TEntity>` on 2026-08-21 and selected ordinary C# references plus property attributes when mapping metadata is useful | Reference and hydration boundary | Resolved |
-| AD-06 | Whether incomplete hydration is visible to ordinary consumers | Keep incomplete state strictly parser-internal and publish only fully bound models | The maintainer required on 2026-08-21 that users never observe a temporarily incomplete entity | Construction and public API | Resolved |
-| AD-07 | Which authority governs public concepts and C# representation choices | ISO 10303-21 and the selected EXPRESS schema define the semantics; C# idioms choose only among equivalent representations | The maintainer established the ISO-first, C#-second rule and prohibited library-invented domain concepts on 2026-08-21 | Terminology, generated API, runtime infrastructure, and review gates | Resolved |
-| AD-08 | Whether `ToString()` is an ISO serialization entry point | No; generate bounded non-recursive diagnostic strings and keep conforming text output on an explicit writer | The maintainer accepted the separation on 2026-08-21 | Generated records, diagnostics, and writing | Resolved |
-| AD-09 | Whether generated ANTLR visitors are retained | Retain visitors and suppress listeners; visitors perform parse-tree-to-model/IR transformation | The maintainer requested review on 2026-08-21; repository use and the planned immutable transformations support retaining them | Parser generation and semantic pipeline | Resolved |
-| AD-10 | Whether the exchange-structure root is generic | Use the non-generic standard concept `ExchangeStructure`; schema binding belongs to sections, populations, descriptors, and entity types | The maintainer accepted this correction on 2026-08-21 | Runtime root model and writing | Resolved |
-| AD-11 | Whether the Part 21 grammar targets a subset or the complete Edition 3 syntax | Target the complete ISO 10303-21 Edition 3 clear-text grammar while delivering advanced runtime semantics in declared stages | The maintainer approved this boundary on 2026-08-21 | Grammar baseline, raw model, diagnostics, testing, and estimates | Resolved |
-| AD-12 | Whether the schema-free parse graph is a public exchange-structure model | No; use internal immutable `ExchangeStructureSyntax` solely for parse/bind staging and publish only complete validated mutable `ExchangeStructure` values | The maintainer explicitly prohibited consumer access to the syntax representation on 2026-08-21 | Parser/binder boundary, public API, atomicity, and diagnostics | Resolved |
-| AD-13 | How graph registration selects a destination data section | Require an owned `DataSection` on every public Add operation and provide no section-omitting overload | The maintainer required omission of the section to be a compile-time error and approved the resulting minimal strong API on 2026-08-21 | Model ownership, registration, multi-section editing, and public API | Resolved |
-| AD-14 | Which source coordinates diagnostics and validation failures share | Use one immutable `SourceLocation` containing only `FilePath`, 1-based `Line`, and 1-based `Column`; omit end coordinates | The maintainer selected the minimal three-member contract on 2026-08-21 | Diagnostic and validation evidence ABI | Resolved |
+- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), superseded; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md), [`ADR-0005`](../adr/ADR-0005-explicit-section-graph-registration.md), [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md), and [`ADR-0007`](../adr/ADR-0007-separate-part21-lexer-parser-grammars.md), accepted
+- Last approved revision: approved by the repository maintainer on 2026-08-26; dependent delivery records pin the committed revision
 
 ## Current architecture
 
@@ -59,6 +40,24 @@ ISO 10303-21 input
 ```
 
 The runtime must not reference the Analyzer, TedToolkit.RoslynHelper, a generated schema, JSON, or XML. The Analyzer may reference ANTLR, Roslyn, and TedToolkit.RoslynHelper. Analyzer implementation dependencies that execute inside the compiler must be packaged beside the analyzer assembly. Generated source must not reference TedToolkit.RoslynHelper.
+
+### Component responsibilities
+
+These are conceptual ownership boundaries; they do not require one assembly per row.
+
+| Component boundary | Owned input and output | Visibility | Allowed dependency direction |
+| --- | --- | --- | --- |
+| Normative grammar sources | ISO-backed `.g4` sources -> reproducible generated ANTLR artifacts | Repository/build only | Standards evidence -> grammar -> generated parser |
+| EXPRESS syntax and closed-set compiler | Complete `.exp` input set -> diagnostics plus immutable bound schema IR | Analyzer internal | Syntax -> binding; never runtime model discovery |
+| EXPRESS generation | Valid bound IR -> generated schema contracts, types, validation, and descriptor behavior | Build-time | Bound IR -> RoslynHelper composition -> generated source |
+| Generated schema code | Supplied EXPRESS declarations -> public schema types and direct internal mapping behavior | Consumer compile/runtime | Generated code -> runtime contracts only |
+| Part 21 syntax and staging | Complete input text -> immutable internal syntax and stage diagnostics | Runtime internal | Grammar artifacts -> syntax -> binding orchestration |
+| Schema descriptor bridge | Physical parameters and entities -> allocation, hydration, compatibility, validation, and projection | Public identity; internal dispatch | Runtime -> abstract descriptor contract -> generated overrides |
+| Exchange model and values | Bound header, sections, identities, parameters, and generated entities -> mutable `ExchangeStructure` | Runtime public | Schema-neutral runtime contracts only |
+| Writer | Valid registered graph and generated projections -> canonical Part 21 text | Runtime internal | Exchange model -> descriptor projection -> buffered output |
+| Conformance evidence | Normative fixtures, independent corpora, package consumers, and deployment proofs -> bounded claims | Repository/public documentation | Evidence constrains claims; corpus success does not redefine standards |
+
+No component may bypass a preceding semantic stage by reinterpreting its private syntax or IR. In particular, runtime code does not inspect generated properties to reconstruct schema metadata, generated code does not parse Part 21 text, and public callers do not receive parser or binder state.
 
 ### Schema-neutral exchange-structure model
 
@@ -155,6 +154,18 @@ The standard permits references before definitions and does not require entity i
 
 The delivered operational set is intentionally narrower than the complete Edition 3 document syntax. Anchor resolution, external resource retrieval, and signature verification remain explicit capability failures. Validation executes the supported statically generated validation-reachable EXPRESS closure; it does not expose a general EXPRESS interpreter.
 
+### Public lifecycle and atomic boundaries
+
+| Boundary | Successful result | Failure result | State visible to callers |
+| --- | --- | --- | --- |
+| EXPRESS generation | A complete collision-free generated schema surface for each valid independent schema | Ordered Roslyn diagnostics; affected invalid schemas are withheld | Diagnostics and complete generated declarations only |
+| Part 21 read | A fully allocated, hydrated, and validated mutable `ExchangeStructure` | Syntax, capability, binding, or aggregate validation exception | No syntax graph, hydration state, or partial structure |
+| Construction and editing | A mutable graph that may temporarily violate schema rules | Registration and ownership operations reject invalid structural mutations before commit | Public entities, aggregates, sections, and registrations through approved APIs |
+| Explicit validation | One immutable ordered `ValidationResult` without mutation | Invalid results contain the complete detected failure set | Validation evidence only; the graph is unchanged |
+| Part 21 write | Complete canonical text committed to the caller's `TextWriter` | Capability, projection, or aggregate validation failure before domain-controlled output | No partial library-produced exchange structure |
+
+Destination I/O failures remain owned by the supplied `TextWriter` and can occur while that writer accepts the already validated complete buffer. Atomicity covers library-controlled validation and projection failures; it does not claim transactional behavior from an arbitrary external destination.
+
 ### Grammar governance
 
 Grammar is limited to standard syntax. Each behavior-changing grammar proposal must include:
@@ -167,7 +178,7 @@ Grammar is limited to standard syntax. Each behavior-changing grammar proposal m
 
 Examples of semantic requirements that must not be solved only in `.g4` include `#001 == #1`, uniqueness of occurrence names, type compatibility of a referenced entity, ordering of inherited attributes, aggregate bounds, and schema constraints. Current grammar changes in the working tree, including generic EXPRESS schema names, form part of the baseline but require the same evidence before acceptance.
 
-The split `STEPLexer.g4`/`STEPParser.g4` pair is the audited normative grammar baseline. Its `exchangeFile` start rule recognizes the complete Edition 3 clear-text syntax and consumes EOF. The split is required because context-bound URI and signature tokenization uses ANTLR lexer modes, which are available only in a lexer grammar. Compatibility fixtures cannot justify syntax that conflicts with the standard.
+The split `STEPLexer.g4`/`STEPParser.g4` pair is the audited normative grammar baseline. Its `exchangeFile` start rule recognizes the complete Edition 3 clear-text syntax and consumes EOF. [`ADR-0007`](../adr/ADR-0007-separate-part21-lexer-parser-grammars.md) requires the split while context-bound URI and signature tokenization uses ANTLR lexer modes, which are available only in a lexer grammar. Compatibility fixtures cannot justify syntax that conflicts with the standard.
 
 Complete syntactic recognition does not imply that every optional facility has complete operational semantics in the first release. The raw model and visitor retain all recognized standard section/value forms. External resource retrieval, signature validation, archive transport, ECMAScript execution, and comparable facilities may return explicit unsupported-capability diagnostics until implemented; they are not made syntactically invalid merely because their runtime behavior is staged.
 
@@ -202,6 +213,30 @@ Both generated base visitors are consumed by the immutable syntax/IR transformat
 
 Schema names are converted to `DataType` objects; source strings are not concatenated to form declarations, generic types, statements, punctuation, indentation, or directives. Source remains structural until one final `Generate` call per stable, collision-free hint name. No custom source fragment is currently expected. If a required C# construct is unsupported by the pinned helper version, the design must be revised or the smallest fragment explicitly approved before generator code is edited.
 
+### Package and deployment view
+
+The `TedToolkit.Step21` NuGet package contains the .NET 10 runtime assembly and packages the .NET Standard 2.0 Analyzer plus its compiler-time dependencies under analyzer assets. Consumer-supplied EXPRESS files are `AdditionalFiles`; generated schema code is compiled into the consumer assembly. Analyzer-only dependencies do not become runtime dependencies of the generated object graph.
+
+The packed-consumer boundary verifies the actual package rather than relying only on project references. It compares emitted generated-source paths and bytes across isolated builds, audits the resolved runtime graph, and publishes and executes a representative `win-x64` Native AOT consumer. The executable runtime identifier is proof scope, not an exclusive supported-platform list.
+
+A family of maintained precompiled schema packages is an accepted extension direction, though it is not yet part of the delivered package topology. [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md) requires one independently versioned optional package per maintained schema baseline, explicit descriptors, pinned provenance, SemVer classification of generated/schema-semantic compatibility, and a bounded dependency on the schema-neutral runtime. Acceptance governs delivery but does not claim that any schema package has been implemented or released.
+
+### Resource ownership and concurrency
+
+The current public read path consumes the complete `TextReader` into memory, temporarily materializes the complete parser representation, then publishes a fully materialized entity graph. It is not a streaming or lazy model. The writer validates and projects the complete graph, buffers all domain-controlled output, and only then calls the destination writer. This full-buffer design supplies atomic library-controlled publication and output at the cost of memory proportional to the input, parser state, object graph, projections, and output that overlap during an operation.
+
+`ExchangeStructure`, generated mutable entities, and mutable EXPRESS aggregates provide no thread-safety or synchronization contract. A caller must not mutate a graph concurrently with validation, registration, removal, projection, or writing. `TextReader` and `TextWriter` lifetime, synchronization, encoding, transport, and destination durability remain caller-owned.
+
+Streaming, lazy entity materialization, parallel graph mutation, or incremental output would change atomicity, identity, reference hydration, validation completeness, and destination-failure behavior. Such a direction requires representative workload evidence and an architecture decision rather than a local optimization. No fixed file-size or memory threshold is claimed until representative STEP/IFC/AP workloads are measured.
+
+### Observable compatibility and determinism
+
+The versioned compatibility surface includes the runtime public API and XML documentation, generated public type shapes for a fixed normalized EXPRESS input set and generator version, documented diagnostic and validation identities, and canonical writer semantics. Repository public-API snapshots protect the cumulative runtime surface. Generated schema public APIs change when their governing EXPRESS inputs or an explicitly versioned mapping contract changes; private parser contexts, syntax nodes, bound IR, emitter organization, hydration backing members, and Roslyn composition are not compatibility surfaces.
+
+For the same normalized inputs, pinned package/tool versions, and declared build environment, observable diagnostics, generated-source names and contents, validation-failure ordering, and canonical Part 21 output are deterministic. Exact NuGet archive or assembly byte reproducibility is not claimed unless a dedicated proof defines and verifies that stronger boundary. Unordered collections, timestamps, machine-specific paths, active network assets, or nondeterministic parallel scheduling must not affect a result declared deterministic.
+
+Compatibility changes must identify the affected surface and migration consequence. A diagnostic wording improvement is distinct from changing a stable code or path; an internal refactor is distinct from changing generated public nullability, inheritance, constructor shape, mapping, or writer semantics.
+
 ## Constraints for change design
 
 - Treat ISO 10303-21 and the selected EXPRESS schema as the sole sources of public domain semantics and terminology; introduce no library-defined domain abstraction.
@@ -227,6 +262,12 @@ Schema names are converted to `DataType` objects; source strings are not concate
 - Do not change grammar without clause-level evidence and focused conformance fixtures.
 - Target the complete ISO 10303-21 Edition 3 clear-text grammar; stage advanced operational semantics through explicit capability diagnostics rather than narrowing valid syntax.
 - Do not claim full schema conformance until supported EXPRESS constraints are evaluated.
+- Keep syntax recognition, implemented operational semantics, and independently observed interoperability as separate evidence-backed claims.
+- Preserve complete-result publication for generation and read, side-effect-free aggregate validation, and pre-output validation/projection for writing.
+- Account explicitly for the current full-input, full-graph, and full-output buffering model when a change affects scale or latency.
+- Do not introduce a thread-safety guarantee or concurrent mutation path without defining ownership, synchronization, atomicity, and validation consequences.
+- Classify runtime API, generated API, diagnostic identity, and canonical-output compatibility before changing an observable contract.
+- Keep declared deterministic outputs independent of unordered iteration, timestamps, machine paths, active network assets, and scheduling.
 
 ## Decision links and exceptions
 
@@ -234,6 +275,8 @@ Schema names are converted to `DataType` objects; source strings are not concate
 - ADR-0002 records the maintainer-mandated TedToolkit.RoslynHelper source-composition direction.
 - ADR-0003 selects the AOT-ready minimal validation contract and direct generated execution.
 - ADR-0005 retains mutable reference-identity entities, exchange-structure-owned occurrence names, reflection-free `DirectReferences`, and boundary validation while requiring explicit data-section selection for graph registration.
+- ADR-0006 requires one independently versioned optional package per maintained precompiled EXPRESS schema baseline, with explicit descriptor selection, provenance, compatibility classification, and bounded core-runtime dependency.
+- ADR-0007 requires separate target-independent lexer and parser grammars while Part 21 URI and signature tokenization depends on ANTLR lexer modes.
 - No principle exceptions are proposed.
 
 ## Review triggers
@@ -244,3 +287,8 @@ Schema names are converted to `DataType` objects; source strings are not concate
 - Generated code would need to reference generator-only dependencies.
 - TedToolkit.RoslynHelper cannot structurally express a required declaration with an acceptably small, reviewed extension.
 - A conformance claim expands to anchors, external references, signatures, archives, or full EXPRESS rule execution.
+- Representative files make complete input, parser, graph, projection, or output materialization operationally unacceptable.
+- A consumer requires concurrent mutation, lazy entity materialization, streaming read, or incremental write.
+- A change breaks a protected runtime/generated API, diagnostic identity, or canonical semantic-output contract.
+- An observable result declared deterministic varies with iteration order, machine state, network state, or scheduling.
+- A maintained precompiled schema package is accepted, combined with another schema family, or made dynamically discoverable.

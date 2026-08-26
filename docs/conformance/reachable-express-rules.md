@@ -1,6 +1,6 @@
 # Reachable EXPRESS rule execution
 
-SBRT-017 attaches the static expression compiler to validation roots. A generated schema either executes every dependency in its accepted reachable closure or is rejected with source-located `STEP21EXP006`; it never publishes a descriptor that silently skips a validation-relevant rule.
+SBRT-017 attaches the static expression compiler to validation roots within the documented supported closure. A generated schema either executes every dependency in that accepted closure or is rejected with source-located `STEP21EXP006`; it never publishes a descriptor that silently skips a validation-relevant rule. This is not a claim that arbitrary EXPRESS algorithms or cross-schema executable dependencies are supported.
 
 ## Reachability roots
 

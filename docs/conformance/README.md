@@ -9,12 +9,12 @@ This index states what the current package delivers, what the grammars recognize
 | ISO 10303-21:2016 Edition 3 complete clear-text syntax | [Part 21 grammar traceability](part21-edition3-grammar.md) |
 | ISO 10303-11:2004 Edition 2 EXPRESS syntax and closed-set binding | [EXPRESS grammar traceability](express-edition2-grammar.md), [closed-set binding](express-closed-set-binding.md) |
 | Generated mutable entity classes, values, aggregates, and sealed class descriptors | [entity hierarchy](generated-entity-hierarchy.md), [values](generated-schema-values.md), [aggregates](generated-schema-aggregates.md), [descriptors](generated-schema-descriptors.md) |
-| Static validation-reachable EXPRESS rules and structural validation | [reachable rules](reachable-express-rules.md), [structural validation](structural-validation.md) |
+| Documented statically generated validation-reachable EXPRESS rule closure and structural validation | [reachable rules](reachable-express-rules.md), [structural validation](structural-validation.md) |
 | Atomic simple read, same-schema sections, local references, and multi-schema populations | [simple read](atomic-simple-read.md), [same-schema sections](same-schema-data-sections.md), [reference hydration](reference-hydration.md), [multi-schema populations](multi-schema-populations.md) |
 | Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
 
-Semantic round-trip evidence compares entity identity, generated type, values, aggregate semantics, and reference identity after write/read. Canonical formatting may differ from the input.
+Repository-owned semantic round-trip fixtures compare entity identity, generated type, values, aggregate semantics, and reference identity after write/read. Canonical formatting may differ from the input; the opt-in external corpus is syntax evidence only.
 
 ## Syntax recognized; operation unsupported
 
