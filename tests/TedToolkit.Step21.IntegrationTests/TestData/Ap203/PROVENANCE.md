@@ -9,7 +9,7 @@ AP203 writer. Verification reads the checked-in STEP file and does not require O
 - Exporter: `STEPControl_Writer`, `STEPControl_ManifoldSolidBrep`, schema `AP203`, millimetres;
   surface curves, color, names, layers, properties, metadata, and material export disabled.
 - Geometry source: `occt-box-10x20x30-generator.cxx` in this directory.
-- Fixture SHA-256: `0859D705B69592C50CD6DCBF7564FF2CBDE5ED4960EB6DF70A836FC794F9BA9A`.
+- Fixture SHA-256: `2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62`.
 - Deterministic normalization: `FILE_NAME` path, timestamp, author, organization, exporter, system,
   and authorization text were replaced after export. Exporter-generated `PERSON`, `ORGANIZATION`,
   `LOCAL_TIME`, and UTC-offset values were also replaced with fixed neutral values; geometry,
