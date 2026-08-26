@@ -1,0 +1,11 @@
+SCHEMA flow_invalid;
+CONSTANT
+  first_value : INTEGER := second_value;
+  second_value : INTEGER := first_value;
+END_CONSTANT;
+ENTITY sample;
+  amount : INTEGER;
+WHERE
+  below_cycle : amount < first_value;
+END_ENTITY;
+END_SCHEMA;

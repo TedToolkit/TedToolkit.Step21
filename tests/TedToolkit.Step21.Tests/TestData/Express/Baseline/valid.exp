@@ -1,0 +1,5 @@
+SCHEMA baseline_valid;
+ENTITY sample;
+  value : INTEGER;
+END_ENTITY;
+END_SCHEMA;

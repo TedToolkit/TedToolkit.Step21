@@ -1,0 +1,3 @@
+SCHEMA binding_dependent;
+USE FROM binding_invalid;
+END_SCHEMA;
