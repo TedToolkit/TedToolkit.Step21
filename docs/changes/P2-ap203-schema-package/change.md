@@ -208,7 +208,7 @@ Documentation forecast: package/API 指南、schema 来源/许可、互操作和
 | ID | Blocking item | Blocks | Next action | Status |
 | --- | --- | --- | --- | --- |
 | AP203-DB-01 | ADR-0006 与首次公开发布的 package/runtime/generated-surface 版本兼容策略必须成为 Accepted 决策 | 本修订的批准、AP203-006 启动和 change closure | 已在 `3eb14b4d8657f77da8f686d3f2ee0c25fbaa3179` 接受并固定 | Closed |
-| AP203-DB-02 | 候选集成 revision `f66c33d` 的实现状态与证据尚未合入当前主分支并与本修订后的 delivery map 对齐 | AP203-004 后续交付和最终实现评审 | 合入或等价迁移候选证据，更新唯一 work-item status source 后再继续 | Open |
+| AP203-DB-02 | 早期候选 `f66c33d` 的实现状态与证据需要迁移到当前 delivery baseline | AP203-004 后续交付和最终实现评审 | 已以 `57fea41..3b84aa3` 等价迁移、补齐证明并更新唯一 work-item status source | Closed |
 
 ## ⚠️ Risks and coordination
 

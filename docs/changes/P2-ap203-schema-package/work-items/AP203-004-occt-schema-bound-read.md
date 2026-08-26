@@ -73,6 +73,18 @@ Record the candidate revision, fixture checksum and provenance, actual changed a
 commands, observable graph/failure assertions, test counts, resource prerequisites, documented
 unsupported boundary, and the typed fixture baseline supplied to AP203-005 and AP203-006.
 
+### Candidate completion evidence
+
+| Evidence | Result |
+| --- | --- |
+| Candidate boundary | Baseline `57fea41`; implementation `a08dbce`; fixture-whitespace normalization `3b84aa3`. The exact reviewed range is `57fea41..3b84aa3`. |
+| Fixture and provenance | The checked-in 10 × 20 × 30 mm box was exported by OCCT commit `7d2efad9c8a9a57ea96c4c8587134b34dd503cd8` with AP203 manifold-solid B-rep mode and surface curves disabled. Its normalized SHA-256 is `2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62`; `PROVENANCE.md` records source, generator, parameters, deterministic normalization, license hashes, and the supported boundary. Verification requires only checked-in files, .NET, and the local package build; it uses neither network nor installed OCCT. |
+| AC-05 primary proof | `dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release` passed all 6 enabled tests with one expected opt-in external-corpus test skipped. The package-only fixture consumer observed 200 typed entities, one product, 6 advanced faces, 12 edge curves, 8 vertex points, 27 Cartesian points, and 3 SI units; it also proved shape-definition-to-representation and representation-to-solid reference identity plus metre/radian/steradian values. After final fixture normalization, the AP203 package-consumer test was rerun alone and passed 1/1. |
+| AC-09 primary proof | The same package consumer read the fixed unsupported-extension file and observed `P21-BIND-ENTITY` at line 8, column 6 without a returned partial structure. The fixture documentation limits support to entity keywords present in the pinned `CONFIG_CONTROL_DESIGN` descriptor. |
+| General corrections and regression | The implementation extends schema-neutral complex-entity projection, SELECT hydration/projection, derived-redeclaration mapping, rule reachability/lowering, structural validation, and atomic reader behavior; it contains no fixture-name or OCCT domain switch. Narrow regressions cover signed REAL values, aggregate/nested/NUMBER SELECTs, nested and unconstrained complex mappings, derived markers, group qualifiers, exhaustive enum CASE evaluation, and typed measures using derived complex-unit dimensions. The complete Release unit suite passed 344/344. |
+| Structural verification | `dotnet build TedToolkit.Step21.slnx --configuration Release --no-incremental -m:1 --disable-build-servers` succeeded with 0 warnings and 0 errors. `git diff --check 57fea41..3b84aa3` is clean. |
+| Review and downstream handoff | Read-only implementation review of `57fea41..3b84aa3` concluded Ready with no blocking or important findings and no design deviation. The checked-in typed fixture and the semantic baseline above are supplied to AP203-005; the same fixture, package consumer, checksum, and offline resource boundary are supplied to AP203-006. |
+
 ## Risks and implementation notes
 
 An OCCT file can legitimately exceed the pinned schema. Do not broaden the package claim to make a
