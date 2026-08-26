@@ -68,6 +68,17 @@ Record the candidate revision, actual changed artifacts, edited field and invali
 commands and observable assertions, discovered/passed/failed/skipped counts, output-length evidence,
 and the full journey supplied to AP203-006.
 
+### Candidate completion evidence
+
+| Evidence | Result |
+| --- | --- |
+| Candidate boundary | Baseline `3b4e4b1`; implementation `2f18b16`; exact reviewed range `3b4e4b1..2f18b16`. The only changed artifacts are the package-only AP203 fixture consumer and its integration assertions. |
+| AC-06 edit and semantic signature | The concrete generated `Product.Name` is changed to `TedToolkit AP203 OCCT box 10x20x30 mm - edited`, followed by `Validate`, complete `Write`, and descriptor-bound reread. Before-write and after-reread signatures compare entity/category counts, edited product value, all sorted Cartesian coordinate tuples, sorted SI-unit names, shared edge-endpoint vertex degrees, shape-definition-to-representation identity, and representation-to-solid identity; physical instance numbers and formatting are excluded. The observed journey retains 200 entities, 6 faces, 12 edges, 8 vertices, 27 points, metre/radian/steradian units, and eight degree-3 shared vertices. |
+| AC-07 invalid condition and atomicity | On the reread graph, the product `frame_of_reference` and one face `bounds` aggregate are cleared. Explicit validation returns 9 failures including the product and face lower-bound codes. Write throws `ExchangeStructureWriteValidationException`; its ordered `(code,path)` sequence exactly equals explicit validation, and the destination remains 0 bytes. |
+| Primary proof | `dotnet run --project tests/TedToolkit.Step21.IntegrationTests --configuration Release` passed all 6 enabled tests; the one network-backed external-corpus test was skipped by its opt-in contract. The package-only consumer output fixes `AP203_ROUND_TRIP_OK` and `AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0`. |
+| Regression proof | `dotnet run --project tests/TedToolkit.Step21.Tests --configuration Release` passed 344/344 with 0 failed and 0 skipped. No reusable runtime/generator defect was exposed, so no production implementation changed. |
+| Review and AP203-006 handoff | Read-only review of `3b4e4b1..2f18b16` concluded Ready with no blocking or important findings and no design deviation. `Ap203FixtureProgram` now contains the exact read, typed navigation, edit, validate, write, reread, semantic comparison, invalid validation, zero-byte rejection, and unsupported-extension journey to execute under the AP203-006 packed Native AOT/offline proof. |
+
 ## Risks and implementation notes
 
 AP203 rule execution can expose an unsupported EXPRESS feature. Fix an already approved standards
