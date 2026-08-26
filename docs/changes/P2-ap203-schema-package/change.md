@@ -130,6 +130,13 @@ Rejected alternatives:
 
 Target delivery artifacts: code, tests, configuration/build metadata, package contents, and consumer documentation.
 
+<!-- section: start-conditions -->
+## Start conditions
+
+<!-- change-prerequisite: none -->
+
+None. This delivery did not consume another repository change outcome.
+
 ## 🔀 Delivery disposition and operational handoffs
 
 - Target delivery artifacts: code, tests, configuration, build automation, package contents, documentation.
@@ -141,6 +148,8 @@ Target delivery artifacts: code, tests, configuration/build metadata, package co
 
 <!-- section: behavior-contract -->
 ## 🧪 Behavior cases
+
+<!-- acceptance-case: AC-12 -->
 
 | ID | Preconditions and input | Action | Expected observable behavior |
 | --- | --- | --- | --- |
