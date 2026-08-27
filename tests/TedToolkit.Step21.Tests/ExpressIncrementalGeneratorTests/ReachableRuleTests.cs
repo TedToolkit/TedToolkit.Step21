@@ -4501,6 +4501,7 @@ public sealed class ReachableRuleTests
           direct_access : single_owner.rank > 0;
           repeated_access : (single_owner.rank > 0) AND (single_owner.rank > 0);
           function_access : owner_rank(SELF) > 0;
+          identity_access : SELF :=: single_owner.targets[1];
           independent_rule : code > 0;
         END_ENTITY;
         ENTITY owner;
@@ -4628,6 +4629,60 @@ public sealed class ReachableRuleTests
                 }
             }
 
+            internal static ValidationResult WriteMany()
+            {
+                var structure = CreateStructure();
+                var section = structure.DataSections[0];
+                var target = new Target(BigInteger.One);
+                _ = structure.Add(section, target);
+                _ = structure.Add(section, new Owner(BigInteger.One, new ExpressList<ITarget>(0) { target }));
+                _ = structure.Add(section, new Owner(BigInteger.One, new ExpressList<ITarget>(0) { target }));
+                var output = new StringWriter();
+                try
+                {
+                    structure.Write(output);
+                    throw new InvalidOperationException("Invalid singular inverse write unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureWriteValidationException exception)
+                {
+                    if (output.ToString().Length != 0)
+                    {
+                        throw new InvalidOperationException("Invalid singular inverse write produced output.");
+                    }
+
+                    return exception.ValidationResult;
+                }
+            }
+
+            internal static ValidationResult ReadMany()
+            {
+                const string source = """
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('singular inverse'),'3;1');
+                    FILE_NAME('singular.step','2026-08-27T00:00:00', (), (),'tests','tests','');
+                    FILE_SCHEMA(('singular_inverse_model'));
+                    ENDSEC;
+                    DATA;
+                    #1=TARGET(1);
+                    #2=OWNER(1,(#1));
+                    #3=OWNER(1,(#1));
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """;
+                try
+                {
+                    _ = ExchangeStructure.Read(
+                        new StringReader(source),
+                        [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                    throw new InvalidOperationException("Invalid singular inverse read unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureReadValidationException exception)
+                {
+                    return exception.ValidationResult;
+                }
+            }
+
             private static ExchangeStructure CreateStructure()
             {
                 var structure = new ExchangeStructure(
@@ -4687,6 +4742,96 @@ public sealed class ReachableRuleTests
             }
         }
         """";
+
+    private const string SINGULAR_INVERSE_ORDER_SCHEMA = """
+        SCHEMA singular_inverse_order_model;
+        ENTITY order_target;
+          code : INTEGER;
+          values : LIST [1:1] OF INTEGER;
+        INVERSE
+          single_owner : order_owner FOR targets;
+        UNIQUE
+          unique_code : code;
+        WHERE
+          inverse_rule : single_owner.rank > 0;
+          later_where : code > 0;
+        END_ENTITY;
+        ENTITY order_owner;
+          rank : INTEGER;
+          targets : LIST [0:?] OF order_target;
+        END_ENTITY;
+        RULE population_rule FOR (order_target);
+        WHERE
+          global_failure : SIZEOF(order_target) > 100;
+        END_RULE;
+        END_SCHEMA;
+        """;
+
+    private const string SINGULAR_INVERSE_ORDER_CONSUMER = """
+        using System;
+        using System.IO;
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.SingularInverseOrderModel;
+
+        internal static class SingularInverseOrderConsumer
+        {
+            internal static ValidationResult[] ValidateTwice()
+            {
+                var structure = CreateInvalidStructure();
+                return [structure.Validate(), structure.Validate()];
+            }
+
+            internal static ValidationResult Write()
+            {
+                var structure = CreateInvalidStructure();
+                var output = new StringWriter();
+                try
+                {
+                    structure.Write(output);
+                    throw new InvalidOperationException("Invalid mixed failure write unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureWriteValidationException exception)
+                {
+                    if (output.ToString().Length != 0)
+                    {
+                        throw new InvalidOperationException("Invalid mixed failure write produced output.");
+                    }
+
+                    return exception.ValidationResult;
+                }
+            }
+
+            private static ExchangeStructure CreateInvalidStructure()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["mixed order"], "3;1"),
+                        new FileName("mixed.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileSchema(["singular_inverse_order_model"])),
+                    [TedToolkit.Step21.Generated.SingularInverseOrderModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("singular_inverse_order_model"));
+                structure.DataSections.Add(section);
+
+                var missingOwner = new OrderTarget(-BigInteger.One, new ExpressList<BigInteger>(1, 1));
+                var uniqueOwner = new OrderTarget(
+                    -BigInteger.One,
+                    new ExpressList<BigInteger>(1, 1) { BigInteger.One });
+                var unregistered = new OrderTarget(
+                    BigInteger.One,
+                    new ExpressList<BigInteger>(1, 1) { BigInteger.One });
+                _ = structure.Add(section, missingOwner);
+                _ = structure.Add(section, uniqueOwner);
+                _ = structure.Add(
+                    section,
+                    new OrderOwner(
+                        BigInteger.One,
+                        new ExpressList<IOrderTarget>(0) { uniqueOwner, unregistered }));
+                _ = structure.Remove(unregistered);
+                return structure;
+            }
+        }
+        """;
 
     private const string IMPORTED_RULE_FOUNDATION_SCHEMA = """
         SCHEMA imported_rule_foundation;
@@ -8992,6 +9137,12 @@ public sealed class ReachableRuleTests
         var readZero = consumer.GetMethod(
             "ReadZero",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var writeMany = consumer.GetMethod(
+            "WriteMany",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var readMany = consumer.GetMethod(
+            "ReadMany",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var unique = (ValidationResult)validate.Invoke(
             null,
             [1, true, new System.Numerics.BigInteger(1)])!;
@@ -9008,6 +9159,8 @@ public sealed class ReachableRuleTests
         var lazy = (ValidationResult)validateLazy.Invoke(null, null)!;
         var writeFailure = (ValidationResult)writeZero.Invoke(null, null)!;
         var readFailure = (ValidationResult)readZero.Invoke(null, null)!;
+        var writeManyFailure = (ValidationResult)writeMany.Invoke(null, null)!;
+        var readManyFailure = (ValidationResult)readMany.Invoke(null, null)!;
         var ownerQueryCount = (int)consumer.GetProperty(
             "OwnerQueryCount",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
@@ -9030,13 +9183,20 @@ public sealed class ReachableRuleTests
                 .And.Contains("0");
             await Assert.That(zero.Failures[0].SourceLocation!.FilePath)
                 .IsEqualTo("singular-inverse.exp");
-            await Assert.That(many.Failures.Select(failure => failure.Code))
-                .IsEquivalentTo(new[]
+            await Assert.That(zero.Failures[0].SourceLocation!.Line).IsEqualTo(5);
+            await Assert.That(zero.Failures[0].SourceLocation!.Column).IsEqualTo(3);
+            await Assert.That(many.Failures.Select(failure => (failure.Code, failure.Path)).SequenceEqual(new[]
                 {
-                    "SINGULAR_INVERSE_MODEL.TARGET.SINGLE_OWNER.INVERSE_CARDINALITY",
-                });
-            await Assert.That(many.Failures[0].Message).Contains("2");
-            await Assert.That(ownerQueryCount).IsEqualTo(2);
+                    ("SINGULAR_INVERSE_MODEL.TARGET.SINGLE_OWNER.INVERSE_CARDINALITY", "DataSections[0].#1.SingleOwner"),
+                })).IsTrue();
+            await Assert.That(many.Failures[0].Message)
+                .Contains("SINGULAR_INVERSE_MODEL.OWNER.TARGETS")
+                .And.Contains("2");
+            await Assert.That(many.Failures[0].SourceLocation!.FilePath)
+                .IsEqualTo("singular-inverse.exp");
+            await Assert.That(many.Failures[0].SourceLocation!.Line).IsEqualTo(5);
+            await Assert.That(many.Failures[0].SourceLocation!.Column).IsEqualTo(3);
+            await Assert.That(ownerQueryCount).IsEqualTo(3);
             await Assert.That(counting.Failures.Any(failure => failure.Code.EndsWith(
                 ".INVERSE_CARDINALITY",
                 StringComparison.Ordinal))).IsFalse();
@@ -9050,6 +9210,56 @@ public sealed class ReachableRuleTests
                 explicitZero.Failures.Select(FailureEvidence))).IsTrue();
             await Assert.That(readFailure.Failures.Select(FailureEvidence).SequenceEqual(
                 explicitZero.Failures.Select(FailureEvidence))).IsTrue();
+            await Assert.That(writeManyFailure.Failures.Select(FailureEvidence).SequenceEqual(
+                many.Failures.Select(FailureEvidence))).IsTrue();
+            await Assert.That(readManyFailure.Failures.Select(FailureEvidence).SequenceEqual(
+                many.Failures.Select(FailureEvidence))).IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies the complete mixed-failure sequence is stable across validation and writer preflight.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_complete_singular_inverse_failure_order_across_validation_and_writer_preflight()
+    {
+        var result = GeneratorHostTests.Run(
+            SINGULAR_INVERSE_ORDER_CONSUMER,
+            ("schemas/singular-inverse-order.exp", SINGULAR_INVERSE_ORDER_SCHEMA));
+        var diagnostics = result.OutputCompilation.GetDiagnostics()
+            .Concat(result.Diagnostics)
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(diagnostics)
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics.Select(item => item.ToString())));
+
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("SingularInverseOrderConsumer", throwOnError: true)!;
+        var validateTwice = consumer.GetMethod(
+            "ValidateTwice",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var write = consumer.GetMethod(
+            "Write",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validations = (ValidationResult[])validateTwice.Invoke(null, null)!;
+        var writeFailure = (ValidationResult)write.Invoke(null, null)!;
+        var firstEvidence = validations[0].Failures.Select(FailureEvidence).ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(validations[1].Failures.Select(FailureEvidence).SequenceEqual(firstEvidence)).IsTrue();
+            await Assert.That(writeFailure.Failures.Select(FailureEvidence).SequenceEqual(firstEvidence)).IsTrue();
+            await Assert.That(validations[0].Failures.Select(failure => (failure.Code, failure.Path)).SequenceEqual(new[]
+                {
+                    ("SINGULAR_INVERSE_ORDER_MODEL.ORDER_TARGET.VALUES.AGGREGATE_0.LOWER_BOUND", "DataSections[0].#1.Values"),
+                    ("SINGULAR_INVERSE_ORDER_MODEL.ORDER_TARGET.SINGLE_OWNER.INVERSE_CARDINALITY", "DataSections[0].#1.SingleOwner"),
+                    ("SINGULAR_INVERSE_ORDER_MODEL.ORDER_TARGET.WHERE.LATER_WHERE", "DataSections[0].#1"),
+                    ("SINGULAR_INVERSE_ORDER_MODEL.ORDER_TARGET.WHERE.LATER_WHERE", "DataSections[0].#2"),
+                    ("SINGULAR_INVERSE_ORDER_MODEL.ORDER_TARGET.UNIQUE.UNIQUE_CODE", "DataSections[0].#2.Code"),
+                    ("SINGULAR_INVERSE_ORDER_MODEL.RULE.POPULATION_RULE.WHERE.GLOBAL_FAILURE", "Schema[singular_inverse_order_model].population_rule"),
+                    ("P21.STRUCTURE.REFERENCE.REGISTRATION", "DataSections[0].#3.DirectReferences[1]"),
+                })).IsTrue().Because(string.Join(Environment.NewLine, firstEvidence));
         }
     }
 
