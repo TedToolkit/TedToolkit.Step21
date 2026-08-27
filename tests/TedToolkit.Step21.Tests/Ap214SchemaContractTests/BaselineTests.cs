@@ -65,11 +65,11 @@ internal sealed class BaselineTests
         {
             await Assert.That(ComputeTextHash(upstreamSource)).IsEqualTo(UpstreamSha256);
             await Assert.That(ComputeTextHash(canonicalSource)).IsEqualTo(CanonicalLfSha256);
-            await Assert.That(ComputeFileHash(Path.Combine(directory, "COPYING")))
+            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "COPYING")))
                 .IsEqualTo("C787486F3E1358CF1CB4456B56E00862DE9C0433E7D49F5501D1289FF8BEF37E");
-            await Assert.That(ComputeFileHash(Path.Combine(directory, "AUTHORS")))
+            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "AUTHORS")))
                 .IsEqualTo("619EE3D3D9CE6DB690B4A20F36AB30616CB8F1FB8616FAEB85D9685AFDFD15FB");
-            await Assert.That(ComputeFileHash(Path.Combine(directory, "INTENT.md")))
+            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "INTENT.md")))
                 .IsEqualTo("B10C7DCC9C269B383C944ACC139F787CCA050D497142CA03ED90C49EF41CE23F");
             await Assert.That(source).Contains("SCHEMA AUTOMOTIVE_DESIGN;");
             await Assert.That(source).Contains("ISO/DIS 10303-214:2007");
@@ -195,8 +195,8 @@ internal sealed class BaselineTests
             or Accessibility.Protected
             or Accessibility.ProtectedOrInternal;
 
-    private static string ComputeFileHash(string path) =>
-        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+    private static string ComputeCanonicalTextFileHash(string path) =>
+        ComputeTextHash(File.ReadAllText(path).ReplaceLineEndings("\n"));
 
     private static string ComputeTextHash(string text) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
