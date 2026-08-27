@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: candidate-ready -->
+<!-- change-status: in-progress -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: user 2026-08-27 -->
-<!-- candidate-binding: commit:229eb6b43bdeb34d540ef7ab87c6cc3a138a512f -->
+<!-- candidate-binding: none -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -235,7 +235,9 @@ AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated 
 
 ## Implementation evidence
 
-- Exact implementation candidate: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`.
+- Rejected implementation candidate: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`. Independent review found
+  an unsafe renamed-specialization projection, a false compound-invalid `STEP21EXP005`, and incomplete AC-01/AC-05
+  proof partitions. These findings returned the change to `in-progress`; the next candidate must supersede this evidence.
 - M-01 through M-05 focused generation, projection, diagnostics, topology, aggregate identity, and atomic
   read/write tests pass, including overlapping SELECT alternatives selecting the unique most-specific leaf.
 - Public API snapshot and complete runtime XML documentation checks pass; the compiler manifest changed only
