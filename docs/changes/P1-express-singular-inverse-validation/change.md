@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: user 2026-08-27 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:1041a5037e46e8f98f23db2abd8a2d85f673c5bf -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -189,21 +189,25 @@ AC-01 至 AC-06 必须绑定同一 exact candidate；generated XML/conformance�
 
 ## Implementation evidence
 
-- Exact implementation candidate: `cea2e808674eb117b1186135f207236468606ab2`.
+- Exact implementation candidate: `1041a5037e46e8f98f23db2abd8a2d85f673c5bf`.
 - Reachability planning retains only actually referenced entity-valued inverses. Generated descriptor helpers resolve the
   declared forward role from the ordered validation population, reference-deduplicate compatible owners, and cache the
   unique value or unavailable state by current entity reference and inverse declaration for one invocation.
 - Zero/multiple candidates emit one stable uppercase `INVERSE_CARDINALITY` failure at the generated inverse-member path,
   with inverse-declaration source and role/count message. A private generated signal suppresses only the dependent
   WHERE/UNIQUE evaluation; later independent rules continue and ordinary schemas receive no unrelated generated churn.
-- Focused generated behavior proves unique single/repeated role occurrences, 0/2-owner partitions, direct/repeated/
-  function-mediated cache reuse, exact role-query observations, TRUE-OR/FALSE-AND non-access, deterministic evidence,
-  no public inverse property, read non-publication, and zero-byte writer rejection.
+- Focused generated behavior proves unique single/repeated role occurrences and exact owner identity, 0/2-owner
+  partitions, direct/repeated/function-mediated cache reuse, exact role-query observations, TRUE-OR/FALSE-AND
+  non-access, exact inverse source line/column, no public inverse property, and zero/multiple-owner canonical read
+  rejection and zero-byte writer rejection with evidence identical to explicit validation.
+- A fixed mixed model proves the complete structural, inverse, later WHERE, UNIQUE, global RULE, and relationship
+  failure sequence is byte-for-byte stable across two explicit validation invocations and writer preflight, including
+  code, path, message, and source location.
 - Generated descriptor XML, architecture, reachable-rule, structural-validation, and package/AOT conformance documents
   describe the same code/path/source/timing and physical-slot boundary. Aggregate-valued inverse behavior is unchanged.
 - Exact candidate verification ran in the LF-preserving detached worktree
-  `TedToolkit.Step21.Candidate.cea2e80`: Release solution build passed with 0 warnings/errors; the compiler manifest gate
-  passed; unit/generator tests passed 378/378; integration passed 7/7 enabled tests with the one opt-in network corpus
+  `TedToolkit.Step21.Candidate.1041a50`: Release solution build passed with 0 warnings/errors; the compiler manifest gate
+  passed within the complete suite; unit/generator tests passed 379/379; integration passed 7/7 enabled tests with the one opt-in network corpus
   skipped. The actual packed consumer executed the 1/0/many/lazy and read/write matrix.
 - Actual-package trimmed `win-x64` Native AOT publish/run emitted no attributable warning and reported
   `PACKED_AOT_OK` plus `NATIVE_AOT_PACKAGE_PROOF_OK win-x64 executable-bytes=3661824 compiler-package=10.0.11`.
