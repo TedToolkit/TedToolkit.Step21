@@ -310,7 +310,7 @@ internal sealed class ExpressEntityGenerationPlan
         {
             var redeclarations = projection.PhysicalComponents
                 .SelectMany(entity => entity.Attributes)
-                .Where(attribute => attribute.RedeclaredAttributeName is not null)
+                .Where(attribute => IsIndividuallySupportedRedeclaration(attribute, valueResolver))
                 .ToArray();
             foreach (var group in redeclarations.GroupBy(attribute =>
                          (attribute.RedeclaredEntity, attribute.RedeclaredAttributeName)))
@@ -341,6 +341,22 @@ internal sealed class ExpressEntityGenerationPlan
                 }
             }
         }
+    }
+
+    private static bool IsIndividuallySupportedRedeclaration(
+        ExpressBoundAttribute attribute,
+        ExpressGeneratedTypeResolver valueResolver)
+    {
+        if (attribute.RedeclaredAttributeName is null
+            || !valueResolver.HasValidRedeclarationOrigin(attribute)
+            || !valueResolver.TryGetRedeclaredAttribute(attribute, out var original)
+            || (!original.IsOptional && attribute.IsOptional))
+        {
+            return false;
+        }
+
+        return valueResolver.ClassifySpecialization(original.Type, attribute.Type)
+            is ExpressRedeclarationClassification.Equivalent or ExpressRedeclarationClassification.Supported;
     }
 
     private static void PropagateInvalidImports(

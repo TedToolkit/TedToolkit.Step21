@@ -47,6 +47,8 @@ internal static class Program
         var specialization = structure.Entities.OfType<SpecializationChild>().Single();
         var specializedTarget = structure.Entities.OfType<SpecializedTarget>().Single();
         ISpecializationRoot broadSpecialization = specialization;
+        var narrowSelected = specialization.SelectValue.TryGetSpecializedTarget(out var selectedSpecializedTarget);
+        var broadSelected = broadSpecialization.SelectValue.TryGetTarget(out var selectedTarget);
 
         if (complex is not ILeft { Enabled: true, } left
             || complex is not IRight { Rank: var rank }
@@ -56,6 +58,10 @@ internal static class Program
             || left.Label != "complex"
             || !ReferenceEquals(specialization.Link, specializedTarget)
             || !ReferenceEquals(broadSpecialization.Link, specializedTarget)
+            || !narrowSelected
+            || !ReferenceEquals(selectedSpecializedTarget, specializedTarget)
+            || !broadSelected
+            || !ReferenceEquals(selectedTarget, specializedTarget)
             || specialization.IntegerValue.ToString() != "18446744073709551616000000000000000001"
             || broadSpecialization.IntegerValue != NumberValue.FromInteger(specialization.IntegerValue)
             || broadSpecialization.RealValue != NumberValue.FromReal(specialization.RealValue)
@@ -97,6 +103,9 @@ internal static class Program
         var rereadSpecialization = reread.Entities.OfType<SpecializationChild>().Single();
         var rereadSpecializedTarget = reread.Entities.OfType<SpecializedTarget>().Single();
         ISpecializationRoot rereadBroadSpecialization = rereadSpecialization;
+        var rereadNarrowSelected = rereadSpecialization.SelectValue.TryGetSpecializedTarget(
+            out var rereadSelectedSpecializedTarget);
+        var rereadBroadSelected = rereadBroadSpecialization.SelectValue.TryGetTarget(out var rereadSelectedTarget);
         if (!reread.Validate().IsValid
             || reread.Entities.Count() != 5
             || rereadComplex is not ILeft { Enabled: true, }
@@ -109,10 +118,28 @@ internal static class Program
             || rereadSimple.Name != "after"
             || !ReferenceEquals(rereadSpecialization.Link, rereadSpecializedTarget)
             || !ReferenceEquals(rereadBroadSpecialization.Link, rereadSpecializedTarget)
+            || !rereadNarrowSelected
+            || !ReferenceEquals(rereadSelectedSpecializedTarget, rereadSpecializedTarget)
+            || !rereadBroadSelected
+            || !ReferenceEquals(rereadSelectedTarget, rereadSpecializedTarget)
+            || rereadSpecialization.IntegerValue.ToString() != "18446744073709551616000000000000000001"
+            || rereadBroadSpecialization.IntegerValue != NumberValue.FromInteger(
+                rereadSpecialization.IntegerValue)
+            || rereadBroadSpecialization.RealValue != NumberValue.FromReal(rereadSpecialization.RealValue)
             || !ReferenceEquals(rereadSpecialization.ArrayValue, rereadBroadSpecialization.ArrayValue)
+            || !ReferenceEquals(rereadSpecialization.ListValue, rereadBroadSpecialization.ListValue)
+            || !ReferenceEquals(rereadSpecialization.BagValue, rereadBroadSpecialization.BagValue)
+            || !ReferenceEquals(rereadSpecialization.SetValue, rereadBroadSpecialization.SetValue)
+            || !ReferenceEquals(rereadSpecialization.OptionalLink, rereadSpecializedTarget)
+            || !ReferenceEquals(rereadBroadSpecialization.OptionalLink, rereadSpecializedTarget)
+            || !ReferenceEquals(rereadSpecialization.ArrayValue[1], rereadSpecializedTarget)
+            || !ReferenceEquals(rereadSpecialization.ArrayValue[2], rereadSpecializedTarget)
             || rereadSpecializedTarget.Code != "narrow-edited"
-            || rereadSpecialization.ListValue.Count != 1
-            || rereadSpecialization.BagValue.Count != 3)
+            || !rereadSpecialization.ListValue.SequenceEqual([rereadSpecializedTarget])
+            || rereadSpecialization.BagValue.Count != 3
+            || rereadSpecialization.BagValue.Any(item => !ReferenceEquals(item, rereadSpecializedTarget))
+            || rereadSpecialization.SetValue.Count != 1
+            || !rereadSpecialization.SetValue.Contains(rereadSpecializedTarget))
         {
             return 13;
         }

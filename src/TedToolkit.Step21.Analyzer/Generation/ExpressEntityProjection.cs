@@ -334,9 +334,6 @@ internal sealed class ExpressEntityProjection
             {
                 var inherited = effective[effectiveIndex];
                 var isRenamed = !StringComparer.Ordinal.Equals(inherited.Name, attribute.Name);
-                attribute = attribute.WithStorage(
-                    inherited,
-                    isRenamed ? inherited.Name : null);
                 var forward = valueResolver.ClassifySpecialization(inherited.Type, attribute.Type);
                 var reverse = valueResolver.ClassifySpecialization(attribute.Type, inherited.Type);
                 var inheritedIsMoreSpecific = reverse == ExpressRedeclarationClassification.Supported
@@ -345,8 +342,8 @@ internal sealed class ExpressEntityProjection
                         && attribute.Attribute.IsOptional);
                 if (inheritedIsMoreSpecific)
                 {
-                    if (!isRenamed
-                        && !adapters.Any(adapter => ReferenceEquals(
+                    attribute = attribute.WithStorage(inherited, redirectTargetName: null);
+                    if (!adapters.Any(adapter => ReferenceEquals(
                             adapter.InterfaceAttribute.Attribute,
                             attribute.Attribute)))
                     {
@@ -356,9 +353,14 @@ internal sealed class ExpressEntityProjection
                     continue;
                 }
 
-                if (!isRenamed
-                    && (forward != ExpressRedeclarationClassification.Equivalent
-                        || inherited.Attribute.IsOptional != attribute.Attribute.IsOptional))
+                var attributeIsMoreSpecific = forward == ExpressRedeclarationClassification.Supported
+                    || (forward == ExpressRedeclarationClassification.Equivalent
+                        && inherited.Attribute.IsOptional
+                        && !attribute.Attribute.IsOptional);
+                attribute = attribute.WithStorage(
+                    inherited,
+                    isRenamed && !attributeIsMoreSpecific ? inherited.Name : null);
+                if (attributeIsMoreSpecific)
                 {
                     for (var index = 0; index < adapters.Count; index++)
                     {
@@ -374,10 +376,11 @@ internal sealed class ExpressEntityProjection
                     {
                         adapters.Add(new(inherited, attribute));
                     }
-                }
 
-                effective[effectiveIndex] = attribute;
-                if (isRenamed)
+                    var publicIndex = result.FindIndex(candidate => SameStorage(candidate, inherited));
+                    result[publicIndex] = attribute;
+                }
+                else if (isRenamed)
                 {
                     AddPublicProperty(result, attribute);
                 }
@@ -387,6 +390,7 @@ internal sealed class ExpressEntityProjection
                     result[publicIndex] = attribute;
                 }
 
+                effective[effectiveIndex] = attribute;
                 continue;
             }
 

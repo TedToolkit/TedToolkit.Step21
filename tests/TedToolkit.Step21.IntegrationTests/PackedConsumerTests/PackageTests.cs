@@ -223,14 +223,14 @@ internal sealed class PackageTests
                 "schemas",
                 "ap203",
                 "ap203.exp"));
-            var validFixtureHash = ComputeCanonicalTextHash(Path.Combine(
+            var validFixtureHash = ComputeFileHash(Path.Combine(
                 repositoryRoot,
                 "tests",
                 "TedToolkit.Step21.IntegrationTests",
                 "TestData",
                 "Ap203",
                 "occt-box-10x20x30-ap203.step"));
-            var unsupportedFixtureHash = ComputeCanonicalTextHash(Path.Combine(
+            var unsupportedFixtureHash = ComputeFileHash(Path.Combine(
                 repositoryRoot,
                 "tests",
                 "TedToolkit.Step21.IntegrationTests",
@@ -575,6 +575,12 @@ internal sealed class PackageTests
     {
         var text = File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal);
         return ComputeTextHash(text);
+    }
+
+    private static string ComputeFileHash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return ComputeStreamHash(stream);
     }
 
     private static string ComputeTextHash(string text) =>
