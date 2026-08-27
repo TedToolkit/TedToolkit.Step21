@@ -2547,8 +2547,12 @@ internal static class ExpressReachableRuleEmitter
         method.AddStatement(new CustomExpression(
             $"cachedByDeclaration.Add({Literal(declaration)}, null)"));
         method.AddStatement(new CustomExpression(
-            "var candidatePath = global::System.Linq.Enumerable.First(entities, entry => "
-            + "global::System.Object.ReferenceEquals(entry.Value, candidate)).Key"));
+            "var candidateEntry = global::System.Linq.Enumerable.FirstOrDefault(entities, entry => "
+            + "global::System.Object.ReferenceEquals(entry.Value, candidate))"));
+        method.AddStatement(new IfStatement(new CustomExpression("candidateEntry.Value is null"))
+            .AddStatement(new CustomExpression(
+                "throw new __ExpressInverseUnavailableException()")));
+        method.AddStatement(new CustomExpression("var candidatePath = candidateEntry.Key"));
         method.AddStatement(new CustomExpression(
             "failures.Add(new global::TedToolkit.Step21.ValidationFailure("
             + $"{Literal(code)}, candidatePath + {Literal($".{member}")}, "

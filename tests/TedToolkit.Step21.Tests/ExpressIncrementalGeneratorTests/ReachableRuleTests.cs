@@ -4508,6 +4508,11 @@ public sealed class ReachableRuleTests
           rank : INTEGER;
           targets : LIST [0:?] OF target;
         END_ENTITY;
+        ENTITY carrier;
+          related : target;
+        WHERE
+          related_inverse : related.single_owner.rank > 0;
+        END_ENTITY;
         ENTITY lazy_target;
         INVERSE
           single_owner : lazy_owner FOR targets;
@@ -4681,6 +4686,48 @@ public sealed class ReachableRuleTests
                 {
                     return exception.ValidationResult;
                 }
+            }
+
+            internal static ValidationResult ValidateUnregistered(int ownerCount)
+            {
+                return CreateUnregisteredStructure(ownerCount).Validate();
+            }
+
+            internal static ValidationResult WriteUnregistered(int ownerCount)
+            {
+                var structure = CreateUnregisteredStructure(ownerCount);
+                var output = new StringWriter();
+                try
+                {
+                    structure.Write(output);
+                    throw new InvalidOperationException("Invalid unregistered inverse write unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureWriteValidationException exception)
+                {
+                    if (output.ToString().Length != 0)
+                    {
+                        throw new InvalidOperationException("Invalid unregistered inverse write produced output.");
+                    }
+
+                    return exception.ValidationResult;
+                }
+            }
+
+            private static ExchangeStructure CreateUnregisteredStructure(int ownerCount)
+            {
+                var structure = CreateStructure();
+                var section = structure.DataSections[0];
+                var target = new Target(BigInteger.One);
+                _ = structure.Add(section, new Carrier(target));
+                for (var index = 0; index < ownerCount; index++)
+                {
+                    _ = structure.Add(
+                        section,
+                        new Owner(BigInteger.One, new ExpressList<ITarget>(0) { target }));
+                }
+
+                _ = structure.Remove(target);
+                return structure;
             }
 
             private static ExchangeStructure CreateStructure()
@@ -9143,6 +9190,12 @@ public sealed class ReachableRuleTests
         var readMany = consumer.GetMethod(
             "ReadMany",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validateUnregistered = consumer.GetMethod(
+            "ValidateUnregistered",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var writeUnregistered = consumer.GetMethod(
+            "WriteUnregistered",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var unique = (ValidationResult)validate.Invoke(
             null,
             [1, true, new System.Numerics.BigInteger(1)])!;
@@ -9161,6 +9214,10 @@ public sealed class ReachableRuleTests
         var readFailure = (ValidationResult)readZero.Invoke(null, null)!;
         var writeManyFailure = (ValidationResult)writeMany.Invoke(null, null)!;
         var readManyFailure = (ValidationResult)readMany.Invoke(null, null)!;
+        var unregisteredZero = (ValidationResult)validateUnregistered.Invoke(null, [0])!;
+        var unregisteredMany = (ValidationResult)validateUnregistered.Invoke(null, [2])!;
+        var writeUnregisteredZero = (ValidationResult)writeUnregistered.Invoke(null, [0])!;
+        var writeUnregisteredMany = (ValidationResult)writeUnregistered.Invoke(null, [2])!;
         var ownerQueryCount = (int)consumer.GetProperty(
             "OwnerQueryCount",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
@@ -9214,6 +9271,20 @@ public sealed class ReachableRuleTests
                 many.Failures.Select(FailureEvidence))).IsTrue();
             await Assert.That(readManyFailure.Failures.Select(FailureEvidence).SequenceEqual(
                 many.Failures.Select(FailureEvidence))).IsTrue();
+            await Assert.That(unregisteredZero.Failures.Select(failure => (failure.Code, failure.Path)).SequenceEqual(new[]
+                {
+                    ("P21.STRUCTURE.REFERENCE.REGISTRATION", "DataSections[0].#1.DirectReferences[0]"),
+                })).IsTrue();
+            await Assert.That(unregisteredMany.Failures.Select(failure => (failure.Code, failure.Path)).SequenceEqual(new[]
+                {
+                    ("P21.STRUCTURE.REFERENCE.REGISTRATION", "DataSections[0].#1.DirectReferences[0]"),
+                    ("P21.STRUCTURE.REFERENCE.REGISTRATION", "DataSections[0].#3.DirectReferences[0]"),
+                    ("P21.STRUCTURE.REFERENCE.REGISTRATION", "DataSections[0].#4.DirectReferences[0]"),
+                })).IsTrue();
+            await Assert.That(writeUnregisteredZero.Failures.Select(FailureEvidence).SequenceEqual(
+                unregisteredZero.Failures.Select(FailureEvidence))).IsTrue();
+            await Assert.That(writeUnregisteredMany.Failures.Select(FailureEvidence).SequenceEqual(
+                unregisteredMany.Failures.Select(FailureEvidence))).IsTrue();
         }
     }
 
