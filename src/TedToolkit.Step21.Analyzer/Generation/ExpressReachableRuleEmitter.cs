@@ -7,6 +7,8 @@
 
 using System.Globalization;
 
+using Microsoft.CodeAnalysis.CSharp;
+
 using TedToolkit.RoslynHelper;
 using TedToolkit.RoslynHelper.Syntaxes;
 
@@ -27,6 +29,13 @@ internal static class ExpressReachableRuleEmitter
 
     private const string POPULATION_TYPE =
         "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>";
+
+    private const string FAILURE_LIST_TYPE =
+        "global::System.Collections.Generic.List<global::TedToolkit.Step21.ValidationFailure>";
+
+    private const string INVERSE_CACHE_TYPE =
+        "global::System.Collections.Generic.Dictionary<global::TedToolkit.Step21.Entity, "
+        + "global::System.Collections.Generic.Dictionary<global::System.String, global::System.Object?>>";
 
     /// <summary>
     /// Creates private static helpers for every reachable declaration dependency.
@@ -417,6 +426,7 @@ internal static class ExpressReachableRuleEmitter
         Func<string, string> allocateTemporaryName = prefix => prefix
             + (temporaryOrdinal++).ToString(CultureInfo.InvariantCulture);
         AddPopulationParameter(method);
+        AddValidationContextParameters(method, plan);
         var expression = plan.GetExpression(
             plan.Analysis.GetDeclaration(declaration).RequiredChild("expression"));
         var generated = ExpressExpressionEmitter.Emit(
@@ -479,6 +489,7 @@ internal static class ExpressReachableRuleEmitter
         }
 
         AddPopulationParameter(method);
+        AddValidationContextParameters(method, plan);
         var determinateLexicals = new HashSet<ExpressBoundName>();
         var localTypes = new List<ExpressBoundType>();
         var algorithmHead = declarationRule.RequiredChild("algorithmHead");
@@ -2222,6 +2233,7 @@ internal static class ExpressReachableRuleEmitter
         Func<string, string> allocateTemporaryName = prefix => prefix
             + (temporaryOrdinal++).ToString(CultureInfo.InvariantCulture);
         AddPopulationParameter(method);
+        AddValidationContextParameters(method, plan);
         var generated = ExpressExpressionEmitter.Emit(
             expression,
             CreateContext(
@@ -2303,12 +2315,15 @@ internal static class ExpressReachableRuleEmitter
         yield return CreateUsesRoleMethod(plan, resolver, entities);
         yield return CreateUsedInMethod();
         yield return CreateRolesOfMethod(plan, entities);
-        foreach (var inverse in plan.Schema.Declarations
+        var aggregateInverses = plan.Schema.Declarations
                      .OfType<ExpressBoundEntity>()
                      .SelectMany(entity => entity.Attributes
                          .Where(attribute => attribute.Kind == ExpressAttributeKind.Inverse)
                          .Select(attribute => (Entity: entity, Attribute: attribute)))
-                     .Where(candidate => candidate.Attribute.Type is ExpressBoundAggregateType))
+                     .Where(candidate => candidate.Attribute.Type is ExpressBoundAggregateType);
+        var singularInverses = plan.ReachableSingularInverseAttributes
+            .Select(attribute => (Entity: plan.GetAttributeOwner(attribute), Attribute: attribute));
+        foreach (var inverse in aggregateInverses.Concat(singularInverses))
         {
             yield return CreateInverseMethod(plan, inverse.Entity, inverse.Attribute, resolver);
         }
@@ -2433,17 +2448,23 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundAttribute attribute,
         ExpressGeneratedTypeResolver resolver)
     {
-        var aggregate = (ExpressBoundAggregateType)attribute.Type;
-        var returnType = resolver.Resolve(plan.Schema.Identity, aggregate).DataType;
-        var returnTypeName = ExpressExpressionEmitter.BoundTypeName(aggregate);
-        var elementTypeName = ExpressExpressionEmitter.BoundTypeName(aggregate.ElementType);
+        var returnType = resolver.Resolve(plan.Schema.Identity, attribute.Type).DataType;
         var method = CreateMethod(InverseMethodName(owner, attribute), returnType);
         method.AddParameter(SourceComposer.Parameter(
             new DataType("global::TedToolkit.Step21.Entity"),
             "candidate"));
         AddPopulationParameter(method);
+        AddValidationContextParameters(method, plan);
         var role = $"{plan.Schema.Name}.{attribute.InverseEntity!.Name}.{attribute.InverseAttributeName}"
             .ToUpperInvariant();
+        if (attribute.Type is not ExpressBoundAggregateType aggregate)
+        {
+            AddSingularInverseBody(method, plan, owner, attribute, role);
+            return method;
+        }
+
+        var returnTypeName = ExpressExpressionEmitter.BoundTypeName(aggregate);
+        var elementTypeName = ExpressExpressionEmitter.BoundTypeName(aggregate.ElementType);
         method.AddStatement(new CustomExpression($"var result = new {returnTypeName}(0)"));
         var loop = new ForEachStatement(
             DataType.Var,
@@ -2460,6 +2481,85 @@ internal static class ExpressReachableRuleEmitter
     private static void AddPopulationParameter(Method method)
     {
         method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
+    }
+
+    private static void AddValidationContextParameters(Method method, ExpressReachableRulePlan plan)
+    {
+        if (plan.ReachableSingularInverseAttributes.Count == 0)
+        {
+            return;
+        }
+
+        method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(INVERSE_CACHE_TYPE), "inverseCache"));
+    }
+
+    private static string ValidationContextArgumentSuffix(ExpressReachableRulePlan plan)
+    {
+        return plan.ReachableSingularInverseAttributes.Count == 0
+            ? ""
+            : ", failures, inverseCache";
+    }
+
+    private static void AddSingularInverseBody(
+        Method method,
+        ExpressReachableRulePlan plan,
+        ExpressBoundEntity owner,
+        ExpressBoundAttribute attribute,
+        string role)
+    {
+        var returnTypeName = ExpressExpressionEmitter.BoundTypeName(attribute.Type);
+        var declaration = $"{plan.Schema.Name}.{owner.Name}.{attribute.Name}".ToUpperInvariant();
+        var code = declaration + ".INVERSE_CARDINALITY";
+        var member = ExpressEntityProjection.ToPascalCase(attribute.Name);
+        var location = attribute.Span.Start;
+        var filePath = StableFilePath(location.FilePath);
+
+        method.AddStatement(new CustomExpression(
+            "if (inverseCache.TryGetValue(candidate, out var cachedByDeclaration) "
+            + $"&& cachedByDeclaration.TryGetValue({Literal(declaration)}, out var cachedValue)) "
+            + $"{{ return cachedValue is {returnTypeName} typedCachedValue "
+            + "? typedCachedValue : throw new __ExpressInverseUnavailableException(); }"));
+        method.AddStatement(new CustomExpression(
+            "var candidates = new global::System.Collections.Generic.List<"
+            + returnTypeName + ">()"));
+        var loop = new ForEachStatement(
+            DataType.Var,
+            "user",
+            new CustomExpression(
+                $"__ExpressUsedIn<global::TedToolkit.Step21.Entity>(candidate, {Literal(role)}, entities)"));
+        loop.AddStatement(new IfStatement(new CustomExpression(
+                $"user is {returnTypeName} typedUser && !global::System.Linq.Enumerable.Any("
+                + "candidates, existing => global::System.Object.ReferenceEquals(existing, typedUser))"))
+            .AddStatement(new CustomExpression("candidates.Add(typedUser)")));
+        method.AddStatement(loop);
+        method.AddStatement(new IfStatement(new CustomExpression(
+                "!inverseCache.TryGetValue(candidate, out cachedByDeclaration)"))
+            .AddStatement(new CustomExpression(
+                "cachedByDeclaration = new global::System.Collections.Generic.Dictionary<"
+                + "global::System.String, global::System.Object?>(global::System.StringComparer.Ordinal)"))
+            .AddStatement(new CustomExpression(
+                "inverseCache.Add(candidate, cachedByDeclaration)")));
+        method.AddStatement(new IfStatement(new CustomExpression("candidates.Count == 1"))
+            .AddStatement(new CustomExpression(
+                $"cachedByDeclaration.Add({Literal(declaration)}, candidates[0])"))
+            .AddStatement(new CustomExpression("candidates[0]").Return));
+        method.AddStatement(new CustomExpression(
+            $"cachedByDeclaration.Add({Literal(declaration)}, null)"));
+        method.AddStatement(new CustomExpression(
+            "var candidatePath = global::System.Linq.Enumerable.First(entities, entry => "
+            + "global::System.Object.ReferenceEquals(entry.Value, candidate)).Key"));
+        method.AddStatement(new CustomExpression(
+            "failures.Add(new global::TedToolkit.Step21.ValidationFailure("
+            + $"{Literal(code)}, candidatePath + {Literal($".{member}")}, "
+            + $"{Literal("The singular inverse resolved an invalid number of distinct owner candidates for role ")}"
+            + $"+ {Literal(role)} + {Literal(": ")} + candidates.Count.ToString("
+            + "global::System.Globalization.CultureInfo.InvariantCulture), "
+            + "new global::TedToolkit.Step21.SourceLocation("
+            + $"{Literal(filePath)}, {location.Line.ToString(CultureInfo.InvariantCulture)}, "
+            + $"{location.Column.ToString(CultureInfo.InvariantCulture)})))"));
+        method.AddStatement(new CustomExpression(
+            "throw new __ExpressInverseUnavailableException()"));
     }
 
     private static string ResolveModelFunction(
@@ -3007,7 +3107,8 @@ internal static class ExpressReachableRuleEmitter
         var parameters = Enumerable.Range(0, parameterTypes.Length)
             .Select(index => $"__argument{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}")
             .ToArray();
-        var invocationArguments = parameters.Append(populationExpression);
+        var invocationArguments = parameters.Append(
+            populationExpression + ValidationContextArgumentSuffix(plan));
         var returnType = ExpressExpressionEmitter.BoundTypeName(declaration.DeclaredType!)
             + (plan.Schema.IndeterminateFunctions.Contains(symbol) ? "?" : "");
         var delegateTypes = parameterTypes.Append(returnType);
@@ -3031,7 +3132,8 @@ internal static class ExpressReachableRuleEmitter
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
             && ExpressTypeAnalysis.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
         {
-            return $"{FunctionMethodName(symbol)}({string.Join(", ", arguments.Append(populationExpression))})";
+            return $"{FunctionMethodName(symbol)}({string.Join(", ", arguments.Append(
+                populationExpression + ValidationContextArgumentSuffix(plan)))})";
         }
 
         var emittedArguments = arguments.ToArray();
@@ -4309,7 +4411,8 @@ internal static class ExpressReachableRuleEmitter
         {
             return symbol.Kind switch
             {
-                ExpressDeclarationKind.Constant => $"{ConstantMethodName(symbol)}({populationExpression})",
+                ExpressDeclarationKind.Constant =>
+                    $"{ConstantMethodName(symbol)}({populationExpression}{ValidationContextArgumentSuffix(plan)})",
                 ExpressDeclarationKind.Function => FunctionInvocation(
                     plan,
                     symbol,
@@ -4430,9 +4533,9 @@ internal static class ExpressReachableRuleEmitter
                         value = candidate.Kind switch
                         {
                             ExpressAttributeKind.Derived =>
-                                $"{DerivedMethodName(owner, candidate)}({variable}, {populationExpression})",
+                                $"{DerivedMethodName(owner, candidate)}({variable}, {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                             ExpressAttributeKind.Inverse =>
-                                $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({variable}), {populationExpression})",
+                                $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({variable}), {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                             _ => ResolveExplicitAttribute(
                                 plan,
                                 projection,
@@ -4493,9 +4596,9 @@ internal static class ExpressReachableRuleEmitter
                 return candidate.Kind switch
                 {
                     ExpressAttributeKind.Derived =>
-                        $"{DerivedMethodName(owner, candidate)}({source}, {populationExpression})",
+                        $"{DerivedMethodName(owner, candidate)}({source}, {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     ExpressAttributeKind.Inverse =>
-                        $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({source}), {populationExpression})",
+                        $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({source}), {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     _ => $"({source}).{ExpressEntityProjection.ToPascalCase(candidate.Name)}",
                 };
             }
@@ -4521,9 +4624,9 @@ internal static class ExpressReachableRuleEmitter
                 var access = candidate.Kind switch
                 {
                     ExpressAttributeKind.Derived =>
-                        $"{DerivedMethodName(owner, candidate)}({variable}, {populationExpression})",
+                        $"{DerivedMethodName(owner, candidate)}({variable}, {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     ExpressAttributeKind.Inverse =>
-                        $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({variable}), {populationExpression})",
+                        $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({variable}), {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     _ => $"{variable}.{ExpressEntityProjection.ToPascalCase(candidate.Name)}",
                 };
                 return $"{ownerType} {variable} => {access}";
@@ -4535,14 +4638,14 @@ internal static class ExpressReachableRuleEmitter
         if (attribute?.Kind == ExpressAttributeKind.Derived)
         {
             var owner = plan.GetAttributeOwner(attribute);
-            return $"{DerivedMethodName(owner, attribute)}({source}, {populationExpression})";
+            return $"{DerivedMethodName(owner, attribute)}({source}, {populationExpression}{ValidationContextArgumentSuffix(plan)})";
         }
 
         if (attribute?.Kind == ExpressAttributeKind.Inverse)
         {
             var owner = plan.GetAttributeOwner(attribute);
             return $"{InverseMethodName(owner, attribute)}("
-                + $"(global::TedToolkit.Step21.Entity)({source}), {populationExpression})";
+                + $"(global::TedToolkit.Step21.Entity)({source}), {populationExpression}{ValidationContextArgumentSuffix(plan)})";
         }
 
         if (attribute?.Kind == ExpressAttributeKind.Explicit)
@@ -4581,7 +4684,8 @@ internal static class ExpressReachableRuleEmitter
                 + ExpressEntityProjection.ToPascalCase(item.Owner.Name);
             var variable = $"__derived{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             return $"{ownerType} {variable} => "
-                + $"{DerivedMethodName(item.Owner, item.Attribute)}({variable}, {populationExpression})";
+                + $"{DerivedMethodName(item.Owner, item.Attribute)}("
+                + $"{variable}, {populationExpression}{ValidationContextArgumentSuffix(plan)})";
         });
         return $"({source}) switch {{ {string.Join(", ", cases)}, _ => ({source}).{property} }}";
     }
@@ -4672,6 +4776,18 @@ internal static class ExpressReachableRuleEmitter
         return string.Equals(left.Start.FilePath, right.Start.FilePath, StringComparison.Ordinal)
             && left.Start.Line == right.Start.Line
             && left.Start.Column == right.Start.Column;
+    }
+
+    private static string StableFilePath(string value)
+    {
+        var normalized = value.Replace('\\', '/');
+        var separator = normalized.LastIndexOf('/');
+        return separator < 0 ? normalized : normalized.Substring(separator + 1);
+    }
+
+    private static string Literal(string value)
+    {
+        return SymbolDisplay.FormatLiteral(value, quote: true);
     }
 
     private static void AddSummary(IRootDescription target, string text)

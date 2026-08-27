@@ -45,6 +45,11 @@ internal static class ExpressSchemaDescriptorEmitter
 
         descriptor.AddMember(CreateConstructor());
         descriptor.AddMember(CreateInstanceProperty());
+        if (rulePlan.ReachableSingularInverseAttributes.Count > 0)
+        {
+            descriptor.AddMember(CreateInverseUnavailableExceptionType());
+        }
+
         descriptor.AddMember(CreateNameProperty(schema));
         descriptor.AddMember(CreateAllocateMethod(entities, complexEntities));
         descriptor.AddMember(CreateHydrateMethod(entities, complexEntities, resolver));
@@ -98,6 +103,16 @@ internal static class ExpressSchemaDescriptorEmitter
         constructor.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
         AddSummary(constructor, "Initializes the singleton schema descriptor.");
         return constructor;
+    }
+
+    private static TypeDeclaration CreateInverseUnavailableExceptionType()
+    {
+        var type = SourceComposer<ExpressIncrementalGenerator>.Class(
+            "__ExpressInverseUnavailableException");
+        type.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+        type.Polymorphism = Polymorphism.SEALED;
+        type.AddBaseType(new DataType("global::System.Exception"));
+        return type;
     }
 
     private static Property CreateInstanceProperty()

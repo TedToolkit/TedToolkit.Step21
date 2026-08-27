@@ -29,6 +29,7 @@ internal sealed class ExpressReachableRulePlan
         IReadOnlyList<ExpressComplexEntityProjection> complexEntityProjections,
         IEnumerable<ExpressBoundDeclaration> reachableDeclarations,
         IEnumerable<ExpressBoundAttribute> reachableDerivedAttributes,
+        IEnumerable<ExpressBoundAttribute> reachableSingularInverseAttributes,
         IEnumerable<ExpressSemanticRule> reachableRules,
         bool requiresEntityValueEquality,
         IEnumerable<ExpressEntityGenerationFailure> failures)
@@ -46,6 +47,8 @@ internal sealed class ExpressReachableRulePlan
             reachableDeclarations.ToArray());
         ReachableDerivedAttributes = new ReadOnlyCollection<ExpressBoundAttribute>(
             reachableDerivedAttributes.ToArray());
+        ReachableSingularInverseAttributes = new ReadOnlyCollection<ExpressBoundAttribute>(
+            reachableSingularInverseAttributes.ToArray());
         ReachableRules = new ReadOnlyCollection<ExpressSemanticRule>(reachableRules.ToArray());
         RequiresEntityValueEquality = requiresEntityValueEquality;
         Failures = new ReadOnlyCollection<ExpressEntityGenerationFailure>(failures.ToArray());
@@ -87,6 +90,11 @@ internal sealed class ExpressReachableRulePlan
     /// Gets reachable derived attributes in deterministic source order.
     /// </summary>
     internal IReadOnlyList<ExpressBoundAttribute> ReachableDerivedAttributes { get; }
+
+    /// <summary>
+    /// Gets validation-reachable entity-valued inverse attributes in deterministic source order.
+    /// </summary>
+    internal IReadOnlyList<ExpressBoundAttribute> ReachableSingularInverseAttributes { get; }
 
     /// <summary>
     /// Gets the validation-rooted WHERE expressions in deterministic source order.
@@ -292,6 +300,8 @@ internal sealed class ExpressReachableRulePlan
 
         private readonly HashSet<ExpressBoundAttribute> _reachableDerivedAttributes = [];
 
+        private readonly HashSet<ExpressBoundAttribute> _reachableSingularInverseAttributes = [];
+
         private readonly HashSet<ExpressSemanticRule> _reachableRules = [];
 
         private readonly Dictionary<object, VisitState> _states = [];
@@ -360,6 +370,10 @@ internal sealed class ExpressReachableRulePlan
                 .OfType<ExpressBoundEntity>()
                 .SelectMany(entity => entity.Attributes)
                 .Where(_reachableDerivedAttributes.Contains);
+            var orderedSingularInverseAttributes = _schema.Declarations.Concat(_schema.NestedDeclarations)
+                .OfType<ExpressBoundEntity>()
+                .SelectMany(entity => entity.Attributes)
+                .Where(_reachableSingularInverseAttributes.Contains);
             var orderedRules = _schema.Declarations.Concat(_schema.NestedDeclarations)
                 .SelectMany(declaration => _analysis.GetDeclaration(declaration).DescendantsAndSelf())
                 .Where(candidate => candidate.Role == "domainRule" && _reachableRules.Contains(candidate));
@@ -372,6 +386,7 @@ internal sealed class ExpressReachableRulePlan
                 _complexEntityProjections,
                 orderedDeclarations,
                 orderedAttributes,
+                orderedSingularInverseAttributes,
                 orderedRules,
                 _requiresEntityValueEquality,
                 _failures);
@@ -542,9 +557,7 @@ internal sealed class ExpressReachableRulePlan
                 {
                     if (inverse.Type is not ExpressBoundAggregateType)
                     {
-                        AddFailure(
-                            inverse.Span,
-                            $"Validation-reachable singular inverse attribute '{inverse.Name}' cannot represent a missing or multiply populated forward role.");
+                        _reachableSingularInverseAttributes.Add(inverse);
                     }
                 }
 

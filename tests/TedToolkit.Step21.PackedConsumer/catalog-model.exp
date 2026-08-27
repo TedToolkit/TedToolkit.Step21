@@ -42,4 +42,32 @@ ENTITY specialization_child SUBTYPE OF (specialization_root);
   SELF\specialization_root.set_value : SET [0:?] OF specialized_target;
   SELF\specialization_root.optional_link : specialized_target;
 END_ENTITY;
+ENTITY inverse_target;
+  code : INTEGER;
+INVERSE
+  single_owner : inverse_owner FOR targets;
+WHERE
+  direct_access : single_owner.rank > 0;
+  repeated_access : (single_owner.rank > 0) AND (single_owner.rank > 0);
+  function_access : inverse_owner_rank(SELF) > 0;
+  independent_rule : code > 0;
+END_ENTITY;
+ENTITY inverse_owner;
+  rank : INTEGER;
+  targets : LIST [0:?] OF inverse_target;
+END_ENTITY;
+ENTITY inverse_lazy_target;
+INVERSE
+  single_owner : inverse_lazy_owner FOR targets;
+WHERE
+  true_short_circuit : TRUE OR (single_owner.rank > 0);
+  false_short_circuit : FALSE AND (single_owner.rank > 0);
+END_ENTITY;
+ENTITY inverse_lazy_owner;
+  rank : INTEGER;
+  targets : LIST [0:?] OF inverse_lazy_target;
+END_ENTITY;
+FUNCTION inverse_owner_rank(candidate : inverse_target) : INTEGER;
+  RETURN(candidate.single_owner.rank);
+END_FUNCTION;
 END_SCHEMA;

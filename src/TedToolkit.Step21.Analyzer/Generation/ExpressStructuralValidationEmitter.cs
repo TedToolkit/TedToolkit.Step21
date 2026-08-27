@@ -27,6 +27,10 @@ internal static class ExpressStructuralValidationEmitter
     private const string POPULATION_TYPE =
         "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>";
 
+    private const string INVERSE_CACHE_TYPE =
+        "global::System.Collections.Generic.Dictionary<global::TedToolkit.Step21.Entity, "
+        + "global::System.Collections.Generic.Dictionary<global::System.String, global::System.Object?>>";
+
     /// <summary>
     /// Creates the generated descriptor validation dispatch method.
     /// </summary>
@@ -104,6 +108,15 @@ internal static class ExpressStructuralValidationEmitter
                 "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>"),
             "entities"));
         method.AddStatement(new CustomExpression($"var failures = new {FAILURE_LIST_TYPE}()"));
+        var inverseContext = rulePlan.ReachableSingularInverseAttributes.Count > 0;
+        if (inverseContext)
+        {
+            method.AddStatement(new CustomExpression(
+                $"var inverseCache = new {INVERSE_CACHE_TYPE}("
+                + "global::System.Collections.Generic.ReferenceEqualityComparer.Instance)"));
+        }
+
+        var inverseArgument = inverseContext ? ", inverseCache" : "";
         var temporaryOrdinal = 0;
         Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
 
@@ -115,7 +128,7 @@ internal static class ExpressStructuralValidationEmitter
             var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
                 .AddStatement(new CustomExpression("recognized = true"))
                 .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities)"));
+                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities{inverseArgument})"));
             loop.AddStatement(branch);
         }
 
@@ -125,7 +138,7 @@ internal static class ExpressStructuralValidationEmitter
             var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
                 .AddStatement(new CustomExpression("recognized = true"))
                 .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities)"));
+                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities{inverseArgument})"));
             loop.AddStatement(branch);
         }
 
@@ -241,13 +254,15 @@ internal static class ExpressStructuralValidationEmitter
                     ?? $"RULE_{Invariant(index + 1)}";
                 var code = $"{rulePlan.Schema.Name}.RULE.{declaration.Name}.WHERE.{label}"
                     .ToUpperInvariant();
-                owner.AddStatement(new IfStatement(new CustomExpression(
-                        RuleFailureCondition(expression, generated.Code)))
-                    .AddStatement(AddFailure(
+                AddWhereRuleEvaluation(
+                    owner,
+                    rulePlan,
+                    RuleFailureCondition(expression, generated.Code),
+                    AddFailure(
                         code,
                         Literal($"Schema[{rulePlan.Schema.Name}].{declaration.Name}"),
                         $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
-                        rule.Span)));
+                        rule.Span));
             }
         }
     }
@@ -283,6 +298,10 @@ internal static class ExpressStructuralValidationEmitter
             var rules = uniqueClause.ChildRules("uniqueRule").ToArray();
             for (var index = 0; index < rules.Length; index++)
             {
+                var guarded = rulePlan.ReachableSingularInverseAttributes.Count > 0
+                    ? new TryStatement()
+                    : null;
+                var ruleOwner = (IStatementOwner?)guarded ?? owner;
                 var rule = rules[index];
                 var attributes = rule.ChildRules("referencedAttribute")
                     .Select(rulePlan.GetReferencedAttribute)
@@ -291,7 +310,7 @@ internal static class ExpressStructuralValidationEmitter
                 var duplicatesName = $"uniqueDuplicates{Invariant(ruleIndex)}";
                 var duplicateName = $"uniqueDuplicate{Invariant(ruleIndex)}";
                 var interfaceName = $"I{entity.Name}";
-                owner.AddStatement(new CustomExpression(
+                ruleOwner.AddStatement(new CustomExpression(
                     $"var {populationName} = global::System.Linq.Enumerable.Select("
                     + "global::System.Linq.Enumerable.Where(entities, "
                     + $"entry => entry.Value is {interfaceName}), "
@@ -346,7 +365,7 @@ internal static class ExpressStructuralValidationEmitter
                         resolver,
                         rulePlan,
                         ref equalityVariable)));
-                owner.AddStatement(new CustomExpression(
+                ruleOwner.AddStatement(new CustomExpression(
                     $"var {duplicatesName} = global::System.Linq.Enumerable.Where({populationName}, "
                     + $"(item, itemIndex) => ({determinate}) && global::System.Linq.Enumerable.Any("
                     + $"global::System.Linq.Enumerable.Take({populationName}, itemIndex), "
@@ -362,7 +381,16 @@ internal static class ExpressStructuralValidationEmitter
                     $"{duplicateName}.Key + {Literal($".{firstProperty}")}",
                     "The EXPRESS UNIQUE key must identify at most one entity candidate.",
                     rule.Span));
-                owner.AddStatement(loop);
+                ruleOwner.AddStatement(loop);
+                if (guarded is not null)
+                {
+                    guarded.AddCatch(new CatchClause(
+                            new DataType("__ExpressInverseUnavailableException"),
+                            "inverseUnavailable")
+                        .AddStatement(new CustomExpression("_ = inverseUnavailable")));
+                    owner.AddStatement(guarded);
+                }
+
                 ruleIndex++;
             }
         }
@@ -380,7 +408,10 @@ internal static class ExpressStructuralValidationEmitter
                 + ExpressEntityProjection.ToPascalCase(owner.Name)
                 + "_"
                 + ExpressEntityProjection.ToPascalCase(attribute.Name)
-                + $"({valueExpression}, entities)";
+                + $"({valueExpression}, entities"
+                + (rulePlan.ReachableSingularInverseAttributes.Count > 0
+                    ? ", failures, inverseCache)"
+                    : ")");
         }
 
         return $"{valueExpression}.{ExpressEntityProjection.ToPascalCase(attribute.Name)}";
@@ -661,6 +692,21 @@ internal static class ExpressStructuralValidationEmitter
         {
             if (declaration is ExpressBoundEntity entity)
             {
+                foreach (var inverse in entity.Attributes.Where(attribute =>
+                             rulePlan.ReachableSingularInverseAttributes.Contains(attribute)))
+                {
+                    var role = $"{schema.Name}.{inverse.InverseEntity!.Name}.{inverse.InverseAttributeName}"
+                        .ToUpperInvariant();
+                    table.AddItem(
+                        new DescriptionText(
+                            $"{schema.Name}.{entity.Name}.{inverse.Name}.INVERSE_CARDINALITY"
+                                .ToUpperInvariant()),
+                        new DescriptionText(
+                            "Normalized requirement: the entity-valued inverse must resolve exactly one distinct "
+                            + $"compatible owner through forward role '{role}'. Validation boundary: first actual "
+                            + "access during explicit structure validation or Part 21 read/write validation."));
+                }
+
                 AddWhereDocumentationRows(
                     table,
                     schema.Name,
@@ -783,6 +829,7 @@ internal static class ExpressStructuralValidationEmitter
         method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
         method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
         method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
+        AddInverseCacheParameter(method, rulePlan);
 
         var variable = 0;
         var temporaryOrdinal = 0;
@@ -839,6 +886,7 @@ internal static class ExpressStructuralValidationEmitter
         method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
         method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
         method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
+        AddInverseCacheParameter(method, rulePlan);
 
         var context = entity.Leaves[0];
         var attributes = entity.Components
@@ -1079,12 +1127,15 @@ internal static class ExpressStructuralValidationEmitter
             var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                 ?? $"RULE_{Invariant(index + 1)}";
             var code = $"{rulePlan.Schema.Name}.{declaration.Name}.WHERE.{label}".ToUpperInvariant();
-            owner.AddStatement(new IfStatement(new CustomExpression(failed))
-                .AddStatement(AddFailure(
+            AddWhereRuleEvaluation(
+                owner,
+                rulePlan,
+                failed,
+                AddFailure(
                     code,
                     pathExpression,
                     $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
-                    rule.Span)));
+                    rule.Span));
         }
     }
 
@@ -1173,13 +1224,49 @@ internal static class ExpressStructuralValidationEmitter
                 ?? $"RULE_{Invariant(index + 1)}";
             var code = $"{candidateEntity.Schema.Name}.{governingEntity.Name}.WHERE.{label}"
                 .ToUpperInvariant();
-            owner.AddStatement(new IfStatement(new CustomExpression(failed))
-                .AddStatement(AddFailure(
+            AddWhereRuleEvaluation(
+                owner,
+                rulePlan,
+                failed,
+                AddFailure(
                     code,
                     "path",
                     $"The EXPRESS WHERE rule '{expression.SourceText}' must evaluate to TRUE.",
-                    rule.Span)));
+                    rule.Span));
         }
+    }
+
+    private static void AddWhereRuleEvaluation(
+        IStatementOwner owner,
+        ExpressReachableRulePlan rulePlan,
+        string failureCondition,
+        CustomExpression failure)
+    {
+        var evaluation = new IfStatement(new CustomExpression(failureCondition))
+            .AddStatement(failure);
+        if (rulePlan.ReachableSingularInverseAttributes.Count == 0)
+        {
+            owner.AddStatement(evaluation);
+            return;
+        }
+
+        var guarded = new TryStatement()
+            .AddStatement(evaluation)
+            .AddCatch(new CatchClause(
+                    new DataType("__ExpressInverseUnavailableException"),
+                    "inverseUnavailable")
+                .AddStatement(new CustomExpression("_ = inverseUnavailable")));
+        owner.AddStatement(guarded);
+    }
+
+    private static void AddInverseCacheParameter(Method method, ExpressReachableRulePlan rulePlan)
+    {
+        if (rulePlan.ReachableSingularInverseAttributes.Count == 0)
+        {
+            return;
+        }
+
+        method.AddParameter(SourceComposer.Parameter(new DataType(INVERSE_CACHE_TYPE), "inverseCache"));
     }
 
     private static IEnumerable<ExpressBoundEntity> EntityRuleOwners(

@@ -8,6 +8,8 @@ The runtime snapshots `DataSections`, traverses its registered entities once by 
 
 Each generated schema descriptor is an ordinary sealed singleton class. The runtime passes it only the ordered pairs governed by that section's exact nominal `SchemaName`; the generated override dispatches directly to concrete generated entity classes without reflection, discovery, an ambient registry, or a public validation context. Results preserve data-section, registration, attribute, nested aggregate, and rule order.
 
+The same descriptor invocation owns private singular-inverse resolution state. Entity-reference identity and inverse-declaration identity form the cache key; first actual access fixes the failure position. This keeps repeated validation deterministic while leaving the public validation API and descriptor ABI unchanged. Read validation rejects the hydrated candidate before publication, and writer preflight rejects it before producing bytes.
+
 ## Generated structural rules
 
 The generator derives executable checks and their XML documentation from the same bound EXPRESS projection. This stage checks:

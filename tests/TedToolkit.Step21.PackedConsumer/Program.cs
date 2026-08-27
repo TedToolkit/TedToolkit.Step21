@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Numerics;
+
 using TedToolkit.Step21;
 using TedToolkit.Step21.Generated.CatalogCore;
 using TedToolkit.Step21.Generated.CatalogModel;
@@ -144,7 +146,145 @@ internal static class Program
             return 13;
         }
 
+        if (!VerifySingularInverse())
+        {
+            return 14;
+        }
+
         Console.WriteLine("PACKED_AOT_OK");
         return 0;
+    }
+
+    private static bool VerifySingularInverse()
+    {
+        var unique = CreateCatalogStructure();
+        var uniqueTarget = new InverseTarget(BigInteger.One);
+        _ = unique.Add(unique.DataSections[0], uniqueTarget);
+        _ = unique.Add(
+            unique.DataSections[0],
+            new InverseOwner(
+                BigInteger.One,
+                new ExpressList<IInverseTarget>(0) { uniqueTarget, uniqueTarget }));
+        if (!unique.Validate().IsValid)
+        {
+            return false;
+        }
+
+        var uniqueOutput = new StringWriter();
+        unique.Write(uniqueOutput);
+        var uniqueText = uniqueOutput.ToString();
+        if (!uniqueText.Contains("#1=INVERSE_TARGET(1);", StringComparison.Ordinal)
+            || !uniqueText.Contains("#2=INVERSE_OWNER(1,(#1,#1));", StringComparison.Ordinal)
+            || !ExchangeStructure.Read(
+                    new StringReader(uniqueText),
+                    [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance])
+                .Validate()
+                .IsValid)
+        {
+            return false;
+        }
+
+        var zero = CreateCatalogStructure();
+        _ = zero.Add(zero.DataSections[0], new InverseTarget(BigInteger.One));
+        var explicitFailure = zero.Validate();
+        if (explicitFailure.Failures.Count != 1
+            || explicitFailure.Failures[0].Code
+                != "CATALOG_MODEL.INVERSE_TARGET.SINGLE_OWNER.INVERSE_CARDINALITY"
+            || explicitFailure.Failures[0].Path != "DataSections[0].#1.SingleOwner"
+            || !explicitFailure.Failures[0].Message.Contains("CATALOG_MODEL.INVERSE_OWNER.TARGETS", StringComparison.Ordinal)
+            || !explicitFailure.Failures[0].Message.Contains("0", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var many = CreateCatalogStructure();
+        var manyTarget = new InverseTarget(BigInteger.One);
+        _ = many.Add(many.DataSections[0], manyTarget);
+        _ = many.Add(
+            many.DataSections[0],
+            new InverseOwner(BigInteger.One, new ExpressList<IInverseTarget>(0) { manyTarget }));
+        _ = many.Add(
+            many.DataSections[0],
+            new InverseOwner(BigInteger.One, new ExpressList<IInverseTarget>(0) { manyTarget }));
+        var manyFailure = many.Validate();
+        if (manyFailure.Failures.Count != 1
+            || !manyFailure.Failures[0].Message.Contains("2", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var lazy = CreateCatalogStructure();
+        _ = lazy.Add(lazy.DataSections[0], new InverseLazyTarget());
+        var lazyFailure = lazy.Validate();
+        if (lazyFailure.Failures.Count != 1
+            || lazyFailure.Failures[0].Code != "CATALOG_MODEL.INVERSE_LAZY_TARGET.WHERE.FALSE_SHORT_CIRCUIT")
+        {
+            return false;
+        }
+
+        var output = new StringWriter();
+        ValidationResult writeFailure;
+        try
+        {
+            zero.Write(output);
+            return false;
+        }
+        catch (ExchangeStructureWriteValidationException exception)
+        {
+            writeFailure = exception.ValidationResult;
+        }
+
+        if (output.ToString().Length != 0
+            || !FailureEvidence(writeFailure.Failures[0]).Equals(
+                FailureEvidence(explicitFailure.Failures[0]),
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        const string invalidSource = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('singular inverse'),'3;1');
+            FILE_NAME('singular.step','2026-08-27T00:00:00',(),(),'tests','tests','');
+            FILE_SCHEMA(('catalog_model'));
+            ENDSEC;
+            DATA;
+            #1=INVERSE_TARGET(1);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+        try
+        {
+            _ = ExchangeStructure.Read(
+                new StringReader(invalidSource),
+                [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance]);
+            return false;
+        }
+        catch (ExchangeStructureReadValidationException exception)
+        {
+            return exception.ValidationResult.Failures.Count == 1
+                && FailureEvidence(exception.ValidationResult.Failures[0]).Equals(
+                    FailureEvidence(explicitFailure.Failures[0]),
+                    StringComparison.Ordinal);
+        }
+    }
+
+    private static ExchangeStructure CreateCatalogStructure()
+    {
+        var structure = new ExchangeStructure(
+            new HeaderSection(
+                new FileDescription(["singular inverse"], "3;1"),
+                new FileName("singular.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                new FileSchema(["catalog_model"])),
+            [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance]);
+        structure.DataSections.Add(new DataSection(new SchemaName("catalog_model")));
+        return structure;
+    }
+
+    private static string FailureEvidence(ValidationFailure failure)
+    {
+        return $"{failure.Code}|{failure.Path}|{failure.Message}|"
+            + $"{failure.SourceLocation?.FilePath}|{failure.SourceLocation?.Line}|{failure.SourceLocation?.Column}";
     }
 }

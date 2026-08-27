@@ -26,6 +26,10 @@ Literal integer aggregate bounds and statically evaluable integer constant expre
 
 `WHERE` accepts only EXPRESS TRUE; FALSE, UNKNOWN, or an indeterminate result produces one failure at the governing entity, property, or schema-rule path. Global RULE populations include compatible subtype instances.
 
+A validation-reachable entity-valued inverse is computed lazily from the complete ordered validation population. The generated descriptor matches the declared forward role, counts distinct compatible owner CLR identities, and supplies the strongly typed owner only when the count is exactly one. A missing or multiply populated relationship emits one `<SCHEMA>.<DECLARING_ENTITY>.<INVERSE>.INVERSE_CARDINALITY` failure at the current registration path plus the generated inverse member. The message reports the role and actual distinct-owner count, and the source location points to the inverse declaration. Resolution is cached per current entity reference and inverse declaration for one validation invocation, so repeated direct, cross-rule, and function-mediated access neither rescans nor duplicates the failure.
+
+If an accessed singular inverse is unavailable, only the rule evaluation that depends on that value is suppressed; later independent rules continue. Existing boolean and control-flow lowering remains authoritative: a short-circuited or otherwise non-evaluated inverse operand performs no lookup, creates no cache entry, and emits no inverse failure. Aggregate-valued `SET`/`BAG` inverse behavior is unchanged. Singular inverse values remain private computed validation dependencies: no public inverse property, mutable storage, physical Part 21 parameter, hydration slot, writer projection, reflection, or dynamic lookup is generated.
+
 `UNIQUE` compares keys with EXPRESS value semantics: LIST/ARRAY keys are order-sensitive, BAG/SET keys are multiplicity-aware and order-insensitive, SELECT payloads use their selected alternative's semantics, and entity references use CLR reference identity. A key containing an indeterminate optional value does not compare equal. Every duplicate after the first candidate produces a failure at that candidate's first key path; validation continues and retains other failures.
 
 Named rules use their EXPRESS labels. Unnamed rules use deterministic one-based `RULE_n` labels. Generated XML and executable failures share the same uppercase codes:
@@ -33,6 +37,7 @@ Named rules use their EXPRESS labels. Unnamed rules use deterministic one-based 
 - `<SCHEMA>.<ENTITY>.WHERE.<LABEL>`;
 - `<SCHEMA>.<TYPE>.WHERE.<LABEL>`;
 - `<SCHEMA>.<ENTITY>.UNIQUE.<LABEL>`; and
+- `<SCHEMA>.<ENTITY>.<INVERSE>.INVERSE_CARDINALITY`; and
 - `<SCHEMA>.RULE.<RULE>.WHERE.<LABEL>`.
 
 Messages retain the normalized requirement. `SourceLocation` contains the EXPRESS file leaf name and 1-based line and column. Relocating otherwise identical input does not change generated code or constraint IDs.

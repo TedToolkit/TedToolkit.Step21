@@ -4491,6 +4491,203 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string SINGULAR_INVERSE_SCHEMA = """
+        SCHEMA singular_inverse_model;
+        ENTITY target;
+          code : INTEGER;
+        INVERSE
+          single_owner : owner FOR targets;
+        WHERE
+          direct_access : single_owner.rank > 0;
+          repeated_access : (single_owner.rank > 0) AND (single_owner.rank > 0);
+          function_access : owner_rank(SELF) > 0;
+          independent_rule : code > 0;
+        END_ENTITY;
+        ENTITY owner;
+          rank : INTEGER;
+          targets : LIST [0:?] OF target;
+        END_ENTITY;
+        ENTITY lazy_target;
+        INVERSE
+          single_owner : lazy_owner FOR targets;
+        WHERE
+          true_short_circuit : TRUE OR (single_owner.rank > 0);
+          false_short_circuit : FALSE AND (single_owner.rank > 0);
+        END_ENTITY;
+        ENTITY lazy_owner;
+          rank : INTEGER;
+          targets : LIST [0:?] OF lazy_target;
+        END_ENTITY;
+        FUNCTION owner_rank(candidate : target) : INTEGER;
+          RETURN(candidate.single_owner.rank);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
+    private const string SINGULAR_INVERSE_CONSUMER = """"
+        using System;
+        using System.Collections.Generic;
+        using System.IO;
+        using System.Linq;
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.SingularInverseModel;
+
+        internal static class SingularInverseConsumer
+        {
+            internal static int OwnerQueryCount { get; private set; }
+
+            internal static int LazyOwnerQueryCount { get; private set; }
+
+            internal static ValidationResult Validate(int ownerCount, bool repeatOccurrence, BigInteger code)
+            {
+                var structure = CreateStructure();
+                var section = structure.DataSections[0];
+                var target = new Target(code);
+                _ = structure.Add(section, target);
+                for (var index = 0; index < ownerCount; index++)
+                {
+                    var targets = new ExpressList<ITarget>(0) { target };
+                    if (repeatOccurrence)
+                    {
+                        targets.Add(target);
+                    }
+
+                    _ = structure.Add(section, new Owner(BigInteger.One, targets));
+                }
+
+                return structure.Validate();
+            }
+
+            internal static ValidationResult ValidateCountingOwner()
+            {
+                OwnerQueryCount = 0;
+                var structure = CreateStructure();
+                var section = structure.DataSections[0];
+                var target = new Target(BigInteger.One);
+                _ = structure.Add(section, target);
+                _ = structure.Add(section, new CountingOwner(target));
+                return structure.Validate();
+            }
+
+            internal static ValidationResult ValidateLazy()
+            {
+                var structure = CreateStructure();
+                LazyOwnerQueryCount = 0;
+                var target = new LazyTarget();
+                _ = structure.Add(structure.DataSections[0], target);
+                _ = structure.Add(structure.DataSections[0], new CountingLazyOwner(target));
+                return structure.Validate();
+            }
+
+            internal static ValidationResult WriteZero()
+            {
+                var structure = CreateStructure();
+                _ = structure.Add(structure.DataSections[0], new Target(BigInteger.One));
+                var output = new StringWriter();
+                try
+                {
+                    structure.Write(output);
+                    throw new InvalidOperationException("Invalid singular inverse write unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureWriteValidationException exception)
+                {
+                    if (output.ToString().Length != 0)
+                    {
+                        throw new InvalidOperationException("Invalid singular inverse write produced output.");
+                    }
+
+                    return exception.ValidationResult;
+                }
+            }
+
+            internal static ValidationResult ReadZero()
+            {
+                const string source = """
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('singular inverse'),'3;1');
+                    FILE_NAME('singular.step','2026-08-27T00:00:00', (), (),'tests','tests','');
+                    FILE_SCHEMA(('singular_inverse_model'));
+                    ENDSEC;
+                    DATA;
+                    #1=TARGET(1);
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """;
+                try
+                {
+                    _ = ExchangeStructure.Read(
+                        new StringReader(source),
+                        [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                    throw new InvalidOperationException("Invalid singular inverse read unexpectedly succeeded.");
+                }
+                catch (ExchangeStructureReadValidationException exception)
+                {
+                    return exception.ValidationResult;
+                }
+            }
+
+            private static ExchangeStructure CreateStructure()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["singular inverse"], "3;1"),
+                        new FileName("singular.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileSchema(["singular_inverse_model"])),
+                    [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                structure.DataSections.Add(new DataSection(new SchemaName("singular_inverse_model")));
+                return structure;
+            }
+
+            private sealed class CountingOwner : Entity, IOwner
+            {
+                private readonly ExpressList<ITarget> targets;
+
+                internal CountingOwner(ITarget target)
+                {
+                    targets = new ExpressList<ITarget>(0) { target, target };
+                }
+
+                public BigInteger Rank => BigInteger.One;
+
+                public ExpressList<ITarget> Targets
+                {
+                    get
+                    {
+                        OwnerQueryCount++;
+                        return targets;
+                    }
+                }
+
+                public override IEnumerable<Entity> DirectReferences => targets.Cast<Entity>();
+            }
+
+            private sealed class CountingLazyOwner : Entity, ILazyOwner
+            {
+                private readonly ExpressList<ILazyTarget> targets;
+
+                internal CountingLazyOwner(ILazyTarget target)
+                {
+                    targets = new ExpressList<ILazyTarget>(0) { target };
+                }
+
+                public BigInteger Rank => BigInteger.One;
+
+                public ExpressList<ILazyTarget> Targets
+                {
+                    get
+                    {
+                        LazyOwnerQueryCount++;
+                        return targets;
+                    }
+                }
+
+                public override IEnumerable<Entity> DirectReferences => targets.Cast<Entity>();
+            }
+        }
+        """";
+
     private const string IMPORTED_RULE_FOUNDATION_SCHEMA = """
         SCHEMA imported_rule_foundation;
         TYPE imported_positive = INTEGER;
@@ -8753,6 +8950,110 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies entity-valued inverse resolution, invocation-local reuse, and lazy rule access.
+    /// </summary>
+    [Test]
+    public async Task Should_execute_validation_reachable_singular_inverse_attributes()
+    {
+        var result = GeneratorHostTests.Run(
+            SINGULAR_INVERSE_CONSUMER,
+            ("schemas/singular-inverse.exp", SINGULAR_INVERSE_SCHEMA));
+        var generatorDiagnostics = result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(generatorDiagnostics)
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, generatorDiagnostics.Select(item => item.ToString())));
+        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(compilationDiagnostics)
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilationDiagnostics.Select(item => item.ToString())));
+        var targetType = result.OutputCompilation.GetTypeByMetadataName(
+            "TedToolkit.Step21.Generated.SingularInverseModel.Target")!;
+        var targetInterface = result.OutputCompilation.GetTypeByMetadataName(
+            "TedToolkit.Step21.Generated.SingularInverseModel.ITarget")!;
+
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("SingularInverseConsumer", throwOnError: true)!;
+        var validate = consumer.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validateLazy = consumer.GetMethod(
+            "ValidateLazy",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validateCountingOwner = consumer.GetMethod(
+            "ValidateCountingOwner",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var writeZero = consumer.GetMethod(
+            "WriteZero",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var readZero = consumer.GetMethod(
+            "ReadZero",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var unique = (ValidationResult)validate.Invoke(
+            null,
+            [1, true, new System.Numerics.BigInteger(1)])!;
+        var zero = (ValidationResult)validate.Invoke(
+            null,
+            [0, false, new System.Numerics.BigInteger(-1)])!;
+        var many = (ValidationResult)validate.Invoke(
+            null,
+            [2, false, new System.Numerics.BigInteger(1)])!;
+        var explicitZero = (ValidationResult)validate.Invoke(
+            null,
+            [0, false, new System.Numerics.BigInteger(1)])!;
+        var counting = (ValidationResult)validateCountingOwner.Invoke(null, null)!;
+        var lazy = (ValidationResult)validateLazy.Invoke(null, null)!;
+        var writeFailure = (ValidationResult)writeZero.Invoke(null, null)!;
+        var readFailure = (ValidationResult)readZero.Invoke(null, null)!;
+        var ownerQueryCount = (int)consumer.GetProperty(
+            "OwnerQueryCount",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        var lazyOwnerQueryCount = (int)consumer.GetProperty(
+            "LazyOwnerQueryCount",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(targetType.GetMembers("SingleOwner")).IsEmpty();
+            await Assert.That(targetInterface.GetMembers("SingleOwner")).IsEmpty();
+            await Assert.That(unique.IsValid).IsTrue();
+            await Assert.That(zero.Failures.Select(failure => (failure.Code, failure.Path)).SequenceEqual(new[]
+                {
+                    ("SINGULAR_INVERSE_MODEL.TARGET.SINGLE_OWNER.INVERSE_CARDINALITY", "DataSections[0].#1.SingleOwner"),
+                    ("SINGULAR_INVERSE_MODEL.TARGET.WHERE.INDEPENDENT_RULE", "DataSections[0].#1"),
+                })).IsTrue();
+            await Assert.That(zero.Failures[0].Message)
+                .Contains("SINGULAR_INVERSE_MODEL.OWNER.TARGETS")
+                .And.Contains("0");
+            await Assert.That(zero.Failures[0].SourceLocation!.FilePath)
+                .IsEqualTo("singular-inverse.exp");
+            await Assert.That(many.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(new[]
+                {
+                    "SINGULAR_INVERSE_MODEL.TARGET.SINGLE_OWNER.INVERSE_CARDINALITY",
+                });
+            await Assert.That(many.Failures[0].Message).Contains("2");
+            await Assert.That(ownerQueryCount).IsEqualTo(2);
+            await Assert.That(counting.Failures.Any(failure => failure.Code.EndsWith(
+                ".INVERSE_CARDINALITY",
+                StringComparison.Ordinal))).IsFalse();
+            await Assert.That(lazyOwnerQueryCount).IsEqualTo(0);
+            await Assert.That(lazy.Failures.Select(failure => failure.Code).SequenceEqual(new[]
+                {
+                    "SINGULAR_INVERSE_MODEL.LAZY_TARGET.WHERE.FALSE_SHORT_CIRCUIT",
+                    "SINGULAR_INVERSE_MODEL.STRUCTURE.ENTITY_ASSIGNABILITY",
+                })).IsTrue();
+            await Assert.That(writeFailure.Failures.Select(FailureEvidence).SequenceEqual(
+                explicitZero.Failures.Select(FailureEvidence))).IsTrue();
+            await Assert.That(readFailure.Failures.Select(FailureEvidence).SequenceEqual(
+                explicitZero.Failures.Select(FailureEvidence))).IsTrue();
+        }
+    }
+
+    /// <summary>
     /// Verifies integer constants used by aggregate bounds become executable structural metadata and checks.
     /// </summary>
     [Test]
@@ -8892,6 +9193,7 @@ public sealed class ReachableRuleTests
             (SchemaName: "UniqueRuleModel", Source: UNIQUE_SCHEMA),
             (SchemaName: "UniqueValueModel", Source: UNIQUE_VALUE_SCHEMA),
             (SchemaName: "GlobalRuleModel", Source: GLOBAL_RULE_SCHEMA),
+            (SchemaName: "SingularInverseModel", Source: SINGULAR_INVERSE_SCHEMA),
         };
         foreach (var item in cases)
         {
@@ -8926,10 +9228,17 @@ public sealed class ReachableRuleTests
         await Assert.That(GeneratedSnapshot(first)).IsEqualTo(GeneratedSnapshot(second));
     }
 
+    private static string FailureEvidence(ValidationFailure failure)
+    {
+        return $"{failure.Code}|{failure.Path}|{failure.Message}|"
+            + $"{failure.SourceLocation?.FilePath}|{failure.SourceLocation?.Line}|{failure.SourceLocation?.Column}";
+    }
+
     private static bool IsExecutableRuleCode(string value)
     {
         return value.Contains(".WHERE.", StringComparison.Ordinal)
-            || value.Contains(".UNIQUE.", StringComparison.Ordinal);
+            || value.Contains(".UNIQUE.", StringComparison.Ordinal)
+            || value.EndsWith(".INVERSE_CARDINALITY", StringComparison.Ordinal);
     }
 
     private static string GeneratedSnapshot(GeneratorHostTests.GeneratorResult result)
