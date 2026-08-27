@@ -27,10 +27,10 @@ entity-valued SELECT。该能力补齐 AP214 `AUTOMOTIVE_DESIGN` 的两个真实
 
 - In scope:
   - 新增 `M-06`：相同 ARRAY/LIST/BAG/SET kind、等价 bounds/flags 下，element 从 direct entity 或
-    closed entity-valued SELECT 收窄为 closed entity-valued SELECT。
+    closed entity-valued SELECT 映射为另一个 closed entity-valued SELECT；支持 strict narrowing，
+    也支持 flattened coverage identity-equal 但 generated SELECT wrapper 不同的 semantic-equivalent projection。
   - narrowed SELECT 的 flattened leaves 必须全部由 original domain 的相同 entity 或传递 subtype 覆盖，
-    且关系为严格收窄；按 bound-symbol identity 判定，不使用名字或运行时反射。flattened coverage identity-equal
-    时继续走现有 M-02 equivalent mapping，不属于 M-06。
+    且关系为 identity-equal 或严格收窄；按 bound-symbol identity 判定，不使用名字或运行时反射。
   - concrete entity 只保存最窄 mutable aggregate；inherited interface 通过 live read-only projected view
     观察当前元素，并把每个 selected leaf 无损提升到原 entity/SELECT domain。
   - descriptor hydration、validation、writer、direct references、chain/diamond composition、XML/public API
@@ -43,7 +43,9 @@ entity-valued SELECT。该能力补齐 AP214 `AUTOMOTIVE_DESIGN` 的两个真实
   - AP214 的 dependency-cycle diagnostic、reachable function statement shape 与 complex construction 缺口
     仍由 AP214-001 的既有 schema-neutral implementation boundary 负责。
 - Compatibility or deliberately preserved behavior:
-  - M-01 至 M-05、普通 aggregate property、现有 invalid/unsupported diagnostic partition 保持不变。
+  - M-01 至 M-05、普通 aggregate property、现有 invalid/unsupported diagnostic partition 保持不变；
+    identity-equal-but-distinct SELECT wrapper 的 leaf projection 复用 M-02 semantics，aggregate storage/view
+    仍由 M-06 infrastructure 提供。
   - direct entity M-04 继续让 covariant interface getter 与 concrete aggregate 引用相等；M-06 只保证
     projected view 实时反映同一 storage、元素 entity identity 和 EXPRESS metadata，不承诺 wrapper 引用相等。
   - inherited view 只读；mutation 只经最窄 concrete aggregate，并对后续所有 view 枚举立即可见。
@@ -66,7 +68,7 @@ entity-valued SELECT。该能力补齐 AP214 `AUTOMOTIVE_DESIGN` 的两个真实
 Scenario: 分类 aggregate closed-SELECT element specialization
   Given focused schemas 覆盖 direct entity 或 closed SELECT 到严格更窄 closed SELECT、identity-equal flattened coverage、未覆盖 leaf、non-entity/extensible leaf、metadata 变化和 nested aggregate
   When binder 与 generation plan 分析重声明
-  Then strict subset/subtype replacement 的 M-06 生成，identity-equal coverage 保持 M-02 equivalent mapping，widening/unrelated 以 STEP21EXP002 拒绝，non-entity/extensible/nested/metadata-change 类别以 STEP21EXP005 拒绝，全部 source-located 且无 partial output
+  Then strict subset/subtype replacement 与 identity-equal-but-distinct wrapper 都通过 M-06 生成且无 diagnostic，后者逐 leaf 保持 M-02 semantic-equivalent projection；widening/unrelated 以 STEP21EXP002 拒绝，non-entity/extensible/nested/metadata-change 类别以 STEP21EXP005 拒绝，全部 source-located 且无 partial output
 ```
 
 <!-- acceptance-case: AC-02 -->
@@ -74,7 +76,7 @@ Scenario: 分类 aggregate closed-SELECT element specialization
 
 ```gherkin
 Scenario: 通过 inherited aggregate domain 观察 narrowed SELECT storage
-  Given concrete entity 持有 ARRAY LIST BAG SET 的 narrowed closed-SELECT aggregate
+  Given concrete entity 分别持有 strict-narrowed 与 identity-equal-but-distinct-wrapper 的 ARRAY LIST BAG SET closed-SELECT aggregate
   When consumer mutation 最窄 aggregate 并从 inherited interface 重复枚举
   Then projected view 保持 bounds flags order multiplicity slot state 与 selected entity identity，实时反映 mutation，且没有 inherited mutation 成员或第二份 storage
 ```
@@ -117,10 +119,11 @@ Scenario: 发布含 M-06 的 actual-package consumer
 - [`ADR-0008`](../../adr/ADR-0008-covariant-aggregate-views-and-singular-inverse-validation.md) 与
   [`generated-entity-hierarchy.md`](../../conformance/generated-entity-hierarchy.md) 的一个 most-specific storage、
   原子 diagnostic 与无损 SELECT projection 继续治理本 change。
-- M-06 leaf coverage 先 flatten closed SELECT 并按 bound symbol identity 去重；每个 narrowed leaf 必须等于或
-  subtype 于 original coverage，且至少删除一个 original coverage 或进行严格 subtype replacement。
-  identity-equal flattened sets 保持现有 M-02 equivalent mapping；新增未覆盖 leaf 是 ISO-invalid，
-  non-entity/extensible/nested/metadata-change 仍是明确 unsupported。
+- M-06 leaf coverage 先 flatten closed SELECT 并按 bound symbol identity 去重；每个 mapped leaf 必须等于或
+  subtype 于 original coverage。identity-equal flattened sets 是 semantic-equivalent success，strict subset 或
+  strict subtype replacement 是 specialization success；两者都使用一个最窄 storage 与 live projected view，
+  并逐 leaf 复用 M-02 entity/SELECT projection。新增未覆盖 leaf 是 ISO-invalid，non-entity/extensible/
+  nested/metadata-change 仍是明确 unsupported。
 - SELECT 是 generated value wrapper，不能依赖 CLR generic covariance。projected view 可由 generated private
   adapter 或 schema-neutral runtime adapter 实现，但 public contract 只承诺 read-only、live、metadata/identity
   preserving；不得缓存元素快照或暴露反向 mutation。
@@ -171,8 +174,8 @@ Scenario: 发布含 M-06 的 actual-package consumer
 <!-- primary-proof: AC-05 purpose=journey shape=end-to-end -->
 | Contract | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
-| AC-01 | Primary | exact legal/invalid/unsupported matrix、diagnostic tuple 与 atomic withholding | 运行 focused binder/generator classification tests |
-| AC-02 | Primary | 四 aggregate kinds 的 live projection、metadata、identity、mutation visibility 与 one-slot surface | 运行 generated component/API/XML contract matrix |
+| AC-01 | Primary | strict narrowing 与 identity-equal distinct-wrapper success、invalid/unsupported matrix、diagnostic tuple 与 atomic withholding | 运行 focused binder/generator classification tests |
+| AC-02 | Primary | 两种 success relation及四 aggregate kinds 的 live projection、metadata、identity、mutation visibility 与 one-slot surface | 运行 generated component/API/XML contract matrix |
 | AC-03 | Primary | legal read/edit/write/reread 与 broad-only read/write atomic rejection | 运行 canonical schema-bound round-trip matrix |
 | AC-04 | Primary | chain/diamond/M-05 composition、M-01 至 M-05、ordinary snapshots 与 diagnostics 不变 | 运行 specialization compatibility与完整 compiler baseline tests |
 | AC-05 | Primary | actual packed consumer trimmed Native AOT 执行 M-06 matrix | pack 至 isolated source，publish/run并审计 warnings/dependency graph |
