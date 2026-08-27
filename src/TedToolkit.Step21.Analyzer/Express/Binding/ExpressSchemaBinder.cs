@@ -1300,7 +1300,7 @@ internal static class ExpressSchemaBinder
                 var draft = FindSymbol(named.Declaration);
                 if (draft?.Symbol.Kind == ExpressDeclarationKind.Entity)
                 {
-                    foreach (var attribute in EnumerateAttributes(draft, visited))
+                    foreach (var attribute in EnumerateVisibleAttributes(draft))
                     {
                         yield return attribute;
                     }
@@ -1462,6 +1462,23 @@ internal static class ExpressSchemaBinder
                 }
 
                 foreach (var attribute in EnumerateAttributes(draft, visited))
+                {
+                    yield return attribute;
+                }
+            }
+        }
+
+        private IEnumerable<ExpressBoundAttribute> EnumerateVisibleAttributes(SymbolDraft entity)
+        {
+            var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+                .Distinct()
+                .ToArray();
+            foreach (var attribute in attributes)
+            {
+                var isRedeclaredSlot = attributes.Any(candidate =>
+                    ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                    && _nameComparer.Equals(candidate.RedeclaredAttributeName, attribute.Name));
+                if (!isRedeclaredSlot)
                 {
                     yield return attribute;
                 }

@@ -113,6 +113,27 @@ internal sealed class BindingTests
         END_SCHEMA;
         """;
 
+    private const string RedeclaredAttributeSchema = """
+        SCHEMA redeclared_attribute_binding;
+        ENTITY representation_item;
+        END_ENTITY;
+        ENTITY curve SUBTYPE OF (representation_item);
+          dimension : INTEGER;
+        END_ENTITY;
+        ENTITY styled_item;
+          item : representation_item;
+        END_ENTITY;
+        ENTITY curve_style SUBTYPE OF (styled_item);
+          SELF\styled_item.item : curve;
+        END_ENTITY;
+        ENTITY holder;
+          style : curve_style;
+        WHERE
+          valid_dimension : style.item.dimension > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>
     /// Verifies every grammar expression shape becomes source-located typed immutable IR.
     /// </summary>
@@ -229,6 +250,25 @@ internal sealed class BindingTests
             await Assert.That(Find(roots, "dynamic_array[2]").Type.CanBeIndeterminate).IsTrue();
             await Assert.That(Find(roots, "fixed_array[index]").Type.CanBeIndeterminate).IsTrue();
         }
+    }
+
+    /// <summary>
+    /// Verifies an explicit redeclaration shadows the inherited physical slot during member binding.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_the_nearest_explicit_attribute_redeclaration()
+    {
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("redeclared-attribute.exp", RedeclaredAttributeSchema),
+        ]);
+        await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+        await Assert.That(compilation.BindingDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilation.BindingDiagnostics.Select(item => item.Message)));
+        var dimension = compilation.Schemas.Single().Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Single(expression => expression.SourceText == "style.item.dimension");
+        await Assert.That(dimension.Type.Kind).IsEqualTo(ExpressExpressionTypeKind.Integer);
     }
 
     /// <summary>

@@ -1652,7 +1652,7 @@ internal sealed class ExpressExpressionBinder
                     || alternatives.Any(alternative =>
                         !_declarations.TryGetValue(alternative, out var alternativeDeclaration)
                         || alternativeDeclaration is not ExpressBoundEntity alternativeEntity
-                        || !EnumerateAttributes(alternativeEntity, new HashSet<ExpressBoundSymbol>())
+                        || !EnumerateVisibleAttributes(alternativeEntity)
                             .Any(target.AttributeCandidates.Contains));
             }
 
@@ -1812,9 +1812,8 @@ internal sealed class ExpressExpressionBinder
         }
 
         var name = qualifier.RequiredChild("attributeRef").IdentifierToken().Text;
-        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+        var attributes = EnumerateVisibleAttributes(entity)
             .Where(attribute => string.Equals(attribute.Name, name, StringComparison.OrdinalIgnoreCase))
-            .Distinct()
             .ToArray();
         if (attributes.Length != 1)
         {
@@ -1855,6 +1854,26 @@ internal sealed class ExpressExpressionBinder
                 {
                     yield return attribute;
                 }
+            }
+        }
+    }
+
+    private IEnumerable<ExpressBoundAttribute> EnumerateVisibleAttributes(ExpressBoundEntity entity)
+    {
+        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+            .Distinct()
+            .ToArray();
+        foreach (var attribute in attributes)
+        {
+            var isRedeclaredSlot = attributes.Any(candidate =>
+                ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                && string.Equals(
+                    candidate.RedeclaredAttributeName,
+                    attribute.Name,
+                    StringComparison.OrdinalIgnoreCase));
+            if (!isRedeclaredSlot)
+            {
+                yield return attribute;
             }
         }
     }

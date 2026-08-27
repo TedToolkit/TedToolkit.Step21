@@ -22,6 +22,24 @@
     <None Include="..\..\schemas\ap203\ap203.exp"
           Link="TestData\Express\Ap203\ap203.exp"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\AP214E3_2010.exp"
+          Link="TestData\Express\Ap214\AP214E3_2010.exp"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\COPYING"
+          Link="TestData\Express\Ap214\COPYING"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\AUTHORS"
+          Link="TestData\Express\Ap214\AUTHORS"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\INTENT.md"
+          Link="TestData\Express\Ap214\INTENT.md"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\PROVENANCE.md"
+          Link="TestData\Express\Ap214\PROVENANCE.md"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap214\PublicApi.approved.sha256"
+          Link="TestData\Express\Ap214\PublicApi.approved.sha256"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
