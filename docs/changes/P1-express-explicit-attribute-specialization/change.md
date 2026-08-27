@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: implemented -->
+<!-- change-status: completed -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
@@ -262,3 +262,10 @@ AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated 
   and final candidate/contract staleness checks.
 - Durable architecture, conformance, aggregate-view, and Native AOT knowledge is captured in the governing ADR and
   conformance documents cited by this change; no external operational handoff is required.
+
+## Closure evidence
+
+- Exact candidate `a74765dbbbdcc44c508318d7cf9756884b881b0c` remains an ancestor of the closure commit; every later change before
+  closure is confined to this lifecycle, binding, verification, and review evidence.
+- AC-01 through AC-07 are implemented and independently reviewed against the same exact candidate.
+- Durable documentation extraction is captured; external operational handoff is `None` and therefore complete.
