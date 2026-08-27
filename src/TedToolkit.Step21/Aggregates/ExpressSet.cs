@@ -10,7 +10,7 @@ namespace TedToolkit.Step21;
 /// Enumeration is deterministic but has no EXPRESS ordering meaning. <see cref="Add(T)"/> retains duplicate edit
 /// candidates so <see cref="Validate(string)"/> can report the violated set uniqueness rule without mutation.
 /// </remarks>
-public sealed class ExpressSet<T> : ICollection<T>, IReadOnlyCollection<T>
+public sealed class ExpressSet<T> : ICollection<T>, IExpressSet<T>
 {
     private readonly List<T> _items = [];
     private readonly IEqualityComparer<T> _comparer;

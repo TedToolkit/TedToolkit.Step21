@@ -1,0 +1,111 @@
+sealed class TedToolkit.Step21.ExpressArray`1 : System.Object
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressArray<T>
+  constructor (System.Int32 lowerIndex, System.Int32 upperIndex, System.Boolean isOptional = False, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsOptional { get; }
+  property System.Boolean IsUnique { get; }
+  property T? Item[System.Int32 index] { get; set; }
+  property System.Int32 LowerIndex { get; }
+  property System.Int32 UpperIndex { get; }
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean IsSet(System.Int32 index)
+  method System.Boolean TryGetValue(System.Int32 index, out T? value)
+  method System.Void Unset(System.Int32 index)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressBag`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressBag<T>
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean Remove(T? item)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressList`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IList<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.Generic.IReadOnlyList<T>
+  interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressList<T>
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Boolean IsUnique { get; }
+  property T? Item[System.Int32 index] { get; set; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Int32 IndexOf(T? item)
+  method System.Void Insert(System.Int32 index, T? item)
+  method System.Boolean Remove(T? item)
+  method System.Void RemoveAt(System.Int32 index)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+sealed class TedToolkit.Step21.ExpressSet`1 : System.Object
+  interface System.Collections.Generic.ICollection<T>
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressSet<T>
+  constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsReadOnly { get; }
+  property System.Int32 LowerBound { get; }
+  property System.Int32? UpperBound { get; }
+  method System.Void Add(T? item)
+  method System.Void Clear()
+  method System.Boolean Contains(T? item)
+  method System.Void CopyTo(T[] array, System.Int32 arrayIndex)
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean Remove(T? item)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+interface TedToolkit.Step21.IExpressArray`1
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.IEnumerable
+  property abstract System.Int32 Count { get; }
+  property abstract System.Boolean IsOptional { get; }
+  property abstract System.Boolean IsUnique { get; }
+  property abstract T? Item[System.Int32 index] { get; }
+  property abstract System.Int32 LowerIndex { get; }
+  property abstract System.Int32 UpperIndex { get; }
+  abstract method System.Boolean IsSet(System.Int32 index)
+  abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+interface TedToolkit.Step21.IExpressBag`1
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  property abstract System.Int32 LowerBound { get; }
+  property abstract System.Int32? UpperBound { get; }
+  abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+interface TedToolkit.Step21.IExpressList`1
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.Generic.IReadOnlyList<T>
+  interface System.Collections.IEnumerable
+  property abstract System.Boolean IsUnique { get; }
+  property abstract System.Int32 LowerBound { get; }
+  property abstract System.Int32? UpperBound { get; }
+  abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+interface TedToolkit.Step21.IExpressSet`1
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  property abstract System.Int32 LowerBound { get; }
+  property abstract System.Int32? UpperBound { get; }
+  abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")

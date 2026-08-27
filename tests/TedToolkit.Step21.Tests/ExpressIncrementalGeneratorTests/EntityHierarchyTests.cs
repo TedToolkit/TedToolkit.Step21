@@ -91,6 +91,227 @@ public sealed class EntityHierarchyTests
         END_SCHEMA;
         """;
 
+    private const string UNRELATED_REDECLARATION_SCHEMA = """
+        SCHEMA unrelated_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY unrelated;
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          link : target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.link : unrelated;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string NUMERIC_REDECLARATION_SCHEMA = """
+        SCHEMA numeric_redeclaration;
+        ENTITY root ABSTRACT;
+          integer_value : NUMBER;
+          real_value : NUMBER;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.integer_value : INTEGER;
+          SELF\root.real_value : REAL;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string AGGREGATE_REDECLARATION_SCHEMA = """
+        SCHEMA aggregate_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          array_value : ARRAY [1:2] OF target;
+          list_value : LIST [0:?] OF UNIQUE target;
+          bag_value : BAG [0:?] OF target;
+          set_value : SET [0:?] OF target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.array_value : ARRAY [1:2] OF specialized;
+          SELF\root.list_value : LIST [0:?] OF UNIQUE specialized;
+          SELF\root.bag_value : BAG [0:?] OF specialized;
+          SELF\root.set_value : SET [0:?] OF specialized;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string AGGREGATE_REDECLARATION_CONSUMER = """
+        #nullable enable
+        using System;
+        using System.Linq;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.AggregateRedeclaration;
+        internal static class AggregateRedeclarationConsumer
+        {
+            internal static bool Exercise()
+            {
+                var first = new Specialized();
+                var second = new Specialized();
+                var array = new ExpressArray<ISpecialized>(1, 2);
+                array[1] = first;
+                array[2] = second;
+                var list = new ExpressList<ISpecialized>(0, null, isUnique: true) { first };
+                var bag = new ExpressBag<ISpecialized> { first, first };
+                var set = new ExpressSet<ISpecialized> { first };
+                var child = new Child(array, list, bag, set);
+                IRoot root = child;
+                IChild narrowed = child;
+
+                list.Add(second);
+                bag.Add(second);
+                set.Add(second);
+                return ReferenceEquals(child.ArrayValue, root.ArrayValue)
+                    && ReferenceEquals(child.ListValue, root.ListValue)
+                    && ReferenceEquals(child.BagValue, root.BagValue)
+                    && ReferenceEquals(child.SetValue, root.SetValue)
+                    && ReferenceEquals(narrowed.ArrayValue, root.ArrayValue)
+                    && root.ArrayValue[1] == first
+                    && root.ListValue.SequenceEqual(new ITarget[] { first, second })
+                    && root.BagValue.Count == 3
+                    && root.SetValue.Count == 2;
+            }
+        }
+        """;
+
+    private const string SELECT_REDECLARATION_SCHEMA = """
+        SCHEMA select_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY other;
+        END_ENTITY;
+        TYPE broad_choice = SELECT (target, specialized, other);
+        END_TYPE;
+        TYPE narrow_choice = SELECT (specialized);
+        END_TYPE;
+        ENTITY root ABSTRACT;
+          select_to_select : broad_choice;
+          entity_to_select : broad_choice;
+          select_to_entity : target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.select_to_select : narrow_choice;
+          SELF\root.entity_to_select : specialized;
+          SELF\root.select_to_entity : narrow_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string OPTIONAL_REDECLARATION_SCHEMA = """
+        SCHEMA optional_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          optional_number : OPTIONAL NUMBER;
+          optional_link : OPTIONAL target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.optional_number : INTEGER;
+          SELF\root.optional_link : specialized;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string INVALID_OPTIONAL_REDECLARATION_SCHEMA = """
+        SCHEMA invalid_optional_redeclaration;
+        ENTITY root ABSTRACT;
+          measure : INTEGER;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.measure : OPTIONAL INTEGER;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string UNSUPPORTED_AGGREGATE_REDECLARATION_SCHEMA = """
+        SCHEMA unsupported_aggregate_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          items : LIST [0:?] OF target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.items : LIST [1:?] OF specialized;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string INVALID_ORIGIN_REDECLARATION_SCHEMA = """
+        SCHEMA invalid_origin_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          link : target;
+        END_ENTITY;
+        ENTITY unrelated;
+          link : target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\unrelated.link : target;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string INCOMPARABLE_DIAMOND_SCHEMA = """
+        SCHEMA incomparable_diamond;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY left_target SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY right_target SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          link : target;
+        END_ENTITY;
+        ENTITY left_branch ABSTRACT SUBTYPE OF (root);
+          SELF\root.link : left_target;
+        END_ENTITY;
+        ENTITY right_branch ABSTRACT SUBTYPE OF (root);
+          SELF\root.link : right_target;
+        END_ENTITY;
+        ENTITY leaf SUBTYPE OF (left_branch, right_branch);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string ORDERED_REDECLARATION_SCHEMA = """
+        SCHEMA ordered_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY most_specialized SUBTYPE OF (specialized);
+        END_ENTITY;
+        ENTITY root ABSTRACT;
+          link : target;
+        END_ENTITY;
+        ENTITY middle ABSTRACT SUBTYPE OF (root);
+          SELF\root.link : specialized;
+        END_ENTITY;
+        ENTITY leaf SUBTYPE OF (middle);
+          SELF\root.link : most_specialized;
+        END_ENTITY;
+        ENTITY left_branch ABSTRACT SUBTYPE OF (root);
+          SELF\root.link : specialized;
+        END_ENTITY;
+        ENTITY right_branch ABSTRACT SUBTYPE OF (root);
+          SELF\root.link : specialized;
+        END_ENTITY;
+        ENTITY diamond_leaf SUBTYPE OF (left_branch, right_branch);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string INVALID_IMPORTED_BASE_SCHEMA = """
         SCHEMA invalid_imported_base;
         ENTITY root;
@@ -352,20 +573,375 @@ public sealed class EntityHierarchyTests
     }
 
     /// <summary>
-    /// Verifies an unsafe CLR property-type redeclaration reports a bounded generation diagnostic.
+    /// Verifies an entity subtype redeclaration uses one narrow mutable slot and a lossless inherited getter.
     /// </summary>
     [Test]
-    public async Task Should_withhold_entity_type_narrowing_that_cannot_implement_both_interfaces()
+    public async Task Should_project_entity_type_narrowing_through_the_inherited_interface()
     {
         var result = GeneratorHostTests.Run(
             ("schemas/narrowed.exp", NARROWED_REDECLARATION_SCHEMA));
 
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var specialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.NarrowedRedeclaration.Specialized",
+            throwOnError: true)!)!;
+        var childType = assembly.GetType(
+            "TedToolkit.Step21.Generated.NarrowedRedeclaration.Child",
+            throwOnError: true)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.NarrowedRedeclaration.IRoot",
+            throwOnError: true)!;
+        var child = childType.GetConstructors().Single().Invoke([specialized]);
+
         using (Assert.Multiple())
         {
-            await Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Id)).Contains("STEP21EXP005");
+            await Assert.That(childType.GetProperty("Link")!.PropertyType.Name).IsEqualTo("ISpecialized");
+            await Assert.That(childType.GetProperty("Link")!.GetValue(child)).IsSameReferenceAs(specialized);
+            await Assert.That(rootInterface.GetProperty("Link")!.GetValue(child)).IsSameReferenceAs(specialized);
+            await Assert.That(((Entity)child).DirectReferences.Single()).IsSameReferenceAs(specialized);
+        }
+    }
+
+    /// <summary>
+    /// Verifies narrowed entity storage reads, writes, and rereads one inherited physical parameter atomically.
+    /// </summary>
+    [Test]
+    public async Task Should_round_trip_narrowed_entity_storage_and_reject_a_broad_only_value()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/narrowed.exp", NARROWED_REDECLARATION_SCHEMA));
+        var assembly = Emit(result.OutputCompilation);
+        var descriptor = (SchemaDescriptor)assembly.GetType(
+            "TedToolkit.Step21.Generated.NarrowedRedeclaration.SchemaDescriptor",
+            throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.NarrowedRedeclaration.IRoot",
+            throwOnError: true)!;
+        var source = CreateExchange(
+            "NARROWED_REDECLARATION",
+            "#1=SPECIALIZED();\r\n#2=CHILD(#1);");
+
+        var structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        var specialized = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var child = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+        var output = new StringWriter();
+        structure.Write(output);
+        var reread = ExchangeStructure.Read(new StringReader(output.ToString()), [descriptor]);
+        var rereadSpecialized = reread.Registrations
+            .Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var rereadChild = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+        var invalid = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "NARROWED_REDECLARATION",
+                "#1=TARGET();\r\n#2=CHILD(#1);")),
+            [descriptor]));
+        var projectedBeforeInvalidEdit = rootInterface.GetProperty("Link")!.GetValue(child);
+        child.GetType().GetProperty("Link")!.SetValue(child, null);
+        var invalidOutput = new StringWriter();
+        var writeFailure = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.Write(invalidOutput));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(projectedBeforeInvalidEdit).IsSameReferenceAs(specialized);
+            await Assert.That(rootInterface.GetProperty("Link")!.GetValue(rereadChild))
+                .IsSameReferenceAs(rereadSpecialized);
+            await Assert.That(output.ToString()).Contains("#2=CHILD(#1);");
+            await Assert.That(invalid.ValidationResult.Failures.Single().Code)
+                .IsEqualTo("P21.READ.REFERENCE.TYPE");
+            await Assert.That(invalid.ValidationResult.Failures.Single().Path).Contains("Parameters[0]");
+            await Assert.That(writeFailure.ValidationResult.Failures.Any(item => item.Path.Contains(
+                "Link",
+                StringComparison.Ordinal))).IsTrue();
+            await Assert.That(invalidOutput.ToString()).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies an unrelated redeclared entity domain is rejected as an ISO-invalid binding.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_unrelated_entity_redeclaration_as_invalid_binding()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/unrelated.exp", UNRELATED_REDECLARATION_SCHEMA));
+        var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP002");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostic.GetMessage()).Contains("EXPRESS-BIND-INVALID-REDECLARATION");
+            await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsEqualTo(9);
             await Assert.That(result.GeneratedSources).IsEmpty();
-            await Assert.That(result.OutputCompilation.GetDiagnostics()
-                .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies NUMBER-to-INTEGER and NUMBER-to-REAL getters retain exact numeric alternatives.
+    /// </summary>
+    [Test]
+    public async Task Should_project_exact_numeric_redeclarations_without_binary_floating_point()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/numeric.exp", NUMERIC_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var childType = assembly.GetType(
+            "TedToolkit.Step21.Generated.NumericRedeclaration.Child",
+            throwOnError: true)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.NumericRedeclaration.IRoot",
+            throwOnError: true)!;
+        var integer = System.Numerics.BigInteger.Parse("18446744073709551616000000000000000001");
+        var real = new RealValue(
+            System.Numerics.BigInteger.Parse("12345678901234567890123456789"),
+            new System.Numerics.BigInteger(-17));
+        var child = childType.GetConstructors().Single().Invoke([integer, real]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(childType.GetProperty("IntegerValue")!.GetValue(child)).IsEqualTo(integer);
+            await Assert.That(childType.GetProperty("RealValue")!.GetValue(child)).IsEqualTo(real);
+            await Assert.That(rootInterface.GetProperty("IntegerValue")!.GetValue(child))
+                .IsEqualTo(NumberValue.FromInteger(integer));
+            await Assert.That(rootInterface.GetProperty("RealValue")!.GetValue(child))
+                .IsEqualTo(NumberValue.FromReal(real));
+        }
+    }
+
+    /// <summary>
+    /// Verifies ARRAY, LIST, BAG, and SET element specialization retains one mutable aggregate instance.
+    /// </summary>
+    [Test]
+    public async Task Should_project_all_aggregate_specializations_through_covariant_views()
+    {
+        var result = GeneratorHostTests.Run(
+            AGGREGATE_REDECLARATION_CONSUMER,
+            ("schemas/aggregate.exp", AGGREGATE_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("AggregateRedeclarationConsumer", throwOnError: true)!;
+        await Assert.That((bool)consumer.GetMethod(
+            "Exercise",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, null)!)
+            .IsTrue();
+    }
+
+    /// <summary>
+    /// Verifies closed entity-valued SELECT specializations preserve the selected entity identity.
+    /// </summary>
+    [Test]
+    public async Task Should_project_closed_select_specializations_without_erasing_the_selected_leaf()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select.exp", SELECT_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var specialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.SelectRedeclaration.Specialized",
+            throwOnError: true)!)!;
+        var narrowType = assembly.GetType(
+            "TedToolkit.Step21.Generated.SelectRedeclaration.NarrowChoice",
+            throwOnError: true)!;
+        var narrow = narrowType.GetMethod("FromSpecialized")!.Invoke(null, [specialized])!;
+        var childType = assembly.GetType(
+            "TedToolkit.Step21.Generated.SelectRedeclaration.Child",
+            throwOnError: true)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.SelectRedeclaration.IRoot",
+            throwOnError: true)!;
+        var child = childType.GetConstructors().Single().Invoke([narrow, specialized, narrow]);
+        var projectedSelect = rootInterface.GetProperty("SelectToSelect")!.GetValue(child)!;
+        var projectedEntity = rootInterface.GetProperty("EntityToSelect")!.GetValue(child)!;
+        var directEntity = rootInterface.GetProperty("SelectToEntity")!.GetValue(child)!;
+        var broadType = projectedSelect.GetType();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(broadType.GetProperty("Kind")!.GetValue(projectedSelect)!.ToString())
+                .IsEqualTo("Specialized");
+            await Assert.That(broadType.GetProperty("Kind")!.GetValue(projectedEntity)!.ToString())
+                .IsEqualTo("Specialized");
+            await Assert.That(ReadSelectedEntity(broadType, projectedSelect, "TryGetSpecialized"))
+                .IsSameReferenceAs(specialized);
+            await Assert.That(ReadSelectedEntity(broadType, projectedEntity, "TryGetSpecialized"))
+                .IsSameReferenceAs(specialized);
+            await Assert.That(directEntity).IsSameReferenceAs(specialized);
+        }
+    }
+
+    /// <summary>
+    /// Verifies OPTIONAL-to-required redeclarations expose required storage through inherited optional getters.
+    /// </summary>
+    [Test]
+    public async Task Should_tighten_optional_redeclarations_without_duplicating_storage()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/optional.exp", OPTIONAL_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var specialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.OptionalRedeclaration.Specialized",
+            throwOnError: true)!)!;
+        var childType = assembly.GetType(
+            "TedToolkit.Step21.Generated.OptionalRedeclaration.Child",
+            throwOnError: true)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.OptionalRedeclaration.IRoot",
+            throwOnError: true)!;
+        var integer = System.Numerics.BigInteger.Parse("999999999999999999999999999999999999");
+        var child = childType.GetConstructors().Single().Invoke([integer, specialized]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(rootInterface.GetProperty("OptionalNumber")!.GetValue(child))
+                .IsEqualTo(NumberValue.FromInteger(integer));
+            await Assert.That(rootInterface.GetProperty("OptionalLink")!.GetValue(child))
+                .IsSameReferenceAs(specialized);
+            await Assert.That(childType.GetConstructors().Single().GetParameters().Length).IsEqualTo(2);
+            await Assert.That(((Entity)child).DirectReferences.Single()).IsSameReferenceAs(specialized);
+        }
+    }
+
+    /// <summary>
+    /// Verifies required-to-OPTIONAL redeclaration is rejected as ISO-invalid.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_required_to_optional_redeclaration()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/invalid-optional.exp", INVALID_OPTIONAL_REDECLARATION_SCHEMA));
+        await Assert.That(string.Join(",", result.Diagnostics.Select(item => item.Id)))
+            .IsEqualTo("STEP21EXP002");
+        var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP002");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostic.GetMessage()).Contains("EXPRESS-BIND-INVALID-REDECLARATION");
+            await Assert.That(diagnostic.GetMessage()).Contains("cannot be widened to OPTIONAL");
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies changed aggregate metadata remains a bounded unsupported specialization.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_changed_aggregate_metadata_as_unsupported()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/unsupported-aggregate.exp", UNSUPPORTED_AGGREGATE_REDECLARATION_SCHEMA));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics.Select(item => item.Id)).IsEquivalentTo(["STEP21EXP005"]);
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies a qualified origin outside the supertype closure is rejected as ISO-invalid.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_redeclaration_origin_outside_the_supertype_closure()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/invalid-origin.exp", INVALID_ORIGIN_REDECLARATION_SCHEMA));
+        var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP002");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostic.GetMessage()).Contains("EXPRESS-BIND-INVALID-REDECLARATION");
+            await Assert.That(diagnostic.GetMessage()).Contains("qualified origin");
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies an incomparable diamond cannot select storage by traversal order.
+    /// </summary>
+    [Test]
+    public async Task Should_reject_incomparable_diamond_redeclarations_without_selecting_storage()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/incomparable-diamond.exp", INCOMPARABLE_DIAMOND_SCHEMA));
+        var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP005");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostic.GetMessage()).Contains("no unique most-specific storage");
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies a narrowing chain and equivalent diamond choose one deterministic most-specific storage class.
+    /// </summary>
+    [Test]
+    public async Task Should_accept_ordered_chain_and_equivalent_diamond_redeclarations()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/ordered.exp", ORDERED_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        var errors = result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.Location.SourceTree?.GetText()
+                .Lines[diagnostic.Location.GetLineSpan().StartLinePosition.Line].ToString() ?? diagnostic.ToString());
+        await Assert.That(string.Join(Environment.NewLine, errors)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var mostSpecialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.MostSpecialized",
+            throwOnError: true)!)!;
+        var specialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.Specialized",
+            throwOnError: true)!)!;
+        var leafType = assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.Leaf",
+            throwOnError: true)!;
+        var diamondType = assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.DiamondLeaf",
+            throwOnError: true)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.IRoot",
+            throwOnError: true)!;
+        var middleInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.OrderedRedeclaration.IMiddle",
+            throwOnError: true)!;
+        var leaf = leafType.GetConstructors().Single().Invoke([mostSpecialized]);
+        var diamond = diamondType.GetConstructors().Single().Invoke([specialized]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(leafType.GetProperty("Link")!.PropertyType.Name).IsEqualTo("IMostSpecialized");
+            await Assert.That(rootInterface.GetProperty("Link")!.GetValue(leaf))
+                .IsSameReferenceAs(mostSpecialized);
+            await Assert.That(middleInterface.GetProperty("Link")!.GetValue(leaf))
+                .IsSameReferenceAs(mostSpecialized);
+            await Assert.That(rootInterface.GetProperty("Link")!.GetValue(diamond))
+                .IsSameReferenceAs(specialized);
+            await Assert.That(diamondType.GetProperties().Count(property => property.Name == "Link"))
+                .IsEqualTo(1);
         }
     }
 
@@ -508,6 +1084,31 @@ public sealed class EntityHierarchyTests
     private static IPropertySymbol RequiredProperty(INamedTypeSymbol type, string name)
     {
         return type.GetMembers(name).OfType<IPropertySymbol>().Single();
+    }
+
+    private static object ReadSelectedEntity(Type selectType, object select, string methodName)
+    {
+        object?[] arguments = [null];
+        var selected = (bool)selectType.GetMethod(methodName)!.Invoke(select, arguments)!;
+        return selected
+            ? arguments[0]!
+            : throw new InvalidOperationException($"The expected SELECT alternative '{methodName}' was not active.");
+    }
+
+    private static string CreateExchange(string schema, string entities)
+    {
+        return $"""
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('specialization'),'3;1');
+            FILE_NAME('specialization.p21','2026-08-27T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('{schema}'));
+            ENDSEC;
+            DATA;
+            {entities}
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
     }
 
     private static System.Reflection.Assembly Emit(Compilation compilation)

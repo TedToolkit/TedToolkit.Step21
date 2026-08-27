@@ -29,6 +29,7 @@ internal sealed class PublicApiTests
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-021.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-022.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-025.approved.txt")),
+            await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "EXPRESS-specialization.approved.txt")),
         };
         var expected = MergeApprovedSnapshots(approvedSnapshots);
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));
@@ -90,10 +91,13 @@ internal sealed class PublicApiTests
             return;
         }
 
-        builder.Append(FormatTypeDeclaration(type))
-            .Append(type.FullName)
-            .Append(" : ")
-            .AppendLine(FormatType(type.BaseType!));
+        builder.Append(FormatTypeDeclaration(type)).Append(type.FullName);
+        if (type.BaseType is not null)
+        {
+            builder.Append(" : ").Append(FormatType(type.BaseType));
+        }
+
+        builder.AppendLine();
 
         var inheritedInterfaces = type.BaseType?.GetInterfaces() ?? [];
         foreach (var contract in type.GetInterfaces()
@@ -149,6 +153,8 @@ internal sealed class PublicApiTests
 
     private static string FormatTypeDeclaration(Type type)
     {
+        if (type.IsInterface)
+            return "interface ";
         if (type.IsValueType)
         {
             var isReadOnly = type.CustomAttributes.Any(attribute =>

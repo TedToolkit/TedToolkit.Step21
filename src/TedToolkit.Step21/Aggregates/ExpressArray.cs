@@ -11,7 +11,7 @@ namespace TedToolkit.Step21;
 /// Assignment and <see cref="Unset(int)"/> never run validation. Unset slots remain observable through
 /// <see cref="IsSet(int)"/> and are valid only when <see cref="IsOptional"/> is <see langword="true"/>.
 /// </remarks>
-public sealed class ExpressArray<T> : IEnumerable<T>
+public sealed class ExpressArray<T> : IExpressArray<T>
 {
     private readonly T?[] _values;
     private readonly bool[] _isSet;

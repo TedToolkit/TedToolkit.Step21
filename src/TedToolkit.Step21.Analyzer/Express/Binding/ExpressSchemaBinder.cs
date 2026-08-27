@@ -1706,7 +1706,8 @@ internal static class ExpressSchemaBinder
                         attributeDeclaration,
                         ExpressAttributeKind.Explicit,
                         type,
-                        explicitAttribute.HasDirectToken("OPTIONAL"));
+                        explicitAttribute.HasDirectToken("OPTIONAL"),
+                        scope);
                 }
             }
 
@@ -1724,7 +1725,8 @@ internal static class ExpressSchemaBinder
                             derivedAttribute.RequiredChild("attributeDecl"),
                             ExpressAttributeKind.Derived,
                             type,
-                            isOptional: false);
+                            isOptional: false,
+                            scope);
                     }
                 }
             }
@@ -1784,6 +1786,7 @@ internal static class ExpressSchemaBinder
                 ExpressAttributeKind.Inverse,
                 type,
                 isOptional: false,
+                scope,
                 entity,
                 syntax.RequiredChild("attributeRef").IdentifierToken().Text);
         }
@@ -1795,6 +1798,7 @@ internal static class ExpressSchemaBinder
             ExpressAttributeKind kind,
             ExpressBoundType type,
             bool isOptional,
+            NameScope? scope,
             ExpressBoundSymbol? inverseEntity = null,
             string? inverseAttributeName = null)
         {
@@ -1811,12 +1815,29 @@ internal static class ExpressSchemaBinder
                 return;
             }
 
+            var redeclaredAttribute = attributeDeclaration.ChildRules("redeclaredAttribute").SingleOrDefault();
+            var qualifiedAttribute = redeclaredAttribute?.RequiredChild("qualifiedAttribute");
+            var redeclaredEntity = qualifiedAttribute is null
+                ? null
+                : ResolveVisible(
+                    schema,
+                    qualifiedAttribute.RequiredChild("groupQualifier").RequiredChild("entityRef")
+                        .IdentifierToken().Text,
+                    scope);
+            var redeclaredAttributeName = qualifiedAttribute
+                ?.RequiredChild("attributeQualifier")
+                .RequiredChild("attributeRef")
+                .IdentifierToken().Text;
+
             declaration.Attributes.Add(new ExpressBoundAttribute(
                 nameToken.Text,
                 kind,
                 type,
                 isOptional,
                 attributeDeclaration.Span,
+                declaration.Symbol,
+                redeclaredEntity,
+                redeclaredAttributeName,
                 inverseEntity,
                 inverseAttributeName));
         }

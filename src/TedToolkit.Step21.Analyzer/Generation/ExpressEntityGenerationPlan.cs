@@ -85,7 +85,7 @@ internal sealed class ExpressEntityGenerationPlan
                 invalidSchemas,
                 collisions);
             AddMemberNameCollisions(schema, schemaProjections, invalidSchemas, collisions);
-            AddUnsupportedRedeclarations(schema, schemaProjections, invalidSchemas, failures);
+            AddUnsupportedRedeclarations(schema, schemaProjections, valueResolver, invalidSchemas, failures);
         }
 
         PropagateInvalidImports(compilation, invalidSchemas);
@@ -224,22 +224,122 @@ internal sealed class ExpressEntityGenerationPlan
     private static void AddUnsupportedRedeclarations(
         ExpressBoundSchema schema,
         IEnumerable<ExpressEntityProjection> projections,
+        ExpressGeneratedTypeResolver valueResolver,
         HashSet<ExpressBoundSchema> invalidSchemas,
         List<ExpressEntityGenerationFailure> failures)
     {
         var reportedAttributes = new HashSet<ExpressBoundAttribute>();
-        foreach (var attribute in projections
-                     .SelectMany(projection => projection.EffectiveAttributes)
-                     .Where(attribute =>
-                         !ExpressGeneratedTypeResolver.AreEquivalent(attribute.Type, attribute.StorageType)
-                         && reportedAttributes.Add(attribute.Attribute)))
+        var redeclarations = projections
+            .SelectMany(projection => projection.OwnAttributes)
+            .Where(attribute => attribute.Attribute.RedeclaredAttributeName is not null
+                && reportedAttributes.Add(attribute.Attribute))
+            .ToArray();
+        foreach (var attribute in redeclarations)
         {
-            invalidSchemas.Add(schema);
-            failures.Add(new(
-                schema,
-                attribute.Attribute.Span.Start,
-                $"Redeclared entity attribute '{attribute.Attribute.Name}' changes its generated value type; "
-                + "one C# property cannot implement both inherited interface contracts safely."));
+            if (!valueResolver.HasValidRedeclarationOrigin(attribute.Attribute)
+                || !valueResolver.TryGetRedeclaredAttribute(attribute.Attribute, out var original))
+            {
+                AddInvalidRedeclaration(
+                    schema,
+                    attribute,
+                    "The qualified origin does not identify an inherited physical slot.",
+                    invalidSchemas,
+                    failures);
+                continue;
+            }
+
+            if (!original.IsOptional && attribute.Attribute.IsOptional)
+            {
+                AddInvalidRedeclaration(
+                    schema,
+                    attribute,
+                    "A required explicit attribute cannot be widened to OPTIONAL.",
+                    invalidSchemas,
+                    failures);
+                continue;
+            }
+
+            var classification = valueResolver.ClassifySpecialization(original.Type, attribute.Type);
+            if (classification == ExpressRedeclarationClassification.Invalid)
+            {
+                AddInvalidRedeclaration(
+                    schema,
+                    attribute,
+                    "The redeclared domain is not equal to or a specialization of the inherited domain.",
+                    invalidSchemas,
+                    failures);
+            }
+            else if (classification == ExpressRedeclarationClassification.Unsupported)
+            {
+                invalidSchemas.Add(schema);
+                failures.Add(new(
+                    schema,
+                    attribute.Attribute.Span.Start,
+                    $"Redeclared entity attribute '{attribute.Attribute.Name}' uses an ISO specialization "
+                    + "outside the supported M-01 through M-05 mapping matrix."));
+            }
+        }
+
+        AddIncomparableRedeclarations(schema, projections, valueResolver, invalidSchemas, failures);
+    }
+
+    private static void AddInvalidRedeclaration(
+        ExpressBoundSchema schema,
+        ExpressEntityAttributeProjection attribute,
+        string detail,
+        HashSet<ExpressBoundSchema> invalidSchemas,
+        List<ExpressEntityGenerationFailure> failures)
+    {
+        _ = invalidSchemas.Add(schema);
+        failures.Add(new(
+            schema,
+            attribute.Attribute.Span.Start,
+            $"Redeclared entity attribute '{attribute.Attribute.Name}' is invalid. {detail}",
+            "EXPRESS-BIND-INVALID-REDECLARATION"));
+    }
+
+    private static void AddIncomparableRedeclarations(
+        ExpressBoundSchema schema,
+        IEnumerable<ExpressEntityProjection> projections,
+        ExpressGeneratedTypeResolver valueResolver,
+        HashSet<ExpressBoundSchema> invalidSchemas,
+        List<ExpressEntityGenerationFailure> failures)
+    {
+        var reported = new HashSet<ExpressBoundAttribute>();
+        foreach (var projection in projections)
+        {
+            var redeclarations = projection.PhysicalComponents
+                .SelectMany(entity => entity.Attributes)
+                .Where(attribute => attribute.RedeclaredAttributeName is not null)
+                .ToArray();
+            foreach (var group in redeclarations.GroupBy(attribute =>
+                         (attribute.RedeclaredEntity, attribute.RedeclaredAttributeName)))
+            {
+                var items = group.ToArray();
+                for (var first = 0; first < items.Length; first++)
+                {
+                    for (var second = first + 1; second < items.Length; second++)
+                    {
+                        var forward = valueResolver.ClassifySpecialization(items[first].Type, items[second].Type);
+                        var reverse = valueResolver.ClassifySpecialization(items[second].Type, items[first].Type);
+                        if (forward is ExpressRedeclarationClassification.Equivalent
+                            or ExpressRedeclarationClassification.Supported
+                            || reverse == ExpressRedeclarationClassification.Supported
+                            || !reported.Add(items[second]))
+                        {
+                            continue;
+                        }
+
+                        _ = invalidSchemas.Add(schema);
+                        failures.Add(new(
+                            schema,
+                            items[second].Span.Start,
+                            $"Redeclarations of physical slot '{group.Key.RedeclaredAttributeName}' have "
+                            + "incomparable supported domains; no unique most-specific storage exists."));
+                        break;
+                    }
+                }
+            }
         }
     }
 

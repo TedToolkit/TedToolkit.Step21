@@ -140,10 +140,10 @@ internal static class ExpressGeneratorDiagnostics
                      .ThenBy(item => item.Location.Line)
                      .ThenBy(item => item.Location.Column))
         {
-            context.ReportDiagnostic(Diagnostic.Create(
-                _unsupportedEntityProjection,
-                CreateLocation(result.Inputs, failure.Location),
-                failure.Message));
+            var location = CreateLocation(result.Inputs, failure.Location);
+            context.ReportDiagnostic(failure.BindingCode is null
+                ? Diagnostic.Create(_unsupportedEntityProjection, location, failure.Message)
+                : Diagnostic.Create(_bindingFailure, location, failure.BindingCode, failure.Message));
         }
     }
 

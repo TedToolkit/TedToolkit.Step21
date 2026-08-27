@@ -898,15 +898,16 @@ internal static class ExpressStructuralValidationEmitter
 
         var valueName = $"ruleAttribute{Invariant(attributeIndex)}";
         var pathName = $"ruleAttributePath{Invariant(attributeIndex)}";
-        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Name)}";
-        if (!ReferenceEquals(entity.Schema.Identity, attribute.StorageEntity.Symbol.DeclaringSchema))
+        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Name)}";
+        if (!ReferenceEquals(entity.Schema.Identity, attribute.DeclaringEntity.Symbol.DeclaringSchema))
         {
             storageInterface = "global::TedToolkit.Step21.Generated."
-                + $"{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Symbol.DeclaringSchema.Name)}."
+                + $"{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Symbol.DeclaringSchema.Name)}."
                 + storageInterface;
         }
 
         var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+            && entity.Entity.DirectSupertypes.Count <= 1
             ? $"value.{attribute.Name}"
             : $"(({storageInterface})value).{attribute.Name}";
         owner.AddStatement(new CustomExpression(
@@ -1301,15 +1302,16 @@ internal static class ExpressStructuralValidationEmitter
         var prefix = ConstraintPrefix(entity, attribute);
         var valueName = $"attribute{Invariant(attributeIndex)}";
         var pathName = $"attributePath{Invariant(attributeIndex)}";
-        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Name)}";
-        if (!ReferenceEquals(entity.Schema.Identity, attribute.StorageEntity.Symbol.DeclaringSchema))
+        var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Name)}";
+        if (!ReferenceEquals(entity.Schema.Identity, attribute.DeclaringEntity.Symbol.DeclaringSchema))
         {
             storageInterface = "global::TedToolkit.Step21.Generated."
-                + $"{ExpressEntityProjection.ToPascalCase(attribute.StorageEntity.Symbol.DeclaringSchema.Name)}."
+                + $"{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Symbol.DeclaringSchema.Name)}."
                 + storageInterface;
         }
 
         var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+            && entity.Entity.DirectSupertypes.Count <= 1
             ? $"value.{attribute.Name}"
             : $"(({storageInterface})value).{attribute.Name}";
         owner.AddStatement(new CustomExpression(
@@ -1722,7 +1724,7 @@ internal static class ExpressStructuralValidationEmitter
         ref int variable)
     {
         var indexName = $"arrayIndex{Invariant(variable++)}";
-        var itemName = $"arrayItem{Invariant(variable++)}";
+        var itemName = $"{valueExpression}[{indexName}]";
         var loop = new ForEachStatement(
             DataType.Int,
             indexName,
@@ -1740,7 +1742,7 @@ internal static class ExpressStructuralValidationEmitter
         }
 
         var present = new IfStatement(new CustomExpression(
-            $"{valueExpression}.TryGetValue({indexName}, out var {itemName})"));
+            $"{valueExpression}.IsSet({indexName})"));
         AddValueValidation(
             present,
             schema,

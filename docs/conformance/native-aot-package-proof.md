@@ -2,7 +2,7 @@
 
 SBRT-025 proves the deployment boundary from a real NuGet consumer rather than from project references.
 
-The representative consumer supplies two EXPRESS schemas as `AdditionalFiles` and uses only the public packaged API. It reads a multi-schema exchange structure containing both simple and flat `ANDOR` complex entity instances, navigates generated interfaces and classes, edits values, validates, writes, and reads the result again. The fixture contains no reflection or dynamic-code fallback.
+The representative consumer supplies two EXPRESS schemas as `AdditionalFiles` and uses only the public packaged API. It reads a multi-schema exchange structure containing simple and flat `ANDOR` complex instances plus representative M-01 through M-05 explicit attribute specializations. The executable observes inherited entity, SELECT, exact numeric, required, and all four covariant aggregate views over their unique narrow storage; edits values; validates; writes; and reads the result again. The fixture contains no reflection or dynamic-code fallback.
 
 ## Stable proof
 

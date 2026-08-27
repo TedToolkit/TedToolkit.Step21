@@ -34,6 +34,42 @@ internal sealed class BehaviorTests
     }
 
     /// <summary>
+    /// Verifies that mutable entity aggregates expose the same instance through covariant read-only views.
+    /// </summary>
+    [Test]
+    public async Task Should_expose_covariant_read_only_views_without_copying_aggregate_state()
+    {
+        var element = new DerivedEntity();
+        var array = new ExpressArray<DerivedEntity>(1, 1);
+        var list = new ExpressList<DerivedEntity> { element };
+        var bag = new ExpressBag<DerivedEntity> { element };
+        var set = new ExpressSet<DerivedEntity> { element };
+        array[1] = element;
+
+        IExpressArray<BaseEntity> arrayView = array;
+        IExpressList<BaseEntity> listView = list;
+        IExpressBag<BaseEntity> bagView = bag;
+        IExpressSet<BaseEntity> setView = set;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(arrayView).IsSameReferenceAs(array);
+            await Assert.That(listView).IsSameReferenceAs(list);
+            await Assert.That(bagView).IsSameReferenceAs(bag);
+            await Assert.That(setView).IsSameReferenceAs(set);
+            await Assert.That(arrayView[1]).IsSameReferenceAs(element);
+            await Assert.That(listView[0]).IsSameReferenceAs(element);
+            await Assert.That(bagView.Single()).IsSameReferenceAs(element);
+            await Assert.That(setView.Single()).IsSameReferenceAs(element);
+            await Assert.That(arrayView.LowerIndex).IsEqualTo(1);
+            await Assert.That(arrayView.UpperIndex).IsEqualTo(1);
+            await Assert.That(listView.LowerBound).IsEqualTo(0);
+            await Assert.That(bagView.UpperBound).IsNull();
+            await Assert.That(setView.Validate().IsValid).IsTrue();
+        }
+    }
+
+    /// <summary>
     /// Verifies that LIST accepts upper-bound and uniqueness violations until explicit validation.
     /// </summary>
     [Test]
@@ -254,4 +290,8 @@ internal sealed class BehaviorTests
                 .And.Contains("never run validation");
         }
     }
+
+    private class BaseEntity;
+
+    private sealed class DerivedEntity : BaseEntity;
 }

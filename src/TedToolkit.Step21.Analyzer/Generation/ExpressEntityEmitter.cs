@@ -99,10 +99,24 @@ internal static class ExpressEntityEmitter
                 valueResolver,
                 isMutable: true,
                 generatedName: attribute.StorageMemberName));
-            if (!StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName))
+            if (!StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+                || valueResolver.RequiresAggregateView(attribute.Attribute))
             {
-                entityClass.AddMember(CreateExplicitInterfaceGetter(projection, attribute, valueResolver));
+                entityClass.AddMember(CreateExplicitInterfaceGetter(
+                    projection,
+                    attribute,
+                    attribute,
+                    valueResolver));
             }
+        }
+
+        foreach (var adapter in projection.InterfaceAdapters)
+        {
+            entityClass.AddMember(CreateExplicitInterfaceGetter(
+                projection,
+                adapter.InterfaceAttribute,
+                adapter.StorageAttribute,
+                valueResolver));
         }
 
         entityClass.AddMember(CreateConstructor(projection, valueResolver));
@@ -129,7 +143,11 @@ internal static class ExpressEntityEmitter
         bool initializeDefault = false,
         string? generatedName = null)
     {
-        var (dataType, isReferenceType) = AttributeDataType(projection, attribute, valueResolver);
+        var (dataType, isReferenceType) = AttributeDataType(
+            projection,
+            attribute,
+            valueResolver,
+            useInterfaceContract: !isMutable);
         if (attribute.Attribute.IsOptional)
         {
             dataType = dataType.Null;
@@ -236,22 +254,32 @@ internal static class ExpressEntityEmitter
 
     private static Custom CreateExplicitInterfaceGetter(
         ExpressEntityProjection projection,
-        ExpressEntityAttributeProjection attribute,
+        ExpressEntityAttributeProjection interfaceAttribute,
+        ExpressEntityAttributeProjection storageAttribute,
         ExpressGeneratedTypeResolver valueResolver)
     {
-        var (dataType, _) = AttributeDataType(projection, attribute, valueResolver);
-        if (attribute.Attribute.IsOptional)
+        var (dataType, _) = AttributeDataType(
+            projection,
+            interfaceAttribute,
+            valueResolver,
+            useInterfaceContract: true);
+        if (interfaceAttribute.Attribute.IsOptional)
         {
             dataType = dataType.Null;
         }
 
-        var interfaceType = EntityInterfaceDataType(projection, attribute.DeclaringEntity.Symbol);
+        var interfaceType = EntityInterfaceDataType(projection, interfaceAttribute.DeclaringEntity.Symbol);
         return new((ref SourceBuilder builder) =>
         {
             dataType.ToCode(ref builder);
             builder.AppendSpace();
             interfaceType.ToCode(ref builder);
-            builder.Append($".{attribute.Name} => {attribute.StorageMemberName};");
+            var expression = valueResolver.CreateSpecializationProjection(
+                projection.Schema.Identity,
+                storageAttribute.Type,
+                interfaceAttribute.Type,
+                storageAttribute.StorageMemberName);
+            builder.Append($".{interfaceAttribute.Name} => {expression};");
         });
     }
 
@@ -298,8 +326,16 @@ internal static class ExpressEntityEmitter
     private static (DataType DataType, bool IsReferenceType) AttributeDataType(
         ExpressEntityProjection projection,
         ExpressEntityAttributeProjection attribute,
-        ExpressGeneratedTypeResolver valueResolver)
+        ExpressGeneratedTypeResolver valueResolver,
+        bool useInterfaceContract = false)
     {
+        if (useInterfaceContract
+            && attribute.Type is ExpressBoundAggregateType aggregate
+            && valueResolver.RequiresAggregateView(attribute.Attribute))
+        {
+            return (valueResolver.ResolveAggregateView(projection.Schema.Identity, aggregate), true);
+        }
+
         return valueResolver.Resolve(projection.Schema.Identity, attribute.Type);
     }
 

@@ -10,7 +10,7 @@ namespace TedToolkit.Step21;
 /// Enumeration is deterministic but has no EXPRESS ordering meaning. Mutations accept temporary bound violations and
 /// never run validation; call <see cref="Validate(string)"/> explicitly or rely on a later model boundary.
 /// </remarks>
-public sealed class ExpressBag<T> : ICollection<T>, IReadOnlyCollection<T>
+public sealed class ExpressBag<T> : ICollection<T>, IExpressBag<T>
 {
     private readonly List<T> _items = [];
 

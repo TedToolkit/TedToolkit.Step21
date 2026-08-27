@@ -20,6 +20,9 @@ internal sealed class ExpressBoundAttribute
     /// <param name="type">The resolved attribute type.</param>
     /// <param name="isOptional">Whether the explicit attribute is optional.</param>
     /// <param name="span">The attribute declaration span.</param>
+    /// <param name="declaringEntity">The entity that declares the attribute.</param>
+    /// <param name="redeclaredEntity">The inherited entity named by a qualified redeclaration.</param>
+    /// <param name="redeclaredAttributeName">The inherited physical slot name.</param>
     /// <param name="inverseEntity">The entity that declares the forward role for an inverse attribute.</param>
     /// <param name="inverseAttributeName">The forward role name for an inverse attribute.</param>
     internal ExpressBoundAttribute(
@@ -28,6 +31,9 @@ internal sealed class ExpressBoundAttribute
         ExpressBoundType type,
         bool isOptional,
         ExpressSourceSpan span,
+        ExpressBoundSymbol declaringEntity,
+        ExpressBoundSymbol? redeclaredEntity = null,
+        string? redeclaredAttributeName = null,
         ExpressBoundSymbol? inverseEntity = null,
         string? inverseAttributeName = null)
     {
@@ -36,6 +42,9 @@ internal sealed class ExpressBoundAttribute
         Type = type;
         IsOptional = isOptional;
         Span = span;
+        DeclaringEntity = declaringEntity;
+        RedeclaredEntity = redeclaredEntity;
+        RedeclaredAttributeName = redeclaredAttributeName;
         InverseEntity = inverseEntity;
         InverseAttributeName = inverseAttributeName;
     }
@@ -64,6 +73,21 @@ internal sealed class ExpressBoundAttribute
     /// Gets the attribute declaration span.
     /// </summary>
     internal ExpressSourceSpan Span { get; }
+
+    /// <summary>
+    /// Gets the entity that declares this attribute.
+    /// </summary>
+    internal ExpressBoundSymbol DeclaringEntity { get; }
+
+    /// <summary>
+    /// Gets the inherited entity named by a qualified redeclaration, when present.
+    /// </summary>
+    internal ExpressBoundSymbol? RedeclaredEntity { get; }
+
+    /// <summary>
+    /// Gets the inherited physical slot name, when present.
+    /// </summary>
+    internal string? RedeclaredAttributeName { get; }
 
     /// <summary>
     /// Gets the entity that declares the forward role for an inverse attribute.

@@ -27,6 +27,8 @@ internal static class Program
         DATA('model',('catalog_model'));
         #1=(LEFT(.T.)RIGHT(7)ROOT('complex',#2,(1,2)));
         #3=SIMPLE('before');
+        #4=SPECIALIZED_TARGET('narrow');
+        #5=SPECIALIZATION_CHILD(#4,#4,18446744073709551616000000000000000001,1.234567890123456789E-17,(#4,#4),(#4),(#4,#4),(#4),#4);
         ENDSEC;
         END-ISO-10303-21;
         """;
@@ -42,19 +44,34 @@ internal static class Program
         var complex = structure.Entities.Single(entity => entity is ILeft && entity is IRight);
         var target = structure.Entities.OfType<Target>().Single();
         var simple = structure.Entities.OfType<Simple>().Single();
+        var specialization = structure.Entities.OfType<SpecializationChild>().Single();
+        var specializedTarget = structure.Entities.OfType<SpecializedTarget>().Single();
+        ISpecializationRoot broadSpecialization = specialization;
 
         if (complex is not ILeft { Enabled: true, } left
             || complex is not IRight { Rank: var rank }
             || complex is not IRoot { Label: "complex", Peer: var peer, Values.Count: 2 }
             || rank != 7
             || !ReferenceEquals(peer, target)
-            || left.Label != "complex")
+            || left.Label != "complex"
+            || !ReferenceEquals(specialization.Link, specializedTarget)
+            || !ReferenceEquals(broadSpecialization.Link, specializedTarget)
+            || specialization.IntegerValue.ToString() != "18446744073709551616000000000000000001"
+            || broadSpecialization.IntegerValue != NumberValue.FromInteger(specialization.IntegerValue)
+            || broadSpecialization.RealValue != NumberValue.FromReal(specialization.RealValue)
+            || !ReferenceEquals(specialization.ArrayValue, broadSpecialization.ArrayValue)
+            || !ReferenceEquals(specialization.ListValue, broadSpecialization.ListValue)
+            || !ReferenceEquals(specialization.BagValue, broadSpecialization.BagValue)
+            || !ReferenceEquals(specialization.SetValue, broadSpecialization.SetValue)
+            || !ReferenceEquals(specialization.OptionalLink, broadSpecialization.OptionalLink))
         {
             return 10;
         }
 
         target.Code = "peer-edited";
         simple.Name = "after";
+        specializedTarget.Code = "narrow-edited";
+        specialization.BagValue.Add(specializedTarget);
         if (!structure.Validate().IsValid)
         {
             return 11;
@@ -65,7 +82,10 @@ internal static class Program
         var text = output.ToString();
         if (!text.Contains("#1=(LEFT(.T.)RIGHT(7)ROOT('complex',#2,(1,2)));", StringComparison.Ordinal)
             || !text.Contains("#2=TARGET('peer-edited');", StringComparison.Ordinal)
-            || !text.Contains("#3=SIMPLE('after');", StringComparison.Ordinal))
+            || !text.Contains("#3=SIMPLE('after');", StringComparison.Ordinal)
+            || !text.Contains("#4=SPECIALIZED_TARGET('narrow-edited');", StringComparison.Ordinal)
+            || !text.Contains("#5=SPECIALIZATION_CHILD(#4,#4,18446744073709551616000000000000000001,", StringComparison.Ordinal)
+            || !text.Contains("(#4,#4,#4)", StringComparison.Ordinal))
         {
             return 12;
         }
@@ -74,8 +94,11 @@ internal static class Program
         var rereadComplex = reread.Entities.Single(entity => entity is ILeft && entity is IRight);
         var rereadTarget = reread.Entities.OfType<Target>().Single();
         var rereadSimple = reread.Entities.OfType<Simple>().Single();
+        var rereadSpecialization = reread.Entities.OfType<SpecializationChild>().Single();
+        var rereadSpecializedTarget = reread.Entities.OfType<SpecializedTarget>().Single();
+        ISpecializationRoot rereadBroadSpecialization = rereadSpecialization;
         if (!reread.Validate().IsValid
-            || reread.Entities.Count() != 3
+            || reread.Entities.Count() != 5
             || rereadComplex is not ILeft { Enabled: true, }
             || rereadComplex is not IRight { Rank: var rereadRank }
             || rereadComplex is not IRoot { Label: "complex", Peer: var rereadPeer, Values: var rereadValues }
@@ -83,7 +106,13 @@ internal static class Program
             || !rereadValues.SequenceEqual([1, 2])
             || !ReferenceEquals(rereadPeer, rereadTarget)
             || rereadTarget.Code != "peer-edited"
-            || rereadSimple.Name != "after")
+            || rereadSimple.Name != "after"
+            || !ReferenceEquals(rereadSpecialization.Link, rereadSpecializedTarget)
+            || !ReferenceEquals(rereadBroadSpecialization.Link, rereadSpecializedTarget)
+            || !ReferenceEquals(rereadSpecialization.ArrayValue, rereadBroadSpecialization.ArrayValue)
+            || rereadSpecializedTarget.Code != "narrow-edited"
+            || rereadSpecialization.ListValue.Count != 1
+            || rereadSpecialization.BagValue.Count != 3)
         {
             return 13;
         }

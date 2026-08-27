@@ -21,14 +21,17 @@ internal sealed class ExpressEntityGenerationFailure
     /// <param name="schema">The affected schema.</param>
     /// <param name="location">The unsupported declaration location.</param>
     /// <param name="message">The bounded failure detail.</param>
+    /// <param name="bindingCode">The internal binding diagnostic code, or <see langword="null"/> for STEP21EXP005.</param>
     internal ExpressEntityGenerationFailure(
         ExpressBoundSchema schema,
         ExpressSourceLocation location,
-        string message)
+        string message,
+        string? bindingCode = null)
     {
         Schema = schema;
         Location = location;
         Message = message;
+        BindingCode = bindingCode;
     }
 
     /// <summary>
@@ -45,4 +48,9 @@ internal sealed class ExpressEntityGenerationFailure
     /// Gets the bounded failure detail.
     /// </summary>
     internal string Message { get; }
+
+    /// <summary>
+    /// Gets the internal binding diagnostic code, or <see langword="null"/> for an unsupported projection.
+    /// </summary>
+    internal string? BindingCode { get; }
 }

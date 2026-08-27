@@ -909,6 +909,7 @@ internal static class ExpressSchemaDescriptorEmitter
         var item = $"projectedAggregateItem{suffix}";
         if (aggregate.Kind == ExpressAggregateKind.Array)
         {
+            item = $"{value}[projectedAggregateIndex{suffix}]";
             var projected = CreateProjectedValue(
                 currentSchema,
                 aggregate.ElementType,
@@ -920,7 +921,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 + "global::System.Linq.Enumerable.Select("
                 + $"global::System.Linq.Enumerable.Range({lowerBound.ToString(System.Globalization.CultureInfo.InvariantCulture)}, "
                 + $"{count.ToString(System.Globalization.CultureInfo.InvariantCulture)}), projectedAggregateIndex{suffix} => "
-                + $"{value}.TryGetValue(projectedAggregateIndex{suffix}, out var {item}) ? {projected} "
+                + $"{value}.IsSet(projectedAggregateIndex{suffix}) ? {projected} "
                 + ": global::TedToolkit.Step21.ParameterValue.Omitted))";
         }
 

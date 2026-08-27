@@ -10,7 +10,7 @@ namespace TedToolkit.Step21;
 /// Mutations accept temporary bound and <c>UNIQUE</c> violations and never run validation.
 /// Call <see cref="Validate(string)"/> explicitly or rely on a later model boundary to inspect the candidate.
 /// </remarks>
-public sealed class ExpressList<T> : IList<T>, IReadOnlyList<T>
+public sealed class ExpressList<T> : IList<T>, IExpressList<T>
 {
     private readonly List<T> _items = [];
     private readonly IEqualityComparer<T> _comparer;
