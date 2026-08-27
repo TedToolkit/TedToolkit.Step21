@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: user 2026-08-27 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:a74765dbbbdcc44c508318d7cf9756884b881b0c -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -235,16 +235,20 @@ AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated 
 
 ## Implementation evidence
 
-- Rejected implementation candidate: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`. Independent review found
-  an unsafe renamed-specialization projection, a false compound-invalid `STEP21EXP005`, and incomplete AC-01/AC-05
-  proof partitions. These findings returned the change to `in-progress`; the next candidate must supersede this evidence.
-- M-01 through M-05 focused generation, projection, diagnostics, topology, aggregate identity, and atomic
-  read/write tests pass, including overlapping SELECT alternatives selecting the unique most-specific leaf.
+- Exact implementation candidate: `a74765dbbbdcc44c508318d7cf9756884b881b0c`, superseding rejected candidate
+  `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`.
+- Renamed specialization now selects the renamed narrow member as the only mutable storage and projects every wider or
+  differently named interface getter from that member. Compound-invalid diamonds compare only individually legal
+  redeclarations, so they emit only their exact `STEP21EXP002` binding failures rather than a false `STEP21EXP005`.
+- M-01 through M-05 focused generation, projection, diagnostics, topology, aggregate identity, and atomic read/write
+  tests pass. The expanded AC-01/AC-05 matrix covers renamed specialization, SELECT addition/replacement, aggregate
+  kind/bounds/flags, nested aggregates, WHERE-constrained relations, compound-invalid topology, complete positive
+  reread oracles, and nine broad-only negative inputs across entity, SELECT, numeric, aggregate, and required domains.
 - Public API snapshot and complete runtime XML documentation checks pass; the compiler manifest changed only
   the expected AP203 schema-descriptor hash while retaining 492 generated sources and zero diagnostics.
-- Release solution build passes with 0 warnings and 0 errors; the complete unit/generator suite passes 363/363.
+- Release solution build passes with 0 warnings and 0 errors; the complete unit/generator suite passes 377/377.
 - The complete integration suite passes 7/7 enabled tests with the one opt-in network corpus test skipped.
-- The actual packed consumer passes deterministic package generation and executes representative specialization
-  read/edit/validate/write/reread. The exact candidate was verified in an isolated detached worktree; trimmed
-  `win-x64` Native AOT emitted no attributable warning and reported `NATIVE_AOT_PACKAGE_PROOF_OK` with a
-  3,584,000-byte executable.
+- The actual packed consumer passes deterministic package generation and executes complete representative M-01 through
+  M-05 read/edit/validate/write/reread assertions. The exact candidate was verified in an LF-preserving isolated
+  detached worktree; AP203 raw-byte fixture proofs match the approved baseline, and trimmed `win-x64` Native AOT emitted
+  no attributable warning and reported `NATIVE_AOT_PACKAGE_PROOF_OK` with a 3,589,120-byte executable.
