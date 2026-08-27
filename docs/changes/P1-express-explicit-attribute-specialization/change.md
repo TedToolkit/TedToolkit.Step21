@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: user 2026-08-27 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:229eb6b43bdeb34d540ef7ab87c6cc3a138a512f -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -235,7 +235,7 @@ AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated 
 
 ## Implementation evidence
 
-- Provisional implementation commit: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`.
+- Exact implementation candidate: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`.
 - M-01 through M-05 focused generation, projection, diagnostics, topology, aggregate identity, and atomic
   read/write tests pass, including overlapping SELECT alternatives selecting the unique most-specific leaf.
 - Public API snapshot and complete runtime XML documentation checks pass; the compiler manifest changed only
@@ -243,6 +243,6 @@ AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated 
 - Release solution build passes with 0 warnings and 0 errors; the complete unit/generator suite passes 363/363.
 - The complete integration suite passes 7/7 enabled tests with the one opt-in network corpus test skipped.
 - The actual packed consumer passes deterministic package generation and executes representative specialization
-  read/edit/validate/write/reread. A pre-candidate trimmed `win-x64` Native AOT run emitted no attributable warning
-  and reported `NATIVE_AOT_PACKAGE_PROOF_OK` with a 3,584,000-byte executable; the exact-commit AOT rerun remains
-  pending until verified formatter-only worktree noise can be removed safely.
+  read/edit/validate/write/reread. The exact candidate was verified in an isolated detached worktree; trimmed
+  `win-x64` Native AOT emitted no attributable warning and reported `NATIVE_AOT_PACKAGE_PROOF_OK` with a
+  3,584,000-byte executable.
