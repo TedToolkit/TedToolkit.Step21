@@ -5,8 +5,8 @@
 - Scope and system boundary: the long-lived boundary among ISO 10303-21 parsing/writing, EXPRESS schema compilation, generated .NET types, and schema-bound model navigation
 - Applicable product intent: [`docs/product/README.md`](../product/README.md), approved at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`
 - Governing principles: [`docs/principles/architecture.md`](../principles/architecture.md) and [`docs/principles/engineering.md`](../principles/engineering.md), active; dependent delivery records pin the applicable committed revision
-- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), superseded; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md), [`ADR-0005`](../adr/ADR-0005-explicit-section-graph-registration.md), [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md), and [`ADR-0007`](../adr/ADR-0007-separate-part21-lexer-parser-grammars.md), accepted
-- Last approved revision: approved by the repository maintainer on 2026-08-26; dependent delivery records pin the committed revision
+- Related ADRs: [`ADR-0001`](../adr/ADR-0001-schema-bound-entity-model.md) and [`ADR-0004`](../adr/ADR-0004-mutable-entities-and-boundary-validation.md), superseded; [`ADR-0002`](../adr/ADR-0002-roslynhelper-source-composition.md), accepted at `5021769553568e25aa8ae8e5b7af39cc2c9b1c82`; [`ADR-0003`](../adr/ADR-0003-aot-ready-schema-validation.md), [`ADR-0005`](../adr/ADR-0005-explicit-section-graph-registration.md), [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md), [`ADR-0007`](../adr/ADR-0007-separate-part21-lexer-parser-grammars.md), and [`ADR-0008`](../adr/ADR-0008-covariant-aggregate-views-and-singular-inverse-validation.md), accepted
+- Last approved revision: approved by the repository maintainer on 2026-08-27; dependent delivery records pin the committed revision
 
 ## Current architecture
 
@@ -111,6 +111,8 @@ Interfaces are the complete and exclusive representation of EXPRESS entity inher
 - Classes for abstract EXPRESS entities are abstract; all instantiable generated entity classes can be `sealed` because schema subtype polymorphism is carried by interfaces rather than class inheritance.
 - Inherited schema-defined storage is generated exactly once in each concrete class projection. No arbitrary "primary supertype" exists.
 - Explicit attributes are mutable properties. Mandatory members are non-nullable and required for ordinary construction; `OPTIONAL` members are nullable. Setters do not validate and may participate in temporarily invalid multi-step edits. Derived and inverse attributes are not serialized properties; optional computed/navigation APIs may be generated separately only when their semantics are supported.
+- A physical aggregate slot narrowed by an explicit redeclaration retains exactly one concrete mutable aggregate at its narrowest effective type. The affected generated entity interfaces expose kind-specific covariant read-only EXPRESS views that preserve bounds, ordering/index, multiplicity, optional-slot, and uniqueness observations; every inherited and redeclared view returns the same aggregate instance. Existing successfully generated non-narrowed aggregate surfaces remain unchanged.
+- A validation-reachable singular inverse remains computed from the complete model population rather than becoming a serialized or mutable public property. Exactly one compatible forward-role candidate supplies its value; zero or multiple candidates produce stable aggregate validation evidence and never first-wins selection, a validation-external navigation exception, or partial publication.
 - EXPRESS defined types produce `readonly record struct` wrappers rather than aliases.
 - EXPRESS enumerations produce `readonly record struct` symbol types with generated known values, avoiding C# enum limitations around extensible EXPRESS enumerations.
 - EXPRESS selects produce immutable record-based discriminated values with typed construction and exhaustive matching.
@@ -262,6 +264,8 @@ Compatibility changes must identify the affected surface and migration consequen
 - Treat any generated .NET mapping attribute as non-normative library metadata; the first contract does not require one.
 - Express all EXPRESS entity inheritance through generated interfaces; generated mutable entity classes inherit only `Entity`, implement their own interface, and use reference identity.
 - Every instantiable generated entity class is sealed; immutable defined-type and enumeration value wrappers may remain record structs where semantically appropriate.
+- Preserve one physical storage instance across every inherited/redeclared aggregate view; do not copy, synchronize, widen away, or silently omit a narrowed redeclaration. Covariant view contracts remain observation-only and schema-neutral.
+- Evaluate validation-reachable singular inverse attributes from the complete forward-role candidate set; require exactly one candidate and route cardinality violations through the aggregate validation contract.
 - Provide ISO 10303-21 writing and semantic round-trip only; do not introduce JSON/XML dependencies or contracts.
 - Keep `ToString()` non-recursive and diagnostic-only; route ISO 10303-21 text through explicit writer operations with diagnostics.
 - Represent the document root as non-generic `ExchangeStructure`; do not assume one schema through a generic root type.
@@ -289,6 +293,7 @@ Compatibility changes must identify the affected surface and migration consequen
 - ADR-0005 retains mutable reference-identity entities, exchange-structure-owned occurrence names, reflection-free `DirectReferences`, and boundary validation while requiring explicit data-section selection for graph registration.
 - ADR-0006 requires one independently versioned optional package per maintained precompiled EXPRESS schema baseline, with explicit descriptor selection, provenance, compatibility classification, and bounded core-runtime dependency.
 - ADR-0007 requires separate target-independent lexer and parser grammars while Part 21 URI and signature tokenization depends on ANTLR lexer modes.
+- ADR-0008 requires identity-preserving covariant read-only views for narrowed aggregate redeclarations and aggregate validation evidence for non-unique singular inverse candidates.
 - No principle exceptions are proposed.
 
 ## Review triggers
