@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: candidate-ready -->
+<!-- change-status: implemented -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
@@ -215,3 +215,14 @@ AC-01 至 AC-06 必须绑定同一 exact candidate；generated XML/conformance�
   skipped. The actual packed consumer executed the 1/0/many/lazy and read/write matrix.
 - Actual-package trimmed `win-x64` Native AOT publish/run emitted no attributable warning and reported
   `PACKED_AOT_OK` plus `NATIVE_AOT_PACKAGE_PROOF_OK win-x64 executable-bytes=3661824 compiler-package=10.0.11`.
+
+## Implementation review
+
+- Independent delivery-candidate review: `Ready to merge`, with no blocking or important findings.
+- Reviewed exact range: `c8d5b2750afca392b7abd4778fe6d3be020859a8..367c20dc6a349e2c3d29d1c96824b947b3ff27e9`.
+- The fresh reviewer independently passed format-3 readiness, both singular-inverse focused acceptance tests,
+  diff hygiene, removal of the unsafe registration-path `First` lookup, and exact candidate cleanliness.
+- The reviewer confirmed the detached-source fix caches unavailable state and uses the private suppression signal,
+  preserving authoritative relationship evidence without escaping validation or inventing an inverse path.
+- Complete 379/379, integration 7/7 enabled plus one opt-in skip, and actual-package trimmed Native AOT gates are
+  owner-executed exact-candidate evidence; no external operational handoff is required.
