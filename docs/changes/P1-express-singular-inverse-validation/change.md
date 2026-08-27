@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: implemented -->
+<!-- change-status: completed -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
@@ -226,3 +226,12 @@ AC-01 至 AC-06 必须绑定同一 exact candidate；generated XML/conformance�
   preserving authoritative relationship evidence without escaping validation or inventing an inverse path.
 - Complete 379/379, integration 7/7 enabled plus one opt-in skip, and actual-package trimmed Native AOT gates are
   owner-executed exact-candidate evidence; no external operational handoff is required.
+
+## Closure evidence
+
+- Exact candidate `367c20dc6a349e2c3d29d1c96824b947b3ff27e9` remains an ancestor of the closure commit; every later
+  change before closure is confined to lifecycle, binding, verification, and independent review evidence.
+- AC-01 through AC-06, including the detached inverse-source invalid-graph boundary, are implemented and independently
+  reviewed against the same exact candidate.
+- Durable ISO/architecture/conformance knowledge is captured in ADR-0008, schema-bound architecture, reachable-rule,
+  structural-validation, and Native AOT documents; external operational handoff is `None` and therefore complete.
