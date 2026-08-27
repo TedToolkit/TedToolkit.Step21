@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: approved -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: user 2026-08-27 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:229eb6b43bdeb34d540ef7ab87c6cc3a138a512f -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -232,3 +232,16 @@ None. Ready from the approved baseline.
 AC-01 至 AC-07 必须绑定同一 exact candidate；public API/XML、generated snapshots、conformance docs、package/AOT
 证据一致；完整 regression 与独立 implementation review 通过；无 external handoff。完成后 AP214 source change
 只能消费本文明确验证的 outcome，不能把 AP214 的其它 generator gap 偷渡进本 change。
+
+## Implementation evidence
+
+- Exact implementation candidate: `229eb6b43bdeb34d540ef7ab87c6cc3a138a512f`.
+- M-01 through M-05 focused generation, projection, diagnostics, topology, aggregate identity, and atomic
+  read/write tests pass, including overlapping SELECT alternatives selecting the unique most-specific leaf.
+- Public API snapshot and complete runtime XML documentation checks pass; the compiler manifest changed only
+  the expected AP203 schema-descriptor hash while retaining 492 generated sources and zero diagnostics.
+- Release solution build passes with 0 warnings and 0 errors; the complete unit/generator suite passes 363/363.
+- The complete integration suite passes 7/7 enabled tests with the one opt-in network corpus test skipped.
+- The actual packed consumer passes deterministic package generation and executes representative specialization
+  read/edit/validate/write/reread; trimmed `win-x64` Native AOT emits no attributable warning and reports
+  `NATIVE_AOT_PACKAGE_PROOF_OK` with a 3,584,000-byte executable.
