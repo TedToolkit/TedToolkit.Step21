@@ -29,7 +29,8 @@ entity-valued SELECT。该能力补齐 AP214 `AUTOMOTIVE_DESIGN` 的两个真实
   - 新增 `M-06`：相同 ARRAY/LIST/BAG/SET kind、等价 bounds/flags 下，element 从 direct entity 或
     closed entity-valued SELECT 收窄为 closed entity-valued SELECT。
   - narrowed SELECT 的 flattened leaves 必须全部由 original domain 的相同 entity 或传递 subtype 覆盖，
-    且关系为严格收窄；按 bound-symbol identity 判定，不使用名字或运行时反射。
+    且关系为严格收窄；按 bound-symbol identity 判定，不使用名字或运行时反射。flattened coverage identity-equal
+    时继续走现有 M-02 equivalent mapping，不属于 M-06。
   - concrete entity 只保存最窄 mutable aggregate；inherited interface 通过 live read-only projected view
     观察当前元素，并把每个 selected leaf 无损提升到原 entity/SELECT domain。
   - descriptor hydration、validation、writer、direct references、chain/diamond composition、XML/public API
@@ -63,9 +64,9 @@ entity-valued SELECT。该能力补齐 AP214 `AUTOMOTIVE_DESIGN` 的两个真实
 
 ```gherkin
 Scenario: 分类 aggregate closed-SELECT element specialization
-  Given focused schemas 覆盖 direct entity 或 closed SELECT 到严格更窄 closed SELECT、等价 leaf、未覆盖 leaf、non-entity/extensible leaf、metadata 变化和 nested aggregate
+  Given focused schemas 覆盖 direct entity 或 closed SELECT 到严格更窄 closed SELECT、identity-equal flattened coverage、未覆盖 leaf、non-entity/extensible leaf、metadata 变化和 nested aggregate
   When binder 与 generation plan 分析重声明
-  Then 合法 M-06 生成，widening/unrelated 以 STEP21EXP002 拒绝，其余未支持类别以 STEP21EXP005 拒绝，全部 source-located 且无 partial output
+  Then strict subset/subtype replacement 的 M-06 生成，identity-equal coverage 保持 M-02 equivalent mapping，widening/unrelated 以 STEP21EXP002 拒绝，non-entity/extensible/nested/metadata-change 类别以 STEP21EXP005 拒绝，全部 source-located 且无 partial output
 ```
 
 <!-- acceptance-case: AC-02 -->
@@ -118,6 +119,8 @@ Scenario: 发布含 M-06 的 actual-package consumer
   原子 diagnostic 与无损 SELECT projection 继续治理本 change。
 - M-06 leaf coverage 先 flatten closed SELECT 并按 bound symbol identity 去重；每个 narrowed leaf 必须等于或
   subtype 于 original coverage，且至少删除一个 original coverage 或进行严格 subtype replacement。
+  identity-equal flattened sets 保持现有 M-02 equivalent mapping；新增未覆盖 leaf 是 ISO-invalid，
+  non-entity/extensible/nested/metadata-change 仍是明确 unsupported。
 - SELECT 是 generated value wrapper，不能依赖 CLR generic covariance。projected view 可由 generated private
   adapter 或 schema-neutral runtime adapter 实现，但 public contract 只承诺 read-only、live、metadata/identity
   preserving；不得缓存元素快照或暴露反向 mutation。
@@ -135,10 +138,14 @@ Scenario: 发布含 M-06 的 actual-package consumer
 <!-- section: start-conditions -->
 ## Start conditions
 
-<!-- change-prerequisite: PRE-01 source=../P1-express-explicit-attribute-specialization/change.md contract=AC-04 -->
+<!-- change-prerequisite: PRE-01 source=../P1-express-explicit-attribute-specialization/change.md contract=AC-01 -->
+<!-- change-prerequisite: PRE-02 source=../P1-express-explicit-attribute-specialization/change.md contract=AC-03 -->
+<!-- change-prerequisite: PRE-03 source=../P1-express-explicit-attribute-specialization/change.md contract=AC-04 -->
 | ID | Required input or guarantee | Source change outcome | Required readiness evidence |
 | --- | --- | --- | --- |
-| PRE-01 | 一个 most-specific aggregate storage、kind-specific read-only views 与 M-01 至 M-05 diagnostic/composition 基线 | `../P1-express-explicit-attribute-specialization/change.md`, AC-04 | Source contract is Completed on the selected Git baseline |
+| PRE-01 | M-01 至 M-05 的 legality、invalid/unsupported diagnostic partition 与唯一 most-specific composition baseline | `../P1-express-explicit-attribute-specialization/change.md`, AC-01 | Source contract is Completed on the selected Git baseline |
+| PRE-02 | direct entity/SELECT projection、chain/diamond topology 与一个 most-specific logical storage baseline | `../P1-express-explicit-attribute-specialization/change.md`, AC-03 | Source contract is Completed on the selected Git baseline |
+| PRE-03 | 四 aggregate kinds 的一个 mutable storage、kind-specific covariant read-only view、mutation visibility 与一个 physical slot baseline | `../P1-express-explicit-attribute-specialization/change.md`, AC-04 | Source contract is Completed on the selected Git baseline |
 
 <!-- section: delivery-brief -->
 ## Delivery brief
@@ -148,6 +155,9 @@ Scenario: 发布含 M-06 的 actual-package consumer
 - Other real start conditions or resource prerequisites: .NET 10 SDK、本地可恢复依赖、Windows x64 Native AOT。
 - Likely touchpoints (non-binding): generated type resolver、entity projection/emitter、aggregate view support、
   descriptor hydration/projection、direct references、focused generator/round-trip/packed-consumer tests和 conformance 文档。
+- AP214 conditional consumer boundary: recovery baseline `18a95b13e6bf9b049c273fbf14706a92b4153677` 的
+  `schemas/ap214/AP214E3_2010.exp` 中 `kinematic_frame_background_representation.items` 与
+  `text_string_representation.items` 两个 `SET [1:?]` redeclarations。
 - Private implementation choices left open: adapter 位于 generated code 或 schema-neutral runtime、是否按 getter
   创建轻量 view、内部 projection helper 组织，只要满足 live/read-only/one-slot/identity contract。
 
@@ -166,7 +176,7 @@ Scenario: 发布含 M-06 的 actual-package consumer
 | AC-03 | Primary | legal read/edit/write/reread 与 broad-only read/write atomic rejection | 运行 canonical schema-bound round-trip matrix |
 | AC-04 | Primary | chain/diamond/M-05 composition、M-01 至 M-05、ordinary snapshots 与 diagnostics 不变 | 运行 specialization compatibility与完整 compiler baseline tests |
 | AC-05 | Primary | actual packed consumer trimmed Native AOT 执行 M-06 matrix | pack 至 isolated source，publish/run并审计 warnings/dependency graph |
-| AP214 consumer gate | Conditional | 两个批准的 AUTOMOTIVE_DESIGN declarations 不再产生 aggregate specialization diagnostic | 在 AP214-001 worktree 重跑 focused full-schema generation gate |
+| AP214 consumer gate | Conditional | `kinematic_frame_background_representation.items` 与 `text_string_representation.items` 不再产生 aggregate specialization diagnostic | 在 AP214-001 recovery baseline `18a95b13e6bf9b049c273fbf14706a92b4153677` 重跑 focused full-schema generation gate并逐项断言两个 qualified declarations |
 
 <!-- section: completion-criteria -->
 ## Completion
