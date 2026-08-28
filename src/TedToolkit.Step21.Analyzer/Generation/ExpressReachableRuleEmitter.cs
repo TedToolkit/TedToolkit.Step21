@@ -2875,21 +2875,60 @@ internal static class ExpressReachableRuleEmitter
                     }
 
                     var targetAlternatives = plan.Resolver.GetSelectAlternatives(targetSelect)
-                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
-                            && sourceProjection.PhysicalComponents.Any(component =>
-                                component.Symbol == alternative))
+                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
+                        .Select(alternative => (
+                            Alternative: alternative,
+                            Projection: plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == alternative)))
+                        .Where(candidate => sourceProjection.PhysicalComponents.Any(component =>
+                                component.Symbol == candidate.Alternative)
+                            || candidate.Projection.PhysicalComponents.Any(component =>
+                                component.Symbol == source.Declaration))
                         .ToArray();
-                    if (targetAlternatives.Length != 1
-                        || plan.Resolver.GetSelectAlternatives(targetSelect).Count != 1)
+                    if (targetAlternatives.Length == 0)
                     {
                         throw new InvalidOperationException(
-                            "Aggregate union SELECT target must have exactly one compatible entity alternative.");
+                            "Aggregate union SELECT target has no compatible entity alternative.");
                     }
 
-                    return ExpressExpressionEmitter.BoundTypeName(target)
-                        + ".From"
-                        + ExpressEntityProjection.ToPascalCase(targetAlternatives[0].Name)
-                        + $"({arguments[0]})";
+                    var directAlternatives = targetAlternatives
+                        .Where(candidate => sourceProjection.PhysicalComponents.Any(component =>
+                            component.Symbol == candidate.Alternative))
+                        .ToArray();
+                    if (targetAlternatives.Length == 1 && directAlternatives.Length == 1)
+                    {
+                        return ExpressExpressionEmitter.BoundTypeName(target)
+                            + ".From"
+                            + ExpressEntityProjection.ToPascalCase(
+                                targetAlternatives[0].Alternative.Name)
+                            + $"({arguments[0]})";
+                    }
+
+                    if (directAlternatives.Length > 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Aggregate union SELECT target is ambiguous for the statically known entity element.");
+                    }
+
+                    var targetType = ExpressExpressionEmitter.BoundTypeName(target);
+                    var branches = targetAlternatives
+                        .OrderByDescending(candidate => candidate.Projection.PhysicalComponents.Count)
+                        .Select((candidate, index) =>
+                        {
+                            var alternativeType = ExpressExpressionEmitter.BoundTypeName(
+                                new ExpressBoundNamedType(candidate.Alternative, targetSelect.Span));
+                            var selected = "__expressAggregateUnionSelected"
+                                + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + index.ToString(CultureInfo.InvariantCulture);
+                            return alternativeType + " " + selected + " => "
+                                + targetType
+                                + ".From"
+                                + ExpressEntityProjection.ToPascalCase(candidate.Alternative.Name)
+                                + $"({selected})";
+                        });
+                    return $"({arguments[0]}) switch {{ {string.Join(", ", branches)}, "
+                        + "_ => throw new global::System.InvalidOperationException() }";
                 }
             }
 

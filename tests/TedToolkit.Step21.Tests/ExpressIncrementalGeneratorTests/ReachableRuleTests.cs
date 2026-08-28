@@ -5534,6 +5534,29 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string AGGREGATE_MULTI_SELECT_UNION_SCHEMA = """
+        SCHEMA aggregate_multi_select_union_model;
+        ENTITY root_item;
+        END_ENTITY;
+        ENTITY first_item SUBTYPE OF (root_item);
+        END_ENTITY;
+        ENTITY second_item SUBTYPE OF (root_item);
+        END_ENTITY;
+        TYPE item_choice = SELECT (first_item, second_item);
+        END_TYPE;
+        FUNCTION merge_items(values : SET OF root_item;
+                             selections : SET OF item_choice) : SET OF item_choice;
+          RETURN(selections + values);
+        END_FUNCTION;
+        ENTITY sample;
+          values : SET [1:?] OF root_item;
+          selections : SET [1:?] OF item_choice;
+        WHERE
+          reachable : SIZEOF(merge_items(values, selections)) > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string NESTED_AGGREGATE_EQUALITY_SCHEMA = """
         SCHEMA nested_aggregate_equality_model;
         ENTITY item;
@@ -6100,8 +6123,18 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
+        var multiple = GeneratorHostTests.Run(
+            ("schemas/aggregate-multi-select-union.exp", AGGREGATE_MULTI_SELECT_UNION_SCHEMA));
+        var multipleDiagnostics = multiple.Diagnostics.Concat(multiple.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var multipleGenerated = string.Join(
+            Environment.NewLine,
+            multiple.GeneratedSources.Select(source => source.SourceText.ToString()));
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
+        await Assert.That(multipleDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, multipleDiagnostics));
         var assembly = Emit(result.OutputCompilation);
         var validation = (ValidationResult)assembly.GetType(
                 "AggregateSelectUnionConsumer",
@@ -6143,6 +6176,8 @@ public sealed class ReachableRuleTests
         {
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+            await Assert.That(multipleGenerated).Contains("ItemChoice.FromFirstItem");
+            await Assert.That(multipleGenerated).Contains("ItemChoice.FromSecondItem");
             foreach (var invalid in invalidResults)
             {
                 var invalidGenerated = string.Join(
