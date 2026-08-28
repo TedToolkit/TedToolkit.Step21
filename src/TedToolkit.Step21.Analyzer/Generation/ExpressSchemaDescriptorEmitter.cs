@@ -364,14 +364,23 @@ internal static class ExpressSchemaDescriptorEmitter
                 .AddStatement(CreateParameterCountCheck(component.Entity.Name, attributes.Count));
             for (var attributeIndex = 0; attributeIndex < attributes.Count; attributeIndex++)
             {
+                var physicalAttribute = attributes[attributeIndex];
+                var storageAttribute = entity.Properties.Where(attribute =>
+                        ReferenceEquals(attribute.StorageEntity.Symbol, physicalAttribute.StorageEntity.Symbol)
+                        && StringComparer.OrdinalIgnoreCase.Equals(
+                            attribute.StorageAttributeName,
+                            physicalAttribute.StorageAttributeName))
+                    .OrderBy(attribute => attribute.RedirectTargetName is null ? 0 : 1)
+                    .FirstOrDefault()
+                    ?? physicalAttribute;
                 componentBranch.AddStatement(CreateHydrateAttribute(
                     context,
-                    attributes[attributeIndex],
+                    storageAttribute,
                     attributeIndex,
                     typedName,
                     resolver,
                     component.Entity.Name,
-                    entity.IsDerivedRedeclared(attributes[attributeIndex])));
+                    entity.IsDerivedRedeclared(physicalAttribute)));
             }
 
             branch.AddStatement(componentBranch);

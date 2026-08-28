@@ -252,7 +252,15 @@ internal static class ExpressEntityEmitter
         return constructor;
     }
 
-    private static Custom CreateExplicitInterfaceGetter(
+    /// <summary>
+    /// Creates an inherited interface getter over the most-specific mutable storage slot.
+    /// </summary>
+    /// <param name="projection">The concrete entity context.</param>
+    /// <param name="interfaceAttribute">The inherited interface contract.</param>
+    /// <param name="storageAttribute">The mutable storage projection.</param>
+    /// <param name="valueResolver">The closed-set generated value resolver.</param>
+    /// <returns>The explicit interface implementation.</returns>
+    internal static Custom CreateExplicitInterfaceGetter(
         ExpressEntityProjection projection,
         ExpressEntityAttributeProjection interfaceAttribute,
         ExpressEntityAttributeProjection storageAttribute,

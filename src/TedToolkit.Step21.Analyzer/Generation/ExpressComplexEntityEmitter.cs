@@ -7,6 +7,7 @@
 
 using TedToolkit.RoslynHelper;
 using TedToolkit.RoslynHelper.Syntaxes;
+using TedToolkit.Step21.Analyzer.Express.Binding;
 
 namespace TedToolkit.Step21.Analyzer.Generation;
 
@@ -41,6 +42,7 @@ internal static class ExpressComplexEntityEmitter
         }
 
         var contextProjection = projection.Leaves[0];
+        var explicitAttributes = new HashSet<ExpressBoundAttribute>();
         foreach (var attribute in projection.Properties)
         {
             type.AddMember(ExpressEntityEmitter.CreateProperty(
@@ -48,7 +50,39 @@ internal static class ExpressComplexEntityEmitter
                 attribute,
                 resolver,
                 isMutable: true,
-                initializeDefault: true));
+                initializeDefault: true,
+                generatedName: attribute.StorageMemberName));
+            if ((!StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+                    || resolver.RequiresAggregateView(attribute.Attribute))
+                && explicitAttributes.Add(attribute.Attribute))
+            {
+                type.AddMember(ExpressEntityEmitter.CreateExplicitInterfaceGetter(
+                    contextProjection,
+                    attribute,
+                    attribute,
+                    resolver));
+            }
+        }
+
+        foreach (var adapter in projection.Leaves.SelectMany(leaf => leaf.InterfaceAdapters))
+        {
+            if (!explicitAttributes.Add(adapter.InterfaceAttribute.Attribute))
+            {
+                continue;
+            }
+
+            var storageAttribute = projection.Properties.Where(attribute =>
+                    ReferenceEquals(attribute.StorageEntity.Symbol, adapter.StorageAttribute.StorageEntity.Symbol)
+                    && StringComparer.OrdinalIgnoreCase.Equals(
+                        attribute.StorageAttributeName,
+                        adapter.StorageAttribute.StorageAttributeName))
+                .OrderBy(attribute => attribute.RedirectTargetName is null ? 0 : 1)
+                .First();
+            type.AddMember(ExpressEntityEmitter.CreateExplicitInterfaceGetter(
+                contextProjection,
+                adapter.InterfaceAttribute,
+                storageAttribute,
+                resolver));
         }
 
         var constructor = SourceComposer<ExpressIncrementalGenerator>.Constructor();
