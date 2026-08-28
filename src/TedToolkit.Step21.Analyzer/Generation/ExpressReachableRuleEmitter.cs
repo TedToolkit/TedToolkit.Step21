@@ -181,11 +181,15 @@ internal static class ExpressReachableRuleEmitter
                     arguments,
                     populationExpression,
                     aggregateUnionSourceTypeOverrides: operation == "AGGREGATE_UNION"
-                        ? expression.Children.Select(child => (ExpressBoundType?)ResolveNarrowedExpressionType(
+                        ? expression.Children.Select(child => (ExpressBoundType?)ResolveNarrowedReferenceType(
+                            child,
+                            selectNarrowings)).ToArray()
+                        : null,
+                    aggregateUnionAllowsRuntimeNarrowing: operation == "AGGREGATE_UNION"
+                        && expression.Children.Any(child => IsNarrowedEntityExpression(
                             child,
                             selectNarrowings,
-                            pathNarrowings)).ToArray()
-                        : null),
+                            pathNarrowings))),
             resolveValueEquality: (left, leftCode, right, rightCode, leftTypeOverride) =>
                 ResolveValueEquality(plan, left, leftCode, right, rightCode, leftTypeOverride),
             resolveAttribute: (sourceExpression, reference, source) =>
@@ -248,29 +252,27 @@ internal static class ExpressReachableRuleEmitter
                     .PhysicalComponents.Any(component => component.Symbol == group)));
     }
 
-    private static ExpressBoundNamedType? ResolveNarrowedExpressionType(
+    private static ExpressBoundNamedType? ResolveNarrowedReferenceType(
+        ExpressBoundExpression expression,
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings)
+    {
+        return expression.Reference is { } reference
+            && selectNarrowings?.TryGetValue(reference, out var alternative) == true
+            && alternative.Kind == ExpressDeclarationKind.Entity
+                ? new(alternative, expression.Type.DeclaredType?.Span ?? alternative.Span)
+                : null;
+    }
+
+    private static bool IsNarrowedEntityExpression(
         ExpressBoundExpression expression,
         IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
         IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
     {
-        if (expression.Reference is { } reference
-            && selectNarrowings?.TryGetValue(reference, out var alternative) == true
-            && alternative.Kind == ExpressDeclarationKind.Entity)
-        {
-            return new(alternative, expression.Type.DeclaredType?.Span ?? alternative.Span);
-        }
-
-        var pathAlternatives = pathNarrowings
-            ?.Where(narrowing => SameDirectReferencePath(narrowing.Key, expression))
-            .Select(narrowing => narrowing.Value)
-            .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
-            .Distinct()
-            .ToArray() ?? Array.Empty<ExpressBoundSymbol>();
-        return pathAlternatives.Length == 1
-            ? new(
-                pathAlternatives[0],
-                expression.Type.DeclaredType?.Span ?? pathAlternatives[0].Span)
-            : null;
+        return (expression.Reference is { } reference
+                && selectNarrowings?.TryGetValue(reference, out var alternative) == true
+                && alternative.Kind == ExpressDeclarationKind.Entity)
+            || pathNarrowings?.Any(narrowing => narrowing.Value.Kind == ExpressDeclarationKind.Entity
+                && SameDirectReferencePath(narrowing.Key, expression)) == true;
     }
 
     private static string ResolveValueEquality(
@@ -1917,6 +1919,23 @@ internal static class ExpressReachableRuleEmitter
                     alternative.DeclaringSchema.Name + "." + alternative.Name,
                     qualifiedName,
                     StringComparison.OrdinalIgnoreCase));
+                if (selected is null)
+                {
+                    var selectedEntity = plan.EntityProjections
+                        .Select(projection => projection.Entity.Symbol)
+                        .SingleOrDefault(entity => string.Equals(
+                            entity.DeclaringSchema.Name + "." + entity.Name,
+                            qualifiedName,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (selectedEntity is not null
+                        && plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == selectedEntity)
+                            .PhysicalComponents.Any(component => alternatives.Contains(component.Symbol)))
+                    {
+                        selected = selectedEntity;
+                    }
+                }
+
                 if (selected is not null)
                 {
                     if (narrowedReference is not null)
@@ -1929,7 +1948,9 @@ internal static class ExpressReachableRuleEmitter
                     }
 
                     var remaining = alternatives.Where(alternative => alternative != selected).ToArray();
-                    if (allAlternativesClosed && remaining.Length == 1)
+                    if (alternatives.Contains(selected)
+                        && allAlternativesClosed
+                        && remaining.Length == 1)
                     {
                         if (narrowedReference is not null)
                         {
@@ -2851,7 +2872,8 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundType? aggregateUnionSourceType = null,
         ExpressBoundType? aggregateUnionTargetType = null,
         int aggregateUnionDepth = 0,
-        ExpressBoundType?[]? aggregateUnionSourceTypeOverrides = null)
+        ExpressBoundType?[]? aggregateUnionSourceTypeOverrides = null,
+        bool aggregateUnionAllowsRuntimeNarrowing = false)
     {
         if (operation == "AGGREGATE_UNION_ELEMENT")
         {
@@ -2888,16 +2910,32 @@ internal static class ExpressReachableRuleEmitter
                     projection.Entity.Symbol == source.Declaration);
                 if (target.Declaration.Kind == ExpressDeclarationKind.Entity)
                 {
-                    if (!sourceProjection.PhysicalComponents.Any(component =>
-                            component.Symbol == target.Declaration))
-                    {
-                        throw new InvalidOperationException(
-                            "Aggregate SELECT union entity alternative is incompatible with the result element type.");
-                    }
-
                     if (source.Declaration == target.Declaration)
                     {
                         return arguments[0];
+                    }
+
+                    var targetProjection = plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == target.Declaration);
+                    var sourceIsTargetSubtype = sourceProjection.PhysicalComponents.Any(component =>
+                        component.Symbol == target.Declaration);
+                    var targetIsSourceSubtype = targetProjection.PhysicalComponents.Any(component =>
+                        component.Symbol == source.Declaration);
+                    if (!sourceIsTargetSubtype && !targetIsSourceSubtype)
+                    {
+                        if (!aggregateUnionAllowsRuntimeNarrowing)
+                        {
+                            throw new InvalidOperationException(
+                                "Aggregate SELECT union entity alternative is incompatible with the result element type.");
+                        }
+
+                        return "throw new global::System.InvalidOperationException()";
+                    }
+
+                    if (!sourceIsTargetSubtype && !aggregateUnionAllowsRuntimeNarrowing)
+                    {
+                        throw new InvalidOperationException(
+                            "Aggregate SELECT union entity alternative is incompatible with the result element type.");
                     }
 
                     entityTargetType = ExpressExpressionEmitter.BoundTypeName(target);
@@ -2994,7 +3032,8 @@ internal static class ExpressReachableRuleEmitter
                     populationExpression,
                     aggregateUnionSourceType: namedUnderlying,
                     aggregateUnionTargetType: target,
-                    aggregateUnionDepth: aggregateUnionDepth);
+                    aggregateUnionDepth: aggregateUnionDepth,
+                    aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
             }
 
             if (underlying is not ExpressBoundSelectType select)
@@ -3018,7 +3057,8 @@ internal static class ExpressReachableRuleEmitter
                     populationExpression,
                     aggregateUnionSourceType: new ExpressBoundNamedType(alternative, select.Span),
                     aggregateUnionTargetType: target,
-                    aggregateUnionDepth: aggregateUnionDepth + 1);
+                    aggregateUnionDepth: aggregateUnionDepth + 1,
+                    aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
             });
             return $"({arguments[0]}).Match({string.Join(", ", sourceBranches)})";
         }
@@ -3073,18 +3113,20 @@ internal static class ExpressReachableRuleEmitter
                         populationExpression,
                         aggregateUnionSourceType: source,
                         aggregateUnionTargetType: target,
-                        aggregateUnionDepth: index);
+                        aggregateUnionDepth: index,
+                        aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
                 values[index] = operandAggregates[index] is null
                     ? adapted
                     : "global::System.Linq.Enumerable.Select("
                         + $"({arguments[index]}), {item} => {adapted})";
             }
 
+            var targetName = ExpressExpressionEmitter.BoundTypeName(target);
             var combined = (operandAggregates[0] is not null, operandAggregates[1] is not null) switch
             {
-                (true, true) => $"global::System.Linq.Enumerable.Concat({values[0]}, {values[1]})",
-                (true, false) => $"global::System.Linq.Enumerable.Append({values[0]}, {values[1]})",
-                (false, true) => $"global::System.Linq.Enumerable.Prepend({values[1]}, {values[0]})",
+                (true, true) => $"global::System.Linq.Enumerable.Concat<{targetName}>({values[0]}, {values[1]})",
+                (true, false) => $"global::System.Linq.Enumerable.Append<{targetName}>({values[0]}, {values[1]})",
+                (false, true) => $"global::System.Linq.Enumerable.Prepend<{targetName}>({values[1]}, {values[0]})",
                 _ => throw new InvalidOperationException(
                     "Aggregate union requires at least one aggregate operand."),
             };

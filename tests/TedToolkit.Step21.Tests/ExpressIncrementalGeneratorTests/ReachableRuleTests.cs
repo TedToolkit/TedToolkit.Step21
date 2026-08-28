@@ -5552,16 +5552,32 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         ENTITY first_item SUBTYPE OF (root_item);
         END_ENTITY;
+        ENTITY derived_first_item SUBTYPE OF (first_item);
+        END_ENTITY;
         ENTITY second_item SUBTYPE OF (root_item);
         END_ENTITY;
         TYPE item_choice = SELECT (first_item, second_item);
         END_TYPE;
+        ENTITY path_holder;
+          candidate : item_choice;
+        WHERE
+          narrowed_path_reachable : SIZEOF(narrow_path(SELF)) <= 1;
+        END_ENTITY;
         FUNCTION narrow_item(candidate : item_choice) : SET OF first_item;
           LOCAL
             result : SET OF first_item := [];
           END_LOCAL;
           IF 'AGGREGATE_MULTI_SELECT_UNION_MODEL.FIRST_ITEM' IN TYPEOF(candidate) THEN
             result := result + candidate;
+          END_IF;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION narrow_path(holder_instance : path_holder) : SET OF derived_first_item;
+          LOCAL
+            result : SET OF derived_first_item := [];
+          END_LOCAL;
+          IF 'AGGREGATE_MULTI_SELECT_UNION_MODEL.DERIVED_FIRST_ITEM' IN TYPEOF(holder_instance.candidate) THEN
+            result := result + holder_instance.candidate;
           END_IF;
           RETURN(result);
         END_FUNCTION;
