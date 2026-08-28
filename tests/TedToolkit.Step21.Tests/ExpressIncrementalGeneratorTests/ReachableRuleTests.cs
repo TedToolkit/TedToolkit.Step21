@@ -4348,6 +4348,20 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA = """
+        SCHEMA repeated_cyclic_derived_model;
+        ENTITY sample;
+        DERIVE
+          dimensions : INTEGER := derive_dimensions(SELF);
+        WHERE
+          dimensions_are_zero : dimensions = 0;
+        END_ENTITY;
+        FUNCTION derive_dimensions(item : sample) : INTEGER;
+          RETURN(item.dimensions + item.dimensions + item.dimensions);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
     private const string SELF_RECURSIVE_FUNCTION_SCHEMA = """
         SCHEMA self_recursive_model;
         FUNCTION countdown(input_value : INTEGER) : BOOLEAN;
@@ -9034,6 +9048,30 @@ public sealed class ReachableRuleTests
             await Assert.That(cyclic.GeneratedSources).IsEmpty();
             await Assert.That(cycleDiagnostic.GetMessage()).Contains("dependency cycle");
             await Assert.That(cycleDiagnostic.Location.GetLineSpan().Path).IsEqualTo("schemas/cyclic.exp");
+        }
+    }
+
+    /// <summary>
+    /// Verifies repeated references to the same active dependency produce one canonical cycle diagnostic.
+    /// </summary>
+    [Test]
+    public async Task Should_report_each_reachable_dependency_cycle_once()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/repeated-cyclic-derived.exp", REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA));
+        var diagnostics = result.Diagnostics
+            .Where(diagnostic => diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains("dependency cycle"))
+            .ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.GeneratedSources).IsEmpty();
+            await Assert.That(diagnostics).Count().IsEqualTo(1)
+                .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(diagnostics[0].GetMessage()).Contains("dimensions");
+            await Assert.That(diagnostics[0].Location.GetLineSpan().Path)
+                .IsEqualTo("schemas/repeated-cyclic-derived.exp");
         }
     }
 

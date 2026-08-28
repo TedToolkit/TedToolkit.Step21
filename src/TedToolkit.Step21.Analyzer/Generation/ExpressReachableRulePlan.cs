@@ -1086,11 +1086,10 @@ internal sealed class ExpressReachableRulePlan
                 ExpressBoundAttribute attribute => attribute.Span,
                 _ => _schema.Identity.Span,
             };
-            _failures.Add(new(
-                _schema,
-                span.Start,
+            AddFailure(
+                span,
                 $"Reachable EXPRESS dependency cycle includes '{DependencyName(dependency)}'"
-                + (parent is null ? "." : $" from '{DependencyName(parent)}'.")));
+                + (parent is null ? "." : $" from '{DependencyName(parent)}'."));
 
             return false;
         }
