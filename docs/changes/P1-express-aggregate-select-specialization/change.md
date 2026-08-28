@@ -8,7 +8,7 @@
 
 - Priority: P1
 <!-- approval-source: user-explicit-approve-and-continue-2026-08-28 -->
-<!-- candidate-binding: 9c7193efb130926929aebdf2eef958796212cf9d -->
+<!-- candidate-binding: 500a414c0ba6b1df9d86515847b768193c33934f -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -191,25 +191,31 @@ outcome，并继续负责其余 compiler diagnostics。
 
 ## Implementation evidence
 
-- Exact implementation candidate: `9c7193efb130926929aebdf2eef958796212cf9d` over approved implementation-start
-  baseline `7a11e4b56228dee999a00464c7eebef70d6e8a09`.
+- Exact implementation candidate: `500a414c0ba6b1df9d86515847b768193c33934f` over approved implementation-start
+  baseline `7a11e4b56228dee999a00464c7eebef70d6e8a09`. It supersedes initial candidate
+  `9c7193efb130926929aebdf2eef958796212cf9d`, whose independent review found that an unset optional aggregate
+  attribute could invoke the projection factory with `null`.
 - M-06 classification accepts same-metadata ARRAY/LIST/BAG/SET element projection from a direct entity or closed
   entity-valued SELECT to a covered closed SELECT. Uncovered leaves remain source-located `STEP21EXP002`; non-entity,
   extensible, nested-aggregate, and metadata-change partitions remain atomic `STEP21EXP005` failures.
 - Generated entities retain one most-specific mutable aggregate. Direct-entity M-04 still uses CLR covariance and
   preserves aggregate reference identity; SELECT-valued M-06 getters use documented schema-neutral live adapters that
   preserve bounds/flags, ARRAY slot state, order, multiplicity, selected entity identity, validation, and later mutation.
+- Optional M-06 attributes now preserve `null` without constructing a view; populated values still expose the same live
+  projection. A focused generated schema covers unset and populated ARRAY/LIST/BAG/SET attributes, and the conformance
+  contract records optional-container semantics separately from optional ARRAY slot state.
 - Focused generation and schema-bound tests cover strict and identity-equal distinct-wrapper relations, all four
   aggregate kinds, exact invalid/unsupported diagnostics, direct references, legal read/edit/write/reread, broad-only
   read rejection, and zero-byte invalid write. Existing M-01 through M-05, chain/diamond, public API, and runtime XML
   gates pass.
-- The LF-preserving detached worktree `P1-aggregate-select-candidate` verified exact candidate `9c7193e`: Release
-  solution build passed with 0 warnings/errors; unit/generator tests passed 383/383; integration passed 7/7 enabled
+- The LF-preserving detached worktree `P1-aggregate-select-candidate` verified exact candidate `500a414`: Release
+  solution build passed with 0 warnings/errors; unit/generator tests passed 384/384; integration passed 7/7 enabled
   tests with one opt-in network corpus test skipped.
 - The exact candidate actual-package trimmed `win-x64` Native AOT consumer executed M-01 through M-06 success and
   atomic-failure journeys without attributable warnings and reported `PACKED_AOT_OK` plus
   `NATIVE_AOT_PACKAGE_PROOF_OK win-x64 executable-bytes=3726848 compiler-package=10.0.11`.
-- Conditional AP214 gate: recovery baseline `18a95b13e6bf9b049c273fbf14706a92b4153677` plus the candidate produced no
-  diagnostic for `kinematic_frame_background_representation.items` or `text_string_representation.items`. Full
-  `AUTOMOTIVE_DESIGN` generation now reports only the 13 pre-existing AP214-001 `STEP21EXP006` outcomes: eight
-  duplicate dependency-cycle reports, four reachable-function statement gaps, and one complex-construction gap.
+- Conditional AP214 gate: recovery baseline `18a95b13e6bf9b049c273fbf14706a92b4153677` plus exact candidate `500a414`
+  produced no diagnostic for `kinematic_frame_background_representation.items` or
+  `text_string_representation.items`. The gate was repeated after the optional-container fix; full `AUTOMOTIVE_DESIGN`
+  generation reports only the 13 AP214-001 `STEP21EXP006` outcomes: eight duplicate dependency-cycle reports, four
+  reachable-function statement gaps, and one complex-construction gap.
