@@ -1150,6 +1150,24 @@ public sealed class ReachableRuleTests
         FUNCTION return_same(item : item_choice) : item_choice;
           RETURN(item);
         END_FUNCTION;
+        FUNCTION project_select(item : base_item) : base_item;
+          LOCAL
+            choice : item_choice;
+            result : base_item;
+          END_LOCAL;
+          choice := item;
+          result := choice;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION maybe_choice(item : base_item) : item_choice;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION select_nvl(item : base_item) : base_item;
+          LOCAL
+            result : base_item := NVL(maybe_choice(item), item);
+          END_LOCAL;
+          RETURN(result);
+        END_FUNCTION;
         ENTITY sample;
           direct_item : base_item;
           child_value : child_item;
@@ -1159,6 +1177,8 @@ public sealed class ReachableRuleTests
           direct_assignment : EXISTS(assign_direct(direct_item,marker));
           subtype_return : EXISTS(return_subtype(child_value));
           same_select : EXISTS(return_same(selected));
+          selected_entity : EXISTS(project_select(direct_item));
+          selected_nvl : EXISTS(select_nvl(direct_item));
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -1309,6 +1329,8 @@ public sealed class ReachableRuleTests
 
     private const string NUMERIC_ASSIGNMENT_WIDENING_SCHEMA = """
         SCHEMA numeric_assignment_widening_model;
+        TYPE dimension_count = INTEGER;
+        END_TYPE;
         FUNCTION maybe_integer(flag : BOOLEAN) : INTEGER;
           IF flag THEN
             RETURN(2);
@@ -1340,6 +1362,20 @@ public sealed class ReachableRuleTests
           result_value := input;
           RETURN(result_value);
         END_FUNCTION;
+        FUNCTION wrap_count(input : INTEGER) : dimension_count;
+          LOCAL
+            result_value : dimension_count;
+          END_LOCAL;
+          result_value := input;
+          RETURN(result_value);
+        END_FUNCTION;
+        FUNCTION collect_count(input : dimension_count) : BOOLEAN;
+          LOCAL
+            values : SET OF dimension_count := [];
+          END_LOCAL;
+          values := values + [input];
+          RETURN(SIZEOF(values) = 1);
+        END_FUNCTION;
         ENTITY sample;
         WHERE
           literal_present : promote_literal(TRUE) = 0.0;
@@ -1347,6 +1383,8 @@ public sealed class ReachableRuleTests
           optional_present : promote_optional(TRUE) = 2.0;
           optional_unknown : NOT EXISTS(promote_optional(FALSE));
           real_unchanged : keep_real(3.0) = 3.0;
+          defined_assignment : wrap_count(4) = 4;
+          defined_aggregate : collect_count(wrap_count(4));
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -5887,10 +5925,18 @@ public sealed class ReachableRuleTests
         END_TYPE;
         TYPE measure_value = SELECT (length_measure, count_measure);
         END_TYPE;
+        FUNCTION project_real(item : measure_value) : REAL;
+          LOCAL
+            result : REAL;
+          END_LOCAL;
+          result := item;
+          RETURN(result);
+        END_FUNCTION;
         ENTITY measure_holder;
           value_component : measure_value;
         WHERE
           non_negative : ('NUMBER' IN TYPEOF(value_component)) AND (value_component >= 0.0);
+          projected_real : project_real(value_component) >= 0.0;
         END_ENTITY;
         ENTITY measure_container;
           measurement : measure_holder;
@@ -7504,7 +7550,7 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
-            await Assert.That(Regex.Matches(generated, "ItemChoice\\.FromBaseItem\\(")).Count().IsEqualTo(4);
+            await Assert.That(Regex.Matches(generated, "ItemChoice\\.FromBaseItem\\(")).Count().IsEqualTo(6);
             await Assert.That(incompatible.Diagnostics.Concat(incompatible.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsNotEmpty();

@@ -288,7 +288,7 @@ internal static class ExpressExpressionEmitter
             ":<>:" => LogicalComparison(
                 $"!({InstanceEquality(expression, left, leftCode, right, rightCode, context)})"),
             "<=" or ">=" when left.Type.Kind == ExpressExpressionTypeKind.Aggregate =>
-                LogicalComparison(AggregateSubset(operation, left, leftCode, rightCode)),
+                LogicalComparison(AggregateSubset(operation, leftCode, rightCode)),
             "<" or "<=" or ">" or ">=" => LogicalComparison(
                 OrderedComparison(operation, left, leftCode, right, rightCode, context)),
             "IN" => EmitMembership(expression, left, leftCode, right, rightCode, context),
@@ -390,13 +390,14 @@ internal static class ExpressExpressionEmitter
             if ((expression.Reference.Type ?? expression.Reference.Attribute?.Type) is { } scalarCarrier
                 && scalarCarrier is not ExpressBoundScalarType
                 && CreateScalarType(expression.Type.Kind, scalarCarrier) is { } narrowedScalar
-                && context.ResolveNarrowedScalarReference is not null)
-            {
-                return context.ResolveNarrowedScalarReference(
+                && context.ResolveNarrowedScalarReference is not null
+                && context.ResolveNarrowedScalarReference(
                     expression.Reference,
                     scalarCarrier,
                     source,
-                    narrowedScalar);
+                    narrowedScalar) is { } narrowedSource)
+            {
+                return narrowedSource;
             }
 
             return UnwrapDefined(expression.Type, source, context);
@@ -491,7 +492,9 @@ internal static class ExpressExpressionEmitter
             var result = Access(candidate);
             var narrowed = expression.Type.DeclaredType as ExpressBoundNamedType;
             if (reference.Type is { } carrier
-                && narrowed?.Declaration.Kind == ExpressDeclarationKind.Entity)
+                && narrowed?.Declaration.Kind == ExpressDeclarationKind.Entity
+                && (carrier is not ExpressBoundNamedType carrierName
+                    || !ReferenceEquals(carrierName.Declaration, narrowed.Declaration)))
             {
                 return context.ResolveReference(
                     reference,
@@ -503,13 +506,14 @@ internal static class ExpressExpressionEmitter
             if ((reference.Type ?? reference.Attribute?.Type) is { } scalarCarrier
                 && scalarCarrier is not ExpressBoundScalarType
                 && CreateScalarType(expression.Type.Kind, scalarCarrier) is { } narrowedScalar
-                && context.ResolveNarrowedScalarReference is not null)
-            {
-                return context.ResolveNarrowedScalarReference(
+                && context.ResolveNarrowedScalarReference is not null
+                && context.ResolveNarrowedScalarReference(
                     reference,
                     scalarCarrier,
                     result,
-                    narrowedScalar);
+                    narrowedScalar) is { } narrowedResult)
+            {
+                return narrowedResult;
             }
 
             return UnwrapDefined(expression.Type, result, context);
@@ -763,7 +767,11 @@ internal static class ExpressExpressionEmitter
                 {
                     if (child.Kind != ExpressExpressionKind.Repetition)
                     {
-                        return ConvertAggregateElement(child, presentCodes[index], aggregate.ElementType);
+                        return ConvertAggregateElement(
+                            child,
+                            presentCodes[index],
+                            aggregate.ElementType,
+                            context);
                     }
 
                     var dynamicRepetition = dynamicRepetitions.SingleOrDefault(item =>
@@ -772,7 +780,11 @@ internal static class ExpressExpressionEmitter
                         ? EmitCode(child.Children[1], context)
                         : dynamicRepetition.Variable;
                     return "..global::System.Linq.Enumerable.Repeat("
-                        + $"{ConvertAggregateElement(child.Children[0], presentCodes[index], aggregate.ElementType)}, "
+                        + $"{ConvertAggregateElement(
+                            child.Children[0],
+                            presentCodes[index],
+                            aggregate.ElementType,
+                            context)}, "
                         + $"checked((int)({count})))";
                 });
                 var resultType = TypeName(expression.Type.WithIndeterminate(false));
@@ -934,13 +946,17 @@ internal static class ExpressExpressionEmitter
                     + "_");
                 item = $"(({EmitCode(value, context)}) is {{ }} {presentValue} "
                     + $"? (true, new {elementType}[] {{ "
-                    + $"{ConvertAggregateElement(value, presentValue, aggregate.ElementType)} }}) "
+                    + $"{ConvertAggregateElement(value, presentValue, aggregate.ElementType, context)} }}) "
                     + $": (false, global::System.Array.Empty<{elementType}>()))";
             }
             else
             {
                 item = $"(true, new {elementType}[] {{ "
-                    + $"{ConvertAggregateElement(value, EmitCode(value, context), aggregate.ElementType)} }})";
+                    + $"{ConvertAggregateElement(
+                        value,
+                        EmitCode(value, context),
+                        aggregate.ElementType,
+                        context)} }})";
             }
 
             if (child.Kind != ExpressExpressionKind.Repetition)
@@ -1007,9 +1023,10 @@ internal static class ExpressExpressionEmitter
     private static string ConvertAggregateElement(
         ExpressBoundExpression expression,
         string code,
-        ExpressBoundType target)
+        ExpressBoundType target,
+        ExpressExpressionEmissionContext context)
     {
-        return target switch
+        var converted = target switch
         {
             ExpressBoundScalarType { Kind: ExpressScalarKind.Number, } =>
                 PromoteNumeric(expression, code, ExpressExpressionTypeKind.Number),
@@ -1017,6 +1034,7 @@ internal static class ExpressExpressionEmitter
                 PromoteNumeric(expression, code, ExpressExpressionTypeKind.Real),
             _ => code,
         };
+        return context.ResolveAggregateElement?.Invoke(expression, converted, target) ?? converted;
     }
 
     private static string EmitQuery(
@@ -1107,8 +1125,8 @@ internal static class ExpressExpressionEmitter
         {
             var index = "__expressQueryIndex_" + suffix;
             body = $"for (var {index} = {input}.LowerIndex; {index} <= {input}.UpperIndex; {index}++) {{ "
-                + $"if ({input}.TryGetValue({index}, out var {variableName}) && ({condition})) "
-                + $"{{ {result}[{index}] = {resultValue}; }} }}";
+                + $"if ({input}.IsSet({index})) {{ var {variableName} = {input}[{index}]; "
+                + $"if ({condition}) {{ {result}[{index}] = {resultValue}; }} }} }}";
         }
         else
         {
@@ -1126,6 +1144,21 @@ internal static class ExpressExpressionEmitter
         ExpressExpressionEmissionContext context)
     {
         var parameters = expression.Children;
+        if (string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase)
+            && parameters.Count > 1
+            && parameters[0].Type.DeclaredType is ExpressBoundNamedType sourceName
+            && sourceName.Declaration.Kind != ExpressDeclarationKind.Entity
+            && parameters[1].Type.DeclaredType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } fallbackEntity
+            && context.ResolveSelectToEntityValue is not null)
+        {
+            var projected = context.ResolveSelectToEntityValue(
+                parameters[0],
+                arguments[0],
+                fallbackEntity);
+            return $"(({projected}) ?? ({arguments[1]}))";
+        }
+
         if (string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase)
             && parameters.Count > 1
             && parameters[0].Type.Kind is ExpressExpressionTypeKind.Integer
@@ -1300,7 +1333,6 @@ internal static class ExpressExpressionEmitter
     {
         var resultType = TypeName(expression.Type);
         var resultAggregate = (ExpressBoundAggregateType)expression.Type.DeclaredType!;
-        var elementType = BoundTypeName(resultAggregate.ElementType);
         var leftIsAggregate = left.Type.Kind == ExpressExpressionTypeKind.Aggregate;
         var rightIsAggregate = right.Type.Kind == ExpressExpressionTypeKind.Aggregate;
         string enumerable;
@@ -1347,46 +1379,45 @@ internal static class ExpressExpressionEmitter
         {
             enumerable = resultAggregate.Kind == ExpressAggregateKind.Set
                 ? $"global::System.Linq.Enumerable.Intersect(({leftCode}), ({rightCode}))"
-                : BagIntersection(leftCode, rightCode, elementType);
+                : BagIntersection(leftCode, rightCode);
         }
         else if (resultAggregate.Kind == ExpressAggregateKind.Set)
         {
             enumerable = rightIsAggregate
                 ? $"global::System.Linq.Enumerable.Except(({leftCode}), ({rightCode}))"
                 : $"global::System.Linq.Enumerable.Where(({leftCode}), __item => "
-                    + $"!global::System.Collections.Generic.EqualityComparer<{elementType}>.Default.Equals("
+                    + "!global::System.Object.Equals("
                     + $"__item, ({rightCode})))";
         }
         else
         {
-            enumerable = BagDifference(leftCode, rightCode, elementType, rightIsAggregate);
+            enumerable = BagDifference(leftCode, rightCode, rightIsAggregate);
         }
 
         return $"({resultType})[..{enumerable}]";
     }
 
-    private static string BagIntersection(string left, string right, string elementType)
+    private static string BagIntersection(string left, string right)
     {
         return "global::System.Linq.Enumerable.SelectMany("
             + $"global::System.Linq.Enumerable.GroupBy(({left}), __item => __item), __group => "
             + "global::System.Linq.Enumerable.Repeat(__group.Key, global::System.Math.Min("
             + "global::System.Linq.Enumerable.Count(__group), "
             + $"global::System.Linq.Enumerable.Count(({right}), __candidate => "
-            + $"global::System.Collections.Generic.EqualityComparer<{elementType}>.Default.Equals("
+            + "global::System.Object.Equals("
             + "__candidate, __group.Key)))))";
     }
 
     private static string BagDifference(
         string left,
         string right,
-        string elementType,
         bool rightIsAggregate)
     {
         var removedCount = rightIsAggregate
             ? $"global::System.Linq.Enumerable.Count(({right}), __candidate => "
-                + $"global::System.Collections.Generic.EqualityComparer<{elementType}>.Default.Equals("
+                + "global::System.Object.Equals("
                 + "__candidate, __group.Key))"
-            : $"(global::System.Collections.Generic.EqualityComparer<{elementType}>.Default.Equals("
+            : "(global::System.Object.Equals("
                 + $"({right}), __group.Key) ? 1 : 0)";
         return "global::System.Linq.Enumerable.SelectMany("
             + $"global::System.Linq.Enumerable.GroupBy(({left}), __item => __item), __group => "
@@ -1396,15 +1427,13 @@ internal static class ExpressExpressionEmitter
 
     private static string AggregateSubset(
         string operation,
-        ExpressBoundExpression left,
         string leftCode,
         string rightCode)
     {
-        var elementType = BoundTypeName(((ExpressBoundAggregateType)left.Type.DeclaredType!).ElementType);
-        var subset = "global::System.Linq.Enumerable.All("
+        const string subset = "global::System.Linq.Enumerable.All("
             + "global::System.Linq.Enumerable.GroupBy(({0}), __item => __item), __group => "
             + "global::System.Linq.Enumerable.Count(({1}), __candidate => "
-            + $"global::System.Collections.Generic.EqualityComparer<{elementType}>.Default.Equals("
+            + "global::System.Object.Equals("
             + "__candidate, __group.Key)) >= global::System.Linq.Enumerable.Count(__group))";
         return operation == "<="
             ? string.Format(CultureInfo.InvariantCulture, subset, leftCode, rightCode)
@@ -1620,7 +1649,8 @@ internal static class ExpressExpressionEmitter
                 + ": global::TedToolkit.Step21.LogicalValue.False)";
         }
 
-        var contains = $"global::System.Linq.Enumerable.Contains(({aggregate}), ({value}))";
+        var contains = "global::System.Linq.Enumerable.Any("
+            + $"({aggregate}), __candidate => global::System.Object.Equals(__candidate, ({value})))";
         if (aggregateExpression.Type.DeclaredType is not ExpressBoundAggregateType
             {
                 Kind: ExpressAggregateKind.Array,
@@ -1656,8 +1686,8 @@ internal static class ExpressExpressionEmitter
                 return $"global::System.Linq.Enumerable.SequenceEqual(({leftCode}), ({rightCode}))";
             }
 
-            return $"({AggregateSubset("<=", left, leftCode, rightCode)}) && "
-                + $"({AggregateSubset(">=", left, leftCode, rightCode)})";
+            return $"({AggregateSubset("<=", leftCode, rightCode)}) && "
+                + $"({AggregateSubset(">=", leftCode, rightCode)})";
         }
 
         if (IsNumeric(left.Type.Kind) && IsNumeric(right.Type.Kind))
@@ -2052,7 +2082,13 @@ internal static class ExpressExpressionEmitter
         return $"global::TedToolkit.Step21.{definition}<{BoundTypeName(aggregate.ElementType)}>";
     }
 
-    private static string AggregateInterfaceTypeName(ExpressBoundAggregateType aggregate)
+    /// <summary>
+    /// Gets the covariant read-only interface spelling for a bound aggregate type.
+    /// </summary>
+    /// <param name="aggregate">The bound aggregate type.</param>
+    /// <returns>The fully qualified aggregate interface spelling.</returns>
+    /// <exception cref="InvalidOperationException">The aggregate kind is unknown.</exception>
+    internal static string AggregateInterfaceTypeName(ExpressBoundAggregateType aggregate)
     {
         var definition = aggregate.Kind switch
         {

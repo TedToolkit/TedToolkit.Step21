@@ -1229,6 +1229,20 @@ internal static class ExpressSchemaBinder
                 .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
                 .Distinct()
                 .ToArray();
+            var effectiveAttribute = attributes.Length == 1 ? attributes[0] : null;
+            if (effectiveAttribute is not null
+                && source.Type is ExpressBoundNamedType sourceEntity
+                && FindSymbol(sourceEntity.Declaration) is { } sourceEntityDraft
+                && sourceEntityDraft.Symbol.Kind == ExpressDeclarationKind.Entity)
+            {
+                attributes = EnumerateAttributes(
+                        sourceEntityDraft,
+                        new HashSet<ExpressBoundSymbol>())
+                    .Where(candidate => _nameComparer.Equals(candidate.Name, token.Text))
+                    .Distinct()
+                    .ToArray();
+            }
+
             if (attributes.Length == 0)
             {
                 attributes = EnumerateAttributes(
@@ -1240,14 +1254,15 @@ internal static class ExpressSchemaBinder
                     .ToArray();
             }
 
-            var compatibleAttributes = attributes.Length > 0
+            var compatibleAttributes = effectiveAttribute is not null
+                || (attributes.Length > 0
                 && attributes.All(candidate => ReferenceEquals(candidate.Type, attributes[0].Type)
                     || (candidate.Type is ExpressBoundNamedType candidateNamed
                         && attributes[0].Type is ExpressBoundNamedType firstNamed
-                        && ReferenceEquals(candidateNamed.Declaration, firstNamed.Declaration)));
+                        && ReferenceEquals(candidateNamed.Declaration, firstNamed.Declaration))));
             if (compatibleAttributes)
             {
-                var attribute = attributes[0];
+                var attribute = effectiveAttribute ?? attributes[0];
                 target = new(
                     attribute.Name,
                     ExpressBoundNameKind.Attribute,

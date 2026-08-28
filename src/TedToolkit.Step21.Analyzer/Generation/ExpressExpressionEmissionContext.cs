@@ -29,6 +29,8 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="allocateTemporaryName">Allocates a deterministic private C# name within the generated method.</param>
     /// <param name="isKnownDeterminate">Identifies expressions made determinate by the enclosing control-flow branch.</param>
     /// <param name="resolveNarrowedScalarReference">Projects a SELECT carrier to a branch-proven scalar value.</param>
+    /// <param name="resolveSelectToEntityValue">Projects a SELECT value to one compatible entity alternative.</param>
+    /// <param name="resolveAggregateElement">Adapts one present aggregate element to its declared element type.</param>
     internal ExpressExpressionEmissionContext(
         Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference,
         string? selfExpression = null,
@@ -42,8 +44,12 @@ internal sealed class ExpressExpressionEmissionContext
         IReadOnlyCollection<string>? genericTypeLabels = null,
         Func<string, string>? allocateTemporaryName = null,
         Func<ExpressBoundExpression, bool>? isKnownDeterminate = null,
-        Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string>?
-            resolveNarrowedScalarReference = null)
+        Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string?>?
+            resolveNarrowedScalarReference = null,
+        Func<ExpressBoundExpression, string, ExpressBoundNamedType, string>?
+            resolveSelectToEntityValue = null,
+        Func<ExpressBoundExpression, string, ExpressBoundType, string>?
+            resolveAggregateElement = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
@@ -56,6 +62,8 @@ internal sealed class ExpressExpressionEmissionContext
         GenericTypeLabels = genericTypeLabels ?? [];
         IsKnownDeterminate = isKnownDeterminate;
         ResolveNarrowedScalarReference = resolveNarrowedScalarReference;
+        ResolveSelectToEntityValue = resolveSelectToEntityValue;
+        ResolveAggregateElement = resolveAggregateElement;
         if (allocateTemporaryName is null)
         {
             var temporaryOrdinal = 0;
@@ -126,8 +134,22 @@ internal sealed class ExpressExpressionEmissionContext
     /// <summary>
     /// Gets the resolver for a SELECT carrier narrowed to a scalar branch.
     /// </summary>
-    internal Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string>?
+    internal Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string?>?
         ResolveNarrowedScalarReference
+    { get; }
+
+    /// <summary>
+    /// Gets the resolver that safely projects a SELECT value to a compatible entity alternative.
+    /// </summary>
+    internal Func<ExpressBoundExpression, string, ExpressBoundNamedType, string>?
+        ResolveSelectToEntityValue
+    { get; }
+
+    /// <summary>
+    /// Gets the resolver that adapts a present aggregate element to its declared element type.
+    /// </summary>
+    internal Func<ExpressBoundExpression, string, ExpressBoundType, string>?
+        ResolveAggregateElement
     { get; }
 
     /// <summary>
@@ -150,6 +172,8 @@ internal sealed class ExpressExpressionEmissionContext
             GenericTypeLabels,
             AllocateTemporaryName,
             IsKnownDeterminate,
-            ResolveNarrowedScalarReference);
+            ResolveNarrowedScalarReference,
+            ResolveSelectToEntityValue,
+            ResolveAggregateElement);
     }
 }

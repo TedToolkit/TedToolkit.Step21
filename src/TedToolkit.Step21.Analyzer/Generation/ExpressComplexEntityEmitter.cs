@@ -103,10 +103,8 @@ internal static class ExpressComplexEntityEmitter
         property.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
         property.Polymorphism = Polymorphism.OVERRIDE;
         var getter = SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET);
-        var physicalAttributes = projection.Components.SelectMany(
-            ExpressComplexEntityProjection.GetComponentAttributes);
         getter.AddStatement(new CustomExpression(
-            ExpressDirectReferenceExpression.Create(physicalAttributes, resolver)).Return);
+            ExpressDirectReferenceExpression.Create(projection.Properties, resolver)).Return);
         property.AddAccessor(getter);
         return property;
     }
