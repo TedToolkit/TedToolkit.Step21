@@ -5820,6 +5820,52 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string TYPEOF_GUARDED_DEFINED_SELECT_SCHEMA = """
+        SCHEMA typeof_guarded_defined_select_model;
+        ENTITY precision_qualifier;
+        END_ENTITY;
+        ENTITY uncertainty_qualifier;
+          measure_name : STRING;
+        END_ENTITY;
+        TYPE value_qualifier = SELECT (precision_qualifier, uncertainty_qualifier);
+        END_TYPE;
+        ENTITY qualified_item;
+          qualifiers : SET [1:?] OF value_qualifier;
+        WHERE
+          unique_uncertainty : SIZEOF(QUERY(u1 <* qualifiers |
+            ('TYPEOF_GUARDED_DEFINED_SELECT_MODEL.UNCERTAINTY_QUALIFIER' IN TYPEOF(u1)) AND
+            (SIZEOF(QUERY(u2 <* qualifiers |
+              ('TYPEOF_GUARDED_DEFINED_SELECT_MODEL.UNCERTAINTY_QUALIFIER' IN TYPEOF(u2)) AND
+              (u2\uncertainty_qualifier.measure_name = u1\uncertainty_qualifier.measure_name))) > 0))) > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_SCHEMA = """
+        SCHEMA typeof_guarded_redeclared_attribute_model;
+        ENTITY representation_item;
+        END_ENTITY;
+        ENTITY annotation_symbol SUBTYPE OF (representation_item);
+        END_ENTITY;
+        TYPE annotation_item = SELECT (annotation_symbol);
+        END_TYPE;
+        ENTITY styled_item;
+          item : representation_item;
+        END_ENTITY;
+        ENTITY annotation_occurrence SUBTYPE OF (styled_item);
+        END_ENTITY;
+        ENTITY annotation_symbol_occurrence SUBTYPE OF (annotation_occurrence);
+          SELF\styled_item.item : annotation_item;
+        END_ENTITY;
+        ENTITY draughting_annotation_occurrence SUBTYPE OF (annotation_occurrence);
+        WHERE
+          valid_symbol : NOT ('TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_MODEL.ANNOTATION_SYMBOL_OCCURRENCE'
+            IN TYPEOF(SELF)) OR ('TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_MODEL.ANNOTATION_SYMBOL'
+            IN TYPEOF(SELF.item));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string QUERY_RESULT_NARROWING_SCHEMA = """
         SCHEMA query_result_narrowing_model;
         ENTITY representation_item;
@@ -6384,6 +6430,38 @@ public sealed class ReachableRuleTests
     {
         var result = GeneratorHostTests.Run(
             ("schemas/typeof-guarded-attribute.exp", TYPEOF_GUARDED_ATTRIBUTE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a TYPEOF guard unwraps a defined SELECT query element before a group-qualified access.
+    /// </summary>
+    [Test]
+    public async Task Should_unwrap_a_defined_select_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-defined-select.exp", TYPEOF_GUARDED_DEFINED_SELECT_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a TYPEOF path proof reads a redeclared attribute through its declaring interface.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_a_redeclared_attribute_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-redeclared-attribute.exp", TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_SCHEMA));
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();

@@ -374,17 +374,19 @@ internal static class ExpressExpressionEmitter
     {
         if (expression.Reference is not null)
         {
-            var source = context.ResolveReference(expression.Reference, null, null, null);
             var narrowed = expression.Type.DeclaredType as ExpressBoundNamedType;
             if ((expression.Reference.Type is ExpressBoundGenericType { IsEntity: true, }
                     || expression.Reference.Kind == ExpressBoundNameKind.QueryVariable)
                 && narrowed?.Declaration.Kind == ExpressDeclarationKind.Entity)
             {
-                var target = BoundTypeName(narrowed);
-                return $"({source}) switch {{ {target} __expressTypeOfNarrowed => "
-                    + "__expressTypeOfNarrowed, _ => throw new global::System.InvalidOperationException() }";
+                return context.ResolveReference(
+                    expression.Reference,
+                    expression.Reference.Type,
+                    null,
+                    narrowed.Declaration);
             }
 
+            var source = context.ResolveReference(expression.Reference, null, null, null);
             return UnwrapDefined(expression.Type, source, context);
         }
 
@@ -981,22 +983,31 @@ internal static class ExpressExpressionEmitter
         var source = EmitCode(sourceExpression, context);
         var variableName = "__query_" + ExpressEntityProjection.ToPascalCase(expression.Operation!);
         var predicate = expression.Children[1];
+        var sourceAggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
         string ResolveQueryReference(
             ExpressBoundName reference,
             ExpressBoundType? narrowedType,
             string? narrowedCode,
             ExpressBoundSymbol? narrowedAlternative)
         {
-            return reference.Kind == ExpressBoundNameKind.QueryVariable
-                && string.Equals(reference.Name, expression.Operation, StringComparison.OrdinalIgnoreCase)
+            if (reference.Kind == ExpressBoundNameKind.QueryVariable
+                && string.Equals(reference.Name, expression.Operation, StringComparison.OrdinalIgnoreCase))
+            {
+                return narrowedAlternative is null
                     ? variableName
-                    : context.ResolveReference(reference, narrowedType, narrowedCode, narrowedAlternative);
+                    : context.ResolveReference(
+                        reference,
+                        narrowedType ?? sourceAggregate.ElementType,
+                        narrowedCode ?? variableName,
+                        narrowedAlternative);
+            }
+
+            return context.ResolveReference(reference, narrowedType, narrowedCode, narrowedAlternative);
         }
 
         var predicateCode = EmitCode(predicate, context.WithReferenceResolver(ResolveQueryReference));
         var condition = $"({AsLogical(predicate, predicateCode)}) "
             + "== global::TedToolkit.Step21.LogicalValue.True";
-        var sourceAggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
         var resultAggregate = expression.Type.DeclaredType as ExpressBoundAggregateType
             ?? throw new InvalidOperationException("A QUERY result must retain its aggregate type.");
         var resultValue = variableName;

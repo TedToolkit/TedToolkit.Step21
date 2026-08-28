@@ -199,7 +199,8 @@ internal static class ExpressReachableRuleEmitter
                     reference,
                     source,
                     populationExpression,
-                    selectNarrowings),
+                    selectNarrowings,
+                    pathNarrowings),
             resolveApplication: (expression, arguments) =>
                 ResolveApplication(
                     plan,
@@ -4477,6 +4478,13 @@ internal static class ExpressReachableRuleEmitter
         int narrowingDepth = 0)
     {
         if (narrowedType is not null
+            && narrowedCode is null
+            && lexicalNames?.TryGetValue(reference.Name, out var narrowedLexical) == true)
+        {
+            narrowedCode = narrowedLexical.Code;
+        }
+
+        if (narrowedType is not null
             && narrowedCode is not null
             && (narrowedAlternative is not null || narrowedScalarType is not null))
         {
@@ -4763,7 +4771,7 @@ internal static class ExpressReachableRuleEmitter
                     $"Unqualified attribute '{reference.Name}' has no enclosing entity value.");
             }
 
-            return ResolveAttribute(plan, null, reference, selfExpression, populationExpression, null);
+            return ResolveAttribute(plan, null, reference, selfExpression, populationExpression, null, null);
         }
 
         if (reference.SchemaDeclaration is { } symbol)
@@ -4791,7 +4799,8 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundName reference,
         string source,
         string populationExpression,
-        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings)
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
     {
         ExpressBoundType? sourceType = sourceExpression?.Type.DeclaredType;
         ExpressBoundSymbol? narrowedAlternative = null;
@@ -4801,6 +4810,23 @@ internal static class ExpressReachableRuleEmitter
             sourceType = new ExpressBoundNamedType(
                 narrowedAlternative,
                 sourceType?.Span ?? narrowedAlternative.Span);
+        }
+
+        if (narrowedAlternative is null && sourceExpression is not null)
+        {
+            var pathAlternatives = pathNarrowings?
+                .Where(narrowing => SameDirectReferencePath(narrowing.Key, sourceExpression))
+                .Select(narrowing => narrowing.Value)
+                .Distinct()
+                .ToArray();
+            if (pathAlternatives is { Length: 1, }
+                && pathAlternatives[0].Kind == ExpressDeclarationKind.Entity)
+            {
+                narrowedAlternative = pathAlternatives[0];
+                sourceType = new ExpressBoundNamedType(
+                    narrowedAlternative,
+                    sourceType?.Span ?? narrowedAlternative.Span);
+            }
         }
 
         while (sourceType is ExpressBoundNamedType namedSource
@@ -4905,7 +4931,7 @@ internal static class ExpressReachableRuleEmitter
                     }
                     else
                     {
-                        value = ResolveAttribute(plan, null, reference, variable, populationExpression, null);
+                        value = ResolveAttribute(plan, null, reference, variable, populationExpression, null, null);
                     }
                 }
                 else
@@ -4958,7 +4984,12 @@ internal static class ExpressReachableRuleEmitter
                         $"{DerivedMethodName(owner, candidate)}({source}, {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     ExpressAttributeKind.Inverse =>
                         $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({source}), {populationExpression}{ValidationContextArgumentSuffix(plan)})",
-                    _ => $"({source}).{ExpressEntityProjection.ToPascalCase(candidate.Name)}",
+                    _ => ResolveExplicitAttribute(
+                        plan,
+                        sourceProjection,
+                        candidate,
+                        source,
+                        populationExpression),
                 };
             }
 
@@ -5029,10 +5060,16 @@ internal static class ExpressReachableRuleEmitter
         string populationExpression)
     {
         var property = ExpressEntityProjection.ToPascalCase(attribute.Name);
+        var owner = plan.GetAttributeOwner(attribute);
+        var ownerType = "global::TedToolkit.Step21.Generated."
+            + ExpressEntityProjection.ToPascalCase(owner.Symbol.DeclaringSchema.Name)
+            + ".I"
+            + ExpressEntityProjection.ToPascalCase(owner.Name);
+        var explicitAccess = $"(({ownerType})({source})).{property}";
         var derivedOverrides = GetDerivedOverrides(plan, sourceProjection, attribute);
         if (derivedOverrides.Length == 0)
         {
-            return $"({source}).{property}";
+            return explicitAccess;
         }
 
         var cases = derivedOverrides.Select((item, index) =>
@@ -5046,7 +5083,7 @@ internal static class ExpressReachableRuleEmitter
                 + $"{DerivedMethodName(item.Owner, item.Attribute)}("
                 + $"{variable}, {populationExpression}{ValidationContextArgumentSuffix(plan)})";
         });
-        return $"({source}) switch {{ {string.Join(", ", cases)}, _ => ({source}).{property} }}";
+        return $"({source}) switch {{ {string.Join(", ", cases)}, _ => {explicitAccess} }}";
     }
 
     private static ExpressEntityProjection? GetSourceProjection(
