@@ -1704,6 +1704,48 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string NUMERIC_SELECT_ORDERING_SCHEMA = """
+        SCHEMA numeric_select_ordering_model;
+        TYPE plane_angle_measure = REAL;
+        END_TYPE;
+        TYPE count_measure = INTEGER;
+        END_TYPE;
+        TYPE descriptive_measure = STRING;
+        END_TYPE;
+        TYPE unlimited_range = ENUMERATION OF (unlimited);
+        END_TYPE;
+        TYPE rotational_range_measure = SELECT (plane_angle_measure, unlimited_range);
+        END_TYPE;
+        TYPE measure_value = SELECT (plane_angle_measure, count_measure, descriptive_measure);
+        END_TYPE;
+        FUNCTION valid_measure_value(m : measure_value) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(m) THEN
+            RETURN(m > 0.0);
+          ELSE
+            IF 'INTEGER' IN TYPEOF(m) THEN
+              RETURN(m > 0);
+            END_IF;
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
+        FUNCTION scale_measure(m : measure_value) : REAL;
+          IF 'STRING' IN TYPEOF(m) THEN RETURN(?); END_IF;
+          RETURN(2.0 * m);
+        END_FUNCTION;
+        ENTITY sample;
+          lower_limit : rotational_range_measure;
+          upper_limit : rotational_range_measure;
+          measured : measure_value;
+        WHERE
+          ordered_range : ('NUMERIC_SELECT_ORDERING_MODEL.UNLIMITED_RANGE' IN TYPEOF(lower_limit))
+            OR ('NUMERIC_SELECT_ORDERING_MODEL.UNLIMITED_RANGE' IN TYPEOF(upper_limit))
+            XOR (lower_limit < upper_limit);
+          positive_measure : valid_measure_value(measured);
+          scalable_measure : EXISTS(scale_measure(measured)) OR NOT EXISTS(scale_measure(measured));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string DEFINED_RETURN_BOUNDARY_SCHEMA = """
         SCHEMA defined_return_boundary_model;
         TYPE dimension_count = INTEGER;
@@ -6591,7 +6633,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
         var assembly = Emit(result.OutputCompilation);
@@ -7740,7 +7781,8 @@ public sealed class ReachableRuleTests
             await Assert.That(generated).Contains("ItemChoice.FromBaseItem(");
             await Assert.That(narrowingDiagnostics.Any(diagnostic => diagnostic.Id == "CS1503")).IsTrue();
             await Assert.That(differentDefinedDiagnostics).IsNotEmpty();
-            await Assert.That(optionalDefinedDiagnostics).IsNotEmpty();
+            await Assert.That(optionalDefinedDiagnostics).IsEmpty()
+                .Because("An explicit EXPRESS indeterminate actual propagates UNKNOWN before invocation.");
         }
     }
 
@@ -8095,6 +8137,21 @@ public sealed class ReachableRuleTests
             await Assert.That(generated).Contains(".HighBound");
             await Assert.That(generated).Contains(".LowBound");
         }
+    }
+
+    /// <summary>
+    /// Verifies ordered numeric SELECT values are projected only for compatible runtime alternatives.
+    /// </summary>
+    [Test]
+    public async Task Should_order_numeric_select_alternatives_without_comparing_the_carriers()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/numeric-select-ordering.exp", NUMERIC_SELECT_ORDERING_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>

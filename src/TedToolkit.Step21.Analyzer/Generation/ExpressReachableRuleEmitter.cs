@@ -193,7 +193,11 @@ internal static class ExpressReachableRuleEmitter
                         && expression.Children.Any(child => IsNarrowedEntityExpression(
                             child,
                             selectNarrowings,
-                            pathNarrowings))),
+                            pathNarrowings)),
+                    typeOfCarrierTypeOverride: operation == "TYPEOF"
+                        && expression.Children[0].Reference is { } typeOfReference
+                        ? ResolveLexicalBound(typeOfReference.Name)?.Type
+                        : null),
             resolveValueEquality: (left, leftCode, right, rightCode, leftTypeOverride) =>
                 ResolveValueEquality(plan, left, leftCode, right, rightCode, leftTypeOverride),
             resolveAttribute: (sourceExpression, reference, source) =>
@@ -3090,7 +3094,8 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundType? aggregateUnionTargetType = null,
         int aggregateUnionDepth = 0,
         ExpressBoundType?[]? aggregateUnionSourceTypeOverrides = null,
-        bool aggregateUnionAllowsRuntimeNarrowing = false)
+        bool aggregateUnionAllowsRuntimeNarrowing = false,
+        ExpressBoundType? typeOfCarrierTypeOverride = null)
     {
         if (operation == "AGGREGATE_UNION_ELEMENT")
         {
@@ -3410,6 +3415,14 @@ internal static class ExpressReachableRuleEmitter
         return operation switch
         {
             "COMPLEX_CONSTRUCTOR" => LowerComplexConstructor(plan, expression, arguments),
+            "ORDERED_SELECT_COMPARISON" => ResolveOrderedSelectComparison(
+                plan,
+                expression,
+                arguments),
+            "NUMERIC_SELECT_BINARY" => ResolveNumericSelectBinary(
+                plan,
+                expression,
+                arguments),
             "INSTANCE_EQUALITY" => ResolveValueEquality(
                 plan,
                 expression.Children[0],
@@ -3420,12 +3433,187 @@ internal static class ExpressReachableRuleEmitter
                 instanceEquality: true),
             "TYPEOF" => LowerTypeOf(
                 plan,
-                expression.Children[0].Type.DeclaredType,
+                typeOfCarrierTypeOverride ?? expression.Children[0].Type.DeclaredType,
                 arguments[0]),
             "ROLESOF" => "__ExpressRolesOf("
                 + $"(global::TedToolkit.Step21.Entity)({arguments[0]}), {populationExpression})",
             _ => throw new InvalidOperationException($"{operation}: {expression.SourceText}"),
         };
+    }
+
+    private static string ResolveOrderedSelectComparison(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        IReadOnlyList<string> arguments)
+    {
+        const string unknown = "global::TedToolkit.Step21.LogicalValue.Unknown";
+        const string trueValue = "global::TedToolkit.Step21.LogicalValue.True";
+        const string falseValue = "global::TedToolkit.Step21.LogicalValue.False";
+
+        static string Promote(string value, ExpressScalarKind source, ExpressScalarKind target)
+        {
+            return (source, target) switch
+            {
+                (ExpressScalarKind.Integer, ExpressScalarKind.Real) =>
+                    $"new global::TedToolkit.Step21.RealValue(({value}), "
+                    + "global::System.Numerics.BigInteger.Zero)",
+                (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({value})",
+                (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({value})",
+                _ => value,
+            };
+        }
+
+        string Compare(string left, ExpressScalarKind leftKind, string right, ExpressScalarKind rightKind)
+        {
+            var target = ExpressScalarKind.Integer;
+            if (leftKind == ExpressScalarKind.Number || rightKind == ExpressScalarKind.Number)
+            {
+                target = ExpressScalarKind.Number;
+            }
+            else if (leftKind == ExpressScalarKind.Real || rightKind == ExpressScalarKind.Real)
+            {
+                target = ExpressScalarKind.Real;
+            }
+
+            return $"(({Promote(left, leftKind, target)}) {expression.Operation} "
+                + $"({Promote(right, rightKind, target)}) ? {trueValue} : {falseValue})";
+        }
+
+        return ProjectSelectScalar(
+            plan,
+            expression.Children[0].Type.DeclaredType,
+            arguments[0],
+            0,
+            (left, leftKind) => ProjectSelectScalar(
+                plan,
+                expression.Children[1].Type.DeclaredType,
+                arguments[1],
+                1,
+                (right, rightKind) => Compare(left, leftKind, right, rightKind),
+                unknown,
+                "global::TedToolkit.Step21.LogicalValue",
+                "Ordered",
+                []),
+            unknown,
+            "global::TedToolkit.Step21.LogicalValue",
+            "Ordered",
+            []);
+    }
+
+    private static string ResolveNumericSelectBinary(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        IReadOnlyList<string> arguments)
+    {
+        var fallbackType = expression.Type.Kind switch
+        {
+            ExpressExpressionTypeKind.Integer => "global::System.Numerics.BigInteger",
+            ExpressExpressionTypeKind.Number => "global::TedToolkit.Step21.NumberValue",
+            ExpressExpressionTypeKind.Real => "global::TedToolkit.Step21.RealValue",
+            _ => throw new InvalidOperationException(
+                "SELECT arithmetic requires a numeric result type."),
+        };
+        var fallback = $"({fallbackType}?)null";
+
+        static ExpressExpressionTypeKind ExpressionKind(ExpressScalarKind kind)
+        {
+            return kind switch
+            {
+                ExpressScalarKind.Integer => ExpressExpressionTypeKind.Integer,
+                ExpressScalarKind.Number => ExpressExpressionTypeKind.Number,
+                ExpressScalarKind.Real => ExpressExpressionTypeKind.Real,
+                _ => ExpressExpressionTypeKind.Unresolved,
+            };
+        }
+
+        return ProjectSelectScalar(
+            plan,
+            expression.Children[0].Type.DeclaredType,
+            arguments[0],
+            0,
+            (left, leftKind) => ProjectSelectScalar(
+                plan,
+                expression.Children[1].Type.DeclaredType,
+                arguments[1],
+                1,
+                (right, rightKind) => ExpressExpressionEmitter.EmitNumericBinary(
+                    expression,
+                    expression.Operation!,
+                    expression.Children[0],
+                    left,
+                    expression.Children[1],
+                    right,
+                    ExpressionKind(leftKind),
+                    ExpressionKind(rightKind)),
+                fallback,
+                fallbackType + "?",
+                "Numeric",
+                []),
+            fallback,
+            fallbackType + "?",
+            "Numeric",
+            []);
+    }
+
+    private static string ProjectSelectScalar(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType? type,
+        string value,
+        int depth,
+        Func<string, ExpressScalarKind, string> continuation,
+        string incompatible,
+        string resultType,
+        string name,
+        HashSet<ExpressBoundSymbol> visited)
+    {
+        while (type is ExpressBoundNamedType named
+               && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            if (!visited.Add(named.Declaration))
+            {
+                return incompatible;
+            }
+
+            var underlying = plan.Resolver.GetDefinedType(named.Declaration).UnderlyingType;
+            if (underlying is ExpressBoundSelectType select)
+            {
+                var branches = plan.Resolver.GetSelectAlternatives(select)
+                    .Select((alternative, index) =>
+                    {
+                        var selected = "__express" + name + "Select"
+                            + depth.ToString(CultureInfo.InvariantCulture)
+                            + "_"
+                            + index.ToString(CultureInfo.InvariantCulture);
+                        return selected + " => " + ProjectSelectScalar(
+                            plan,
+                            new ExpressBoundNamedType(alternative, select.Span),
+                            selected,
+                            depth + 1,
+                            continuation,
+                            incompatible,
+                            resultType,
+                            name,
+                            new HashSet<ExpressBoundSymbol>(visited));
+                    });
+                return $"({value}).Match<{resultType}>({string.Join(", ", branches)})";
+            }
+
+            value = $"({value}).Value";
+            type = underlying;
+        }
+
+        if (type is not ExpressBoundScalarType scalar)
+        {
+            return incompatible;
+        }
+
+        return scalar.Kind is ExpressScalarKind.Integer
+            or ExpressScalarKind.Number
+            or ExpressScalarKind.Real
+                ? continuation(value, scalar.Kind)
+                : incompatible;
     }
 
     private static string LowerTypeOf(

@@ -250,6 +250,16 @@ internal static class ExpressExpressionEmitter
             "+" or "-" or "*" when left.Type.Kind == ExpressExpressionTypeKind.Aggregate
                 || right.Type.Kind == ExpressExpressionTypeKind.Aggregate =>
                 EmitAggregateBinary(expression, operation, left, leftCode, right, rightCode, context),
+            "+" or "-" or "*" or "/"
+                when RequiresSelectScalarProjection(left, context)
+                    || RequiresSelectScalarProjection(right, context) =>
+                context.ResolveModelFunction?.Invoke(
+                    "NUMERIC_SELECT_BINARY",
+                    expression,
+                    [leftCode, rightCode,])
+                ?? throw GenerationError(
+                    expression,
+                    "SELECT arithmetic requires an enclosing generated schema operation."),
             "+" or "-" or "*" or "/" => EmitNumericBinary(
                 expression,
                 operation,
@@ -289,12 +299,32 @@ internal static class ExpressExpressionEmitter
                 $"!({InstanceEquality(expression, left, leftCode, right, rightCode, context)})"),
             "<=" or ">=" when left.Type.Kind == ExpressExpressionTypeKind.Aggregate =>
                 LogicalComparison(AggregateSubset(operation, leftCode, rightCode)),
+            "<" or "<=" or ">" or ">="
+                when RequiresSelectScalarProjection(left, context)
+                    || RequiresSelectScalarProjection(right, context) =>
+                context.ResolveModelFunction?.Invoke(
+                    "ORDERED_SELECT_COMPARISON",
+                    expression,
+                    [leftCode, rightCode,])
+                ?? throw GenerationError(
+                    expression,
+                    "SELECT ordering requires an enclosing generated schema operation."),
             "<" or "<=" or ">" or ">=" => LogicalComparison(
                 OrderedComparison(operation, left, leftCode, right, rightCode, context)),
             "IN" => EmitMembership(expression, left, leftCode, right, rightCode, context),
             "LIKE" => LogicalComparison(LikeMatch(leftCode, rightCode)),
             _ => throw new InvalidOperationException($"Operation '{expression.Operation}' is not statically generated."),
         };
+    }
+
+    private static bool RequiresSelectScalarProjection(
+        ExpressBoundExpression expression,
+        ExpressExpressionEmissionContext context)
+    {
+        return expression.Type.Kind == ExpressExpressionTypeKind.Select
+            && !(expression.Reference is { } reference
+                && context.ResolveLexicalBound?.Invoke(reference.Name)?.Type
+                    is ExpressBoundScalarType);
     }
 
     private static string LikeMatch(string input, string pattern)
@@ -387,6 +417,12 @@ internal static class ExpressExpressionEmitter
             }
 
             var source = context.ResolveReference(expression.Reference, null, null, null);
+            if (context.ResolveLexicalBound?.Invoke(expression.Reference.Name)?.Type
+                is ExpressBoundScalarType)
+            {
+                return source;
+            }
+
             if ((expression.Reference.Type ?? expression.Reference.Attribute?.Type) is { } scalarCarrier
                 && scalarCarrier is not ExpressBoundScalarType
                 && CreateScalarType(expression.Type.Kind, scalarCarrier) is { } narrowedScalar
@@ -1233,17 +1269,31 @@ internal static class ExpressExpressionEmitter
         };
     }
 
-    private static string EmitNumericBinary(
+    /// <summary>
+    /// Emits one numeric binary operation after any schema-owned SELECT projection.
+    /// </summary>
+    /// <param name="expression">The bound binary expression.</param>
+    /// <param name="operation">The normalized operator spelling.</param>
+    /// <param name="left">The bound left operand.</param>
+    /// <param name="leftCode">The projected left value.</param>
+    /// <param name="right">The bound right operand.</param>
+    /// <param name="rightCode">The projected right value.</param>
+    /// <param name="leftType">The runtime-proven left scalar kind, when narrower than the bound type.</param>
+    /// <param name="rightType">The runtime-proven right scalar kind, when narrower than the bound type.</param>
+    /// <returns>The statically typed C# numeric operation.</returns>
+    internal static string EmitNumericBinary(
         ExpressBoundExpression expression,
         string operation,
         ExpressBoundExpression left,
         string leftCode,
         ExpressBoundExpression right,
-        string rightCode)
+        string rightCode,
+        ExpressExpressionTypeKind? leftType = null,
+        ExpressExpressionTypeKind? rightType = null)
     {
         var target = operation == "/" ? ExpressExpressionTypeKind.Real : expression.Type.Kind;
-        var promotedLeft = PromoteNumeric(left, leftCode, target);
-        var promotedRight = PromoteNumeric(right, rightCode, target);
+        var promotedLeft = PromoteNumeric(left, leftCode, target, leftType);
+        var promotedRight = PromoteNumeric(right, rightCode, target, rightType);
         if (operation != "/")
         {
             return $"(({promotedLeft}) {operation} ({promotedRight}))";
