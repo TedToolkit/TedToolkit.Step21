@@ -279,6 +279,29 @@ internal sealed class ExpressGeneratedTypeResolver
                     : ExpressRedeclarationClassification.Invalid;
             }
 
+            if (TryGetClosedEntityLeaves(originalAggregate.ElementType, out var originalElementLeaves)
+                && TryGetClosedEntityLeaves(narrowedAggregate.ElementType, out var narrowedElementLeaves))
+            {
+                if (!narrowedElementLeaves.All(candidate =>
+                        originalElementLeaves.Any(parent => IsEntitySubtype(candidate, parent))))
+                {
+                    return ExpressRedeclarationClassification.Invalid;
+                }
+
+                if (!TryGetClosedSelect(narrowedAggregate.ElementType, out _))
+                {
+                    return ExpressRedeclarationClassification.Unsupported;
+                }
+
+                return TryGetClosedSelect(originalAggregate.ElementType, out var originalSelect)
+                    && narrowedElementLeaves.Any(candidate => !TrySelectProjectionAlternative(
+                        candidate,
+                        originalSelect,
+                        out _))
+                        ? ExpressRedeclarationClassification.Unsupported
+                        : ExpressRedeclarationClassification.Supported;
+            }
+
             return ExpressRedeclarationClassification.Unsupported;
         }
 
@@ -355,10 +378,27 @@ internal sealed class ExpressGeneratedTypeResolver
     {
         var classification = ClassifySpecialization(target, source);
         if (classification == ExpressRedeclarationClassification.Equivalent
-            || (TryGetDirectEntity(source, out _) && TryGetDirectEntity(target, out _))
-            || (source is ExpressBoundAggregateType && target is ExpressBoundAggregateType))
+            || (TryGetDirectEntity(source, out _) && TryGetDirectEntity(target, out _)))
         {
             return expression;
+        }
+
+        if (source is ExpressBoundAggregateType sourceAggregate
+            && target is ExpressBoundAggregateType targetAggregate)
+        {
+            if (TryGetDirectEntity(sourceAggregate.ElementType, out _)
+                && TryGetDirectEntity(targetAggregate.ElementType, out _))
+            {
+                return expression;
+            }
+
+            const string parameter = "selected";
+            var projected = CreateSpecializationProjection(
+                currentSchema,
+                sourceAggregate.ElementType,
+                targetAggregate.ElementType,
+                parameter);
+            return $"global::TedToolkit.Step21.ExpressAggregateView.Project({expression}, {parameter} => {projected})";
         }
 
         if (target is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, }
@@ -393,7 +433,10 @@ internal sealed class ExpressGeneratedTypeResolver
                         parameter);
                     return $"{parameter} => {projected}";
                 });
-            return $"{expression}.Match({string.Join(", ", handlers)})";
+            var targetType = target is ExpressBoundNamedType targetNamed
+                ? GeneratedTypeName(currentSchema, targetNamed.Declaration)
+                : throw new InvalidOperationException("The SELECT projection target must be a named entity domain.");
+            return $"{expression}.Match<{targetType}>({string.Join(", ", handlers)})";
         }
 
         throw new InvalidOperationException(

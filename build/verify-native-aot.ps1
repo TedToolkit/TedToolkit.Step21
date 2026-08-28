@@ -25,6 +25,7 @@ $intermediateDirectory = (Join-Path $proofRoot 'obj') + [System.IO.Path]::Direct
 $publishDirectory = Join-Path $proofRoot 'publish'
 $nugetConfigPath = Join-Path $proofRoot 'NuGet.Config'
 $productProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21/TedToolkit.Step21.csproj'
+$analyzerProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj'
 $ap203Project = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap203/TedToolkit.Step21.Ap203.csproj'
 $consumerProject = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.PackedConsumer/TedToolkit.Step21.PackedConsumer.csproj'
 $fixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-box-10x20x30-ap203.step'
@@ -114,6 +115,13 @@ $nugetConfig = @"
 [System.IO.File]::WriteAllText($nugetConfigPath, $nugetConfig)
 
 try {
+    Invoke-DotNet -Arguments @(
+        'build',
+        $analyzerProject,
+        '--configuration', 'Release',
+        '--no-restore',
+        '--disable-build-servers'
+    ) | Out-Null
     $buildProject = if ($Ap203) { $ap203Project } else { $productProject }
     Invoke-DotNet -Arguments @(
         'build',

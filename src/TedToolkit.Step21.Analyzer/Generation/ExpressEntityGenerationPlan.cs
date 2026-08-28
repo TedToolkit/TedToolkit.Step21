@@ -276,7 +276,7 @@ internal sealed class ExpressEntityGenerationPlan
                     schema,
                     attribute.Attribute.Span.Start,
                     $"Redeclared entity attribute '{attribute.Attribute.Name}' uses an ISO specialization "
-                    + "outside the supported M-01 through M-05 mapping matrix."));
+                    + "outside the supported M-01 through M-06 mapping matrix."));
             }
         }
 

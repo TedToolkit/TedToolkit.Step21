@@ -336,7 +336,8 @@ internal sealed class ExpressEntityProjection
                 var isRenamed = !StringComparer.Ordinal.Equals(inherited.Name, attribute.Name);
                 var forward = valueResolver.ClassifySpecialization(inherited.Type, attribute.Type);
                 var reverse = valueResolver.ClassifySpecialization(attribute.Type, inherited.Type);
-                var inheritedIsMoreSpecific = reverse == ExpressRedeclarationClassification.Supported
+                var inheritedIsMoreSpecific = (reverse == ExpressRedeclarationClassification.Supported
+                    && forward != ExpressRedeclarationClassification.Supported)
                     || (forward == ExpressRedeclarationClassification.Equivalent
                         && !inherited.Attribute.IsOptional
                         && attribute.Attribute.IsOptional);

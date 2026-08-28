@@ -30,7 +30,7 @@ internal static class Program
         #1=(LEFT(.T.)RIGHT(7)ROOT('complex',#2,(1,2)));
         #3=SIMPLE('before');
         #4=SPECIALIZED_TARGET('narrow');
-        #5=SPECIALIZATION_CHILD(#4,#4,18446744073709551616000000000000000001,1.234567890123456789E-17,(#4,#4),(#4),(#4,#4),(#4),#4);
+        #5=SPECIALIZATION_CHILD(#4,#4,18446744073709551616000000000000000001,1.234567890123456789E-17,(#4,#4),(#4),(#4,#4),(#4),#4,(#4,$),(#4),(#4,#4),(#4));
         ENDSEC;
         END-ISO-10303-21;
         """;
@@ -51,6 +51,10 @@ internal static class Program
         ISpecializationRoot broadSpecialization = specialization;
         var narrowSelected = specialization.SelectValue.TryGetSpecializedTarget(out var selectedSpecializedTarget);
         var broadSelected = broadSpecialization.SelectValue.TryGetTarget(out var selectedTarget);
+        var selectArrayView = broadSpecialization.SelectArray;
+        var selectListView = broadSpecialization.SelectList;
+        var selectBagView = broadSpecialization.SelectBag;
+        var selectSetView = broadSpecialization.SelectSet;
 
         if (complex is not ILeft { Enabled: true, } left
             || complex is not IRight { Rank: var rank }
@@ -71,7 +75,18 @@ internal static class Program
             || !ReferenceEquals(specialization.ListValue, broadSpecialization.ListValue)
             || !ReferenceEquals(specialization.BagValue, broadSpecialization.BagValue)
             || !ReferenceEquals(specialization.SetValue, broadSpecialization.SetValue)
-            || !ReferenceEquals(specialization.OptionalLink, broadSpecialization.OptionalLink))
+            || !ReferenceEquals(specialization.OptionalLink, broadSpecialization.OptionalLink)
+            || !selectArrayView.IsSet(1)
+            || selectArrayView.IsSet(2)
+            || !selectArrayView[1].TryGetSpecializedTarget(out var arrayTarget)
+            || !ReferenceEquals(arrayTarget, specializedTarget)
+            || selectListView.Count != 1
+            || !ReferenceEquals(selectListView[0], specializedTarget)
+            || selectBagView.Count != 2
+            || selectBagView.Any(item => !item.TryGetSpecializedTarget(out var itemTarget)
+                || !ReferenceEquals(itemTarget, specializedTarget))
+            || selectSetView.Count != 1
+            || !ReferenceEquals(selectSetView.Single(), specializedTarget))
         {
             return 10;
         }
@@ -80,6 +95,9 @@ internal static class Program
         simple.Name = "after";
         specializedTarget.Code = "narrow-edited";
         specialization.BagValue.Add(specializedTarget);
+        specialization.SelectArray[2] = EqualChoice.FromSpecializedTarget(specializedTarget);
+        specialization.SelectList.Add(NarrowChoice.FromSpecializedTarget(specializedTarget));
+        specialization.SelectBag.Add(EqualChoice.FromSpecializedTarget(specializedTarget));
         if (!structure.Validate().IsValid)
         {
             return 11;
@@ -93,7 +111,8 @@ internal static class Program
             || !text.Contains("#3=SIMPLE('after');", StringComparison.Ordinal)
             || !text.Contains("#4=SPECIALIZED_TARGET('narrow-edited');", StringComparison.Ordinal)
             || !text.Contains("#5=SPECIALIZATION_CHILD(#4,#4,18446744073709551616000000000000000001,", StringComparison.Ordinal)
-            || !text.Contains("(#4,#4,#4)", StringComparison.Ordinal))
+            || !text.Contains("(#4,#4,#4)", StringComparison.Ordinal)
+            || !text.Contains("#4,(#4,#4),(#4,#4),(#4,#4,#4),(#4));", StringComparison.Ordinal))
         {
             return 12;
         }
@@ -141,18 +160,69 @@ internal static class Program
             || rereadSpecialization.BagValue.Count != 3
             || rereadSpecialization.BagValue.Any(item => !ReferenceEquals(item, rereadSpecializedTarget))
             || rereadSpecialization.SetValue.Count != 1
-            || !rereadSpecialization.SetValue.Contains(rereadSpecializedTarget))
+            || !rereadSpecialization.SetValue.Contains(rereadSpecializedTarget)
+            || !rereadBroadSpecialization.SelectArray.IsSet(1)
+            || !rereadBroadSpecialization.SelectArray.IsSet(2)
+            || rereadBroadSpecialization.SelectArray.Any(item =>
+                !item.TryGetSpecializedTarget(out var itemTarget)
+                || !ReferenceEquals(itemTarget, rereadSpecializedTarget))
+            || rereadBroadSpecialization.SelectList.Count != 2
+            || rereadBroadSpecialization.SelectList.Any(item => !ReferenceEquals(item, rereadSpecializedTarget))
+            || rereadBroadSpecialization.SelectBag.Count != 3
+            || rereadBroadSpecialization.SelectBag.Any(item =>
+                !item.TryGetSpecializedTarget(out var itemTarget)
+                || !ReferenceEquals(itemTarget, rereadSpecializedTarget))
+            || rereadBroadSpecialization.SelectSet.Count != 1
+            || rereadBroadSpecialization.SelectSet.Any(item => !ReferenceEquals(item, rereadSpecializedTarget)))
         {
             return 13;
         }
 
-        if (!VerifySingularInverse())
+        if (!VerifyAggregateSelectAtomicity(descriptors, structure, specialization))
         {
             return 14;
         }
 
+        if (!VerifySingularInverse())
+        {
+            return 15;
+        }
+
         Console.WriteLine("PACKED_AOT_OK");
         return 0;
+    }
+
+    private static bool VerifyAggregateSelectAtomicity(
+        IReadOnlyList<SchemaDescriptor> descriptors,
+        ExchangeStructure structure,
+        SpecializationChild specialization)
+    {
+        var invalidSource = SOURCE.Replace(
+            "#4,(#4,$),(#4),(#4,#4),(#4)",
+            "#4,(#2,$),(#4),(#4,#4),(#4)",
+            StringComparison.Ordinal);
+        try
+        {
+            _ = ExchangeStructure.Read(new StringReader(invalidSource), descriptors);
+            return false;
+        }
+        catch (Exception exception) when (exception is ExchangeStructureBindingException
+            or ExchangeStructureReadValidationException)
+        {
+        }
+
+        specialization.SelectList.Clear();
+        var output = new StringWriter();
+        try
+        {
+            structure.Write(output);
+        }
+        catch (ExchangeStructureWriteValidationException)
+        {
+            return output.ToString().Length == 0;
+        }
+
+        return false;
     }
 
     private static bool VerifySingularInverse()
