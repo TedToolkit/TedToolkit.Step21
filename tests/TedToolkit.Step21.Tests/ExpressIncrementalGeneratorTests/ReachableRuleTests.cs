@@ -4351,15 +4351,49 @@ public sealed class ReachableRuleTests
     private const string REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA = """
         SCHEMA repeated_cyclic_derived_model;
         ENTITY sample;
+          seed : INTEGER;
         DERIVE
           dimensions : INTEGER := derive_dimensions(SELF);
         WHERE
-          dimensions_are_zero : dimensions = 0;
+          dimensions_match : dimensions = seed;
         END_ENTITY;
         FUNCTION derive_dimensions(item : sample) : INTEGER;
-          RETURN(item.dimensions + item.dimensions + item.dimensions);
+          IF item.seed = 0 THEN
+            RETURN(0);
+          END_IF;
+          RETURN(item.dimensions);
         END_FUNCTION;
         END_SCHEMA;
+        """;
+
+    private const string CYCLIC_DERIVED_DEPENDENCY_CONSUMER = """
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel;
+
+        internal static class CyclicDerivedDependencyConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["derived-recursion"], "3;1"),
+                        new FileName(
+                            "derived-recursion.step",
+                            "2026-08-28T00:00:00+08:00",
+                            [],
+                            [],
+                            "tests",
+                            "tests",
+                            ""),
+                        new FileSchema(["repeated_cyclic_derived_model"])),
+                    [TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("repeated_cyclic_derived_model"));
+                structure.DataSections.Add(section);
+                _ = structure.Add(section, new Sample(BigInteger.Zero));
+                return structure.Validate();
+            }
+        }
         """;
 
     private const string ALGORITHM_CONTROL_SCHEMA = """
@@ -9126,27 +9160,27 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
-    /// Verifies repeated references to the same active dependency produce one canonical cycle diagnostic.
+    /// Verifies a function/derived-attribute recursion component may terminate from runtime instance state.
     /// </summary>
     [Test]
-    public async Task Should_report_each_reachable_dependency_cycle_once()
+    public async Task Should_execute_runtime_guarded_derived_attribute_recursion()
     {
         var result = GeneratorHostTests.Run(
+            CYCLIC_DERIVED_DEPENDENCY_CONSUMER,
             ("schemas/repeated-cyclic-derived.exp", REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA));
-        var diagnostics = result.Diagnostics
-            .Where(diagnostic => diagnostic.Id == "STEP21EXP006"
-                && diagnostic.GetMessage().Contains("dependency cycle"))
-            .ToArray();
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType(
+                "CyclicDerivedDependencyConsumer",
+                throwOnError: true)!
+            .GetMethod("Validate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
 
-        using (Assert.Multiple())
-        {
-            await Assert.That(result.GeneratedSources).IsEmpty();
-            await Assert.That(diagnostics).Count().IsEqualTo(1)
-                .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
-            await Assert.That(diagnostics[0].GetMessage()).Contains("dimensions");
-            await Assert.That(diagnostics[0].Location.GetLineSpan().Path)
-                .IsEqualTo("schemas/repeated-cyclic-derived.exp");
-        }
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
     }
 
     /// <summary>

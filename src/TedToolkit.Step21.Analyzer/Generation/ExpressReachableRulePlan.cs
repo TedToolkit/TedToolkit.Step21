@@ -1073,9 +1073,13 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var repeatedIndex = _dependencyPath.FindLastIndex(candidate => ReferenceEquals(candidate, dependency));
-            if (repeatedIndex >= 0
-                && _dependencyPath.Skip(repeatedIndex).All(candidate =>
-                    candidate is ExpressBoundDeclaration { Kind: ExpressDeclarationKind.Function, }))
+            var cycle = repeatedIndex < 0
+                ? []
+                : _dependencyPath.Skip(repeatedIndex).ToArray();
+            if (cycle.Any(candidate => candidate is ExpressBoundDeclaration
+                { Kind: ExpressDeclarationKind.Function, })
+                && cycle.All(candidate => candidate is ExpressBoundAttribute
+                    or ExpressBoundDeclaration { Kind: ExpressDeclarationKind.Function, }))
             {
                 return false;
             }
@@ -1169,10 +1173,14 @@ internal sealed class ExpressReachableRulePlan
                     })
                 && operations.Where(operation => operation.Role == "repeatStmt")
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control
-                        && control.ChildRules("incrementControl").Count() <= 1
-                        && control.ChildRules("whileControl").Count() <= 1
-                        && control.ChildRules("untilControl").Count() <= 1
-                        && control.ChildRules().Any())
+                        && ((control.ChildRules("incrementControl").Count() == 1
+                                && !control.ChildRules("whileControl").Any()
+                                && !control.ChildRules("untilControl").Any())
+                            || (!control.ChildRules("incrementControl").Any()
+                                && control.ChildRules("whileControl").Count() <= 1
+                                && control.ChildRules("untilControl").Count() <= 1
+                                && (control.ChildRules("whileControl").Any()
+                                    || control.ChildRules("untilControl").Any()))))
                 && operations.Where(operation => operation.Role == "caseStmt")
                     .All(caseStatement => caseStatement.ChildRules("caseAction")
                             .All(action => action.ChildRules("caseLabel").Any()
