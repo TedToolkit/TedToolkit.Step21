@@ -3960,6 +3960,59 @@ internal static class ExpressReachableRuleEmitter
                     }
                 }
 
+                if (targetType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Aggregate, }
+                    && actual.Type.DeclaredType is ExpressBoundNamedType actualAggregateSelectName
+                    && actualAggregateSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(actualAggregateSelectName.Declaration).UnderlyingType
+                        is ExpressBoundSelectType actualAggregateSelect)
+                {
+                    var placeholder = "__expressDynamicAggregateArgument_"
+                        + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + index.ToString(CultureInfo.InvariantCulture)
+                        + "__";
+                    var branches = plan.Resolver.GetSelectAlternatives(actualAggregateSelect)
+                        .Select((alternative, branchIndex) =>
+                        {
+                            var variable = "__expressDynamicAggregateValue_"
+                                + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + index.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + branchIndex.ToString(CultureInfo.InvariantCulture);
+                            var value = variable;
+                            ExpressBoundType pending = new ExpressBoundNamedType(
+                                alternative,
+                                actualAggregateSelect.Span);
+                            var visited = new HashSet<ExpressBoundSymbol>();
+                            while (pending is ExpressBoundNamedType pendingNamed
+                                   && pendingNamed.Declaration.Kind != ExpressDeclarationKind.Entity
+                                   && visited.Add(pendingNamed.Declaration))
+                            {
+                                pending = plan.Resolver.GetDefinedType(pendingNamed.Declaration).UnderlyingType;
+                                value = $"({value}).Value";
+                            }
+
+                            return (
+                                Pattern: variable,
+                                Value: pending is ExpressBoundAggregateType ? value : null);
+                        })
+                        .ToArray();
+                    if (branches.Any(branch => branch.Value is not null))
+                    {
+                        dynamicArguments.Add((
+                            emittedArguments[index],
+                            placeholder,
+                            branches,
+                            true));
+                        emittedArguments[index] = placeholder;
+                    }
+                }
+
                 var definedTypes = new List<ExpressBoundNamedType>();
                 while (targetType is ExpressBoundNamedType definedType
                        && definedType.Declaration.Kind != ExpressDeclarationKind.Entity)

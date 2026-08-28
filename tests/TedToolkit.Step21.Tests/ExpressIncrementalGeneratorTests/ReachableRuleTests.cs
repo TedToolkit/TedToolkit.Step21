@@ -1678,6 +1678,32 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string SELECT_AGGREGATE_APPLICATION_SCHEMA = """
+        SCHEMA select_aggregate_application_model;
+        ENTITY representation_item;
+        END_ENTITY;
+        TYPE list_representation_item = LIST [1:4] OF representation_item;
+        END_TYPE;
+        TYPE set_representation_item = SET [1:4] OF representation_item;
+        END_TYPE;
+        TYPE compound_item_definition = SELECT
+          (list_representation_item, set_representation_item);
+        END_TYPE;
+        FUNCTION accepts_aggregate(values : AGGREGATE OF representation_item) : BOOLEAN;
+          RETURN((SIZEOF(values) > 0)
+            AND (LOBOUND(values) = 1)
+            AND (HIBOUND(values) = 4)
+            AND (LOINDEX(values) = 1)
+            AND (HIINDEX(values) = SIZEOF(values)));
+        END_FUNCTION;
+        ENTITY compound_representation_item SUBTYPE OF (representation_item);
+          item_element : compound_item_definition;
+        WHERE
+          valid_item_element : accepts_aggregate(item_element);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string DEFINED_RETURN_BOUNDARY_SCHEMA = """
         SCHEMA defined_return_boundary_model;
         TYPE dimension_count = INTEGER;
@@ -8039,6 +8065,35 @@ public sealed class ReachableRuleTests
             await Assert.That(unsafeDiagnostics.Count(diagnostic => diagnostic.Id == "CS1503"))
                 .IsGreaterThanOrEqualTo(5)
                 .Because(string.Join(Environment.NewLine, unsafeDiagnostics));
+        }
+    }
+
+    /// <summary>
+    /// Verifies a SELECT of defined aggregate categories satisfies a general AGGREGATE formal without becoming a LIST.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_selected_aggregate_categories_at_general_formals()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-aggregate-application.exp", SELECT_AGGREGATE_APPLICATION_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains(
+                "global::TedToolkit.Step21.IExpressAggregate<global::TedToolkit.Step21.Generated."
+                + "SelectAggregateApplicationModel.IRepresentationItem>");
+            await Assert.That(generated).Contains(".Match(");
+            await Assert.That(generated).Contains(".Value");
+            await Assert.That(generated).Contains(".HighBound");
+            await Assert.That(generated).Contains(".LowBound");
         }
     }
 

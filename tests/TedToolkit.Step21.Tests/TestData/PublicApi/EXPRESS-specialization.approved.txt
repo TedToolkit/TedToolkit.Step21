@@ -5,7 +5,9 @@ static class TedToolkit.Step21.ExpressAggregateView : System.Object
   static method TedToolkit.Step21.IExpressSet<TResult> Project(TedToolkit.Step21.IExpressSet<TSource> source, System.Func<TSource, TResult> projector)
 sealed class TedToolkit.Step21.ExpressArray`1 : System.Object
   interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   interface TedToolkit.Step21.IExpressArray<T>
   constructor (System.Int32 lowerIndex, System.Int32 upperIndex, System.Boolean isOptional = False, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
   property System.Int32 Count { get; }
@@ -24,6 +26,7 @@ sealed class TedToolkit.Step21.ExpressBag`1 : System.Object
   interface System.Collections.Generic.IEnumerable<T>
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   interface TedToolkit.Step21.IExpressBag<T>
   constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null)
   property System.Int32 Count { get; }
@@ -44,6 +47,7 @@ sealed class TedToolkit.Step21.ExpressList`1 : System.Object
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.Generic.IReadOnlyList<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   interface TedToolkit.Step21.IExpressList<T>
   constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
   property System.Int32 Count { get; }
@@ -67,6 +71,7 @@ sealed class TedToolkit.Step21.ExpressSet`1 : System.Object
   interface System.Collections.Generic.IEnumerable<T>
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   interface TedToolkit.Step21.IExpressSet<T>
   constructor (System.Int32 lowerBound = 0, System.Int32? upperBound = null, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
   property System.Int32 Count { get; }
@@ -80,12 +85,21 @@ sealed class TedToolkit.Step21.ExpressSet`1 : System.Object
   method System.Collections.Generic.IEnumerator<T> GetEnumerator()
   method System.Boolean Remove(T? item)
   method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
+interface TedToolkit.Step21.IExpressAggregate`1
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
+  interface System.Collections.IEnumerable
+  property abstract System.Int32? HighBound { get; }
+  property abstract System.Int32 HighIndex { get; }
+  property abstract System.Boolean IsUnique { get; }
+  property abstract System.Int32 LowBound { get; }
+  property abstract System.Int32 LowIndex { get; }
 interface TedToolkit.Step21.IExpressArray`1
   interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
-  property abstract System.Int32 Count { get; }
+  interface TedToolkit.Step21.IExpressAggregate<T>
   property abstract System.Boolean IsOptional { get; }
-  property abstract System.Boolean IsUnique { get; }
   property abstract T? Item[System.Int32 index] { get; }
   property abstract System.Int32 LowerIndex { get; }
   property abstract System.Int32 UpperIndex { get; }
@@ -95,6 +109,7 @@ interface TedToolkit.Step21.IExpressBag`1
   interface System.Collections.Generic.IEnumerable<T>
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   property abstract System.Int32 LowerBound { get; }
   property abstract System.Int32? UpperBound { get; }
   abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
@@ -103,7 +118,7 @@ interface TedToolkit.Step21.IExpressList`1
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.Generic.IReadOnlyList<T>
   interface System.Collections.IEnumerable
-  property abstract System.Boolean IsUnique { get; }
+  interface TedToolkit.Step21.IExpressAggregate<T>
   property abstract System.Int32 LowerBound { get; }
   property abstract System.Int32? UpperBound { get; }
   abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")
@@ -111,6 +126,7 @@ interface TedToolkit.Step21.IExpressSet`1
   interface System.Collections.Generic.IEnumerable<T>
   interface System.Collections.Generic.IReadOnlyCollection<T>
   interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressAggregate<T>
   property abstract System.Int32 LowerBound { get; }
   property abstract System.Int32? UpperBound { get; }
   abstract method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")

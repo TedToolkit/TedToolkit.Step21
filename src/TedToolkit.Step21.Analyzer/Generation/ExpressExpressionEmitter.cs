@@ -1114,8 +1114,10 @@ internal static class ExpressExpressionEmitter
             ExpressAggregateKind.Array => $"new {resultType}({input}.LowerIndex, {input}.UpperIndex, "
                 + $"isOptional: true, isUnique: {input}.IsUnique)",
             ExpressAggregateKind.Bag => $"new {resultType}(0, {input}.UpperBound)",
-            ExpressAggregateKind.List or ExpressAggregateKind.Aggregate =>
+            ExpressAggregateKind.List =>
                 $"new {resultType}(0, {input}.UpperBound, {input}.IsUnique)",
+            ExpressAggregateKind.Aggregate =>
+                $"new {resultType}(0, {input}.HighBound, {input}.IsUnique)",
             ExpressAggregateKind.Set => $"new {resultType}(0, {input}.UpperBound)",
             _ => throw new InvalidOperationException(
                 $"Unknown query aggregate kind '{aggregate.Kind.ToString()}'."),
@@ -1888,8 +1890,13 @@ internal static class ExpressExpressionEmitter
 
     private static string HighIndex(ExpressBoundExpression parameter, string argument)
     {
-        return parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Array, }
-            ? $"({argument}).UpperIndex"
+        return parameter.Type.DeclaredType is ExpressBoundAggregateType { } aggregate
+            ? aggregate.Kind switch
+            {
+                ExpressAggregateKind.Array => $"({argument}).UpperIndex",
+                ExpressAggregateKind.Aggregate => $"({argument}).HighIndex",
+                _ => $"global::System.Linq.Enumerable.Count({argument})",
+            }
             : $"global::System.Linq.Enumerable.Count({argument})";
     }
 
@@ -1898,6 +1905,13 @@ internal static class ExpressExpressionEmitter
         if (parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Array, })
         {
             return BigIntegerExpression($"({argument}).UpperIndex");
+        }
+
+        if (parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Aggregate, })
+        {
+            return $"(({argument}).HighBound.HasValue ? "
+                + $"new global::System.Numerics.BigInteger(({argument}).HighBound.Value) : "
+                + "(global::System.Numerics.BigInteger?)null)";
         }
 
         if (parameter.Type.DeclaredType is ExpressBoundAggregateType
@@ -1915,15 +1929,25 @@ internal static class ExpressExpressionEmitter
 
     private static string LowBound(ExpressBoundExpression parameter, string argument)
     {
-        return parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Array, }
-            ? $"({argument}).LowerIndex"
+        return parameter.Type.DeclaredType is ExpressBoundAggregateType { } aggregate
+            ? aggregate.Kind switch
+            {
+                ExpressAggregateKind.Array => $"({argument}).LowerIndex",
+                ExpressAggregateKind.Aggregate => $"({argument}).LowBound",
+                _ => $"({argument}).LowerBound",
+            }
             : $"({argument}).LowerBound";
     }
 
     private static string LowIndex(ExpressBoundExpression parameter, string argument)
     {
-        return parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Array, }
-            ? $"({argument}).LowerIndex"
+        return parameter.Type.DeclaredType is ExpressBoundAggregateType { } aggregate
+            ? aggregate.Kind switch
+            {
+                ExpressAggregateKind.Array => $"({argument}).LowerIndex",
+                ExpressAggregateKind.Aggregate => $"({argument}).LowIndex",
+                _ => "1",
+            }
             : "1";
     }
 
@@ -2104,7 +2128,8 @@ internal static class ExpressExpressionEmitter
         {
             ExpressAggregateKind.Array => "IExpressArray",
             ExpressAggregateKind.Bag => "IExpressBag",
-            ExpressAggregateKind.List or ExpressAggregateKind.Aggregate => "IExpressList",
+            ExpressAggregateKind.List => "IExpressList",
+            ExpressAggregateKind.Aggregate => "IExpressAggregate",
             ExpressAggregateKind.Set => "IExpressSet",
             _ => throw new InvalidOperationException(
                 $"Unknown aggregate kind '{aggregate.Kind.ToString()}'."),
