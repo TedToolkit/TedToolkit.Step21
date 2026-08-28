@@ -875,6 +875,255 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string AP214_BOUNDARY_ADAPTATION_SCHEMA = """
+        SCHEMA ap214_boundary_adaptation_model;
+        TYPE angle_measure = REAL;
+        END_TYPE;
+        ENTITY base_item;
+          code : INTEGER;
+        END_ENTITY;
+        ENTITY selected_item SUBTYPE OF (base_item);
+          detail : INTEGER;
+        END_ENTITY;
+        TYPE item_choice = SELECT (base_item);
+        END_TYPE;
+        TYPE nested_choice = SELECT (item_choice);
+        END_TYPE;
+        TYPE selected_result = SELECT (selected_item);
+        END_TYPE;
+        TYPE measure_value = SELECT (angle_measure);
+        END_TYPE;
+        TYPE integer_list = LIST OF INTEGER;
+        END_TYPE;
+        TYPE integer_set = SET OF INTEGER;
+        END_TYPE;
+        TYPE compound_items = SELECT (integer_list, integer_set);
+        END_TYPE;
+        ENTITY direction;
+          ratios : LIST [1:?] OF REAL;
+        END_ENTITY;
+        ENTITY vector;
+          orientation : direction;
+        END_ENTITY;
+        TYPE vector_or_direction = SELECT (vector, direction);
+        END_TYPE;
+        ENTITY product_definition;
+        END_ENTITY;
+        ENTITY product_relationship;
+        END_ENTITY;
+        TYPE characterized_product_definition = SELECT (
+          product_definition, product_relationship);
+        END_TYPE;
+        ENTITY shape_aspect;
+        END_ENTITY;
+        ENTITY shape_relationship;
+        END_ENTITY;
+        TYPE shape_definition = SELECT (shape_aspect, shape_relationship);
+        END_TYPE;
+        TYPE characterized_definition = SELECT (
+          characterized_product_definition, shape_definition);
+        END_TYPE;
+        ENTITY property_definition;
+          definition : characterized_definition;
+        END_ENTITY;
+        ENTITY named_unit;
+        END_ENTITY;
+        ENTITY derived_unit;
+        END_ENTITY;
+        ENTITY conversion_based_unit SUBTYPE OF (named_unit);
+          factor : REAL;
+        END_ENTITY;
+        ENTITY si_unit SUBTYPE OF (named_unit);
+          scale : REAL;
+        END_ENTITY;
+        TYPE unit = SELECT (derived_unit, named_unit);
+        END_TYPE;
+        FUNCTION promote(values : SET OF selected_item) : BOOLEAN;
+          LOCAL
+            promoted : SET OF nested_choice := [];
+          END_LOCAL;
+          promoted := QUERY(item <* values | TRUE);
+          RETURN(SIZEOF(promoted) = SIZEOF(values));
+        END_FUNCTION;
+        FUNCTION convert_angle(angle : angle_measure) : angle_measure;
+          LOCAL
+            converted : angle_measure := angle;
+            marker : LOGICAL := TRUE;
+          END_LOCAL;
+          IF marker THEN
+            RETURN(converted);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION extract_measure(measured_value : measure_value) : REAL;
+          RETURN(measured_value);
+        END_FUNCTION;
+        FUNCTION has_selected(values : BAG OF base_item) : BOOLEAN;
+          LOCAL
+            selected : BAG OF selected_item := [];
+          END_LOCAL;
+          selected := QUERY(item <* values |
+            'AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(item));
+          RETURN(SIZEOF(selected) >= 0);
+        END_FUNCTION;
+        FUNCTION normalise_direction(item : direction) : vector_or_direction;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION consumes_direction(item : direction) : BOOLEAN;
+          RETURN(EXISTS(item));
+        END_FUNCTION;
+        FUNCTION adapts_select_result(item : direction) : BOOLEAN;
+          RETURN(consumes_direction(normalise_direction(item)));
+        END_FUNCTION;
+        FUNCTION observes_nested_select(item : characterized_definition) : BOOLEAN;
+          RETURN('AP214_BOUNDARY_ADAPTATION_MODEL.PRODUCT_DEFINITION' IN TYPEOF(item));
+        END_FUNCTION;
+        FUNCTION counts_nested_select_users(item : characterized_definition) : INTEGER;
+          RETURN(SIZEOF(USEDIN(item,
+            'AP214_BOUNDARY_ADAPTATION_MODEL.PROPERTY_DEFINITION.DEFINITION')));
+        END_FUNCTION;
+        FUNCTION reads_guarded_unit(item : unit) : REAL;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.CONVERSION_BASED_UNIT' IN TYPEOF(item) THEN
+            RETURN(item\conversion_based_unit.factor);
+          END_IF;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.SI_UNIT' IN TYPEOF(item) THEN
+            RETURN(item\si_unit.scale);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION selects_from_base(item : base_item) : selected_result;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(item) THEN
+            RETURN(item);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION reads_subtype_group(item : base_item) : INTEGER;
+          RETURN(item\selected_item.detail);
+        END_FUNCTION;
+        FUNCTION dot_values(left, right : direction) : REAL;
+          LOCAL
+            scalar : REAL;
+            count : INTEGER;
+          END_LOCAL;
+          scalar := 0.0;
+          count := SIZEOF(left.ratios);
+          REPEAT i := 1 TO count;
+            scalar := scalar + left.ratios[i] * right.ratios[i];
+          END_REPEAT;
+          RETURN(scalar);
+        END_FUNCTION;
+        FUNCTION rewrites_direction(item : direction) : direction;
+          LOCAL
+            result : direction := item;
+            count : INTEGER := SIZEOF(item.ratios);
+          END_LOCAL;
+          REPEAT i := 1 TO count;
+            result.ratios[i] := result.ratios[i] / 2.0;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION orthogonal_values(item : direction) : direction;
+          RETURN(direction([-item.ratios[2], item.ratios[1]]));
+        END_FUNCTION;
+        ENTITY holder;
+          styles : LIST [1:?] OF item_choice;
+          base_value : base_item;
+          items : SET OF selected_item;
+          measure : measure_value;
+          compound : compound_items;
+          bag_items : BAG OF base_item;
+          direction_value : direction;
+          direction_choice : vector_or_direction;
+          characterized : characterized_definition;
+          selected_unit : unit;
+        WHERE
+          selected_member :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(styles[1]))
+            AND (styles[1]\selected_item.detail > 0);
+          promotes_set : promote(items);
+          converts_angle : EXISTS(convert_angle(1.0));
+          extracts_measure : EXISTS(extract_measure(measure));
+          sizes_selected_aggregate : SIZEOF(compound) >= 0;
+          narrows_bag : has_selected(bag_items);
+          adapts_select_function_result : adapts_select_result(direction_value);
+          adapts_narrowed_attribute_select :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.DIRECTION' IN TYPEOF(direction_choice))
+            AND consumes_direction(direction_choice);
+          observes_nested_typeof : observes_nested_select(characterized);
+          observes_nested_usedin : counts_nested_select_users(characterized) >= 0;
+          reads_unit_group : EXISTS(reads_guarded_unit(selected_unit));
+          reads_attribute_unit_group :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.CONVERSION_BASED_UNIT' IN TYPEOF(selected_unit))
+            AND (selected_unit\conversion_based_unit.factor > 0.0);
+          returns_select_subtype : EXISTS(selects_from_base(styles[1]));
+          projects_entity_subtype_group : EXISTS(reads_subtype_group(base_value));
+          computes_guarded_indices : EXISTS(dot_values(direction_value, direction_value));
+          writes_guarded_index : EXISTS(rewrites_direction(direction_value));
+          constructs_from_guarded_indices : EXISTS(orthogonal_values(direction_value));
+        END_ENTITY;
+        ENTITY derived_holder;
+          base_value : base_item;
+        DERIVE
+          selected_choice : selected_result := base_value;
+          selected_entity : selected_item := base_value;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string AP214_COMPLEX_BOUNDARY_SCHEMA = """
+        SCHEMA ap214_complex_boundary_model;
+        CONSTANT
+          dummy_gri : geometric_representation_item := geometric_representation_item('');
+        END_CONSTANT;
+        TYPE dimension_value = INTEGER;
+        WHERE
+          non_negative : SELF >= 0;
+        END_TYPE;
+        ENTITY named_unit
+        SUPERTYPE OF (ONEOF (si_unit, conversion_based_unit, context_dependent_unit)
+          ANDOR ONEOF (length_unit));
+          dimensions : dimension_value;
+        END_ENTITY;
+        ENTITY si_unit SUBTYPE OF (named_unit);
+        DERIVE
+          SELF\named_unit.dimensions : dimension_value := 1;
+        END_ENTITY;
+        ENTITY conversion_based_unit SUBTYPE OF (named_unit);
+        DERIVE
+          SELF\named_unit.dimensions : dimension_value := 1;
+        END_ENTITY;
+        ENTITY context_dependent_unit SUBTYPE OF (named_unit);
+        END_ENTITY;
+        ENTITY length_unit SUBTYPE OF (named_unit);
+        END_ENTITY;
+        ENTITY representation_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY geometric_representation_item SUBTYPE OF (representation_item);
+        END_ENTITY;
+        ENTITY direction;
+          ratios : LIST [1:?] OF REAL;
+        END_ENTITY;
+        ENTITY vector SUBTYPE OF (geometric_representation_item);
+          orientation : direction;
+          magnitude : REAL;
+        END_ENTITY;
+        TYPE vector_or_direction = SELECT (vector, direction);
+        END_TYPE;
+        FUNCTION normalise_direction(item : direction) : vector_or_direction;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION build_vector(item : direction) : vector;
+          RETURN(dummy_gri || vector(normalise_direction(item), 1.0));
+        END_FUNCTION;
+        ENTITY sample;
+          direction_value : direction;
+        WHERE
+          builds : EXISTS(build_vector(direction_value));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string INCOMPATIBLE_FUNCTION_SELECT_ARGUMENT_SCHEMA = """
         SCHEMA incompatible_function_select_argument_model;
         ENTITY accepted;
@@ -6156,6 +6405,9 @@ public sealed class ReachableRuleTests
             NOT polyline_ok(shape))) = 0;
           result_outside_query : SIZEOF(QUERY (candidate <* choices |
             'QUERY_RESULT_NARROWING_MODEL.POINT' IN TYPEOF(candidate))) = 1;
+          nested_shadow : SIZEOF(QUERY (candidate <* items |
+            (candidate.code > 0) AND (SIZEOF(QUERY (candidate <* items |
+              candidate.code > 0)) > 0))) > 0;
           generic_bag_result : SIZEOF(generic_bag_items(generic_item)) = 1;
         END_ENTITY;
         END_SCHEMA;
@@ -7578,6 +7830,34 @@ public sealed class ReachableRuleTests
             .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
+    /// <summary>Preserves AP214-style nominal, aggregate, and guarded SELECT boundaries.</summary>
+    [Test]
+    public async Task Should_adapt_ap214_algorithm_and_guarded_member_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/ap214-boundary-adaptation.exp", AP214_BOUNDARY_ADAPTATION_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Preserves complex derived overrides and flattened SELECT entity arguments.</summary>
+    [Test]
+    public async Task Should_adapt_ap214_complex_entity_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/ap214-complex-boundary.exp", AP214_COMPLEX_BOUNDARY_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
     /// <summary>
     /// Verifies a dynamically compatible entity application invokes only a matching runtime alternative.
     /// </summary>
@@ -8392,7 +8672,13 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(invalidResults.All(invalid => invalid.Diagnostics
                 .Concat(invalid.OutputCompilation.GetDiagnostics())
-                .Any(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)))
+                .All(diagnostic => diagnostic.Severity is not DiagnosticSeverity.Error
+                    and not DiagnosticSeverity.Warning)))
+                .IsTrue();
+            await Assert.That(invalidResults.All(invalid => string.Join(
+                    Environment.NewLine,
+                    invalid.GeneratedSources.Select(source => source.SourceText.ToString()))
+                .Contains(" switch {", StringComparison.Ordinal)))
                 .IsTrue();
         }
     }
@@ -8441,8 +8727,17 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(invalidResults.All(invalid => invalid.Diagnostics
                 .Concat(invalid.OutputCompilation.GetDiagnostics())
-                .Any(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)))
+                .All(diagnostic => diagnostic.Severity is not DiagnosticSeverity.Error
+                    and not DiagnosticSeverity.Warning)))
                 .IsTrue();
+            await Assert.That(invalidResults.All(invalid =>
+            {
+                var generated = string.Join(
+                    Environment.NewLine,
+                    invalid.GeneratedSources.Select(source => source.SourceText.ToString()));
+                return generated.Contains(" is { }", StringComparison.Ordinal)
+                    && generated.Contains("?)null", StringComparison.Ordinal);
+            })).IsTrue();
         }
     }
 
@@ -8475,10 +8770,10 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
-    /// Verifies TYPEOF-proven scalar SELECT values participate in numeric operations only inside the proven branch.
+    /// Verifies scalar SELECT values dispatch numeric operations over compatible runtime alternatives.
     /// </summary>
     [Test]
-    public async Task Should_narrow_lexical_select_references_to_terminal_scalars()
+    public async Task Should_dispatch_lexical_select_references_to_terminal_scalars()
     {
         var result = GeneratorHostTests.Run(
             SELECT_SCALAR_NARROWING_CONSUMER,
@@ -8502,7 +8797,7 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(unguarded.Diagnostics.Concat(unguarded.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
         }
 
         var assembly = Emit(result.OutputCompilation);
@@ -9419,7 +9714,11 @@ public sealed class ReachableRuleTests
             await Assert.That(narrowedApplications.All(application => application.Type.CanBeIndeterminate)).IsTrue();
             await Assert.That(unprotected.Diagnostics.Concat(unprotected.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
+            await Assert.That(string.Join(
+                    Environment.NewLine,
+                    unprotected.GeneratedSources.Select(source => source.SourceText.ToString())))
+                .Contains(".Match(");
             await Assert.That(immediateMethod).DoesNotContain("__parameter_InputValue =");
         }
 
@@ -9505,7 +9804,8 @@ public sealed class ReachableRuleTests
                 .IsEmpty();
             await Assert.That(nestedMethod.TypeParameters.Select(parameter => parameter.Name))
                 .IsEquivalentTo(["TT", "TU"]);
-            await Assert.That(validation.IsValid).IsTrue();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
         }
     }
 

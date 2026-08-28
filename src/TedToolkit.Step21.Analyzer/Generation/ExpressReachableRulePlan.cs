@@ -831,7 +831,7 @@ internal sealed class ExpressReachableRulePlan
                     : null;
                 var formalTypes = functionHead?.ChildRules("formalParameter")
                     .SelectMany(formal => formal.ChildRules("parameterId"))
-                    .Select(parameter => _schema.NameReferences.Select(reference => reference.Target)
+                    .Select(parameter => _schema.LexicalNames
                         .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
                             && SameStart(candidate.Span, parameter.Span))
                         .Distinct()
@@ -843,7 +843,7 @@ internal sealed class ExpressReachableRulePlan
                         .ChildRules("localDecl")
                         .SelectMany(local => local.ChildRules("localVariable"))
                         .SelectMany(local => local.ChildRules("variableId"))
-                        .Select(variable => _schema.NameReferences.Select(reference => reference.Target)
+                        .Select(variable => _schema.LexicalNames
                             .Where(candidate => candidate.Kind == ExpressBoundNameKind.Variable
                                 && SameStart(candidate.Span, variable.Span))
                             .Distinct()
@@ -879,8 +879,7 @@ internal sealed class ExpressReachableRulePlan
                 var localLabels = ExpressTypeAnalysis.GenericTypeLabels(localTypes);
                 var scopeLabels = ExpressTypeAnalysis.GenericTypeLabels(
                     formalTypes.Concat([declaredType,]).Concat(localTypes));
-                var lexicalBounds = _schema.NameReferences
-                    .Select(reference => reference.Target)
+                var lexicalBounds = _schema.LexicalNames
                     .Where(candidate => candidate.Kind is ExpressBoundNameKind.Parameter or ExpressBoundNameKind.Variable
                         && Contains(_analysis.GetDeclaration(declaration).Span, candidate.Span)
                         && candidate.Type is ExpressBoundScalarType
@@ -963,7 +962,7 @@ internal sealed class ExpressReachableRulePlan
 
                         var callerFormalTypes = callerHead.ChildRules("formalParameter")
                             .SelectMany(formal => formal.ChildRules("parameterId"))
-                            .Select(parameter => _schema.NameReferences.Select(reference => reference.Target)
+                            .Select(parameter => _schema.LexicalNames
                                 .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
                                     && SameStart(candidate.Span, parameter.Span))
                                 .Distinct()
@@ -974,7 +973,7 @@ internal sealed class ExpressReachableRulePlan
                             .ChildRules("localDecl")
                             .SelectMany(local => local.ChildRules("localVariable"))
                             .SelectMany(local => local.ChildRules("variableId"))
-                            .Select(variable => _schema.NameReferences.Select(reference => reference.Target)
+                            .Select(variable => _schema.LexicalNames
                                 .Where(candidate => candidate.Kind == ExpressBoundNameKind.Variable
                                     && SameStart(candidate.Span, variable.Span))
                                 .Distinct()

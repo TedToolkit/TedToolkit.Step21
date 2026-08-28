@@ -128,13 +128,13 @@ internal sealed class BaselineTests
         {
             await Assert.That(result.GeneratedSources.Count(source =>
                 source.HintName == "ExpressSchema_AUTOMOTIVE_DESIGN.g.cs")).IsEqualTo(1);
-            await Assert.That(descriptorSource).Contains("SchemaName(\"automotive_design\")");
+            await Assert.That(descriptorSource).Contains("SchemaName(\"AUTOMOTIVE_DESIGN\")");
             await Assert.That(descriptor.GetMembers("Name").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("SchemaName");
             await Assert.That(advancedFace.Interfaces.Select(type => type.Name)).Contains("IFaceSurface");
             await Assert.That(product.Constructors.Single(constructor =>
-                        constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name)
-                    .SequenceEqual(["id", "name", "description", "frameOfReference"]))
+                    constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name)
+                    .SequenceEqual(["id", "name", "frameOfReference"]))
                 .IsTrue();
             await Assert.That(product.GetMembers("FrameOfReference").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("ExpressSet");
@@ -146,7 +146,7 @@ internal sealed class BaselineTests
                 .IsEqualTo("ExpressSet");
             await Assert.That(aheadOrBehind.GetMembers().OfType<IPropertySymbol>()
                     .Where(property => property.IsStatic).Select(property => property.Name)
-                    .SequenceEqual(["Ahead", "Behind"]))
+                    .SequenceEqual(["Ahead", "Exact", "Behind"]))
                 .IsTrue();
             await Assert.That(axis2PlacementKind.GetMembers().OfType<IFieldSymbol>()
                     .Where(field => field.HasConstantValue).Select(field => field.Name)

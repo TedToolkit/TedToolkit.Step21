@@ -225,6 +225,7 @@ internal static class ExpressSchemaBinder
             schema.ResolvedImports,
             declarations,
             nestedDeclarations,
+            schema.LexicalNames,
             schema.NameReferences,
             [],
             [],
@@ -1670,6 +1671,7 @@ internal static class ExpressSchemaBinder
         {
             if (scope.TryAdd(name))
             {
+                schema.LexicalNames.Add(name);
                 return;
             }
 
@@ -2787,6 +2789,8 @@ internal static class ExpressSchemaBinder
         internal List<ExpressBoundImport> ResolvedImports { get; } = [];
 
         internal List<ExpressBoundNameReference> NameReferences { get; } = [];
+
+        internal List<ExpressBoundName> LexicalNames { get; } = [];
 
         internal bool IsInvalid { get; set; }
     }
