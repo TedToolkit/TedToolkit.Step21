@@ -374,7 +374,18 @@ internal static class ExpressExpressionEmitter
     {
         if (expression.Reference is not null)
         {
-            return UnwrapDefined(expression.Type, context.ResolveReference(expression.Reference, null, null, null), context);
+            var source = context.ResolveReference(expression.Reference, null, null, null);
+            var narrowed = expression.Type.DeclaredType as ExpressBoundNamedType;
+            if ((expression.Reference.Type is ExpressBoundGenericType { IsEntity: true, }
+                    || expression.Reference.Kind == ExpressBoundNameKind.QueryVariable)
+                && narrowed?.Declaration.Kind == ExpressDeclarationKind.Entity)
+            {
+                var target = BoundTypeName(narrowed);
+                return $"({source}) switch {{ {target} __expressTypeOfNarrowed => "
+                    + "__expressTypeOfNarrowed, _ => throw new global::System.InvalidOperationException() }";
+            }
+
+            return UnwrapDefined(expression.Type, source, context);
         }
 
         return expression.Operation?.ToUpperInvariant() switch
@@ -461,6 +472,23 @@ internal static class ExpressExpressionEmitter
                 : context.ResolveAttribute(expression.Children[0], reference, candidate);
         }
 
+        string Result(string candidate)
+        {
+            var result = Access(candidate);
+            var narrowed = expression.Type.DeclaredType as ExpressBoundNamedType;
+            if (reference.Type is { } carrier
+                && narrowed?.Declaration.Kind == ExpressDeclarationKind.Entity)
+            {
+                return context.ResolveReference(
+                    reference,
+                    carrier,
+                    result,
+                    narrowed.Declaration);
+            }
+
+            return UnwrapDefined(expression.Type, result, context);
+        }
+
         if (expression.Children[0].Type.CanBeIndeterminate)
         {
             return GuardIndeterminate(
@@ -468,16 +496,10 @@ internal static class ExpressExpressionEmitter
                 context,
                 expression.Children,
                 [source,],
-                codes => UnwrapDefined(
-                    expression.Type,
-                    Access(codes[0]),
-                    context));
+                codes => Result(codes[0]));
         }
 
-        return UnwrapDefined(
-            expression.Type,
-            Access(source),
-            context);
+        return Result(source);
     }
 
     private static string EmitGroup(

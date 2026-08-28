@@ -5711,6 +5711,49 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string TYPEOF_GUARDED_ATTRIBUTE_SCHEMA = """
+        SCHEMA typeof_guarded_attribute_model;
+        ENTITY item;
+        END_ENTITY;
+        ENTITY applied_assignment;
+          items : SET [1:?] OF item;
+        END_ENTITY;
+        ENTITY property_definition;
+          name : STRING;
+          description : STRING;
+        END_ENTITY;
+        ENTITY thread_definition SUBTYPE OF (property_definition);
+        END_ENTITY;
+        ENTITY external_definition SUBTYPE OF (property_definition);
+        END_ENTITY;
+        TYPE definition_select = SELECT (
+          item,
+          property_definition,
+          thread_definition,
+          external_definition);
+        END_TYPE;
+        ENTITY property_definition_representation;
+          definition : definition_select;
+        END_ENTITY;
+        RULE guarded_assignment_items FOR (item);
+        WHERE
+          guarded_attribute : SIZEOF(QUERY(candidate <* item |
+            SIZEOF(QUERY(assignment <* USEDIN(candidate, '') |
+              (('TYPEOF_GUARDED_ATTRIBUTE_MODEL.' + 'APPLIED_ASSIGNMENT') IN TYPEOF(assignment)) AND
+              (SIZEOF(assignment.items) > 0))) >= 0)) >= 0;
+        END_RULE;
+        RULE guarded_select_path FOR (property_definition_representation);
+        WHERE
+          guarded_path : SIZEOF(QUERY(pdr <* property_definition_representation |
+            ('TYPEOF_GUARDED_ATTRIBUTE_MODEL.PROPERTY_DEFINITION' IN TYPEOF(pdr.definition)) AND
+            (pdr.definition.name = 'document property') AND
+            ((('TYPEOF_GUARDED_ATTRIBUTE_MODEL.THREAD_DEFINITION' IN TYPEOF(pdr.definition)) OR
+              ('TYPEOF_GUARDED_ATTRIBUTE_MODEL.EXTERNAL_DEFINITION' IN TYPEOF(pdr.definition))) AND
+            (pdr.definition.description = 'thread')))) >= 0;
+        END_RULE;
+        END_SCHEMA;
+        """;
+
     private const string QUERY_RESULT_NARROWING_SCHEMA = """
         SCHEMA query_result_narrowing_model;
         ENTITY representation_item;
@@ -6253,6 +6296,22 @@ public sealed class ReachableRuleTests
             .Invoke(null, null)!;
         await Assert.That(validation.IsValid).IsTrue()
             .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+    }
+
+    /// <summary>
+    /// Verifies a positive TYPEOF guard narrows a generic entity for the guarded side of AND.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_attribute_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-attribute.exp", TYPEOF_GUARDED_ATTRIBUTE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>
