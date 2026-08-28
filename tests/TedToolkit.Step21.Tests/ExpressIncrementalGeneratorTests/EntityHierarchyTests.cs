@@ -328,6 +328,75 @@ public sealed class EntityHierarchyTests
         END_SCHEMA;
         """;
 
+    private const string OPTIONAL_AGGREGATE_SELECT_REDECLARATION_SCHEMA = """
+        SCHEMA optional_aggregate_select_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        TYPE narrow_choice = SELECT (specialized);
+        END_TYPE;
+        ENTITY root ABSTRACT;
+          array_value : OPTIONAL ARRAY [1:1] OF target;
+          list_value : OPTIONAL LIST [0:?] OF target;
+          bag_value : OPTIONAL BAG [0:?] OF target;
+          set_value : OPTIONAL SET [0:?] OF target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.array_value : OPTIONAL ARRAY [1:1] OF narrow_choice;
+          SELF\root.list_value : OPTIONAL LIST [0:?] OF narrow_choice;
+          SELF\root.bag_value : OPTIONAL BAG [0:?] OF narrow_choice;
+          SELF\root.set_value : OPTIONAL SET [0:?] OF narrow_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string OPTIONAL_AGGREGATE_SELECT_REDECLARATION_CONSUMER = """
+        #nullable enable
+        using System.Linq;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.OptionalAggregateSelectRedeclaration;
+        internal static class OptionalAggregateSelectRedeclarationConsumer
+        {
+            internal static bool Exercise()
+            {
+                var empty = new Child();
+                IRoot emptyRoot = empty;
+                if (emptyRoot.ArrayValue is not null
+                    || emptyRoot.ListValue is not null
+                    || emptyRoot.BagValue is not null
+                    || emptyRoot.SetValue is not null)
+                {
+                    return false;
+                }
+
+                var specialized = new Specialized();
+                var selected = NarrowChoice.FromSpecialized(specialized);
+                var array = new ExpressArray<NarrowChoice>(1, 1);
+                array[1] = selected;
+                var list = new ExpressList<NarrowChoice> { selected };
+                var bag = new ExpressBag<NarrowChoice> { selected };
+                var set = new ExpressSet<NarrowChoice> { selected };
+                var populated = new Child
+                {
+                    ArrayValue = array,
+                    ListValue = list,
+                    BagValue = bag,
+                    SetValue = set,
+                };
+                IRoot populatedRoot = populated;
+                var listView = populatedRoot.ListValue!;
+                list.Add(selected);
+
+                return ReferenceEquals(populatedRoot.ArrayValue![1], specialized)
+                    && listView.Count == 2
+                    && listView.All(item => ReferenceEquals(item, specialized))
+                    && populatedRoot.BagValue!.Single() == specialized
+                    && populatedRoot.SetValue!.Single() == specialized;
+            }
+        }
+        """;
+
     private const string SELECT_REDECLARATION_SCHEMA = """
         SCHEMA select_redeclaration;
         ENTITY target;
@@ -1130,6 +1199,27 @@ public sealed class EntityHierarchyTests
                 .IsTrue();
             await Assert.That(result.GeneratedSources).IsEmpty();
         }
+    }
+
+    /// <summary>Verifies optional narrowed aggregate storage projects null and live non-null values losslessly.</summary>
+    [Test]
+    public async Task Should_preserve_optional_aggregate_select_specialization_nullability()
+    {
+        var result = GeneratorHostTests.Run(
+            OPTIONAL_AGGREGATE_SELECT_REDECLARATION_CONSUMER,
+            ("schemas/optional-aggregate-select.exp", OPTIONAL_AGGREGATE_SELECT_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error
+                || diagnostic.Severity == DiagnosticSeverity.Warning)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("OptionalAggregateSelectRedeclarationConsumer", throwOnError: true)!;
+        await Assert.That((bool)consumer.GetMethod(
+            "Exercise",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, null)!)
+            .IsTrue();
     }
 
     /// <summary>Verifies M-06 values survive schema-bound read, edit, write, and reread.</summary>
