@@ -5556,6 +5556,15 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         TYPE item_choice = SELECT (first_item, second_item);
         END_TYPE;
+        FUNCTION narrow_item(candidate : item_choice) : SET OF first_item;
+          LOCAL
+            result : SET OF first_item := [];
+          END_LOCAL;
+          IF 'AGGREGATE_MULTI_SELECT_UNION_MODEL.FIRST_ITEM' IN TYPEOF(candidate) THEN
+            result := result + candidate;
+          END_IF;
+          RETURN(result);
+        END_FUNCTION;
         FUNCTION merge_items(values : SET OF root_item;
                              selections : SET OF item_choice) : SET OF item_choice;
           RETURN(selections + values);
@@ -5570,6 +5579,7 @@ public sealed class ReachableRuleTests
         WHERE
           reachable : SIZEOF(merge_items(values, selections)) > 0;
           reverse_reachable : SIZEOF(unwrap_items(values, selections)) > 0;
+          narrowed_reachable : SIZEOF(narrow_item(selections[1])) <= 1;
         END_ENTITY;
         END_SCHEMA;
         """;

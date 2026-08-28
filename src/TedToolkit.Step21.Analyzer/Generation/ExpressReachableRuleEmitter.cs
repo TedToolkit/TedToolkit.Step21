@@ -174,7 +174,18 @@ internal static class ExpressReachableRuleEmitter
             ResolveBoundReference,
             selfExpression,
             resolveModelFunction: (operation, expression, arguments) =>
-                ResolveModelFunction(plan, operation, expression, arguments, populationExpression),
+                ResolveModelFunction(
+                    plan,
+                    operation,
+                    expression,
+                    arguments,
+                    populationExpression,
+                    aggregateUnionSourceTypeOverrides: operation == "AGGREGATE_UNION"
+                        ? expression.Children.Select(child => (ExpressBoundType?)ResolveNarrowedExpressionType(
+                            child,
+                            selectNarrowings,
+                            pathNarrowings)).ToArray()
+                        : null),
             resolveValueEquality: (left, leftCode, right, rightCode, leftTypeOverride) =>
                 ResolveValueEquality(plan, left, leftCode, right, rightCode, leftTypeOverride),
             resolveAttribute: (sourceExpression, reference, source) =>
@@ -235,6 +246,31 @@ internal static class ExpressReachableRuleEmitter
                 && plan.EntityProjections.Single(projection =>
                         projection.Entity.Symbol == groupAlternative)
                     .PhysicalComponents.Any(component => component.Symbol == group)));
+    }
+
+    private static ExpressBoundNamedType? ResolveNarrowedExpressionType(
+        ExpressBoundExpression expression,
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
+    {
+        if (expression.Reference is { } reference
+            && selectNarrowings?.TryGetValue(reference, out var alternative) == true
+            && alternative.Kind == ExpressDeclarationKind.Entity)
+        {
+            return new(alternative, expression.Type.DeclaredType?.Span ?? alternative.Span);
+        }
+
+        var pathAlternatives = pathNarrowings
+            ?.Where(narrowing => SameDirectReferencePath(narrowing.Key, expression))
+            .Select(narrowing => narrowing.Value)
+            .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
+            .Distinct()
+            .ToArray() ?? Array.Empty<ExpressBoundSymbol>();
+        return pathAlternatives.Length == 1
+            ? new(
+                pathAlternatives[0],
+                expression.Type.DeclaredType?.Span ?? pathAlternatives[0].Span)
+            : null;
     }
 
     private static string ResolveValueEquality(
@@ -2814,7 +2850,8 @@ internal static class ExpressReachableRuleEmitter
         int usedInDepth = 0,
         ExpressBoundType? aggregateUnionSourceType = null,
         ExpressBoundType? aggregateUnionTargetType = null,
-        int aggregateUnionDepth = 0)
+        int aggregateUnionDepth = 0,
+        ExpressBoundType?[]? aggregateUnionSourceTypeOverrides = null)
     {
         if (operation == "AGGREGATE_UNION_ELEMENT")
         {
@@ -3007,7 +3044,8 @@ internal static class ExpressReachableRuleEmitter
             var values = new string[2];
             for (var index = 0; index < operandAggregates.Length; index++)
             {
-                var source = operandAggregates[index]?.ElementType
+                var source = aggregateUnionSourceTypeOverrides?[index]
+                    ?? operandAggregates[index]?.ElementType
                     ?? expression.Children[index].Type.DeclaredType;
                 if (source is null)
                 {
