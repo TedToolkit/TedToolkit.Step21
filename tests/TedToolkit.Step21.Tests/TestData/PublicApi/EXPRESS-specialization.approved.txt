@@ -1,3 +1,8 @@
+static class TedToolkit.Step21.ExpressAggregateView : System.Object
+  static method TedToolkit.Step21.IExpressArray<TResult> Project(TedToolkit.Step21.IExpressArray<TSource> source, System.Func<TSource, TResult> projector)
+  static method TedToolkit.Step21.IExpressBag<TResult> Project(TedToolkit.Step21.IExpressBag<TSource> source, System.Func<TSource, TResult> projector)
+  static method TedToolkit.Step21.IExpressList<TResult> Project(TedToolkit.Step21.IExpressList<TSource> source, System.Func<TSource, TResult> projector)
+  static method TedToolkit.Step21.IExpressSet<TResult> Project(TedToolkit.Step21.IExpressSet<TSource> source, System.Func<TSource, TResult> projector)
 sealed class TedToolkit.Step21.ExpressArray`1 : System.Object
   interface System.Collections.Generic.IEnumerable<T>
   interface System.Collections.IEnumerable

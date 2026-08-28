@@ -63,12 +63,14 @@ singular inverse 的 status quo 是对 validation-reachable 非 aggregate invers
 
 runtime 增加按 EXPRESS aggregate kind 区分的协变只读 view contract。view 只暴露观察操作以及
 kind-specific 的不可变 schema metadata；任何会接受 `T`、改变 cardinality、替换 element 或暴露
-mutable comparer 的成员都不进入协变 contract。现有 mutable aggregate concrete types 直接实现
-对应 view，不创建 adapter、copy 或第二份 storage。
+mutable comparer 的成员都不进入协变 contract。direct entity element 收窄时，现有 mutable aggregate
+concrete types 直接实现对应 view；generated SELECT value-wrapper 无法使用 CLR covariance 时，使用
+schema-neutral、惰性逐元素 adapter。adapter 不复制 element 或 storage，也不提供第二个 mutation surface。
 
 当且仅当一个 explicit physical slot 参与 element/domain 收窄重声明时，该 slot 的 generated
-entity interface 属性使用相应的协变 EXPRESS view。继承和重声明 interface getter 返回同一 concrete
-aggregate 实例，CLR covariance 提供各自的 element type view。generated concrete entity class 仍只
+entity interface 属性使用相应的协变 EXPRESS view。direct entity mapping 的继承和重声明 getter 返回同一
+concrete aggregate 实例；SELECT wrapper mapping 的 inherited getter 返回观察该实例的 live adapter，
+并逐 leaf 保持 entity identity，但不承诺 adapter 或 value-wrapper reference identity。generated concrete entity class 仍只
 拥有一个最窄有效类型的 mutable storage，并保留 ordinary construction、editing、validation 与
 writer 所需的 concrete mutable property。没有参与这种重声明的现有成功 schema 继续生成当前
 concrete aggregate interface surface，避免无关 source compatibility 变化。
@@ -108,7 +110,7 @@ identity。非泛型共享 storage 虽可保留多个 mutable view，但新增�
 
 ## ⚖️ 后果与接受的代价
 
-- 合法 aggregate 收窄重声明能够保持一个 physical slot、一个 mutable candidate 和多个 covariant interface view。
+- 合法 aggregate 收窄重声明能够保持一个 physical slot、一个 mutable candidate 和多个 live interface view；SELECT wrapper adapter 本身不等同于 storage。
 - 新 runtime view 是公开、版本化、schema-neutral 的 infrastructure API，必须有 XML documentation、public API snapshot、compatibility 与 Native AOT proof。
 - 仅新支持的收窄 slot interface 暴露 read-only view；调用者通过 generated concrete class 的最窄属性继续编辑。现有成功生成的普通 aggregate interface surface 保持不变。
 - singular inverse 的无候选/多候选状态进入完整 `ValidationResult`，而非导航异常；稳定 failure identity 成为 compatibility surface。
@@ -117,7 +119,7 @@ identity。非泛型共享 storage 虽可保留多个 mutable view，但新增�
 
 ## 🛠️ 下游交付约束
 
-- 每个收窄 redeclared aggregate 必须保留一个且仅一个 mutable physical storage；所有 interface view 必须以引用身份指向该 storage。
+- 每个收窄 redeclared aggregate 必须保留一个且仅一个 mutable physical storage；direct entity view 保持 storage 引用身份，SELECT wrapper view 保持实时观察与 leaf entity identity。
 - covariant view 必须保留相应 EXPRESS aggregate kind 的 bounds、order/index、multiplicity、optional-slot 与 uniqueness observation，且不能提供接受 `T` 的 mutation。
 - 非收窄且当前成功生成的 schema public aggregate surface 必须保持 source/API snapshot compatibility。
 - generated construction、hydration、validation、direct-reference enumeration、projection 和 writing 必须观察同一 storage，不得建立同步副本。

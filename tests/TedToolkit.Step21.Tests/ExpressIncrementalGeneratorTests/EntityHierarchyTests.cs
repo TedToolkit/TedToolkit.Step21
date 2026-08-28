@@ -193,6 +193,141 @@ public sealed class EntityHierarchyTests
         }
         """;
 
+    private const string AGGREGATE_SELECT_REDECLARATION_SCHEMA = """
+        SCHEMA aggregate_select_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY first SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY second SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY other SUBTYPE OF (target);
+        END_ENTITY;
+        TYPE broad_choice = SELECT (first, second);
+        END_TYPE;
+        TYPE equal_choice = SELECT (first, second);
+        END_TYPE;
+        TYPE narrow_choice = SELECT (first, second);
+        END_TYPE;
+        ENTITY root ABSTRACT;
+          array_value : ARRAY [1:2] OF OPTIONAL UNIQUE target;
+          list_value : LIST [1:?] OF UNIQUE broad_choice;
+          bag_value : BAG [0:?] OF target;
+          set_value : SET [1:?] OF broad_choice;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.array_value : ARRAY [1:2] OF OPTIONAL UNIQUE narrow_choice;
+          SELF\root.list_value : LIST [1:?] OF UNIQUE equal_choice;
+          SELF\root.bag_value : BAG [0:?] OF narrow_choice;
+          SELF\root.set_value : SET [1:?] OF equal_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string AGGREGATE_SELECT_REDECLARATION_CONSUMER = """
+        #nullable enable
+        using System.Linq;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.AggregateSelectRedeclaration;
+        internal static class AggregateSelectRedeclarationConsumer
+        {
+            internal static bool Exercise()
+            {
+                var first = new First();
+                var second = new Second();
+                var narrowFirst = NarrowChoice.FromFirst(first);
+                var narrowSecond = NarrowChoice.FromSecond(second);
+                var equalFirst = EqualChoice.FromFirst(first);
+                var equalSecond = EqualChoice.FromSecond(second);
+                var array = new ExpressArray<NarrowChoice>(1, 2, isOptional: true, isUnique: true);
+                array[1] = narrowFirst;
+                var list = new ExpressList<EqualChoice>(1, null, isUnique: true) { equalFirst };
+                var bag = new ExpressBag<NarrowChoice> { narrowFirst, narrowFirst };
+                var set = new ExpressSet<EqualChoice>(1, null) { equalFirst };
+                var child = new Child(array, list, bag, set);
+                IRoot root = child;
+
+                var arrayView = root.ArrayValue;
+                var listView = root.ListValue;
+                var bagView = root.BagValue;
+                var setView = root.SetValue;
+                list.Add(equalSecond);
+                bag.Add(narrowSecond);
+                set.Add(equalSecond);
+
+                return arrayView.LowerIndex == 1
+                    && arrayView.UpperIndex == 2
+                    && arrayView.Count == 2
+                    && arrayView.IsOptional
+                    && arrayView.IsUnique
+                    && arrayView.IsSet(1)
+                    && !arrayView.IsSet(2)
+                    && ReferenceEquals(arrayView[1], first)
+                    && listView.LowerBound == 1
+                    && listView.UpperBound is null
+                    && listView.IsUnique
+                    && listView.Count == 2
+                    && ReferenceEquals(Unwrap(listView[0]), first)
+                    && ReferenceEquals(Unwrap(listView[1]), second)
+                    && bagView.Count == 3
+                    && bagView.Count(item => ReferenceEquals(item, first)) == 2
+                    && bagView.Count(item => ReferenceEquals(item, second)) == 1
+                    && setView.Count == 2
+                    && ReferenceEquals(Unwrap(setView.First()), first)
+                    && ReferenceEquals(Unwrap(setView.Last()), second)
+                    && child.DirectReferences.Count() == 8;
+            }
+
+            private static ITarget Unwrap(BroadChoice value) => value.Match<ITarget>(
+                first => first,
+                second => second);
+        }
+        """;
+
+    private const string INVALID_AGGREGATE_SELECT_REDECLARATION_SCHEMA = """
+        SCHEMA invalid_aggregate_select_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY accepted SUBTYPE OF (target);
+        END_ENTITY;
+        ENTITY unrelated;
+        END_ENTITY;
+        TYPE broad_choice = SELECT (accepted);
+        END_TYPE;
+        TYPE widened_choice = SELECT (accepted, unrelated);
+        END_TYPE;
+        ENTITY root ABSTRACT;
+          items : SET [0:?] OF broad_choice;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.items : SET [0:?] OF widened_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string UNSUPPORTED_AGGREGATE_SELECT_REDECLARATION_SCHEMA = """
+        SCHEMA unsupported_aggregate_select_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY accepted SUBTYPE OF (target);
+        END_ENTITY;
+        TYPE label = STRING;
+        END_TYPE;
+        TYPE mixed_choice = SELECT (accepted, label);
+        END_TYPE;
+        TYPE extensible_choice = EXTENSIBLE SELECT (accepted);
+        END_TYPE;
+        ENTITY root ABSTRACT;
+          mixed_items : SET [0:?] OF target;
+          extensible_items : SET [0:?] OF target;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+          SELF\root.mixed_items : SET [0:?] OF mixed_choice;
+          SELF\root.extensible_items : SET [0:?] OF extensible_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string SELECT_REDECLARATION_SCHEMA = """
         SCHEMA select_redeclaration;
         ENTITY target;
@@ -938,6 +1073,143 @@ public sealed class EntityHierarchyTests
     }
 
     /// <summary>
+    /// Verifies strict and equal-coverage SELECT element redeclarations expose live views for every aggregate kind.
+    /// </summary>
+    [Test]
+    public async Task Should_project_aggregate_select_specializations_through_live_read_only_views()
+    {
+        var result = GeneratorHostTests.Run(
+            AGGREGATE_SELECT_REDECLARATION_CONSUMER,
+            ("schemas/aggregate-select.exp", AGGREGATE_SELECT_REDECLARATION_SCHEMA));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("AggregateSelectRedeclarationConsumer", throwOnError: true)!;
+        await Assert.That((bool)consumer.GetMethod(
+            "Exercise",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, null)!)
+            .IsTrue();
+    }
+
+    /// <summary>Verifies an aggregate SELECT leaf outside the inherited domain is ISO-invalid.</summary>
+    [Test]
+    public async Task Should_reject_aggregate_select_leaf_widening_as_invalid()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/invalid-aggregate-select.exp", INVALID_AGGREGATE_SELECT_REDECLARATION_SCHEMA));
+        var diagnostic = result.Diagnostics.Single();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostic.Id).IsEqualTo("STEP21EXP002");
+            await Assert.That(diagnostic.GetMessage()).Contains("EXPRESS-BIND-INVALID-REDECLARATION");
+            await Assert.That(diagnostic.Location.GetLineSpan().StartLinePosition.Line).IsGreaterThan(0);
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>Verifies non-entity and extensible SELECT element domains remain explicitly unsupported.</summary>
+    [Test]
+    public async Task Should_reject_unbounded_aggregate_select_shapes_as_unsupported()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/unsupported-aggregate-select.exp", UNSUPPORTED_AGGREGATE_SELECT_REDECLARATION_SCHEMA));
+        var diagnostics = result.Diagnostics.ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics.Length).IsEqualTo(2);
+            await Assert.That(diagnostics.All(diagnostic => diagnostic.Id == "STEP21EXP005")).IsTrue();
+            await Assert.That(diagnostics.All(diagnostic => diagnostic.GetMessage().Contains(
+                "outside the supported M-01 through M-06 mapping matrix",
+                StringComparison.Ordinal))).IsTrue();
+            await Assert.That(diagnostics.All(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line > 0))
+                .IsTrue();
+            await Assert.That(result.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>Verifies M-06 values survive schema-bound read, edit, write, and reread.</summary>
+    [Test]
+    public async Task Should_round_trip_aggregate_select_specializations_and_reject_invalid_values_atomically()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/aggregate-select.exp", AGGREGATE_SELECT_REDECLARATION_SCHEMA));
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var descriptor = (SchemaDescriptor)assembly.GetType(
+            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.SchemaDescriptor",
+            throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
+        var rootInterface = assembly.GetType(
+            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.IRoot",
+            throwOnError: true)!;
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateAggregateSelectExchange("(#1,$)", "(#1)", "(#1,#2)", "(#1,#2)")),
+            [descriptor]);
+        var child = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("4"))).Entity;
+        var first = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var second = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+        var list = child.GetType().GetProperty("ListValue")!.GetValue(child)!;
+        var equalChoice = assembly.GetType(
+            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.EqualChoice",
+            throwOnError: true)!;
+        var equalSecond = equalChoice.GetMethod("FromSecond")!.Invoke(null, [second])!;
+        list.GetType().GetMethod("Add")!.Invoke(list, [equalSecond]);
+
+        var output = new StringWriter();
+        structure.Write(output);
+        var reread = ExchangeStructure.Read(new StringReader(output.ToString()), [descriptor]);
+        var rereadChild = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("4"))).Entity;
+        var rereadFirst = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("1"))).Entity;
+        var rereadSecond = reread.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
+        var arrayView = rootInterface.GetProperty("ArrayValue")!.GetValue(rereadChild)!;
+        var listView = (System.Collections.IEnumerable)rootInterface.GetProperty("ListValue")!.GetValue(rereadChild)!;
+        var listItems = listView.Cast<object>().ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(reread.Validate().IsValid).IsTrue();
+            await Assert.That(arrayView.GetType().GetProperty("Count")!.GetValue(arrayView)).IsEqualTo(2);
+            await Assert.That((bool)arrayView.GetType().GetMethod("IsSet")!.Invoke(arrayView, [1])!).IsTrue();
+            await Assert.That((bool)arrayView.GetType().GetMethod("IsSet")!.Invoke(arrayView, [2])!).IsFalse();
+            await Assert.That(arrayView.GetType().GetProperty("Item")!.GetValue(arrayView, [1]))
+                .IsSameReferenceAs(rereadFirst);
+            await Assert.That(listItems.Length).IsEqualTo(2);
+            await Assert.That(ReadSelectedEntity(listItems[0].GetType(), listItems[0], "TryGetFirst"))
+                .IsSameReferenceAs(rereadFirst);
+            await Assert.That(ReadSelectedEntity(listItems[1].GetType(), listItems[1], "TryGetSecond"))
+                .IsSameReferenceAs(rereadSecond);
+            await Assert.That(output.ToString()).Contains("#4=CHILD((#1,$),(#1,#2),(#1,#2),(#1,#2));");
+        }
+
+        Exception? readFailure = null;
+        try
+        {
+            _ = ExchangeStructure.Read(
+                new StringReader(CreateAggregateSelectExchange("(#3,$)", "(#1)", "(#1)", "(#1)")),
+                [descriptor]);
+        }
+        catch (Exception exception) when (exception is ExchangeStructureBindingException
+            or ExchangeStructureReadValidationException)
+        {
+            readFailure = exception;
+        }
+
+        await Assert.That(readFailure).IsNotNull();
+
+        list.GetType().GetMethod("Clear")!.Invoke(list, null);
+        var invalidOutput = new StringWriter();
+        _ = Assert.Throws<ExchangeStructureWriteValidationException>(() => structure.Write(invalidOutput));
+        await Assert.That(invalidOutput.ToString()).IsEmpty();
+    }
+
+    /// <summary>
     /// Verifies closed entity-valued SELECT specializations preserve the selected entity identity.
     /// </summary>
     [Test]
@@ -1246,7 +1518,7 @@ public sealed class EntityHierarchyTests
             await Assert.That(diagnostics.Length).IsEqualTo(8);
             await Assert.That(diagnostics.All(diagnostic => diagnostic.Id == "STEP21EXP005")).IsTrue();
             await Assert.That(diagnostics.All(diagnostic => diagnostic.GetMessage().Contains(
-                "outside the supported M-01 through M-05 mapping matrix",
+                "outside the supported M-01 through M-06 mapping matrix",
                 StringComparison.Ordinal))).IsTrue();
             await Assert.That(diagnostics.All(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition is
             { Line: > 0, Character: > 0, })).IsTrue();
@@ -1552,6 +1824,17 @@ public sealed class EntityHierarchyTests
         return CreateExchange(
             "SPECIALIZATION_ROUND_TRIP",
             $"#1=TARGET('broad');\r\n#2=SPECIALIZED('narrow');\r\n#3=CHILD({string.Join(",", parameters)});");
+    }
+
+    private static string CreateAggregateSelectExchange(
+        string array,
+        string list,
+        string bag,
+        string set)
+    {
+        return CreateExchange(
+            "AGGREGATE_SELECT_REDECLARATION",
+            $"#1=FIRST();\r\n#2=SECOND();\r\n#3=OTHER();\r\n#4=CHILD({array},{list},{bag},{set});");
     }
 
     private static Exception CaptureSpecializationReadFailure(

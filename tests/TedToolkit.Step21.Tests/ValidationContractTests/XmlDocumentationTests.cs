@@ -70,7 +70,10 @@ internal sealed class XmlDocumentationTests
             {
                 var parameters = string.Join(",", method.GetParameters().Select(parameter => FormatXmlType(parameter.ParameterType)));
                 var suffix = parameters.Length == 0 ? string.Empty : $"({parameters})";
-                yield return $"M:{type.FullName}.{method.Name}{suffix}";
+                var genericSuffix = method.IsGenericMethodDefinition
+                    ? $"``{method.GetGenericArguments().Length}"
+                    : string.Empty;
+                yield return $"M:{type.FullName}.{method.Name}{genericSuffix}{suffix}";
             }
         }
     }
@@ -81,7 +84,9 @@ internal sealed class XmlDocumentationTests
     private static string FormatXmlType(Type type)
     {
         if (type.IsGenericParameter)
-            return $"`{type.GenericParameterPosition}";
+            return type.DeclaringMethod is null
+                ? $"`{type.GenericParameterPosition}"
+                : $"``{type.GenericParameterPosition}";
         if (type.IsByRef)
             return $"{FormatXmlType(type.GetElementType()!)}@";
         if (type.IsArray)
