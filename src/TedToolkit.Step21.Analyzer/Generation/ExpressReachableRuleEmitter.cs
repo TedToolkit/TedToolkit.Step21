@@ -2967,25 +2967,23 @@ internal static class ExpressReachableRuleEmitter
             }
 
             var alternatives = plan.Resolver.GetSelectAlternatives(select);
-            if (alternatives.Count != 1)
+            var sourceBranches = alternatives.Select((alternative, index) =>
             {
-                throw new InvalidOperationException(
-                    "Aggregate union SELECT element must have exactly one alternative.");
-            }
-
-            var selected = "__expressAggregateUnionSelected"
-                + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture);
-            return $"({arguments[0]}).Match({selected} => "
-                + ResolveModelFunction(
+                var selected = "__expressAggregateUnionSelected"
+                    + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture)
+                    + "_"
+                    + index.ToString(CultureInfo.InvariantCulture);
+                return selected + " => " + ResolveModelFunction(
                     plan,
                     operation,
                     expression,
                     [selected,],
                     populationExpression,
-                    aggregateUnionSourceType: new ExpressBoundNamedType(alternatives[0], select.Span),
+                    aggregateUnionSourceType: new ExpressBoundNamedType(alternative, select.Span),
                     aggregateUnionTargetType: target,
-                    aggregateUnionDepth: aggregateUnionDepth + 1)
-                + ")";
+                    aggregateUnionDepth: aggregateUnionDepth + 1);
+            });
+            return $"({arguments[0]}).Match({string.Join(", ", sourceBranches)})";
         }
 
         if (operation == "AGGREGATE_UNION")

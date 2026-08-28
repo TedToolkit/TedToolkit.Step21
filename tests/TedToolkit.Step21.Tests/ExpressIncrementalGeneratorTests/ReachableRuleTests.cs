@@ -5560,11 +5560,16 @@ public sealed class ReachableRuleTests
                              selections : SET OF item_choice) : SET OF item_choice;
           RETURN(selections + values);
         END_FUNCTION;
+        FUNCTION unwrap_items(values : SET OF root_item;
+                              selections : SET OF item_choice) : SET OF root_item;
+          RETURN(values + selections);
+        END_FUNCTION;
         ENTITY sample;
           values : SET [1:?] OF root_item;
           selections : SET [1:?] OF item_choice;
         WHERE
           reachable : SIZEOF(merge_items(values, selections)) > 0;
+          reverse_reachable : SIZEOF(unwrap_items(values, selections)) > 0;
         END_ENTITY;
         END_SCHEMA;
         """;
