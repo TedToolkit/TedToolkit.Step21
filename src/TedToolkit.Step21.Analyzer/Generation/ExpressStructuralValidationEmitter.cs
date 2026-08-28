@@ -902,7 +902,14 @@ internal static class ExpressStructuralValidationEmitter
                 continue;
             }
 
-            AddAttributeValidation(method, context, attributes[index], index, resolver, ref variable);
+            AddAttributeValidation(
+                method,
+                context,
+                attributes[index],
+                index,
+                resolver,
+                ref variable,
+                useInterfaceContract: true);
             AddAttributeTypeWhereValidation(
                 method,
                 context,
@@ -911,7 +918,8 @@ internal static class ExpressStructuralValidationEmitter
                 resolver,
                 rulePlan,
                 allocateTemporaryName,
-                ref variable);
+                ref variable,
+                useInterfaceContract: true);
         }
 
         var visited = new HashSet<ExpressBoundSymbol>();
@@ -933,7 +941,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
         Func<string, string> allocateTemporaryName,
-        ref int variable)
+        ref int variable,
+        bool useInterfaceContract = false)
     {
         if (!ContainsDefinedTypeWhere(
                 attribute.Type,
@@ -954,7 +963,8 @@ internal static class ExpressStructuralValidationEmitter
                 + storageInterface;
         }
 
-        var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+        var valueExpression = !useInterfaceContract
+            && StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
             && entity.Entity.DirectSupertypes.Count <= 1
             ? $"value.{attribute.Name}"
             : $"(({storageInterface})value).{attribute.Name}";
@@ -1384,7 +1394,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressEntityAttributeProjection attribute,
         int attributeIndex,
         ExpressGeneratedTypeResolver resolver,
-        ref int variable)
+        ref int variable,
+        bool useInterfaceContract = false)
     {
         var prefix = ConstraintPrefix(entity, attribute);
         var valueName = $"attribute{Invariant(attributeIndex)}";
@@ -1397,7 +1408,8 @@ internal static class ExpressStructuralValidationEmitter
                 + storageInterface;
         }
 
-        var valueExpression = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
+        var valueExpression = !useInterfaceContract
+            && StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
             && entity.Entity.DirectSupertypes.Count <= 1
             ? $"value.{attribute.Name}"
             : $"(({storageInterface})value).{attribute.Name}";
