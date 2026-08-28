@@ -457,7 +457,7 @@ internal static class ExpressReachableRuleEmitter
         }
 
         var method = CreateMethod(
-            FunctionMethodName(declaration.Symbol),
+            FunctionMethodName(plan, declaration.Symbol),
             returnType);
         var temporaryOrdinal = 0;
         Func<string, string> allocateTemporaryName = prefix => prefix
@@ -554,9 +554,15 @@ internal static class ExpressReachableRuleEmitter
             string,
             (string StorageCode, string Code, ExpressBoundType Type)>(
             StringComparer.OrdinalIgnoreCase);
+        var fallsThrough = true;
         foreach (var statement in declarationRule.ChildRules("stmt"))
         {
-            if (!EmitFunctionStatement(
+            if (!fallsThrough)
+            {
+                break;
+            }
+
+            fallsThrough = EmitFunctionStatement(
                 plan,
                 statement,
                 declaration.DeclaredType!,
@@ -566,9 +572,23 @@ internal static class ExpressReachableRuleEmitter
                 allocateTemporaryName,
                 sizeAliases: sizeAliases,
                 determinateLexicals: determinateLexicals,
-                scalarNarrowings: scalarNarrowings))
+                scalarNarrowings: scalarNarrowings);
+        }
+
+        if (fallsThrough)
+        {
+            if (canReturnIndeterminate)
             {
-                break;
+                var indeterminateResult = declaration.DeclaredType is ExpressBoundScalarType
+                { Kind: ExpressScalarKind.Logical, }
+                    ? "global::TedToolkit.Step21.LogicalValue.Unknown"
+                    : "null";
+                method.AddStatement(new CustomExpression(indeterminateResult).Return);
+            }
+            else
+            {
+                method.AddStatement(new CustomExpression(
+                    "throw new global::System.InvalidOperationException(\"EXPRESS function completed without RETURN.\")"));
             }
         }
 
@@ -1055,7 +1075,27 @@ internal static class ExpressReachableRuleEmitter
 
         if (operation.Role == "repeatStmt")
         {
-            var increment = operation.RequiredChild("repeatControl").RequiredChild("incrementControl");
+            var repeatControl = operation.RequiredChild("repeatControl");
+            var increment = repeatControl.ChildRules("incrementControl").SingleOrDefault();
+            if (increment is null)
+            {
+                return EmitConditionalRepeat(
+                    plan,
+                    operation,
+                    functionResultType,
+                    canReturnIndeterminate,
+                    owner,
+                    lexicalNames,
+                    allocateTemporaryName,
+                    safeIndices,
+                    sizeAliases,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings);
+            }
+
             var variable = increment.RequiredChild("variableId");
             var variableName = variable.Identifier!;
             var generatedName = "__repeat_"
@@ -2209,6 +2249,204 @@ internal static class ExpressReachableRuleEmitter
         return thenFallsThrough || elseFallsThrough;
     }
 
+    private static bool EmitConditionalRepeat(
+        ExpressReachableRulePlan plan,
+        ExpressSemanticRule operation,
+        ExpressBoundType functionResultType,
+        bool canReturnIndeterminate,
+        IStatementOwner owner,
+        Dictionary<string, (string Code, ExpressBoundType Type)> lexicalNames,
+        Func<string, string> allocateTemporaryName,
+        List<KeyValuePair<ExpressBoundName, ExpressBoundName>>? safeIndices,
+        IDictionary<ExpressBoundName, ExpressBoundName>? sizeAliases,
+        Dictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        List<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings,
+        ISet<ExpressBoundName>? determinateLexicals,
+        List<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths,
+        Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>? scalarNarrowings)
+    {
+        var control = operation.RequiredChild("repeatControl");
+        var whileControl = control.ChildRules("whileControl").SingleOrDefault();
+        var untilControl = control.ChildRules("untilControl").SingleOrDefault();
+        if (whileControl is null && untilControl is null)
+        {
+            throw new InvalidOperationException("A conditional EXPRESS REPEAT requires WHILE or UNTIL control.");
+        }
+
+        var incomingSafeIndices = safeIndices?.ToList() ?? [];
+        var incomingAliases = sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
+        var incomingSelectNarrowings = selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
+        var incomingPathNarrowings = pathNarrowings?.ToList() ?? [];
+        var incomingDeterminateLexicals = determinateLexicals?.ToArray() ?? Array.Empty<ExpressBoundName>();
+        var incomingSafeIndexPaths = safeIndexPaths?.ToList() ?? [];
+        var incomingScalarNarrowings = scalarNarrowings?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase)
+            ?? new(StringComparer.OrdinalIgnoreCase);
+        var nestedSafeIndices = incomingSafeIndices.ToList();
+        var nestedAliases = incomingAliases.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var nestedSelectNarrowings = incomingSelectNarrowings.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var nestedPathNarrowings = incomingPathNarrowings.ToList();
+        var nestedDeterminateLexicals = new HashSet<ExpressBoundName>(incomingDeterminateLexicals);
+        var nestedSafeIndexPaths = incomingSafeIndexPaths.ToList();
+        var nestedScalarNarrowings = incomingScalarNarrowings.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        var nestedNames = lexicalNames.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+        string? whileCode = null;
+        if (whileControl is not null)
+        {
+            var condition = plan.GetExpression(
+                whileControl.RequiredChild("logicalExpression").RequiredChild("expression"));
+            var emitted = ExpressExpressionEmitter.Emit(
+                condition,
+                CreateContext(
+                    plan,
+                    selfExpression: null,
+                    "entities",
+                    lexicalNames,
+                    safeIndices,
+                    allocateTemporaryName,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings));
+            whileCode = $"({ExpressExpressionEmitter.AsLogical(condition, emitted.Code)}) "
+                + "== global::TedToolkit.Step21.LogicalValue.True";
+        }
+
+        var bodyOwner = new IfStatement(new CustomExpression("true"));
+        var bodyFallsThrough = true;
+        foreach (var nested in operation.ChildRules("stmt"))
+        {
+            if (!bodyFallsThrough)
+            {
+                break;
+            }
+
+            bodyFallsThrough = EmitFunctionStatement(
+                plan,
+                nested,
+                functionResultType,
+                canReturnIndeterminate,
+                bodyOwner,
+                nestedNames,
+                allocateTemporaryName,
+                nestedSafeIndices,
+                nestedAliases,
+                nestedSelectNarrowings,
+                nestedPathNarrowings,
+                nestedDeterminateLexicals,
+                nestedSafeIndexPaths,
+                nestedScalarNarrowings);
+        }
+
+        string? untilCode = null;
+        if (bodyFallsThrough && untilControl is not null)
+        {
+            var condition = plan.GetExpression(
+                untilControl.RequiredChild("logicalExpression").RequiredChild("expression"));
+            var emitted = ExpressExpressionEmitter.Emit(
+                condition,
+                CreateContext(
+                    plan,
+                    selfExpression: null,
+                    "entities",
+                    nestedNames,
+                    nestedSafeIndices,
+                    allocateTemporaryName,
+                    nestedSelectNarrowings,
+                    nestedPathNarrowings,
+                    nestedDeterminateLexicals,
+                    nestedSafeIndexPaths,
+                    nestedScalarNarrowings));
+            untilCode = $"({ExpressExpressionEmitter.AsLogical(condition, emitted.Code)}) "
+                + "== global::TedToolkit.Step21.LogicalValue.True";
+        }
+
+        if (bodyFallsThrough)
+        {
+            IntersectDictionaryFacts(
+                scalarNarrowings,
+                static (left, right) => string.Equals(left.StorageCode, right.StorageCode, StringComparison.Ordinal)
+                    && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                    && ReferenceEquals(left.Type, right.Type),
+                incomingScalarNarrowings,
+                nestedScalarNarrowings);
+            IntersectCollectionFacts(
+                safeIndices,
+                static (left, right) => ReferenceEquals(left.Key, right.Key)
+                    && ReferenceEquals(left.Value, right.Value),
+                incomingSafeIndices,
+                nestedSafeIndices);
+            IntersectDictionaryFacts(
+                sizeAliases,
+                static (left, right) => ReferenceEquals(left, right),
+                incomingAliases,
+                nestedAliases);
+            JoinSelectFacts(
+                selectNarrowings,
+                static (left, right) => ReferenceEquals(left, right),
+                key => key.Type is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
+                incomingSelectNarrowings,
+                nestedSelectNarrowings);
+            JoinSelectFacts(
+                pathNarrowings,
+                SameDirectReferencePath,
+                key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
+                incomingPathNarrowings,
+                nestedPathNarrowings);
+            IntersectCollectionFacts(
+                determinateLexicals,
+                static (left, right) => ReferenceEquals(left, right),
+                incomingDeterminateLexicals,
+                nestedDeterminateLexicals);
+            IntersectCollectionFacts(
+                safeIndexPaths,
+                static (left, right) => ReferenceEquals(left.Key, right.Key)
+                    && ReferenceEquals(left.Value, right.Value),
+                incomingSafeIndexPaths,
+                nestedSafeIndexPaths);
+        }
+
+        owner.AddStatement(new Custom((ref SourceBuilder source) =>
+        {
+            source.Append($"while ({whileCode ?? "true"})");
+            source.BeginBlock();
+            foreach (var bodyStatement in bodyOwner.Statements)
+            {
+                bodyStatement.ToCode(ref source);
+                source.AppendLine();
+            }
+
+            if (untilCode is not null)
+            {
+                source.Append($"if ({untilCode})");
+                source.BeginBlock();
+                source.AppendLine("break;");
+                source.EndBlock();
+            }
+
+            source.EndBlock();
+        }));
+        return whileControl is not null || bodyFallsThrough;
+    }
+
     private static Method CreateDerivedMethod(
         ExpressReachableRulePlan plan,
         ExpressBoundAttribute attribute,
@@ -3118,7 +3356,7 @@ internal static class ExpressReachableRuleEmitter
         var delegateTypes = parameterTypes.Append(returnType);
         return $"((global::System.Func<{string.Join(", ", delegateTypes)}>)("
             + $"({string.Join(", ", parameters)}) => "
-            + $"{FunctionMethodName(symbol)}({string.Join(", ", invocationArguments)})))";
+            + $"{FunctionMethodName(plan, symbol)}({string.Join(", ", invocationArguments)})))";
     }
 
     private static string ResolveApplication(
@@ -3136,7 +3374,7 @@ internal static class ExpressReachableRuleEmitter
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
             && ExpressTypeAnalysis.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
         {
-            return $"{FunctionMethodName(symbol)}({string.Join(", ", arguments.Append(
+            return $"{FunctionMethodName(plan, symbol)}({string.Join(", ", arguments.Append(
                 populationExpression + ValidationContextArgumentSuffix(plan)))})";
         }
 
@@ -4745,9 +4983,18 @@ internal static class ExpressReachableRuleEmitter
         return $"__ExpressConstant_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
     }
 
-    private static string FunctionMethodName(ExpressBoundSymbol symbol)
+    private static string FunctionMethodName(
+        ExpressReachableRulePlan plan,
+        ExpressBoundSymbol symbol)
     {
-        return $"__ExpressFunction_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
+        var name = $"__ExpressFunction_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
+        return plan.Schema.NestedDeclarations.Any(declaration => ReferenceEquals(declaration.Symbol, symbol))
+            ? name
+                + "_"
+                + symbol.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                + "_"
+                + symbol.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+            : name;
     }
 
     private static string DerivedMethodName(

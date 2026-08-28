@@ -1169,9 +1169,10 @@ internal sealed class ExpressReachableRulePlan
                     })
                 && operations.Where(operation => operation.Role == "repeatStmt")
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control
-                        && control.ChildRules("incrementControl").Count() == 1
-                        && !control.ChildRules("whileControl").Any()
-                        && !control.ChildRules("untilControl").Any())
+                        && control.ChildRules("incrementControl").Count() <= 1
+                        && control.ChildRules("whileControl").Count() <= 1
+                        && control.ChildRules("untilControl").Count() <= 1
+                        && control.ChildRules().Any())
                 && operations.Where(operation => operation.Role == "caseStmt")
                     .All(caseStatement => caseStatement.ChildRules("caseAction")
                             .All(action => action.ChildRules("caseLabel").Any()
@@ -1179,10 +1180,12 @@ internal sealed class ExpressReachableRulePlan
                         && caseStatement.ChildRules("stmt").Count() <= 1)
                 && operations.Where(operation => operation.Role == "returnStmt")
                     .All(returnStatement => returnStatement.ChildRules("expression").Count() == 1)
-                && AlwaysReturns(statements.Last())
                 && !declarationRule.RequiredChild("algorithmHead")
                     .ChildRules()
-                    .Any(child => child.Role is "constantDecl" or "declaration"))
+                    .Any(child => child.Role == "constantDecl"
+                        || (child.Role == "declaration"
+                            && child.ChildRules().Single().Role != "functionDecl"))
+                && !HasLexicalCapture(declaration, declarationRule))
             {
                 return;
             }
@@ -1193,40 +1196,17 @@ internal sealed class ExpressReachableRulePlan
                 $"Reachable EXPRESS function '{declaration.Name}' uses an algorithm statement shape that has no static generator."));
         }
 
-        private bool AlwaysReturns(ExpressSemanticRule statement)
+        private bool HasLexicalCapture(
+            ExpressBoundDeclaration declaration,
+            ExpressSemanticRule declarationRule)
         {
-            var operation = statement.Role == "stmt"
-                ? statement.ChildRules().Single()
-                : statement;
-            if (operation.Role == "returnStmt")
-            {
-                return operation.ChildRules("expression").Count() == 1;
-            }
-
-            if (operation.Role == "compoundStmt")
-            {
-                var statements = operation.ChildRules("stmt").ToArray();
-                return statements.Length > 0 && AlwaysReturns(statements.Last());
-            }
-
-            if (operation.Role == "caseStmt")
-            {
-                var otherwise = operation.ChildRules("stmt").SingleOrDefault();
-                return ((otherwise is not null && AlwaysReturns(otherwise))
-                        || (otherwise is null
-                            && ExpressReachableRulePlan.IsExhaustiveCase(_schema, _resolver, operation)))
-                    && operation.ChildRules("caseAction").All(action =>
-                        AlwaysReturns(action.RequiredChild("stmt")));
-            }
-
-            if (operation.Role != "ifStmt" || operation.ElseStatements.Count == 0)
-            {
-                return false;
-            }
-
-            return operation.ThenStatements.Count > 0
-                && AlwaysReturns(operation.ThenStatements[operation.ThenStatements.Count - 1])
-                && AlwaysReturns(operation.ElseStatements[operation.ElseStatements.Count - 1]);
+            return _schema.NestedDeclarations.Contains(declaration)
+                && _schema.NameReferences.Any(reference =>
+                    Contains(declarationRule.Span, reference.Span)
+                    && reference.Target.Kind is ExpressBoundNameKind.Parameter
+                        or ExpressBoundNameKind.Variable
+                        or ExpressBoundNameKind.RepeatVariable
+                    && !Contains(declarationRule.Span, reference.Target.Span));
         }
 
         private void ValidateDependencyResult(

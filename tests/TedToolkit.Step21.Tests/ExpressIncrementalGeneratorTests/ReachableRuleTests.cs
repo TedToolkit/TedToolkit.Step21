@@ -4362,6 +4362,80 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string ALGORITHM_CONTROL_SCHEMA = """
+        SCHEMA algorithm_control_model;
+        FUNCTION sum_while(input : INTEGER) : INTEGER;
+          LOCAL
+            remaining : INTEGER := input;
+            result : INTEGER := 0;
+          END_LOCAL;
+          REPEAT WHILE remaining > 0;
+            result := result + remaining;
+            remaining := remaining - 1;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION classify(input : INTEGER) : BOOLEAN;
+          IF input < 0 THEN
+            RETURN(FALSE);
+          END_IF;
+          CASE input OF
+            0 : RETURN(TRUE);
+            1 : RETURN(TRUE);
+          END_CASE;
+        END_FUNCTION;
+        FUNCTION outer_check(values : LIST [1:?] OF INTEGER) : BOOLEAN;
+          FUNCTION all_positive(items : LIST [1:?] OF INTEGER) : BOOLEAN;
+            REPEAT i := 1 TO SIZEOF(items);
+              IF items[i] <= 0 THEN
+                RETURN(FALSE);
+              END_IF;
+            END_REPEAT;
+            RETURN(TRUE);
+          END_FUNCTION;
+          RETURN(all_positive(values));
+        END_FUNCTION;
+        ENTITY sample;
+          values : LIST [1:?] OF INTEGER;
+        WHERE
+          while_control : sum_while(3) = 6;
+          guarded_case : classify(1);
+          nested_function : outer_check(values);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string ALGORITHM_CONTROL_CONSUMER = """
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.AlgorithmControlModel;
+
+        internal static class AlgorithmControlConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["algorithm-control"], "3;1"),
+                        new FileName(
+                            "algorithm-control.step",
+                            "2026-08-28T00:00:00+08:00",
+                            [],
+                            [],
+                            "tests",
+                            "tests",
+                            ""),
+                        new FileSchema(["algorithm_control_model"])),
+                    [TedToolkit.Step21.Generated.AlgorithmControlModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("algorithm_control_model"));
+                structure.DataSections.Add(section);
+                _ = structure.Add(section, new Sample(
+                    new ExpressList<BigInteger>(1) { BigInteger.One, new BigInteger(2) }));
+                return structure.Validate();
+            }
+        }
+        """;
+
     private const string SELF_RECURSIVE_FUNCTION_SCHEMA = """
         SCHEMA self_recursive_model;
         FUNCTION countdown(input_value : INTEGER) : BOOLEAN;
@@ -9073,6 +9147,28 @@ public sealed class ReachableRuleTests
             await Assert.That(diagnostics[0].Location.GetLineSpan().Path)
                 .IsEqualTo("schemas/repeated-cyclic-derived.exp");
         }
+    }
+
+    /// <summary>
+    /// Verifies ISO conditional REPEAT control, guarded fallthrough, and closure-free nested functions emit statically.
+    /// </summary>
+    [Test]
+    public async Task Should_execute_supported_iso_algorithm_control_shapes()
+    {
+        var result = GeneratorHostTests.Run(
+            ALGORITHM_CONTROL_CONSUMER,
+            ("schemas/algorithm-control.exp", ALGORITHM_CONTROL_SCHEMA));
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType("AlgorithmControlConsumer", throwOnError: true)!
+            .GetMethod("Validate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
     }
 
     /// <summary>
