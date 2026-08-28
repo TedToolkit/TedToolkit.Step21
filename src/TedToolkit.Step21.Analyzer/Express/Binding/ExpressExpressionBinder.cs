@@ -397,6 +397,27 @@ internal sealed class ExpressExpressionBinder
         ExpressExpressionType? expectedType,
         bool allowEntitySetNarrowing = false)
     {
+        if (expression.Kind == ExpressExpressionKind.Application
+            && string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase)
+            && expression.Children.Count == 2
+            && expression.Children.Any(child => child.Kind == ExpressExpressionKind.Binary
+                && child.Operation == "||"
+                && child.Children.All(component => component.Type.Kind == ExpressExpressionTypeKind.Entity))
+            && expectedType?.DeclaredType is ExpressBoundNamedType
+            {
+                Declaration.Kind: ExpressDeclarationKind.Entity,
+            })
+        {
+            return new(
+                expression.Kind,
+                expectedType.WithIndeterminate(expression.Type.CanBeIndeterminate),
+                expression.SourceText,
+                expression.Operation,
+                expression.Reference,
+                expression.Children.Select(child => ApplyExpectedType(child, expectedType)).ToArray(),
+                expression.Span);
+        }
+
         if (expression.Kind == ExpressExpressionKind.Binary
             && expression.Operation == "||"
             && expression.Children.All(child => child.Type.Kind == ExpressExpressionTypeKind.Entity)
