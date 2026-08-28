@@ -3,11 +3,11 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: draft -->
+<!-- change-status: approved -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
-<!-- approval-source: none -->
+<!-- approval-source: user-explicit-approve-and-continue-2026-08-28 -->
 <!-- candidate-binding: none -->
 
 <!-- section: goal-rationale -->
