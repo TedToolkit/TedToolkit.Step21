@@ -1113,7 +1113,7 @@ internal static class ExpressReachableRuleEmitter
             var nestedNames = lexicalNames.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
             if (repeatName?.Type is not null)
             {
-                nestedNames.Add(variableName, (generatedName, repeatName.Type));
+                nestedNames[variableName] = (generatedName, repeatName.Type);
             }
 
             var lower = plan.GetExpression(increment.RequiredChild("bound1").RequiredChild("numericExpression"));

@@ -4429,12 +4429,24 @@ public sealed class ReachableRuleTests
           END_FUNCTION;
           RETURN(all_positive(values));
         END_FUNCTION;
+        FUNCTION repeat_shadow(values : LIST [1:?] OF INTEGER) : INTEGER;
+          LOCAL
+            i : INTEGER := 99;
+          END_LOCAL;
+          REPEAT i := 1 TO SIZEOF(values);
+            IF i < 0 THEN
+              RETURN(0);
+            END_IF;
+          END_REPEAT;
+          RETURN(i);
+        END_FUNCTION;
         ENTITY sample;
           values : LIST [1:?] OF INTEGER;
         WHERE
           while_control : sum_while(3) = 6;
           guarded_case : classify(1);
           nested_function : outer_check(values);
+          repeat_scope : repeat_shadow(values) = 99;
         END_ENTITY;
         END_SCHEMA;
         """;
