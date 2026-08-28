@@ -28,6 +28,7 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="genericTypeLabels">Identifies type labels closed by the enclosing generated generic method.</param>
     /// <param name="allocateTemporaryName">Allocates a deterministic private C# name within the generated method.</param>
     /// <param name="isKnownDeterminate">Identifies expressions made determinate by the enclosing control-flow branch.</param>
+    /// <param name="resolveNarrowedScalarReference">Projects a SELECT carrier to a branch-proven scalar value.</param>
     internal ExpressExpressionEmissionContext(
         Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference,
         string? selfExpression = null,
@@ -40,7 +41,9 @@ internal sealed class ExpressExpressionEmissionContext
         Func<string, (string Code, ExpressBoundType Type)?>? resolveLexicalBound = null,
         IReadOnlyCollection<string>? genericTypeLabels = null,
         Func<string, string>? allocateTemporaryName = null,
-        Func<ExpressBoundExpression, bool>? isKnownDeterminate = null)
+        Func<ExpressBoundExpression, bool>? isKnownDeterminate = null,
+        Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string>?
+            resolveNarrowedScalarReference = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
@@ -52,6 +55,7 @@ internal sealed class ExpressExpressionEmissionContext
         ResolveLexicalBound = resolveLexicalBound;
         GenericTypeLabels = genericTypeLabels ?? [];
         IsKnownDeterminate = isKnownDeterminate;
+        ResolveNarrowedScalarReference = resolveNarrowedScalarReference;
         if (allocateTemporaryName is null)
         {
             var temporaryOrdinal = 0;
@@ -120,6 +124,13 @@ internal sealed class ExpressExpressionEmissionContext
     internal Func<ExpressBoundExpression, bool>? IsKnownDeterminate { get; }
 
     /// <summary>
+    /// Gets the resolver for a SELECT carrier narrowed to a scalar branch.
+    /// </summary>
+    internal Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string>?
+        ResolveNarrowedScalarReference
+    { get; }
+
+    /// <summary>
     /// Creates an equivalent context with a scoped declaration-reference resolver.
     /// </summary>
     /// <param name="resolveReference">The scoped resolver.</param>
@@ -138,6 +149,7 @@ internal sealed class ExpressExpressionEmissionContext
             ResolveLexicalBound,
             GenericTypeLabels,
             AllocateTemporaryName,
-            IsKnownDeterminate);
+            IsKnownDeterminate,
+            ResolveNarrowedScalarReference);
     }
 }

@@ -5866,6 +5866,41 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string QUERY_INTERFACE_AGGREGATE_SCHEMA = """
+        SCHEMA query_interface_aggregate_model;
+        ENTITY child;
+          enabled : BOOLEAN;
+        END_ENTITY;
+        ENTITY parent;
+          children : SET [1:?] OF child;
+        WHERE
+          has_enabled_child : SIZEOF(QUERY(candidate <* children | candidate.enabled)) > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string TYPEOF_GUARDED_NUMERIC_SELECT_SCHEMA = """
+        SCHEMA typeof_guarded_numeric_select_model;
+        TYPE length_measure = REAL;
+        END_TYPE;
+        TYPE count_measure = INTEGER;
+        END_TYPE;
+        TYPE measure_value = SELECT (length_measure, count_measure);
+        END_TYPE;
+        ENTITY measure_holder;
+          value_component : measure_value;
+        WHERE
+          non_negative : ('NUMBER' IN TYPEOF(value_component)) AND (value_component >= 0.0);
+        END_ENTITY;
+        ENTITY measure_container;
+          measurement : measure_holder;
+        WHERE
+          non_negative : ('NUMBER' IN TYPEOF(measurement.value_component)) AND
+            (measurement.value_component >= 0.0);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string QUERY_RESULT_NARROWING_SCHEMA = """
         SCHEMA query_result_narrowing_model;
         ENTITY representation_item;
@@ -6462,6 +6497,34 @@ public sealed class ReachableRuleTests
     {
         var result = GeneratorHostTests.Run(
             ("schemas/typeof-guarded-redeclared-attribute.exp", TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Verifies QUERY accepts the covariant aggregate interface exposed by an entity contract.</summary>
+    [Test]
+    public async Task Should_query_an_entity_interface_aggregate()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/query-interface-aggregate.exp", QUERY_INTERFACE_AGGREGATE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Verifies a TYPEOF proof promotes numeric SELECT alternatives to one NUMBER representation.</summary>
+    [Test]
+    public async Task Should_compare_a_numeric_select_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-numeric-select.exp", TYPEOF_GUARDED_NUMERIC_SELECT_SCHEMA));
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();

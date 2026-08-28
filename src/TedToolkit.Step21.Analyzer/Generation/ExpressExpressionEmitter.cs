@@ -387,6 +387,18 @@ internal static class ExpressExpressionEmitter
             }
 
             var source = context.ResolveReference(expression.Reference, null, null, null);
+            if ((expression.Reference.Type ?? expression.Reference.Attribute?.Type) is { } scalarCarrier
+                && scalarCarrier is not ExpressBoundScalarType
+                && CreateScalarType(expression.Type.Kind, scalarCarrier) is { } narrowedScalar
+                && context.ResolveNarrowedScalarReference is not null)
+            {
+                return context.ResolveNarrowedScalarReference(
+                    expression.Reference,
+                    scalarCarrier,
+                    source,
+                    narrowedScalar);
+            }
+
             return UnwrapDefined(expression.Type, source, context);
         }
 
@@ -488,6 +500,18 @@ internal static class ExpressExpressionEmitter
                     narrowed.Declaration);
             }
 
+            if ((reference.Type ?? reference.Attribute?.Type) is { } scalarCarrier
+                && scalarCarrier is not ExpressBoundScalarType
+                && CreateScalarType(expression.Type.Kind, scalarCarrier) is { } narrowedScalar
+                && context.ResolveNarrowedScalarReference is not null)
+            {
+                return context.ResolveNarrowedScalarReference(
+                    reference,
+                    scalarCarrier,
+                    result,
+                    narrowedScalar);
+            }
+
             return UnwrapDefined(expression.Type, result, context);
         }
 
@@ -502,6 +526,26 @@ internal static class ExpressExpressionEmitter
         }
 
         return Result(source);
+    }
+
+    private static ExpressBoundScalarType? CreateScalarType(
+        ExpressExpressionTypeKind kind,
+        ExpressBoundType carrier)
+    {
+        var scalarKind = kind switch
+        {
+            ExpressExpressionTypeKind.Binary => ExpressScalarKind.Binary,
+            ExpressExpressionTypeKind.Boolean => ExpressScalarKind.Boolean,
+            ExpressExpressionTypeKind.Integer => ExpressScalarKind.Integer,
+            ExpressExpressionTypeKind.Logical => ExpressScalarKind.Logical,
+            ExpressExpressionTypeKind.Number => ExpressScalarKind.Number,
+            ExpressExpressionTypeKind.Real => ExpressScalarKind.Real,
+            ExpressExpressionTypeKind.String => ExpressScalarKind.String,
+            _ => (ExpressScalarKind?)null,
+        };
+        return scalarKind is null
+            ? null
+            : new ExpressBoundScalarType(scalarKind.Value, constraintText: null, isFixed: false, carrier.Span);
     }
 
     private static string EmitGroup(
@@ -1039,7 +1083,7 @@ internal static class ExpressExpressionEmitter
         string condition)
     {
         var aggregate = (ExpressBoundAggregateType)sourceExpression.Type.DeclaredType!;
-        var sourceType = TypeName(sourceExpression.Type.WithIndeterminate(false));
+        var sourceType = AggregateInterfaceTypeName(aggregate);
         var resultType = TypeName(expression.Type.WithIndeterminate(false));
         var elementType = BoundTypeName(aggregate.ElementType);
         var suffix = expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
@@ -2002,6 +2046,20 @@ internal static class ExpressExpressionEmitter
             ExpressAggregateKind.Bag => "ExpressBag",
             ExpressAggregateKind.List or ExpressAggregateKind.Aggregate => "ExpressList",
             ExpressAggregateKind.Set => "ExpressSet",
+            _ => throw new InvalidOperationException(
+                $"Unknown aggregate kind '{aggregate.Kind.ToString()}'."),
+        };
+        return $"global::TedToolkit.Step21.{definition}<{BoundTypeName(aggregate.ElementType)}>";
+    }
+
+    private static string AggregateInterfaceTypeName(ExpressBoundAggregateType aggregate)
+    {
+        var definition = aggregate.Kind switch
+        {
+            ExpressAggregateKind.Array => "IExpressArray",
+            ExpressAggregateKind.Bag => "IExpressBag",
+            ExpressAggregateKind.List or ExpressAggregateKind.Aggregate => "IExpressList",
+            ExpressAggregateKind.Set => "IExpressSet",
             _ => throw new InvalidOperationException(
                 $"Unknown aggregate kind '{aggregate.Kind.ToString()}'."),
         };

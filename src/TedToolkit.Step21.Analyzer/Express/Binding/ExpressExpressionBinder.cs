@@ -49,6 +49,9 @@ internal sealed class ExpressExpressionBinder
     private readonly Dictionary<string, IReadOnlyList<ExpressBoundSymbol>> _guardedPathAlternatives =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly Dictionary<string, ExpressExpressionType> _guardedPathScalarTypes =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private ExpressExpressionType? _selfType;
 
     private ExpressExpressionBinder(
@@ -979,35 +982,59 @@ internal sealed class ExpressExpressionBinder
                 string Path,
                 bool HadPrevious,
                 IReadOnlyList<ExpressBoundSymbol>? Previous)>();
+            var scopedScalarPaths = new List<(
+                string Path,
+                bool HadPrevious,
+                ExpressExpressionType? Previous)>();
             if (string.Equals(operation, "AND", StringComparison.OrdinalIgnoreCase))
             {
                 var narrowings = ResolveTypeOfGuards(result);
                 foreach (var narrowing in narrowings.Values)
                 {
-                    var hadPrevious = _guardedPathAlternatives.TryGetValue(
-                        narrowing.Path,
-                        out var previous);
-                    scopedPaths.Add((narrowing.Path, hadPrevious, previous));
-                    _guardedPathAlternatives[narrowing.Path] = narrowing.Alternatives;
+                    if (narrowing.Alternatives.Count > 0)
+                    {
+                        var hadPrevious = _guardedPathAlternatives.TryGetValue(
+                            narrowing.Path,
+                            out var previous);
+                        scopedPaths.Add((narrowing.Path, hadPrevious, previous));
+                        _guardedPathAlternatives[narrowing.Path] = narrowing.Alternatives;
+                    }
+
+                    if (narrowing.ScalarType is not null)
+                    {
+                        var hadPrevious = _guardedPathScalarTypes.TryGetValue(
+                            narrowing.Path,
+                            out var previous);
+                        scopedScalarPaths.Add((narrowing.Path, hadPrevious, previous));
+                        _guardedPathScalarTypes[narrowing.Path] = narrowing.ScalarType;
+                    }
                 }
 
                 var directNarrowings = narrowings.Values
                     .Where(narrowing => narrowing.Reference is not null
-                        && narrowing.Alternatives.Count == 1)
+                        && (narrowing.Alternatives.Count == 1 || narrowing.ScalarType is not null))
                     .ToDictionary(
                         narrowing => narrowing.Reference!.Name,
-                        narrowing => TypeOf(new ExpressBoundNamedType(
-                            narrowing.Alternatives[0],
-                            result.Span)),
+                        narrowing => narrowing.ScalarType
+                            ?? TypeOf(new ExpressBoundNamedType(
+                                narrowing.Alternatives[0],
+                                result.Span)),
                         StringComparer.OrdinalIgnoreCase);
-                rightTypes = directNarrowings.Count == 0
-                    ? lexicalTypes
-                    : lexicalTypes.ToDictionary(
+                if (directNarrowings.Count > 0)
+                {
+                    var narrowedTypes = lexicalTypes.ToDictionary(
                         pair => pair.Key,
                         pair => directNarrowings.TryGetValue(pair.Key, out var narrowedType)
                             ? narrowedType
                             : pair.Value,
                         StringComparer.OrdinalIgnoreCase);
+                    foreach (var narrowing in directNarrowings)
+                    {
+                        narrowedTypes[narrowing.Key] = narrowing.Value;
+                    }
+
+                    rightTypes = narrowedTypes;
+                }
             }
 
             ExpressBoundExpression right;
@@ -1026,6 +1053,18 @@ internal sealed class ExpressExpressionBinder
                     else
                     {
                         _guardedPathAlternatives.Remove(scopedPath.Path);
+                    }
+                }
+
+                foreach (var scopedPath in scopedScalarPaths)
+                {
+                    if (scopedPath.HadPrevious)
+                    {
+                        _guardedPathScalarTypes[scopedPath.Path] = scopedPath.Previous!;
+                    }
+                    else
+                    {
+                        _guardedPathScalarTypes.Remove(scopedPath.Path);
                     }
                 }
             }
@@ -1053,7 +1092,8 @@ internal sealed class ExpressExpressionBinder
     private IReadOnlyDictionary<string, (
         string Path,
         ExpressBoundName? Reference,
-        IReadOnlyList<ExpressBoundSymbol> Alternatives)> ResolveTypeOfGuards(
+        IReadOnlyList<ExpressBoundSymbol> Alternatives,
+        ExpressExpressionType? ScalarType)> ResolveTypeOfGuards(
         ExpressBoundExpression condition)
     {
         if (condition.Kind == ExpressExpressionKind.Binary
@@ -1075,10 +1115,16 @@ internal sealed class ExpressExpressionBinder
                         .Concat(rightNarrowing.Alternatives ?? [])
                         .Distinct()
                         .ToArray();
+                    var scalarTypes = new[] { leftNarrowing.ScalarType, rightNarrowing.ScalarType, }
+                        .Where(type => type is not null)
+                        .GroupBy(type => type!.Kind)
+                        .Select(group => group.First())
+                        .ToArray();
                     return (
                         path,
                         leftNarrowing.Reference ?? rightNarrowing.Reference,
-                        (IReadOnlyList<ExpressBoundSymbol>)alternatives);
+                        (IReadOnlyList<ExpressBoundSymbol>)alternatives,
+                        scalarTypes.Length == 1 ? scalarTypes[0] : null);
                 },
                 StringComparer.OrdinalIgnoreCase);
         }
@@ -1095,7 +1141,8 @@ internal sealed class ExpressExpressionBinder
             return new Dictionary<string, (
                 string,
                 ExpressBoundName?,
-                IReadOnlyList<ExpressBoundSymbol>)>(StringComparer.OrdinalIgnoreCase);
+                IReadOnlyList<ExpressBoundSymbol>,
+                ExpressExpressionType?)>(StringComparer.OrdinalIgnoreCase);
         }
 
         var selected = _declarations.Keys.SingleOrDefault(candidate =>
@@ -1104,26 +1151,36 @@ internal sealed class ExpressExpressionBinder
                 candidate.DeclaringSchema.Name + "." + candidate.Name,
                 qualifiedName,
                 StringComparison.OrdinalIgnoreCase));
-        if (selected is null)
+        var scalarType = qualifiedName.ToUpperInvariant() switch
+        {
+            "INTEGER" => _integer,
+            "NUMBER" => _number,
+            "REAL" => _real,
+            _ => null,
+        };
+        if (selected is null && scalarType is null)
         {
             return new Dictionary<string, (
                 string,
                 ExpressBoundName?,
-                IReadOnlyList<ExpressBoundSymbol>)>(StringComparer.OrdinalIgnoreCase);
+                IReadOnlyList<ExpressBoundSymbol>,
+                ExpressExpressionType?)>(StringComparer.OrdinalIgnoreCase);
         }
 
         var narrowedExpression = typeOf.Children[0];
         return new Dictionary<string, (
             string Path,
             ExpressBoundName? Reference,
-            IReadOnlyList<ExpressBoundSymbol> Alternatives)>(StringComparer.OrdinalIgnoreCase)
+            IReadOnlyList<ExpressBoundSymbol> Alternatives,
+            ExpressExpressionType? ScalarType)>(StringComparer.OrdinalIgnoreCase)
         {
             [narrowedExpression.SourceText] = (
                 narrowedExpression.SourceText,
                 narrowedExpression.Kind == ExpressExpressionKind.Reference
                     ? narrowedExpression.Reference
                     : null,
-                [selected,]),
+                selected is null ? [] : [selected,],
+                scalarType),
         };
     }
 
@@ -1856,7 +1913,7 @@ internal sealed class ExpressExpressionBinder
                             .Any(target.AttributeCandidates.Contains));
             }
 
-            return Create(
+            var result = Create(
                 ExpressExpressionKind.AttributeQualifier,
                 TypeOf(target?.Type)
                     .WithIndeterminate(
@@ -1869,6 +1926,16 @@ internal sealed class ExpressExpressionBinder
                 qualifier.TokenText(),
                 target,
                 [source,]);
+            return _guardedPathScalarTypes.TryGetValue(result.SourceText, out var guardedScalarType)
+                ? new ExpressBoundExpression(
+                    result.Kind,
+                    guardedScalarType.WithIndeterminate(result.Type.CanBeIndeterminate),
+                    result.SourceText,
+                    result.Operation,
+                    result.Reference,
+                    result.Children,
+                    result.Span)
+                : result;
         }
 
         if (qualifier.Production == "groupQualifier")

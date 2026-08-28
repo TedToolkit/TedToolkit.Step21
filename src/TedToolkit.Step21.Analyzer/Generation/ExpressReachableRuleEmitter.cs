@@ -250,7 +250,18 @@ internal static class ExpressReachableRuleEmitter
                 && selectNarrowings?.TryGetValue(groupSourceReference, out var groupAlternative) == true
                 && plan.EntityProjections.Single(projection =>
                         projection.Entity.Symbol == groupAlternative)
-                    .PhysicalComponents.Any(component => component.Symbol == group)));
+                    .PhysicalComponents.Any(component => component.Symbol == group)),
+            resolveNarrowedScalarReference: (reference, carrierType, carrier, narrowedScalar) =>
+                ResolveReference(
+                    plan,
+                    reference,
+                    selfExpression,
+                    populationExpression,
+                    lexicalNames,
+                    selectNarrowings,
+                    carrierType,
+                    carrier,
+                    narrowedScalarType: narrowedScalar));
     }
 
     private static ExpressBoundNamedType? ResolveNarrowedReferenceType(
@@ -1968,6 +1979,7 @@ internal static class ExpressReachableRuleEmitter
                     ExpressScalarKind? selectedScalarKind = qualifiedName.ToUpperInvariant() switch
                     {
                         "INTEGER" => ExpressScalarKind.Integer,
+                        "NUMBER" => ExpressScalarKind.Number,
                         "REAL" => ExpressScalarKind.Real,
                         _ => null,
                     };
@@ -4687,10 +4699,7 @@ internal static class ExpressReachableRuleEmitter
                                 }
                                 else if (pendingType is ExpressBoundScalarType pendingScalar
                                          && narrowedScalarType is not null
-                                         && (pendingScalar.Kind == narrowedScalarType.Kind
-                                             || (pendingScalar.Kind == ExpressScalarKind.Number
-                                                 && narrowedScalarType.Kind
-                                                 is ExpressScalarKind.Integer or ExpressScalarKind.Real)))
+                                         && CanProjectScalar(pendingScalar.Kind, narrowedScalarType.Kind))
                                 {
                                     containsNarrowing = true;
                                 }
@@ -4718,12 +4727,14 @@ internal static class ExpressReachableRuleEmitter
 
             if (carrierType is ExpressBoundScalarType scalar
                 && narrowedScalarType is not null
-                && (scalar.Kind == narrowedScalarType.Kind
-                    || (scalar.Kind == ExpressScalarKind.Number
-                        && narrowedScalarType.Kind is ExpressScalarKind.Integer or ExpressScalarKind.Real)))
+                && CanProjectScalar(scalar.Kind, narrowedScalarType.Kind))
             {
                 return (scalar.Kind, narrowedScalarType.Kind) switch
                 {
+                    (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                        $"global::TedToolkit.Step21.NumberValue.FromInteger({carrier})",
+                    (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                        $"global::TedToolkit.Step21.NumberValue.FromReal({carrier})",
                     (ExpressScalarKind.Number, ExpressScalarKind.Integer) =>
                         $"({carrier}).ToIntegerTruncated()",
                     (ExpressScalarKind.Number, ExpressScalarKind.Real) => $"({carrier}).ToReal()",
@@ -4793,6 +4804,15 @@ internal static class ExpressReachableRuleEmitter
             $"Lexical reference '{reference.Name}' has no generated spelling in this operation.");
     }
 
+    private static bool CanProjectScalar(ExpressScalarKind carrier, ExpressScalarKind target)
+    {
+        return carrier == target
+            || (carrier == ExpressScalarKind.Number
+                && target is ExpressScalarKind.Integer or ExpressScalarKind.Real)
+            || (target == ExpressScalarKind.Number
+                && carrier is ExpressScalarKind.Integer or ExpressScalarKind.Real);
+    }
+
     private static string ResolveAttribute(
         ExpressReachableRulePlan plan,
         ExpressBoundExpression? sourceExpression,
@@ -4814,8 +4834,8 @@ internal static class ExpressReachableRuleEmitter
 
         if (narrowedAlternative is null && sourceExpression is not null)
         {
-            var pathAlternatives = pathNarrowings?
-                .Where(narrowing => SameDirectReferencePath(narrowing.Key, sourceExpression))
+            var pathAlternatives = pathNarrowings
+                ?.Where(narrowing => SameDirectReferencePath(narrowing.Key, sourceExpression))
                 .Select(narrowing => narrowing.Value)
                 .Distinct()
                 .ToArray();
