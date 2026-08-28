@@ -274,11 +274,23 @@ internal static class ExpressEntityEmitter
             dataType.ToCode(ref builder);
             builder.AppendSpace();
             interfaceType.ToCode(ref builder);
+            var storageExpression = storageAttribute.StorageMemberName;
+            var projectionExpression = storageExpression;
+            if (interfaceAttribute.Attribute.IsOptional && storageAttribute.Attribute.IsOptional)
+            {
+                projectionExpression = "__specializedValue";
+            }
+
             var expression = valueResolver.CreateSpecializationProjection(
                 projection.Schema.Identity,
                 storageAttribute.Type,
                 interfaceAttribute.Type,
-                storageAttribute.StorageMemberName);
+                projectionExpression);
+            if (interfaceAttribute.Attribute.IsOptional && storageAttribute.Attribute.IsOptional)
+            {
+                expression = $"{storageExpression} is {{ }} __specializedValue ? {expression} : null";
+            }
+
             builder.Append($".{interfaceAttribute.Name} => {expression};");
         });
     }
