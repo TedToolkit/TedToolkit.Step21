@@ -1420,10 +1420,19 @@ internal sealed class ExpressExpressionBinder
                 {
                     var initializer = parameters[index];
                     if (initializer.Kind != ExpressExpressionKind.AggregateInitializer
-                        || initializer.Children.Count > 1
                         || initializer.Children.Any(child => child.Kind == ExpressExpressionKind.Repetition)
                         || formalTypes[index] is not ExpressBoundAggregateType formalSet
                         || formalSet.Kind != ExpressAggregateKind.Set)
+                    {
+                        continue;
+                    }
+
+                    var staticKeys = initializer.Children
+                        .Select(StaticSetElementKey)
+                        .ToArray();
+                    if (initializer.Children.Count > 1
+                        && (staticKeys.Any(key => key is null)
+                            || staticKeys.Distinct(StringComparer.Ordinal).Count() != staticKeys.Length))
                     {
                         continue;
                     }
@@ -1853,6 +1862,62 @@ internal sealed class ExpressExpressionBinder
             parameters);
     }
 
+    private static string? StaticSetElementKey(ExpressBoundExpression expression)
+    {
+        if (TryStaticStringValue(expression, out var stringValue))
+        {
+            return "String:" + stringValue;
+        }
+
+        if (expression.Kind == ExpressExpressionKind.Literal)
+        {
+            return expression.Type.Kind.ToString() + ":" + expression.SourceText;
+        }
+
+        if (expression.Kind != ExpressExpressionKind.Reference
+            || expression.Reference?.Kind != ExpressBoundNameKind.Enumeration)
+        {
+            return null;
+        }
+
+        return "Enumeration:"
+            + expression.Reference.SchemaDeclaration?.DeclaringSchema.Name
+            + "."
+            + expression.Reference.SchemaDeclaration?.Name
+            + "."
+            + expression.Reference.Name;
+    }
+
+    private static bool TryStaticStringValue(
+        ExpressBoundExpression expression,
+        out string value)
+    {
+        if (expression.Kind == ExpressExpressionKind.Literal
+            && expression.Type.Kind == ExpressExpressionTypeKind.String
+            && expression.SourceText.Length >= 2
+            && expression.SourceText[0] == '\''
+            && expression.SourceText[expression.SourceText.Length - 1] == '\'')
+        {
+            value = expression.SourceText.Substring(1, expression.SourceText.Length - 2)
+                .Replace("''", "'");
+            return true;
+        }
+
+        if (expression.Kind != ExpressExpressionKind.Binary
+            || expression.Operation != "+"
+            || expression.Type.Kind != ExpressExpressionTypeKind.String
+            || expression.Children.Count != 2
+            || !TryStaticStringValue(expression.Children[0], out var left)
+            || !TryStaticStringValue(expression.Children[1], out var right))
+        {
+            value = "";
+            return false;
+        }
+
+        value = left + right;
+        return true;
+    }
+
     private ExpressBoundExpression BindQualifier(
         ExpressRuleSyntax syntax,
         ExpressBoundExpression source,
@@ -1926,6 +1991,20 @@ internal sealed class ExpressExpressionBinder
                 qualifier.TokenText(),
                 target,
                 [source,]);
+            if (_guardedPathAlternatives.TryGetValue(result.SourceText, out var resultAlternatives)
+                && resultAlternatives.Count == 1)
+            {
+                return new(
+                    result.Kind,
+                    TypeOf(new ExpressBoundNamedType(resultAlternatives[0], result.Span))
+                        .WithIndeterminate(result.Type.CanBeIndeterminate),
+                    result.SourceText,
+                    result.Operation,
+                    result.Reference,
+                    result.Children,
+                    result.Span);
+            }
+
             return _guardedPathScalarTypes.TryGetValue(result.SourceText, out var guardedScalarType)
                 ? new ExpressBoundExpression(
                     result.Kind,

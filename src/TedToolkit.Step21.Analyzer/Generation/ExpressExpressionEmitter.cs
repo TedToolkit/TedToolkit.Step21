@@ -1197,7 +1197,9 @@ internal static class ExpressExpressionEmitter
                 (parameters[1], arguments[1])),
             "ATAN" => RealMath(expression, "Atan", (parameters[0], arguments[0])),
             "BLENGTH" or "LENGTH" => BigIntegerExpression($"({arguments[0]}).Length"),
-            "EXISTS" => $"({arguments[0]}) is not null",
+            "EXISTS" => parameters[0].Type.CanBeIndeterminate
+                ? $"({arguments[0]}) is not null"
+                : "true",
             "COS" => RealMath(expression, "Cos", (parameters[0], arguments[0])),
             "EXP" => RealMath(expression, "Exp", (parameters[0], arguments[0])),
             "FORMAT" => EmitFormat(expression, parameters[0], arguments),
@@ -1831,6 +1833,17 @@ internal static class ExpressExpressionEmitter
         string[] codes,
         Func<string[], string> emitPresent)
     {
+        var determinateResultType = result.Type.WithIndeterminate(false);
+        var fallback = result.Type.Kind == ExpressExpressionTypeKind.Logical
+            ? "global::TedToolkit.Step21.LogicalValue.Unknown"
+            : $"({(result.Type.DeclaredType is ExpressBoundGenericType generic
+                ? BoundTypeName(generic)
+                : TypeName(determinateResultType))}?)null";
+        if (operands.Any(operand => operand.Kind == ExpressExpressionKind.Indeterminate))
+        {
+            return fallback;
+        }
+
         var presentCodes = codes.ToArray();
         var conditions = new List<string>();
         for (var index = 0; index < operands.Count; index++)
@@ -1859,9 +1872,6 @@ internal static class ExpressExpressionEmitter
             return emitPresent(presentCodes);
         }
 
-        var fallback = result.Type.Kind == ExpressExpressionTypeKind.Logical
-            ? "global::TedToolkit.Step21.LogicalValue.Unknown"
-            : $"({TypeName(result.Type.WithIndeterminate(false))}?)null";
         return $"({string.Join(" && ", conditions)} ? ({emitPresent(presentCodes)}) : {fallback})";
     }
 

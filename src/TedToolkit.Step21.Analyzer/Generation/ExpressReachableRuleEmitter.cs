@@ -1391,30 +1391,48 @@ internal static class ExpressReachableRuleEmitter
                         determinateLexicals,
                         safeIndexPaths,
                         scalarNarrowings));
+            var boundGuards = new List<string>();
+            string PresentControlValue(ExpressBoundExpression expression, string code, string prefix)
+            {
+                if (!expression.Type.CanBeIndeterminate)
+                {
+                    return code;
+                }
+
+                var present = allocateTemporaryName(prefix);
+                boundGuards.Add($"({code}) is {{ }} {present}");
+                return present;
+            }
+
+            var lowerPresent = PresentControlValue(lower, lowerValue.Code, "__expressRepeatLower");
+            var upperPresent = PresentControlValue(upper, upperValue.Code, "__expressRepeatUpper");
+            var stepPresent = step is null
+                ? null
+                : PresentControlValue(step, stepValue!.Code, "__expressRepeatStep");
             var lowerCode = lower.Type.Kind switch
             {
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({lowerValue.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({lowerPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({lowerValue.Code})",
-                _ => lowerValue.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({lowerPresent})",
+                _ => lowerPresent,
             };
             var upperCode = upper.Type.Kind switch
             {
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({upperValue.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({upperPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({upperValue.Code})",
-                _ => upperValue.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({upperPresent})",
+                _ => upperPresent,
             };
             var stepCode = step?.Type.Kind switch
             {
                 null => "global::TedToolkit.Step21.NumberValue.FromInteger(global::System.Numerics.BigInteger.One)",
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({stepValue!.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({stepPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({stepValue!.Code})",
-                _ => stepValue!.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({stepPresent})",
+                _ => stepPresent!,
             };
             var repeatSafeIndices = safeIndices?.ToList() ?? [];
             var repeatSafeIndexPaths = safeIndexPaths?.ToList()
@@ -1572,7 +1590,7 @@ internal static class ExpressReachableRuleEmitter
                     repeatSafeIndexPaths);
             }
 
-            owner.AddStatement(new Custom((ref SourceBuilder source) =>
+            var loopStatement = new Custom((ref SourceBuilder source) =>
             {
                 source.Append($"for (var {generatedName} = {lowerCode}; "
                     + $"{generatedName} <= {upperCode}; {generatedName} += {stepCode})");
@@ -1584,7 +1602,17 @@ internal static class ExpressReachableRuleEmitter
                 }
 
                 source.EndBlock();
-            }));
+            });
+            if (boundGuards.Count == 0)
+            {
+                owner.AddStatement(loopStatement);
+            }
+            else
+            {
+                owner.AddStatement(new IfStatement(new CustomExpression(string.Join(" && ", boundGuards)))
+                    .AddStatement(loopStatement));
+            }
+
             return true;
         }
 
@@ -4811,6 +4839,13 @@ internal static class ExpressReachableRuleEmitter
             && narrowedCode is not null
             && (narrowedAlternative is not null || narrowedScalarType is not null))
         {
+            if (narrowedAlternative is not null
+                && narrowedType is ExpressBoundNamedType narrowedNamed
+                && ReferenceEquals(narrowedNamed.Declaration, narrowedAlternative))
+            {
+                return narrowedCode;
+            }
+
             if (narrowedAlternative is { Kind: not ExpressDeclarationKind.Entity, }
                 && plan.Resolver.GetDefinedType(narrowedAlternative).UnderlyingType
                     is ExpressBoundSelectType targetSelect)

@@ -710,6 +710,15 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         TYPE unit = SELECT (unit_value);
         END_TYPE;
+        ENTITY named_value;
+          name : STRING;
+        END_ENTITY;
+        ENTITY first_named_value SUBTYPE OF (named_value);
+        END_ENTITY;
+        ENTITY second_named_value SUBTYPE OF (named_value);
+        END_ENTITY;
+        TYPE named_choice = SELECT (first_named_value, second_named_value);
+        END_TYPE;
         FUNCTION guarded_basis(item : pcurve_or_surface) : surface_value;
           IF 'SELECT_ATTRIBUTE_QUALIFIER_MODEL.PCURVE_VALUE' IN TYPEOF(item) THEN
             RETURN(item.basis_surface);
@@ -735,6 +744,9 @@ public sealed class ReachableRuleTests
         END_FUNCTION;
         FUNCTION unguarded_call_measure(item : vector_or_direction) : REAL;
           RETURN(passthrough(item).direction_ratios[1]);
+        END_FUNCTION;
+        FUNCTION common_name(item : named_choice) : STRING;
+          RETURN(item.name);
         END_FUNCTION;
         ENTITY guarded_sample;
           curve_choice : pcurve_or_surface;
@@ -763,6 +775,11 @@ public sealed class ReachableRuleTests
           vector_choice : vector_or_direction;
         WHERE
           unguarded_call_is_unknown : NOT EXISTS(unguarded_call_measure(vector_choice));
+        END_ENTITY;
+        ENTITY named_sample;
+          selected : named_choice;
+        WHERE
+          common_attribute : LENGTH(common_name(selected)) > 0;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -826,6 +843,38 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_SCHEMA = """
+        SCHEMA typeof_guarded_select_path_argument_model;
+        ENTITY property_definition;
+          name : STRING;
+        END_ENTITY;
+        ENTITY other_definition;
+        END_ENTITY;
+        TYPE represented_definition = SELECT (property_definition, other_definition);
+        END_TYPE;
+        ENTITY representation;
+        END_ENTITY;
+        ENTITY property_definition_representation;
+          definition : represented_definition;
+          used_representation : representation;
+        END_ENTITY;
+        FUNCTION correlates(pd : property_definition) : BOOLEAN;
+          RETURN(EXISTS(pd));
+        END_FUNCTION;
+        FUNCTION unknown_comparison(pd : property_definition) : LOGICAL;
+          RETURN(pd = ?);
+        END_FUNCTION;
+        RULE restrict_representation FOR (property_definition_representation);
+        WHERE
+          wr1 : SIZEOF(QUERY(pdr <* property_definition_representation |
+            ('TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_MODEL.PROPERTY_DEFINITION'
+              IN TYPEOF(pdr.definition))
+            AND correlates(pdr.definition)
+            AND EXISTS(unknown_comparison(pdr.definition)))) = 0;
+        END_RULE;
+        END_SCHEMA;
+        """;
+
     private const string INCOMPATIBLE_FUNCTION_SELECT_ARGUMENT_SCHEMA = """
         SCHEMA incompatible_function_select_argument_model;
         ENTITY accepted;
@@ -877,6 +926,8 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         ENTITY rejected SUBTYPE OF (carrier);
         END_ENTITY;
+        TYPE carrier_choice = SELECT (accepted, rejected);
+        END_TYPE;
         TYPE accepted_choice = SELECT (accepted, alternate_item);
         END_TYPE;
         TYPE nested_choice = SELECT (accepted_choice);
@@ -896,6 +947,12 @@ public sealed class ReachableRuleTests
           END_IF;
           RETURN(TRUE);
         END_FUNCTION;
+        FUNCTION proven_selected_entity(item : carrier_choice) : BOOLEAN;
+          IF 'DYNAMIC_ENTITY_APPLICATION_MODEL.ACCEPTED' IN TYPEOF(item) THEN
+            RETURN(accepts_entity(item));
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
         FUNCTION maybe_carrier(expose : BOOLEAN; item : carrier) : carrier;
           IF expose THEN RETURN(item); END_IF;
           RETURN(?);
@@ -905,6 +962,7 @@ public sealed class ReachableRuleTests
           child_value : carrier;
           alternate_value : carrier;
           rejected_value : carrier;
+          selected_value : carrier_choice;
         WHERE
           exact_entity : accepts_entity(accepted_value);
           inherited_entity : accepts_entity(child_value);
@@ -916,6 +974,7 @@ public sealed class ReachableRuleTests
           absent_actual_is_unknown : NOT EXISTS(accepts_entity(
             maybe_carrier(FALSE,accepted_value)));
           proven_path_control : proven_entity(accepted_value);
+          proven_select_path_control : proven_selected_entity(selected_value);
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -945,7 +1004,8 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, child);
                 _ = structure.Add(section, alternate);
                 _ = structure.Add(section, rejected);
-                _ = structure.Add(section, new Sample(accepted, child, alternate, rejected));
+                var selected = CarrierChoice.FromAccepted(accepted);
+                _ = structure.Add(section, new Sample(accepted, child, alternate, rejected, selected));
                 return structure.Validate();
             }
         }
@@ -1537,6 +1597,9 @@ public sealed class ReachableRuleTests
         FUNCTION accept_list(values : LIST [3:3] OF REAL) : BOOLEAN;
           RETURN((values[1] = 1.0) AND (values[2] = 2.0) AND (values[3] = 3.0));
         END_FUNCTION;
+        FUNCTION accept_set(values : SET [3:3] OF STRING) : BOOLEAN;
+          RETURN(('first' IN values) AND ('second' IN values) AND ('third' IN values));
+        END_FUNCTION;
         FUNCTION guarded_list(present : BOOLEAN) : BOOLEAN;
           RETURN(accept_list([
             maybe_real(1.0, TRUE),
@@ -1566,6 +1629,17 @@ public sealed class ReachableRuleTests
           values := [1.0, 1.0];
           RETURN(SIZEOF(values) = 2);
         END_FUNCTION;
+        FUNCTION maybe_upper(present : BOOLEAN) : INTEGER;
+          IF present THEN RETURN(2); END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION guarded_repeat(present : BOOLEAN) : INTEGER;
+          LOCAL result : INTEGER := 0; END_LOCAL;
+          REPEAT i := 1 TO maybe_upper(present);
+            result := result + 1;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
         ENTITY sample;
         WHERE
           list_present : guarded_list(TRUE);
@@ -1575,6 +1649,9 @@ public sealed class ReachableRuleTests
           optional_array_unset : NOT EXISTS(optional_array(FALSE)[2]);
           set_initializer : set_control(TRUE);
           bag_initializer : bag_control(TRUE);
+          contextual_set_initializer : accept_set(['first', 'second', 'third']);
+          present_repeat : guarded_repeat(TRUE) = 2;
+          absent_repeat : guarded_repeat(FALSE) = 0;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -7418,6 +7495,20 @@ public sealed class ReachableRuleTests
             await Assert.That(ambiguousDiagnostics).IsNotEmpty()
                 .Because(string.Join(Environment.NewLine, ambiguousDiagnostics));
         }
+    }
+
+    /// <summary>Projects a SELECT-valued attribute proven by TYPEOF into an entity function formal.</summary>
+    [Test]
+    public async Task Should_project_typeof_guarded_select_paths_at_function_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-select-path-argument.exp", TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>
