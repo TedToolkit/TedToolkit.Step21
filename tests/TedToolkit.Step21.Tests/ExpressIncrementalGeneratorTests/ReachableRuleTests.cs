@@ -1931,12 +1931,17 @@ public sealed class ReachableRuleTests
         SCHEMA select_aggregate_application_model;
         ENTITY representation_item;
         END_ENTITY;
+        TYPE array_representation_item = ARRAY [1:4] OF representation_item;
+        END_TYPE;
+        TYPE bag_representation_item = BAG [1:4] OF representation_item;
+        END_TYPE;
         TYPE list_representation_item = LIST [1:4] OF representation_item;
         END_TYPE;
         TYPE set_representation_item = SET [1:4] OF representation_item;
         END_TYPE;
         TYPE compound_item_definition = SELECT
-          (list_representation_item, set_representation_item);
+          (array_representation_item, bag_representation_item,
+           list_representation_item, set_representation_item);
         END_TYPE;
         FUNCTION accepts_aggregate(values : AGGREGATE OF representation_item) : BOOLEAN;
           RETURN((SIZEOF(values) > 0)
@@ -8410,11 +8415,12 @@ public sealed class ReachableRuleTests
             await Assert.That(diagnostics).IsEmpty()
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(generated).Contains(
-                "global::System.Collections.Generic.IReadOnlyCollection<global::TedToolkit.Step21.Generated."
+                "global::System.Collections.Generic.IEnumerable<global::TedToolkit.Step21.Generated."
                 + "SelectAggregateApplicationModel.IRepresentationItem>");
             await Assert.That(generated).Contains(".Match(");
             await Assert.That(generated).Contains(".Value");
             await Assert.That(generated).Contains("IExpressArray<");
+            await Assert.That(generated).Contains("IExpressBag<");
             await Assert.That(generated).Contains("IExpressList<");
             await Assert.That(generated).Contains("IExpressSet<");
         }

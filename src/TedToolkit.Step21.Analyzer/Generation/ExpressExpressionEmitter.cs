@@ -2281,7 +2281,7 @@ internal static class ExpressExpressionEmitter
     {
         if (aggregate.Kind == ExpressAggregateKind.Aggregate)
         {
-            return "global::System.Collections.Generic.IReadOnlyCollection<"
+            return "global::System.Collections.Generic.IEnumerable<"
                 + BoundTypeName(aggregate.ElementType)
                 + ">";
         }

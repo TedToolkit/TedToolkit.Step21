@@ -73,12 +73,6 @@ internal sealed class BaselineTests
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
             .IsEmpty()
             .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
-        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics();
-        await Assert.That(compilationDiagnostics
-            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
-            .IsEmpty()
-            .Because(string.Join(Environment.NewLine, compilationDiagnostics));
-
         var descriptor = RequiredType(result.OutputCompilation, "SchemaDescriptor");
         var advancedFace = RequiredType(result.OutputCompilation, "IAdvancedFace");
         var product = RequiredType(result.OutputCompilation, "Product");
@@ -92,6 +86,14 @@ internal sealed class BaselineTests
         var generatedSurface = RenderGeneratedSurface(result.GeneratedSources);
         var publicApiHash = ComputeTextHash(generatedSurface);
         var approvedPublicApiHash = File.ReadAllText(Path.Combine(directory, "PublicApi.approved.sha256")).Trim();
+        await Assert.That(publicApiHash).IsEqualTo(approvedPublicApiHash)
+            .Because($"Actual AP214 generated public API SHA-256: {publicApiHash}");
+
+        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics();
+        await Assert.That(compilationDiagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilationDiagnostics));
 
         using (Assert.Multiple())
         {
@@ -121,8 +123,6 @@ internal sealed class BaselineTests
                     .Where(field => field.HasConstantValue).Select(field => field.Name)
                     .SequenceEqual(["Axis2Placement2d", "Axis2Placement3d"]))
                 .IsTrue();
-            await Assert.That(publicApiHash).IsEqualTo(approvedPublicApiHash)
-                .Because($"Actual AP214 generated public API SHA-256: {publicApiHash}");
         }
     }
 
