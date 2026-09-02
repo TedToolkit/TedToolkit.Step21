@@ -6343,6 +6343,16 @@ internal static class ExpressReachableRuleEmitter
                 narrowedGroup);
         }
 
+        if (reference.Kind == ExpressBoundNameKind.Entity
+            && reference.SchemaDeclaration is { } genericGroup
+            && sourceType is ExpressBoundGenericType { IsEntity: true, })
+        {
+            var groupType = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+                genericGroup,
+                sourceType.Span));
+            return $"(({groupType})({source}))";
+        }
+
         if (sourceType is ExpressBoundSelectType select)
         {
             var resultType = reference.Type

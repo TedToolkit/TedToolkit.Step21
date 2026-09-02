@@ -10,7 +10,7 @@
     <PublishAot Condition="'$(NativeAotProof)' == 'true'">true</PublishAot>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true'">
+  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true' and '$(Ap214PackageProof)' != 'true'">
     <PackageReference Include="TedToolkit.Step21" />
   </ItemGroup>
 
@@ -18,7 +18,11 @@
     <PackageReference Include="TedToolkit.Step21.Ap203" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true'">
+  <ItemGroup Condition="'$(Ap214PackageProof)' == 'true'">
+    <PackageReference Include="TedToolkit.Step21.Ap214" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap203PackageProof)' != 'true' and '$(Ap214PackageProof)' != 'true'">
     <AdditionalFiles Include="catalog-core.exp" />
     <AdditionalFiles Include="catalog-model.exp" />
   </ItemGroup>
@@ -26,6 +30,7 @@
   <ItemGroup>
     <Compile Remove="Ap203Program.cs" />
     <Compile Remove="Ap203FixtureProgram.cs" />
+    <Compile Remove="Ap214Program.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' != 'true'">
@@ -36,6 +41,11 @@
   <ItemGroup Condition="'$(Ap203PackageProof)' == 'true' and '$(Ap203FixtureProof)' == 'true'">
     <Compile Remove="Program.cs" />
     <Compile Include="Ap203FixtureProgram.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Ap214PackageProof)' == 'true'">
+    <Compile Remove="Program.cs" />
+    <Compile Include="Ap214Program.cs" />
   </ItemGroup>
 
 </Project>

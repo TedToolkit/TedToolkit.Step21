@@ -3474,6 +3474,123 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string GENERIC_ENTITY_GROUP_QUALIFIER_SCHEMA = """
+        SCHEMA generic_entity_group_qualifier_model;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY relation;
+          link : target;
+        END_ENTITY;
+        FUNCTION has_relation(target_value : target; schema_name : STRING) : BOOLEAN;
+        LOCAL
+          owners : BAG OF GENERIC_ENTITY;
+        END_LOCAL;
+          owners := USEDIN(target_value, schema_name + '.RELATION.LINK');
+          RETURN(SIZEOF(QUERY(owner <* owners |
+            owner\relation.link :=: target_value)) > 0);
+        END_FUNCTION;
+        ENTITY sample;
+          target_value : target;
+        WHERE
+          linked : has_relation(target_value, 'GENERIC_ENTITY_GROUP_QUALIFIER_MODEL');
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string PACKED_CATALOG_CORE_SCHEMA = """
+        SCHEMA catalog_core;
+        ENTITY target;
+          code : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string PACKED_CATALOG_MODEL_SCHEMA = """
+        SCHEMA catalog_model;
+        USE FROM catalog_core (target);
+        ENTITY root SUPERTYPE OF (left ANDOR right);
+          label : STRING;
+          peer : target;
+          values : LIST [1:?] OF INTEGER;
+        END_ENTITY;
+        ENTITY left SUBTYPE OF (root);
+          enabled : BOOLEAN;
+        END_ENTITY;
+        ENTITY right SUBTYPE OF (root);
+          rank : INTEGER;
+        END_ENTITY;
+        ENTITY simple;
+          name : STRING;
+        END_ENTITY;
+        ENTITY specialized_target SUBTYPE OF (target);
+        END_ENTITY;
+        TYPE broad_choice = SELECT (target, simple);
+        END_TYPE;
+        TYPE narrow_choice = SELECT (specialized_target);
+        END_TYPE;
+        TYPE equal_choice = SELECT (specialized_target);
+        END_TYPE;
+        ENTITY specialization_root ABSTRACT;
+          link : target;
+          select_value : broad_choice;
+          integer_value : NUMBER;
+          real_value : NUMBER;
+          array_value : ARRAY [1:2] OF target;
+          list_value : LIST [0:?] OF UNIQUE target;
+          bag_value : BAG [0:?] OF target;
+          set_value : SET [0:?] OF target;
+          optional_link : OPTIONAL target;
+          select_array : ARRAY [1:2] OF OPTIONAL narrow_choice;
+          select_list : LIST [1:?] OF target;
+          select_bag : BAG [0:?] OF narrow_choice;
+          select_set : SET [1:?] OF target;
+        END_ENTITY;
+        ENTITY specialization_child SUBTYPE OF (specialization_root);
+          SELF\specialization_root.link : specialized_target;
+          SELF\specialization_root.select_value : narrow_choice;
+          SELF\specialization_root.integer_value : INTEGER;
+          SELF\specialization_root.real_value : REAL;
+          SELF\specialization_root.array_value : ARRAY [1:2] OF specialized_target;
+          SELF\specialization_root.list_value : LIST [0:?] OF UNIQUE specialized_target;
+          SELF\specialization_root.bag_value : BAG [0:?] OF specialized_target;
+          SELF\specialization_root.set_value : SET [0:?] OF specialized_target;
+          SELF\specialization_root.optional_link : specialized_target;
+          SELF\specialization_root.select_array : ARRAY [1:2] OF OPTIONAL equal_choice;
+          SELF\specialization_root.select_list : LIST [1:?] OF narrow_choice;
+          SELF\specialization_root.select_bag : BAG [0:?] OF equal_choice;
+          SELF\specialization_root.select_set : SET [1:?] OF narrow_choice;
+        END_ENTITY;
+        ENTITY inverse_target;
+          code : INTEGER;
+        INVERSE
+          single_owner : inverse_owner FOR targets;
+        WHERE
+          direct_access : single_owner.rank > 0;
+          repeated_access : (single_owner.rank > 0) AND (single_owner.rank > 0);
+          function_access : inverse_owner_rank(SELF) > 0;
+          independent_rule : code > 0;
+        END_ENTITY;
+        ENTITY inverse_owner;
+          rank : INTEGER;
+          targets : LIST [0:?] OF inverse_target;
+        END_ENTITY;
+        ENTITY inverse_lazy_target;
+        INVERSE
+          single_owner : inverse_lazy_owner FOR targets;
+        WHERE
+          true_short_circuit : TRUE OR (single_owner.rank > 0);
+          false_short_circuit : FALSE AND (single_owner.rank > 0);
+        END_ENTITY;
+        ENTITY inverse_lazy_owner;
+          rank : INTEGER;
+          targets : LIST [0:?] OF inverse_lazy_target;
+        END_ENTITY;
+        FUNCTION inverse_owner_rank(candidate : inverse_target) : INTEGER;
+          RETURN(candidate.single_owner.rank);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
     private const string MIXED_SELECT_USEDIN_SCHEMA = """
         SCHEMA mixed_select_usedin_model;
         TYPE text_value = STRING;
@@ -9209,6 +9326,8 @@ public sealed class ReachableRuleTests
         var unknown = Invoke("ValidateUnknown");
         var mixed = GeneratorHostTests.Run(
             ("schemas/mixed-select-usedin.exp", MIXED_SELECT_USEDIN_SCHEMA));
+        var genericGroup = GeneratorHostTests.Run(
+            ("schemas/generic-entity-group-qualifier.exp", GENERIC_ENTITY_GROUP_QUALIFIER_SCHEMA));
 
         using (Assert.Multiple())
         {
@@ -9223,7 +9342,27 @@ public sealed class ReachableRuleTests
             await Assert.That(mixed.Diagnostics.Concat(mixed.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsNotEmpty();
+            await Assert.That(genericGroup.Diagnostics.Concat(genericGroup.OutputCompilation.GetDiagnostics())
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
         }
+    }
+
+    /// <summary>
+    /// Verifies imported entity specialization and inverse rules generate together across schema inputs.
+    /// </summary>
+    [Test]
+    public async Task Should_generate_the_packed_custom_schema_pair()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/catalog-core.exp", PACKED_CATALOG_CORE_SCHEMA),
+            ("schemas/catalog-model.exp", PACKED_CATALOG_MODEL_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>
