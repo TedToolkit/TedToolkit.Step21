@@ -7,7 +7,7 @@ do not use AP214 continue to reference only `TedToolkit.Step21`.
 ## Install and use AP214
 
 ```shell
-dotnet add package TedToolkit.Step21.Ap214
+dotnet add package TedToolkit.Step21.Ap214 --version 1.0.0-rc.1
 ```
 
 Pass the generated descriptor explicitly to the schema-neutral Step21 runtime:
