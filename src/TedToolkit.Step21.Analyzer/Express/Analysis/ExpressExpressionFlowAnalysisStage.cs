@@ -42,13 +42,15 @@ internal static class ExpressExpressionFlowAnalysisStage
     {
         var facts = ExpressExpressionBinder.Bind(
             schema.Declarations,
-            schema.NameReferences,
+            schema.NameReferences.Concat(schema.LexicalNames.Select(name =>
+                new ExpressBoundNameReference(name, isApplication: false, name.Span))).ToArray(),
             compilation.GetSyntax);
         return new(
             schema.Identity,
             schema.Imports,
             schema.Declarations,
             schema.NestedDeclarations,
+            schema.LexicalNames,
             schema.NameReferences,
             facts.Expressions,
             facts.IndeterminateFunctions,

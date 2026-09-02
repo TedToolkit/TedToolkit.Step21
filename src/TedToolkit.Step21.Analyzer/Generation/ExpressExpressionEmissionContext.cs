@@ -28,6 +28,11 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="genericTypeLabels">Identifies type labels closed by the enclosing generated generic method.</param>
     /// <param name="allocateTemporaryName">Allocates a deterministic private C# name within the generated method.</param>
     /// <param name="isKnownDeterminate">Identifies expressions made determinate by the enclosing control-flow branch.</param>
+    /// <param name="mayReturnIndeterminate">Identifies function applications whose generated method can return UNKNOWN.</param>
+    /// <param name="resolveNarrowedScalarReference">Projects a SELECT carrier to a branch-proven scalar value.</param>
+    /// <param name="resolveSelectToEntityValue">Projects a SELECT value to one compatible entity alternative.</param>
+    /// <param name="resolveNarrowedEntityCarrier">Projects an explicitly typed SELECT carrier to a proven entity.</param>
+    /// <param name="resolveAggregateElement">Adapts one present aggregate element to its declared element type.</param>
     internal ExpressExpressionEmissionContext(
         Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference,
         string? selfExpression = null,
@@ -40,7 +45,16 @@ internal sealed class ExpressExpressionEmissionContext
         Func<string, (string Code, ExpressBoundType Type)?>? resolveLexicalBound = null,
         IReadOnlyCollection<string>? genericTypeLabels = null,
         Func<string, string>? allocateTemporaryName = null,
-        Func<ExpressBoundExpression, bool>? isKnownDeterminate = null)
+        Func<ExpressBoundExpression, bool>? isKnownDeterminate = null,
+        Func<ExpressBoundExpression, bool>? mayReturnIndeterminate = null,
+        Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string?>?
+            resolveNarrowedScalarReference = null,
+        Func<ExpressBoundExpression, string, ExpressBoundNamedType, string>?
+            resolveSelectToEntityValue = null,
+        Func<ExpressBoundType, string, ExpressBoundNamedType, string>?
+            resolveNarrowedEntityCarrier = null,
+        Func<ExpressBoundExpression, string, ExpressBoundType, string>?
+            resolveAggregateElement = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
@@ -52,6 +66,11 @@ internal sealed class ExpressExpressionEmissionContext
         ResolveLexicalBound = resolveLexicalBound;
         GenericTypeLabels = genericTypeLabels ?? [];
         IsKnownDeterminate = isKnownDeterminate;
+        MayReturnIndeterminate = mayReturnIndeterminate;
+        ResolveNarrowedScalarReference = resolveNarrowedScalarReference;
+        ResolveSelectToEntityValue = resolveSelectToEntityValue;
+        ResolveNarrowedEntityCarrier = resolveNarrowedEntityCarrier;
+        ResolveAggregateElement = resolveAggregateElement;
         if (allocateTemporaryName is null)
         {
             var temporaryOrdinal = 0;
@@ -120,6 +139,39 @@ internal sealed class ExpressExpressionEmissionContext
     internal Func<ExpressBoundExpression, bool>? IsKnownDeterminate { get; }
 
     /// <summary>
+    /// Gets the enclosing schema's transitive function-indeterminacy classifier.
+    /// </summary>
+    internal Func<ExpressBoundExpression, bool>? MayReturnIndeterminate { get; }
+
+    /// <summary>
+    /// Gets the resolver for a SELECT carrier narrowed to a scalar branch.
+    /// </summary>
+    internal Func<ExpressBoundName, ExpressBoundType, string, ExpressBoundScalarType, string?>?
+        ResolveNarrowedScalarReference
+    { get; }
+
+    /// <summary>
+    /// Gets the resolver that safely projects a SELECT value to a compatible entity alternative.
+    /// </summary>
+    internal Func<ExpressBoundExpression, string, ExpressBoundNamedType, string>?
+        ResolveSelectToEntityValue
+    { get; }
+
+    /// <summary>
+    /// Gets the resolver that projects a carrier with an explicit nominal type to a proven entity.
+    /// </summary>
+    internal Func<ExpressBoundType, string, ExpressBoundNamedType, string>?
+        ResolveNarrowedEntityCarrier
+    { get; }
+
+    /// <summary>
+    /// Gets the resolver that adapts a present aggregate element to its declared element type.
+    /// </summary>
+    internal Func<ExpressBoundExpression, string, ExpressBoundType, string>?
+        ResolveAggregateElement
+    { get; }
+
+    /// <summary>
     /// Creates an equivalent context with a scoped declaration-reference resolver.
     /// </summary>
     /// <param name="resolveReference">The scoped resolver.</param>
@@ -138,6 +190,11 @@ internal sealed class ExpressExpressionEmissionContext
             ResolveLexicalBound,
             GenericTypeLabels,
             AllocateTemporaryName,
-            IsKnownDeterminate);
+            IsKnownDeterminate,
+            MayReturnIndeterminate,
+            ResolveNarrowedScalarReference,
+            ResolveSelectToEntityValue,
+            ResolveNarrowedEntityCarrier,
+            ResolveAggregateElement);
     }
 }

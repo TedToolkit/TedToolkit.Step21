@@ -364,14 +364,23 @@ internal static class ExpressSchemaDescriptorEmitter
                 .AddStatement(CreateParameterCountCheck(component.Entity.Name, attributes.Count));
             for (var attributeIndex = 0; attributeIndex < attributes.Count; attributeIndex++)
             {
+                var physicalAttribute = attributes[attributeIndex];
+                var storageAttribute = entity.Properties.Where(attribute =>
+                        ReferenceEquals(attribute.StorageEntity.Symbol, physicalAttribute.StorageEntity.Symbol)
+                        && StringComparer.OrdinalIgnoreCase.Equals(
+                            attribute.StorageAttributeName,
+                            physicalAttribute.StorageAttributeName))
+                    .OrderBy(attribute => attribute.RedirectTargetName is null ? 0 : 1)
+                    .FirstOrDefault()
+                    ?? physicalAttribute;
                 componentBranch.AddStatement(CreateHydrateAttribute(
                     context,
-                    attributes[attributeIndex],
+                    storageAttribute,
                     attributeIndex,
                     typedName,
                     resolver,
                     component.Entity.Name,
-                    entity.IsDerivedRedeclared(attributes[attributeIndex])));
+                    entity.IsDerivedRedeclared(physicalAttribute)));
             }
 
             branch.AddStatement(componentBranch);
@@ -513,7 +522,8 @@ internal static class ExpressSchemaDescriptorEmitter
             typedName,
             indexOffset + index,
             resolver,
-            complexEntity?.IsDerivedRedeclared(attribute) == true));
+            complexEntity?.IsDerivedRedeclared(attribute) == true,
+            useInterfaceContract: complexEntity is not null));
         return "new global::System.Collections.Generic.KeyValuePair<global::System.String, "
             + "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>("
             + $"\"{componentName.ToUpperInvariant()}\", [{string.Join(", ", parameters)}])";
@@ -599,17 +609,30 @@ internal static class ExpressSchemaDescriptorEmitter
         string typedName,
         int index,
         ExpressGeneratedTypeResolver resolver,
-        bool isDerivedRedeclared = false)
+        bool isDerivedRedeclared = false,
+        bool useInterfaceContract = false)
     {
         if (isDerivedRedeclared || entity.IsDerivedRedeclared(attribute))
         {
             return "global::TedToolkit.Step21.ParameterValue.Derived";
         }
 
-        var value = StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName)
-            ? $"{typedName}.{attribute.Name}"
-            : $"(({GetGeneratedTypeName(entity.Schema.Identity, attribute.StorageEntity.Symbol)})"
+        string value;
+        if (useInterfaceContract)
+        {
+            value = $"(({GetGeneratedTypeName(entity.Schema.Identity, attribute.DeclaringEntity.Symbol)})"
                 + $"{typedName}).{attribute.Name}";
+        }
+        else if (StringComparer.Ordinal.Equals(attribute.Name, attribute.StorageMemberName))
+        {
+            value = $"{typedName}.{attribute.Name}";
+        }
+        else
+        {
+            value = $"(({GetGeneratedTypeName(entity.Schema.Identity, attribute.StorageEntity.Symbol)})"
+                + $"{typedName}).{attribute.Name}";
+        }
+
         var physicalValue = attribute.Attribute.IsOptional
             && !resolver.Resolve(entity.Schema.Identity, attribute.Type).IsReferenceType
                 ? $"{value}.Value"

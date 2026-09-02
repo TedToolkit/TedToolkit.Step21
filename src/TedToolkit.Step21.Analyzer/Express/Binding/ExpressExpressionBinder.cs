@@ -46,6 +46,12 @@ internal sealed class ExpressExpressionBinder
 
     private readonly HashSet<ExpressBoundAttribute> _indeterminateDerivedAttributes = [];
 
+    private readonly Dictionary<string, IReadOnlyList<ExpressBoundSymbol>> _guardedPathAlternatives =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, ExpressExpressionType> _guardedPathScalarTypes =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private ExpressExpressionType? _selfType;
 
     private ExpressExpressionBinder(
@@ -397,6 +403,27 @@ internal sealed class ExpressExpressionBinder
         ExpressExpressionType? expectedType,
         bool allowEntitySetNarrowing = false)
     {
+        if (expression.Kind == ExpressExpressionKind.Application
+            && string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase)
+            && expression.Children.Count == 2
+            && expression.Children.Any(child => child.Kind == ExpressExpressionKind.Binary
+                && child.Operation == "||"
+                && child.Children.All(component => component.Type.Kind == ExpressExpressionTypeKind.Entity))
+            && expectedType?.DeclaredType is ExpressBoundNamedType
+            {
+                Declaration.Kind: ExpressDeclarationKind.Entity,
+            })
+        {
+            return new(
+                expression.Kind,
+                expectedType.WithIndeterminate(expression.Type.CanBeIndeterminate),
+                expression.SourceText,
+                expression.Operation,
+                expression.Reference,
+                expression.Children.Select(child => ApplyExpectedType(child, expectedType)).ToArray(),
+                expression.Span);
+        }
+
         if (expression.Kind == ExpressExpressionKind.Binary
             && expression.Operation == "||"
             && expression.Children.All(child => child.Type.Kind == ExpressExpressionTypeKind.Entity)
@@ -949,8 +976,99 @@ internal sealed class ExpressExpressionBinder
         var result = bindOperand(operands[0], lexicalTypes);
         for (var index = 0; index < operations.Length; index++)
         {
-            var right = bindOperand(operands[index + 1], lexicalTypes);
             var operation = operations[index].TokenText();
+            var rightTypes = lexicalTypes;
+            var scopedPaths = new List<(
+                string Path,
+                bool HadPrevious,
+                IReadOnlyList<ExpressBoundSymbol>? Previous)>();
+            var scopedScalarPaths = new List<(
+                string Path,
+                bool HadPrevious,
+                ExpressExpressionType? Previous)>();
+            if (string.Equals(operation, "AND", StringComparison.OrdinalIgnoreCase))
+            {
+                var narrowings = ResolveTypeOfGuards(result);
+                foreach (var narrowing in narrowings.Values)
+                {
+                    if (narrowing.Alternatives.Count > 0)
+                    {
+                        var hadPrevious = _guardedPathAlternatives.TryGetValue(
+                            narrowing.Path,
+                            out var previous);
+                        scopedPaths.Add((narrowing.Path, hadPrevious, previous));
+                        _guardedPathAlternatives[narrowing.Path] = narrowing.Alternatives;
+                    }
+
+                    if (narrowing.ScalarType is not null)
+                    {
+                        var hadPrevious = _guardedPathScalarTypes.TryGetValue(
+                            narrowing.Path,
+                            out var previous);
+                        scopedScalarPaths.Add((narrowing.Path, hadPrevious, previous));
+                        _guardedPathScalarTypes[narrowing.Path] = narrowing.ScalarType;
+                    }
+                }
+
+                var directNarrowings = narrowings.Values
+                    .Where(narrowing => narrowing.Reference is not null
+                        && (narrowing.Alternatives.Count == 1 || narrowing.ScalarType is not null))
+                    .ToDictionary(
+                        narrowing => narrowing.Reference!.Name,
+                        narrowing => narrowing.ScalarType
+                            ?? TypeOf(new ExpressBoundNamedType(
+                                narrowing.Alternatives[0],
+                                result.Span)),
+                        StringComparer.OrdinalIgnoreCase);
+                if (directNarrowings.Count > 0)
+                {
+                    var narrowedTypes = lexicalTypes.ToDictionary(
+                        pair => pair.Key,
+                        pair => directNarrowings.TryGetValue(pair.Key, out var narrowedType)
+                            ? narrowedType
+                            : pair.Value,
+                        StringComparer.OrdinalIgnoreCase);
+                    foreach (var narrowing in directNarrowings)
+                    {
+                        narrowedTypes[narrowing.Key] = narrowing.Value;
+                    }
+
+                    rightTypes = narrowedTypes;
+                }
+            }
+
+            ExpressBoundExpression right;
+            try
+            {
+                right = bindOperand(operands[index + 1], rightTypes);
+            }
+            finally
+            {
+                foreach (var scopedPath in scopedPaths)
+                {
+                    if (scopedPath.HadPrevious)
+                    {
+                        _guardedPathAlternatives[scopedPath.Path] = scopedPath.Previous!;
+                    }
+                    else
+                    {
+                        _guardedPathAlternatives.Remove(scopedPath.Path);
+                    }
+                }
+
+                foreach (var scopedPath in scopedScalarPaths)
+                {
+                    if (scopedPath.HadPrevious)
+                    {
+                        _guardedPathScalarTypes[scopedPath.Path] = scopedPath.Previous!;
+                    }
+                    else
+                    {
+                        _guardedPathScalarTypes.Remove(scopedPath.Path);
+                    }
+                }
+            }
+
             var type = BinaryResultType(operation, result.Type, right.Type);
             if (operation is not ("OR" or "XOR" or "AND")
                 && (result.Type.CanBeIndeterminate || right.Type.CanBeIndeterminate))
@@ -969,6 +1087,130 @@ internal sealed class ExpressExpressionBinder
         }
 
         return result;
+    }
+
+    private IReadOnlyDictionary<string, (
+        string Path,
+        ExpressBoundName? Reference,
+        IReadOnlyList<ExpressBoundSymbol> Alternatives,
+        ExpressExpressionType? ScalarType)> ResolveTypeOfGuards(
+        ExpressBoundExpression condition)
+    {
+        if (condition.Kind == ExpressExpressionKind.Binary
+            && condition.Operation is "AND" or "OR"
+            && condition.Children.Count == 2)
+        {
+            var left = ResolveTypeOfGuards(condition.Children[0]);
+            var right = ResolveTypeOfGuards(condition.Children[1]);
+            var paths = condition.Operation == "AND"
+                ? left.Keys.Union(right.Keys, StringComparer.OrdinalIgnoreCase)
+                : left.Keys.Intersect(right.Keys, StringComparer.OrdinalIgnoreCase);
+            return paths.ToDictionary(
+                path => path,
+                path =>
+                {
+                    left.TryGetValue(path, out var leftNarrowing);
+                    right.TryGetValue(path, out var rightNarrowing);
+                    var alternatives = (leftNarrowing.Alternatives ?? [])
+                        .Concat(rightNarrowing.Alternatives ?? [])
+                        .Distinct()
+                        .ToArray();
+                    var scalarTypes = new[] { leftNarrowing.ScalarType, rightNarrowing.ScalarType, }
+                        .Where(type => type is not null)
+                        .GroupBy(type => type!.Kind)
+                        .Select(group => group.First())
+                        .ToArray();
+                    return (
+                        path,
+                        leftNarrowing.Reference ?? rightNarrowing.Reference,
+                        (IReadOnlyList<ExpressBoundSymbol>)alternatives,
+                        scalarTypes.Length == 1 ? scalarTypes[0] : null);
+                },
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        var typeOf = condition.Children.Count == 2 ? condition.Children[1] : null;
+        if (condition.Kind != ExpressExpressionKind.Binary
+            || !string.Equals(condition.Operation, "IN", StringComparison.OrdinalIgnoreCase)
+            || condition.Children.Count != 2
+            || !TryEvaluateStaticString(condition.Children[0], out var qualifiedName)
+            || typeOf?.Kind != ExpressExpressionKind.Application
+            || typeOf.Operation != "TYPEOF"
+            || typeOf.Children.Count != 1)
+        {
+            return new Dictionary<string, (
+                string,
+                ExpressBoundName?,
+                IReadOnlyList<ExpressBoundSymbol>,
+                ExpressExpressionType?)>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var selected = _declarations.Keys.SingleOrDefault(candidate =>
+            candidate.Kind == ExpressDeclarationKind.Entity
+            && string.Equals(
+                candidate.DeclaringSchema.Name + "." + candidate.Name,
+                qualifiedName,
+                StringComparison.OrdinalIgnoreCase));
+        var scalarType = qualifiedName.ToUpperInvariant() switch
+        {
+            "INTEGER" => _integer,
+            "NUMBER" => _number,
+            "REAL" => _real,
+            _ => null,
+        };
+        if (selected is null && scalarType is null)
+        {
+            return new Dictionary<string, (
+                string,
+                ExpressBoundName?,
+                IReadOnlyList<ExpressBoundSymbol>,
+                ExpressExpressionType?)>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var narrowedExpression = typeOf.Children[0];
+        return new Dictionary<string, (
+            string Path,
+            ExpressBoundName? Reference,
+            IReadOnlyList<ExpressBoundSymbol> Alternatives,
+            ExpressExpressionType? ScalarType)>(StringComparer.OrdinalIgnoreCase)
+        {
+            [narrowedExpression.SourceText] = (
+                narrowedExpression.SourceText,
+                narrowedExpression.Kind == ExpressExpressionKind.Reference
+                    ? narrowedExpression.Reference
+                    : null,
+                selected is null ? [] : [selected,],
+                scalarType),
+        };
+    }
+
+    private static bool TryEvaluateStaticString(
+        ExpressBoundExpression expression,
+        out string value)
+    {
+        if (expression.Kind == ExpressExpressionKind.Literal
+            && expression.Type.Kind == ExpressExpressionTypeKind.String
+            && expression.SourceText.Length >= 2
+            && expression.SourceText[0] == '\''
+            && expression.SourceText[expression.SourceText.Length - 1] == '\'')
+        {
+            value = expression.SourceText.Substring(1, expression.SourceText.Length - 2)
+                .Replace("''", "'");
+            return true;
+        }
+
+        if (expression.Kind == ExpressExpressionKind.Binary
+            && expression.Operation == "+"
+            && expression.Children.Count == 2
+            && TryEvaluateStaticString(expression.Children[0], out var left)
+            && TryEvaluateStaticString(expression.Children[1], out var right))
+        {
+            value = left + right;
+            return true;
+        }
+
+        value = "";
+        return false;
     }
 
     private ExpressBoundExpression BindFactor(
@@ -1178,10 +1420,19 @@ internal sealed class ExpressExpressionBinder
                 {
                     var initializer = parameters[index];
                     if (initializer.Kind != ExpressExpressionKind.AggregateInitializer
-                        || initializer.Children.Count > 1
                         || initializer.Children.Any(child => child.Kind == ExpressExpressionKind.Repetition)
                         || formalTypes[index] is not ExpressBoundAggregateType formalSet
                         || formalSet.Kind != ExpressAggregateKind.Set)
+                    {
+                        continue;
+                    }
+
+                    var staticKeys = initializer.Children
+                        .Select(StaticSetElementKey)
+                        .ToArray();
+                    if (initializer.Children.Count > 1
+                        && (staticKeys.Any(key => key is null)
+                            || staticKeys.Distinct(StringComparer.Ordinal).Count() != staticKeys.Length))
                     {
                         continue;
                     }
@@ -1611,16 +1862,87 @@ internal sealed class ExpressExpressionBinder
             parameters);
     }
 
+    private static string? StaticSetElementKey(ExpressBoundExpression expression)
+    {
+        if (TryStaticStringValue(expression, out var stringValue))
+        {
+            return "String:" + stringValue;
+        }
+
+        if (expression.Kind == ExpressExpressionKind.Literal)
+        {
+            return expression.Type.Kind.ToString() + ":" + expression.SourceText;
+        }
+
+        if (expression.Kind != ExpressExpressionKind.Reference
+            || expression.Reference?.Kind != ExpressBoundNameKind.Enumeration)
+        {
+            return null;
+        }
+
+        return "Enumeration:"
+            + expression.Reference.SchemaDeclaration?.DeclaringSchema.Name
+            + "."
+            + expression.Reference.SchemaDeclaration?.Name
+            + "."
+            + expression.Reference.Name;
+    }
+
+    private static bool TryStaticStringValue(
+        ExpressBoundExpression expression,
+        out string value)
+    {
+        if (expression.Kind == ExpressExpressionKind.Literal
+            && expression.Type.Kind == ExpressExpressionTypeKind.String
+            && expression.SourceText.Length >= 2
+            && expression.SourceText[0] == '\''
+            && expression.SourceText[expression.SourceText.Length - 1] == '\'')
+        {
+            value = expression.SourceText.Substring(1, expression.SourceText.Length - 2)
+                .Replace("''", "'");
+            return true;
+        }
+
+        if (expression.Kind != ExpressExpressionKind.Binary
+            || expression.Operation != "+"
+            || expression.Type.Kind != ExpressExpressionTypeKind.String
+            || expression.Children.Count != 2
+            || !TryStaticStringValue(expression.Children[0], out var left)
+            || !TryStaticStringValue(expression.Children[1], out var right))
+        {
+            value = "";
+            return false;
+        }
+
+        value = left + right;
+        return true;
+    }
+
     private ExpressBoundExpression BindQualifier(
         ExpressRuleSyntax syntax,
         ExpressBoundExpression source,
         IReadOnlyDictionary<string, ExpressExpressionType> lexicalTypes)
     {
+        if (_guardedPathAlternatives.TryGetValue(source.SourceText, out var guardedAlternatives)
+            && guardedAlternatives.Count == 1)
+        {
+            var guardedType = TypeOf(new ExpressBoundNamedType(guardedAlternatives[0], source.Span));
+            source = new(
+                source.Kind,
+                guardedType.WithIndeterminate(source.Type.CanBeIndeterminate),
+                source.SourceText,
+                source.Operation,
+                source.Reference,
+                source.Children,
+                source.Span);
+        }
+
         var qualifier = syntax.ChildRules().Single();
         if (qualifier.Production == "attributeQualifier")
         {
             var target = FindReference(qualifier.Span)?.Target
-                ?? ResolveAttribute(source.Type, qualifier);
+                ?? ResolveAttribute(source.Type, qualifier)
+                ?? ResolveGuardedAttribute(source.SourceText, qualifier);
             var targetDerivedIsIndeterminate = target?.AttributeCandidates.Any(
                 _indeterminateDerivedAttributes.Contains) == true;
             ExpressBoundType? sourceType = source.Type.DeclaredType;
@@ -1652,11 +1974,11 @@ internal sealed class ExpressExpressionBinder
                     || alternatives.Any(alternative =>
                         !_declarations.TryGetValue(alternative, out var alternativeDeclaration)
                         || alternativeDeclaration is not ExpressBoundEntity alternativeEntity
-                        || !EnumerateAttributes(alternativeEntity, new HashSet<ExpressBoundSymbol>())
+                        || !EnumerateVisibleAttributes(alternativeEntity)
                             .Any(target.AttributeCandidates.Contains));
             }
 
-            return Create(
+            var result = Create(
                 ExpressExpressionKind.AttributeQualifier,
                 TypeOf(target?.Type)
                     .WithIndeterminate(
@@ -1669,6 +1991,30 @@ internal sealed class ExpressExpressionBinder
                 qualifier.TokenText(),
                 target,
                 [source,]);
+            if (_guardedPathAlternatives.TryGetValue(result.SourceText, out var resultAlternatives)
+                && resultAlternatives.Count == 1)
+            {
+                return new(
+                    result.Kind,
+                    TypeOf(new ExpressBoundNamedType(resultAlternatives[0], result.Span))
+                        .WithIndeterminate(result.Type.CanBeIndeterminate),
+                    result.SourceText,
+                    result.Operation,
+                    result.Reference,
+                    result.Children,
+                    result.Span);
+            }
+
+            return _guardedPathScalarTypes.TryGetValue(result.SourceText, out var guardedScalarType)
+                ? new ExpressBoundExpression(
+                    result.Kind,
+                    guardedScalarType.WithIndeterminate(result.Type.CanBeIndeterminate),
+                    result.SourceText,
+                    result.Operation,
+                    result.Reference,
+                    result.Children,
+                    result.Span)
+                : result;
         }
 
         if (qualifier.Production == "groupQualifier")
@@ -1803,8 +2149,24 @@ internal sealed class ExpressExpressionBinder
         ExpressExpressionType source,
         ExpressRuleSyntax qualifier)
     {
-        if (source.DeclaredType is not ExpressBoundNamedType named
-            || named.Declaration.Kind != ExpressDeclarationKind.Entity
+        var sourceType = source.DeclaredType;
+        while (sourceType is ExpressBoundNamedType namedDefined
+               && namedDefined.Declaration.Kind != ExpressDeclarationKind.Entity
+               && _declarations.TryGetValue(namedDefined.Declaration, out var namedDeclaration)
+               && namedDeclaration is ExpressBoundDefinedType defined)
+        {
+            sourceType = defined.UnderlyingType;
+        }
+
+        if (sourceType is ExpressBoundSelectType select)
+        {
+            return TryGetClosedEntityAlternatives(select, out var alternatives)
+                ? ResolveAttribute(alternatives, qualifier)
+                : null;
+        }
+
+        var named = sourceType as ExpressBoundNamedType;
+        if (named?.Declaration.Kind != ExpressDeclarationKind.Entity
             || !_declarations.TryGetValue(named.Declaration, out var declaration)
             || declaration is not ExpressBoundEntity entity)
         {
@@ -1812,9 +2174,8 @@ internal sealed class ExpressExpressionBinder
         }
 
         var name = qualifier.RequiredChild("attributeRef").IdentifierToken().Text;
-        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+        var attributes = EnumerateVisibleAttributes(entity)
             .Where(attribute => string.Equals(attribute.Name, name, StringComparison.OrdinalIgnoreCase))
-            .Distinct()
             .ToArray();
         if (attributes.Length != 1)
         {
@@ -1830,6 +2191,132 @@ internal sealed class ExpressExpressionBinder
             attribute.Span,
             attribute.IsOptional,
             attribute);
+    }
+
+    private bool TryGetClosedEntityAlternatives(
+        ExpressBoundSelectType select,
+        out IReadOnlyList<ExpressBoundSymbol> alternatives)
+    {
+        var entities = new List<ExpressBoundSymbol>();
+        var pending = new Stack<ExpressBoundType>();
+        var visited = new HashSet<ExpressBoundSymbol>();
+        pending.Push(select);
+        while (pending.Count > 0)
+        {
+            var candidate = pending.Pop();
+            if (candidate is ExpressBoundSelectType candidateSelect)
+            {
+                if (candidateSelect.IsExtensible)
+                {
+                    alternatives = [];
+                    return false;
+                }
+
+                foreach (var alternative in candidateSelect.Alternatives)
+                {
+                    pending.Push(new ExpressBoundNamedType(alternative, candidateSelect.Span));
+                }
+
+                if (candidateSelect.BaseType is not null)
+                {
+                    pending.Push(new ExpressBoundNamedType(
+                        candidateSelect.BaseType,
+                        candidateSelect.Span));
+                }
+
+                continue;
+            }
+
+            if (candidate is not ExpressBoundNamedType named
+                || !visited.Add(named.Declaration))
+            {
+                continue;
+            }
+
+            if (named.Declaration.Kind == ExpressDeclarationKind.Entity)
+            {
+                entities.Add(named.Declaration);
+                continue;
+            }
+
+            if (!_declarations.TryGetValue(named.Declaration, out var declaration)
+                || declaration is not ExpressBoundDefinedType defined)
+            {
+                alternatives = [];
+                return false;
+            }
+
+            pending.Push(defined.UnderlyingType);
+        }
+
+        alternatives = entities;
+        return entities.Count > 0;
+    }
+
+    private ExpressBoundName? ResolveAttribute(
+        IReadOnlyList<ExpressBoundSymbol> alternatives,
+        ExpressRuleSyntax qualifier)
+    {
+        var name = qualifier.RequiredChild("attributeRef").IdentifierToken().Text;
+        var candidates = new List<ExpressBoundAttribute>();
+        foreach (var alternative in alternatives)
+        {
+            if (!_declarations.TryGetValue(alternative, out var declaration)
+                || declaration is not ExpressBoundEntity entity)
+            {
+                return null;
+            }
+
+            var attributes = EnumerateVisibleAttributes(entity)
+                .Where(attribute => string.Equals(
+                    attribute.Name,
+                    name,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (attributes.Length > 1)
+            {
+                return null;
+            }
+
+            if (attributes.Length == 0)
+            {
+                continue;
+            }
+
+            if (!candidates.Contains(attributes[0]))
+            {
+                candidates.Add(attributes[0]);
+            }
+        }
+
+        if (candidates.Count == 0
+            || candidates.Select(candidate => TypeOf(candidate.Type).Kind).Distinct().Count() != 1)
+        {
+            return null;
+        }
+
+        var attribute = candidates.Count == 1 ? candidates[0] : null;
+        return new(
+            name,
+            ExpressBoundNameKind.Attribute,
+            candidates[0].Type,
+            schemaDeclaration: null,
+            qualifier.Span,
+            candidates.Any(candidate => candidate.IsOptional),
+            attribute,
+            candidates);
+    }
+
+    private ExpressBoundName? ResolveGuardedAttribute(
+        string sourcePath,
+        ExpressRuleSyntax qualifier)
+    {
+        if (!_guardedPathAlternatives.TryGetValue(sourcePath, out var alternatives))
+        {
+            return null;
+        }
+
+        return ResolveAttribute(alternatives, qualifier);
     }
 
     private IEnumerable<ExpressBoundAttribute> EnumerateAttributes(
@@ -1855,6 +2342,26 @@ internal sealed class ExpressExpressionBinder
                 {
                     yield return attribute;
                 }
+            }
+        }
+    }
+
+    private IEnumerable<ExpressBoundAttribute> EnumerateVisibleAttributes(ExpressBoundEntity entity)
+    {
+        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+            .Distinct()
+            .ToArray();
+        foreach (var attribute in attributes)
+        {
+            var isRedeclaredSlot = attributes.Any(candidate =>
+                ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                && string.Equals(
+                    candidate.RedeclaredAttributeName,
+                    attribute.Name,
+                    StringComparison.OrdinalIgnoreCase));
+            if (!isRedeclaredSlot)
+            {
+                yield return attribute;
             }
         }
     }

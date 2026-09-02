@@ -21,6 +21,7 @@ internal sealed class ExpressBoundSchema
     /// <param name="imports">The resolved imports.</param>
     /// <param name="declarations">The locally declared symbols.</param>
     /// <param name="nestedDeclarations">The declarations owned by nested algorithm scopes.</param>
+    /// <param name="lexicalNames">The names declared by nested algorithm scopes.</param>
     /// <param name="nameReferences">The resolved expression and statement names.</param>
     /// <param name="expressions">The immutable typed outermost expression trees.</param>
     /// <param name="indeterminateFunctions">Functions whose result can be indeterminate.</param>
@@ -30,6 +31,7 @@ internal sealed class ExpressBoundSchema
         IEnumerable<ExpressBoundImport> imports,
         IEnumerable<ExpressBoundDeclaration> declarations,
         IEnumerable<ExpressBoundDeclaration> nestedDeclarations,
+        IEnumerable<ExpressBoundName> lexicalNames,
         IEnumerable<ExpressBoundNameReference> nameReferences,
         IEnumerable<ExpressBoundExpression> expressions,
         IEnumerable<ExpressBoundSymbol> indeterminateFunctions,
@@ -39,6 +41,7 @@ internal sealed class ExpressBoundSchema
         Imports = new ReadOnlyCollection<ExpressBoundImport>(imports.ToArray());
         Declarations = new ReadOnlyCollection<ExpressBoundDeclaration>(declarations.ToArray());
         NestedDeclarations = new ReadOnlyCollection<ExpressBoundDeclaration>(nestedDeclarations.ToArray());
+        LexicalNames = new ReadOnlyCollection<ExpressBoundName>(lexicalNames.ToArray());
         NameReferences = new ReadOnlyCollection<ExpressBoundNameReference>(nameReferences.ToArray());
         Expressions = new ReadOnlyCollection<ExpressBoundExpression>(expressions.ToArray());
         IndeterminateFunctions = new ReadOnlyCollection<ExpressBoundSymbol>(indeterminateFunctions.ToArray());
@@ -75,6 +78,11 @@ internal sealed class ExpressBoundSchema
     /// Gets declarations owned by nested algorithm scopes in source order.
     /// </summary>
     internal IReadOnlyList<ExpressBoundDeclaration> NestedDeclarations { get; }
+
+    /// <summary>
+    /// Gets names declared by nested algorithm scopes, including names that are never referenced.
+    /// </summary>
+    internal IReadOnlyList<ExpressBoundName> LexicalNames { get; }
 
     /// <summary>
     /// Gets expression and statement names resolved in source order.

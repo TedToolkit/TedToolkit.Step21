@@ -113,6 +113,53 @@ internal sealed class BindingTests
         END_SCHEMA;
         """;
 
+    private const string RedeclaredAttributeSchema = """
+        SCHEMA redeclared_attribute_binding;
+        ENTITY representation_item;
+        END_ENTITY;
+        ENTITY curve SUBTYPE OF (representation_item);
+          dimension : INTEGER;
+        END_ENTITY;
+        ENTITY styled_item;
+          item : representation_item;
+        END_ENTITY;
+        ENTITY curve_style SUBTYPE OF (styled_item);
+          SELF\styled_item.item : curve;
+        END_ENTITY;
+        ENTITY holder;
+          style : curve_style;
+        WHERE
+          valid_dimension : style.item.dimension > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string ContextualNvlComplexConstructionSchema = """
+        SCHEMA contextual_nvl_complex_construction;
+        CONSTANT
+          dummy_gri : geometric_representation_item :=
+            representation_item('') || geometric_representation_item();
+        END_CONSTANT;
+        ENTITY representation_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY geometric_representation_item
+          SUPERTYPE OF (ONEOF (direction))
+          SUBTYPE OF (representation_item);
+        END_ENTITY;
+        ENTITY direction SUBTYPE OF (geometric_representation_item);
+          direction_ratios : LIST [2:3] OF REAL;
+        END_ENTITY;
+        FUNCTION choose_direction(axis : direction) : direction;
+          LOCAL
+            selected : direction;
+          END_LOCAL;
+          selected := NVL(axis, dummy_gri || direction([1.0, 0.0]));
+          RETURN(selected);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
     /// <summary>
     /// Verifies every grammar expression shape becomes source-located typed immutable IR.
     /// </summary>
@@ -140,6 +187,36 @@ internal sealed class BindingTests
                 .IsTrue();
             await Assert.That(expressions.All(expression => expression.Span.Start.FilePath == "expressions.exp"))
                 .IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies an assignment target supplies the most-specific entity type through NVL to a complex constructor.
+    /// </summary>
+    [Test]
+    public async Task Should_contextually_type_a_complex_constructor_inside_nvl()
+    {
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("contextual-nvl-complex.exp", ContextualNvlComplexConstructionSchema),
+        ]);
+        await Assert.That(compilation.SyntaxDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilation.SyntaxDiagnostics.Select(item => item.Message)));
+        await Assert.That(compilation.BindingDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilation.BindingDiagnostics.Select(item => item.Message)));
+        var schema = compilation.Schemas.Single();
+        var nvl = schema.Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Single(expression => string.Equals(expression.Operation, "NVL", StringComparison.OrdinalIgnoreCase));
+        var construction = nvl.Children[1];
+        var expected = schema.Declarations.Single(declaration => declaration.Name == "direction").Symbol;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(((ExpressBoundNamedType)nvl.Type.DeclaredType!).Declaration)
+                .IsSameReferenceAs(expected);
+            await Assert.That(((ExpressBoundNamedType)construction.Type.DeclaredType!).Declaration)
+                .IsSameReferenceAs(expected);
         }
     }
 
@@ -229,6 +306,25 @@ internal sealed class BindingTests
             await Assert.That(Find(roots, "dynamic_array[2]").Type.CanBeIndeterminate).IsTrue();
             await Assert.That(Find(roots, "fixed_array[index]").Type.CanBeIndeterminate).IsTrue();
         }
+    }
+
+    /// <summary>
+    /// Verifies an explicit redeclaration shadows the inherited physical slot during member binding.
+    /// </summary>
+    [Test]
+    public async Task Should_bind_the_nearest_explicit_attribute_redeclaration()
+    {
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("redeclared-attribute.exp", RedeclaredAttributeSchema),
+        ]);
+        await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+        await Assert.That(compilation.BindingDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilation.BindingDiagnostics.Select(item => item.Message)));
+        var dimension = compilation.Schemas.Single().Expressions
+            .SelectMany(expression => expression.DescendantsAndSelf())
+            .Single(expression => expression.SourceText == "style.item.dimension");
+        await Assert.That(dimension.Type.Kind).IsEqualTo(ExpressExpressionTypeKind.Integer);
     }
 
     /// <summary>

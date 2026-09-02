@@ -114,6 +114,26 @@ public sealed class ComplexMappingRoundTripTests
         END_SCHEMA;
         """;
 
+    private const string COMPLEX_NARROWED_REDECLARATION_SCHEMA = """
+        SCHEMA complex_narrowed_redeclaration;
+        ENTITY target;
+        END_ENTITY;
+        ENTITY specialized SUBTYPE OF (target);
+        END_ENTITY;
+        TYPE specialized_choice = SELECT (specialized);
+        END_TYPE;
+        ENTITY root SUPERTYPE OF (left ANDOR right);
+          link : target;
+        END_ENTITY;
+        ENTITY left SUBTYPE OF (root);
+          SELF\root.link : specialized_choice;
+        END_ENTITY;
+        ENTITY right SUBTYPE OF (root);
+          SELF\root.link : specialized_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string SAFE_GROUP_SCHEMA = """
         SCHEMA safe_group;
         ENTITY surface SUPERTYPE OF (ONEOF (plane, swept_surface));
@@ -494,6 +514,38 @@ public sealed class ComplexMappingRoundTripTests
         structure.Write(output);
 
         await Assert.That(output.ToString()).Contains("#1=(LEFT()RIGHT()ROOT(*));");
+    }
+
+    /// <summary>Projects a narrowed complex storage slot through the inherited interface contract.</summary>
+    [Test]
+    public async Task Should_project_a_complex_narrowed_redeclaration_through_its_base_interface()
+    {
+        var descriptor = CreateDescriptor(
+            COMPLEX_NARROWED_REDECLARATION_SCHEMA,
+            "ComplexNarrowedRedeclaration");
+        var assembly = descriptor.GetType().Assembly;
+        var specialized = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.Specialized",
+            throwOnError: true)!)!;
+        var complexType = assembly.GetType(
+            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.__Complex_Left_Right",
+            throwOnError: true)!;
+        var complex = Activator.CreateInstance(complexType, nonPublic: true)!;
+        var choiceType = assembly.GetType(
+            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.SpecializedChoice",
+            throwOnError: true)!;
+        var choice = choiceType.GetMethod("FromSpecialized")!.Invoke(null, [specialized]);
+        complexType.GetProperty("Link")!.SetValue(complex, choice);
+        var rootInterface = complexType.GetInterface(
+            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.IRoot")!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(rootInterface.GetProperty("Link")!.GetValue(complex))
+                .IsSameReferenceAs(specialized);
+            await Assert.That(((Entity)complex).DirectReferences.Single())
+                .IsSameReferenceAs(specialized);
+        }
     }
 
     /// <summary>Treats an inapplicable group qualifier as indeterminate instead of throwing a CLR cast.</summary>

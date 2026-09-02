@@ -710,6 +710,15 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         TYPE unit = SELECT (unit_value);
         END_TYPE;
+        ENTITY named_value;
+          name : STRING;
+        END_ENTITY;
+        ENTITY first_named_value SUBTYPE OF (named_value);
+        END_ENTITY;
+        ENTITY second_named_value SUBTYPE OF (named_value);
+        END_ENTITY;
+        TYPE named_choice = SELECT (first_named_value, second_named_value);
+        END_TYPE;
         FUNCTION guarded_basis(item : pcurve_or_surface) : surface_value;
           IF 'SELECT_ATTRIBUTE_QUALIFIER_MODEL.PCURVE_VALUE' IN TYPEOF(item) THEN
             RETURN(item.basis_surface);
@@ -735,6 +744,9 @@ public sealed class ReachableRuleTests
         END_FUNCTION;
         FUNCTION unguarded_call_measure(item : vector_or_direction) : REAL;
           RETURN(passthrough(item).direction_ratios[1]);
+        END_FUNCTION;
+        FUNCTION common_name(item : named_choice) : STRING;
+          RETURN(item.name);
         END_FUNCTION;
         ENTITY guarded_sample;
           curve_choice : pcurve_or_surface;
@@ -763,6 +775,11 @@ public sealed class ReachableRuleTests
           vector_choice : vector_or_direction;
         WHERE
           unguarded_call_is_unknown : NOT EXISTS(unguarded_call_measure(vector_choice));
+        END_ENTITY;
+        ENTITY named_sample;
+          selected : named_choice;
+        WHERE
+          common_attribute : LENGTH(common_name(selected)) > 0;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -826,6 +843,287 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_SCHEMA = """
+        SCHEMA typeof_guarded_select_path_argument_model;
+        ENTITY property_definition;
+          name : STRING;
+        END_ENTITY;
+        ENTITY other_definition;
+        END_ENTITY;
+        TYPE represented_definition = SELECT (property_definition, other_definition);
+        END_TYPE;
+        ENTITY representation;
+        END_ENTITY;
+        ENTITY property_definition_representation;
+          definition : represented_definition;
+          used_representation : representation;
+        END_ENTITY;
+        FUNCTION correlates(pd : property_definition) : BOOLEAN;
+          RETURN(EXISTS(pd));
+        END_FUNCTION;
+        FUNCTION unknown_comparison(pd : property_definition) : LOGICAL;
+          RETURN(pd = ?);
+        END_FUNCTION;
+        RULE restrict_representation FOR (property_definition_representation);
+        WHERE
+          wr1 : SIZEOF(QUERY(pdr <* property_definition_representation |
+            ('TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_MODEL.PROPERTY_DEFINITION'
+              IN TYPEOF(pdr.definition))
+            AND correlates(pdr.definition)
+            AND EXISTS(unknown_comparison(pdr.definition)))) = 0;
+        END_RULE;
+        END_SCHEMA;
+        """;
+
+    private const string AP214_BOUNDARY_ADAPTATION_SCHEMA = """
+        SCHEMA ap214_boundary_adaptation_model;
+        TYPE angle_measure = REAL;
+        END_TYPE;
+        ENTITY base_item;
+          code : INTEGER;
+        END_ENTITY;
+        ENTITY selected_item SUBTYPE OF (base_item);
+          detail : INTEGER;
+        END_ENTITY;
+        TYPE item_choice = SELECT (base_item);
+        END_TYPE;
+        TYPE nested_choice = SELECT (item_choice);
+        END_TYPE;
+        TYPE selected_result = SELECT (selected_item);
+        END_TYPE;
+        TYPE measure_value = SELECT (angle_measure);
+        END_TYPE;
+        TYPE integer_list = LIST OF INTEGER;
+        END_TYPE;
+        TYPE integer_set = SET OF INTEGER;
+        END_TYPE;
+        TYPE compound_items = SELECT (integer_list, integer_set);
+        END_TYPE;
+        ENTITY direction;
+          ratios : LIST [1:?] OF REAL;
+        END_ENTITY;
+        ENTITY vector;
+          orientation : direction;
+        END_ENTITY;
+        TYPE vector_or_direction = SELECT (vector, direction);
+        END_TYPE;
+        ENTITY product_definition;
+        END_ENTITY;
+        ENTITY product_relationship;
+        END_ENTITY;
+        TYPE characterized_product_definition = SELECT (
+          product_definition, product_relationship);
+        END_TYPE;
+        ENTITY shape_aspect;
+        END_ENTITY;
+        ENTITY shape_relationship;
+        END_ENTITY;
+        TYPE shape_definition = SELECT (shape_aspect, shape_relationship);
+        END_TYPE;
+        TYPE characterized_definition = SELECT (
+          characterized_product_definition, shape_definition);
+        END_TYPE;
+        ENTITY property_definition;
+          definition : characterized_definition;
+        END_ENTITY;
+        ENTITY named_unit;
+        END_ENTITY;
+        ENTITY derived_unit;
+        END_ENTITY;
+        ENTITY conversion_based_unit SUBTYPE OF (named_unit);
+          factor : REAL;
+        END_ENTITY;
+        ENTITY si_unit SUBTYPE OF (named_unit);
+          scale : REAL;
+        END_ENTITY;
+        TYPE unit = SELECT (derived_unit, named_unit);
+        END_TYPE;
+        FUNCTION promote(values : SET OF selected_item) : BOOLEAN;
+          LOCAL
+            promoted : SET OF nested_choice := [];
+          END_LOCAL;
+          promoted := QUERY(item <* values | TRUE);
+          RETURN(SIZEOF(promoted) = SIZEOF(values));
+        END_FUNCTION;
+        FUNCTION convert_angle(angle : angle_measure) : angle_measure;
+          LOCAL
+            converted : angle_measure := angle;
+            marker : LOGICAL := TRUE;
+          END_LOCAL;
+          IF marker THEN
+            RETURN(converted);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION extract_measure(measured_value : measure_value) : REAL;
+          RETURN(measured_value);
+        END_FUNCTION;
+        FUNCTION has_selected(values : BAG OF base_item) : BOOLEAN;
+          LOCAL
+            selected : BAG OF selected_item := [];
+          END_LOCAL;
+          selected := QUERY(item <* values |
+            'AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(item));
+          RETURN(SIZEOF(selected) >= 0);
+        END_FUNCTION;
+        FUNCTION normalise_direction(item : direction) : vector_or_direction;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION consumes_direction(item : direction) : BOOLEAN;
+          RETURN(EXISTS(item));
+        END_FUNCTION;
+        FUNCTION adapts_select_result(item : direction) : BOOLEAN;
+          RETURN(consumes_direction(normalise_direction(item)));
+        END_FUNCTION;
+        FUNCTION observes_nested_select(item : characterized_definition) : BOOLEAN;
+          RETURN('AP214_BOUNDARY_ADAPTATION_MODEL.PRODUCT_DEFINITION' IN TYPEOF(item));
+        END_FUNCTION;
+        FUNCTION counts_nested_select_users(item : characterized_definition) : INTEGER;
+          RETURN(SIZEOF(USEDIN(item,
+            'AP214_BOUNDARY_ADAPTATION_MODEL.PROPERTY_DEFINITION.DEFINITION')));
+        END_FUNCTION;
+        FUNCTION reads_guarded_unit(item : unit) : REAL;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.CONVERSION_BASED_UNIT' IN TYPEOF(item) THEN
+            RETURN(item\conversion_based_unit.factor);
+          END_IF;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.SI_UNIT' IN TYPEOF(item) THEN
+            RETURN(item\si_unit.scale);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION selects_from_base(item : base_item) : selected_result;
+          IF 'AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(item) THEN
+            RETURN(item);
+          END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION reads_subtype_group(item : base_item) : INTEGER;
+          RETURN(item\selected_item.detail);
+        END_FUNCTION;
+        FUNCTION dot_values(left, right : direction) : REAL;
+          LOCAL
+            scalar : REAL;
+            count : INTEGER;
+          END_LOCAL;
+          scalar := 0.0;
+          count := SIZEOF(left.ratios);
+          REPEAT i := 1 TO count;
+            scalar := scalar + left.ratios[i] * right.ratios[i];
+          END_REPEAT;
+          RETURN(scalar);
+        END_FUNCTION;
+        FUNCTION rewrites_direction(item : direction) : direction;
+          LOCAL
+            result : direction := item;
+            count : INTEGER := SIZEOF(item.ratios);
+          END_LOCAL;
+          REPEAT i := 1 TO count;
+            result.ratios[i] := result.ratios[i] / 2.0;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION orthogonal_values(item : direction) : direction;
+          RETURN(direction([-item.ratios[2], item.ratios[1]]));
+        END_FUNCTION;
+        ENTITY holder;
+          styles : LIST [1:?] OF item_choice;
+          base_value : base_item;
+          items : SET OF selected_item;
+          measure : measure_value;
+          compound : compound_items;
+          bag_items : BAG OF base_item;
+          direction_value : direction;
+          direction_choice : vector_or_direction;
+          characterized : characterized_definition;
+          selected_unit : unit;
+        WHERE
+          selected_member :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.SELECTED_ITEM' IN TYPEOF(styles[1]))
+            AND (styles[1]\selected_item.detail > 0);
+          promotes_set : promote(items);
+          converts_angle : EXISTS(convert_angle(1.0));
+          extracts_measure : EXISTS(extract_measure(measure));
+          sizes_selected_aggregate : SIZEOF(compound) >= 0;
+          narrows_bag : has_selected(bag_items);
+          adapts_select_function_result : adapts_select_result(direction_value);
+          adapts_narrowed_attribute_select :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.DIRECTION' IN TYPEOF(direction_choice))
+            AND consumes_direction(direction_choice);
+          observes_nested_typeof : observes_nested_select(characterized);
+          observes_nested_usedin : counts_nested_select_users(characterized) >= 0;
+          reads_unit_group : EXISTS(reads_guarded_unit(selected_unit));
+          reads_attribute_unit_group :
+            ('AP214_BOUNDARY_ADAPTATION_MODEL.CONVERSION_BASED_UNIT' IN TYPEOF(selected_unit))
+            AND (selected_unit\conversion_based_unit.factor > 0.0);
+          returns_select_subtype : EXISTS(selects_from_base(styles[1]));
+          projects_entity_subtype_group : EXISTS(reads_subtype_group(base_value));
+          computes_guarded_indices : EXISTS(dot_values(direction_value, direction_value));
+          writes_guarded_index : EXISTS(rewrites_direction(direction_value));
+          constructs_from_guarded_indices : EXISTS(orthogonal_values(direction_value));
+        END_ENTITY;
+        ENTITY derived_holder;
+          base_value : base_item;
+        DERIVE
+          selected_choice : selected_result := base_value;
+          selected_entity : selected_item := base_value;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string AP214_COMPLEX_BOUNDARY_SCHEMA = """
+        SCHEMA ap214_complex_boundary_model;
+        CONSTANT
+          dummy_gri : geometric_representation_item := geometric_representation_item('');
+        END_CONSTANT;
+        TYPE dimension_value = INTEGER;
+        WHERE
+          non_negative : SELF >= 0;
+        END_TYPE;
+        ENTITY named_unit
+        SUPERTYPE OF (ONEOF (si_unit, conversion_based_unit, context_dependent_unit)
+          ANDOR ONEOF (length_unit));
+          dimensions : dimension_value;
+        END_ENTITY;
+        ENTITY si_unit SUBTYPE OF (named_unit);
+        DERIVE
+          SELF\named_unit.dimensions : dimension_value := 1;
+        END_ENTITY;
+        ENTITY conversion_based_unit SUBTYPE OF (named_unit);
+        DERIVE
+          SELF\named_unit.dimensions : dimension_value := 1;
+        END_ENTITY;
+        ENTITY context_dependent_unit SUBTYPE OF (named_unit);
+        END_ENTITY;
+        ENTITY length_unit SUBTYPE OF (named_unit);
+        END_ENTITY;
+        ENTITY representation_item;
+          name : STRING;
+        END_ENTITY;
+        ENTITY geometric_representation_item SUBTYPE OF (representation_item);
+        END_ENTITY;
+        ENTITY direction;
+          ratios : LIST [1:?] OF REAL;
+        END_ENTITY;
+        ENTITY vector SUBTYPE OF (geometric_representation_item);
+          orientation : direction;
+          magnitude : REAL;
+        END_ENTITY;
+        TYPE vector_or_direction = SELECT (vector, direction);
+        END_TYPE;
+        FUNCTION normalise_direction(item : direction) : vector_or_direction;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION build_vector(item : direction) : vector;
+          RETURN(dummy_gri || vector(normalise_direction(item), 1.0));
+        END_FUNCTION;
+        ENTITY sample;
+          direction_value : direction;
+        WHERE
+          builds : EXISTS(build_vector(direction_value));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string INCOMPATIBLE_FUNCTION_SELECT_ARGUMENT_SCHEMA = """
         SCHEMA incompatible_function_select_argument_model;
         ENTITY accepted;
@@ -877,6 +1175,8 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         ENTITY rejected SUBTYPE OF (carrier);
         END_ENTITY;
+        TYPE carrier_choice = SELECT (accepted, rejected);
+        END_TYPE;
         TYPE accepted_choice = SELECT (accepted, alternate_item);
         END_TYPE;
         TYPE nested_choice = SELECT (accepted_choice);
@@ -896,6 +1196,12 @@ public sealed class ReachableRuleTests
           END_IF;
           RETURN(TRUE);
         END_FUNCTION;
+        FUNCTION proven_selected_entity(item : carrier_choice) : BOOLEAN;
+          IF 'DYNAMIC_ENTITY_APPLICATION_MODEL.ACCEPTED' IN TYPEOF(item) THEN
+            RETURN(accepts_entity(item));
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
         FUNCTION maybe_carrier(expose : BOOLEAN; item : carrier) : carrier;
           IF expose THEN RETURN(item); END_IF;
           RETURN(?);
@@ -905,6 +1211,7 @@ public sealed class ReachableRuleTests
           child_value : carrier;
           alternate_value : carrier;
           rejected_value : carrier;
+          selected_value : carrier_choice;
         WHERE
           exact_entity : accepts_entity(accepted_value);
           inherited_entity : accepts_entity(child_value);
@@ -916,6 +1223,7 @@ public sealed class ReachableRuleTests
           absent_actual_is_unknown : NOT EXISTS(accepts_entity(
             maybe_carrier(FALSE,accepted_value)));
           proven_path_control : proven_entity(accepted_value);
+          proven_select_path_control : proven_selected_entity(selected_value);
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -945,7 +1253,8 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, child);
                 _ = structure.Add(section, alternate);
                 _ = structure.Add(section, rejected);
-                _ = structure.Add(section, new Sample(accepted, child, alternate, rejected));
+                var selected = CarrierChoice.FromAccepted(accepted);
+                _ = structure.Add(section, new Sample(accepted, child, alternate, rejected, selected));
                 return structure.Validate();
             }
         }
@@ -1150,6 +1459,24 @@ public sealed class ReachableRuleTests
         FUNCTION return_same(item : item_choice) : item_choice;
           RETURN(item);
         END_FUNCTION;
+        FUNCTION project_select(item : base_item) : base_item;
+          LOCAL
+            choice : item_choice;
+            result : base_item;
+          END_LOCAL;
+          choice := item;
+          result := choice;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION maybe_choice(item : base_item) : item_choice;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION select_nvl(item : base_item) : base_item;
+          LOCAL
+            result : base_item := NVL(maybe_choice(item), item);
+          END_LOCAL;
+          RETURN(result);
+        END_FUNCTION;
         ENTITY sample;
           direct_item : base_item;
           child_value : child_item;
@@ -1159,6 +1486,8 @@ public sealed class ReachableRuleTests
           direct_assignment : EXISTS(assign_direct(direct_item,marker));
           subtype_return : EXISTS(return_subtype(child_value));
           same_select : EXISTS(return_same(selected));
+          selected_entity : EXISTS(project_select(direct_item));
+          selected_nvl : EXISTS(select_nvl(direct_item));
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -1309,6 +1638,8 @@ public sealed class ReachableRuleTests
 
     private const string NUMERIC_ASSIGNMENT_WIDENING_SCHEMA = """
         SCHEMA numeric_assignment_widening_model;
+        TYPE dimension_count = INTEGER;
+        END_TYPE;
         FUNCTION maybe_integer(flag : BOOLEAN) : INTEGER;
           IF flag THEN
             RETURN(2);
@@ -1340,6 +1671,20 @@ public sealed class ReachableRuleTests
           result_value := input;
           RETURN(result_value);
         END_FUNCTION;
+        FUNCTION wrap_count(input : INTEGER) : dimension_count;
+          LOCAL
+            result_value : dimension_count;
+          END_LOCAL;
+          result_value := input;
+          RETURN(result_value);
+        END_FUNCTION;
+        FUNCTION collect_count(input : dimension_count) : BOOLEAN;
+          LOCAL
+            values : SET OF dimension_count := [];
+          END_LOCAL;
+          values := values + [input];
+          RETURN(SIZEOF(values) = 1);
+        END_FUNCTION;
         ENTITY sample;
         WHERE
           literal_present : promote_literal(TRUE) = 0.0;
@@ -1347,6 +1692,8 @@ public sealed class ReachableRuleTests
           optional_present : promote_optional(TRUE) = 2.0;
           optional_unknown : NOT EXISTS(promote_optional(FALSE));
           real_unchanged : keep_real(3.0) = 3.0;
+          defined_assignment : wrap_count(4) = 4;
+          defined_aggregate : collect_count(wrap_count(4));
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -1499,6 +1846,9 @@ public sealed class ReachableRuleTests
         FUNCTION accept_list(values : LIST [3:3] OF REAL) : BOOLEAN;
           RETURN((values[1] = 1.0) AND (values[2] = 2.0) AND (values[3] = 3.0));
         END_FUNCTION;
+        FUNCTION accept_set(values : SET [3:3] OF STRING) : BOOLEAN;
+          RETURN(('first' IN values) AND ('second' IN values) AND ('third' IN values));
+        END_FUNCTION;
         FUNCTION guarded_list(present : BOOLEAN) : BOOLEAN;
           RETURN(accept_list([
             maybe_real(1.0, TRUE),
@@ -1528,6 +1878,17 @@ public sealed class ReachableRuleTests
           values := [1.0, 1.0];
           RETURN(SIZEOF(values) = 2);
         END_FUNCTION;
+        FUNCTION maybe_upper(present : BOOLEAN) : INTEGER;
+          IF present THEN RETURN(2); END_IF;
+          RETURN(?);
+        END_FUNCTION;
+        FUNCTION guarded_repeat(present : BOOLEAN) : INTEGER;
+          LOCAL result : INTEGER := 0; END_LOCAL;
+          REPEAT i := 1 TO maybe_upper(present);
+            result := result + 1;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
         ENTITY sample;
         WHERE
           list_present : guarded_list(TRUE);
@@ -1537,6 +1898,9 @@ public sealed class ReachableRuleTests
           optional_array_unset : NOT EXISTS(optional_array(FALSE)[2]);
           set_initializer : set_control(TRUE);
           bag_initializer : bag_control(TRUE);
+          contextual_set_initializer : accept_set(['first', 'second', 'third']);
+          present_repeat : guarded_repeat(TRUE) = 2;
+          absent_repeat : guarded_repeat(FALSE) = 0;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -1561,6 +1925,74 @@ public sealed class ReachableRuleTests
                 return structure.Validate();
             }
         }
+        """;
+
+    private const string SELECT_AGGREGATE_APPLICATION_SCHEMA = """
+        SCHEMA select_aggregate_application_model;
+        ENTITY representation_item;
+        END_ENTITY;
+        TYPE list_representation_item = LIST [1:4] OF representation_item;
+        END_TYPE;
+        TYPE set_representation_item = SET [1:4] OF representation_item;
+        END_TYPE;
+        TYPE compound_item_definition = SELECT
+          (list_representation_item, set_representation_item);
+        END_TYPE;
+        FUNCTION accepts_aggregate(values : AGGREGATE OF representation_item) : BOOLEAN;
+          RETURN((SIZEOF(values) > 0)
+            AND (LOBOUND(values) = 1)
+            AND (HIBOUND(values) = 4)
+            AND (LOINDEX(values) = 1)
+            AND (HIINDEX(values) = SIZEOF(values)));
+        END_FUNCTION;
+        ENTITY compound_representation_item SUBTYPE OF (representation_item);
+          item_element : compound_item_definition;
+        WHERE
+          valid_item_element : accepts_aggregate(item_element);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string NUMERIC_SELECT_ORDERING_SCHEMA = """
+        SCHEMA numeric_select_ordering_model;
+        TYPE plane_angle_measure = REAL;
+        END_TYPE;
+        TYPE count_measure = INTEGER;
+        END_TYPE;
+        TYPE descriptive_measure = STRING;
+        END_TYPE;
+        TYPE unlimited_range = ENUMERATION OF (unlimited);
+        END_TYPE;
+        TYPE rotational_range_measure = SELECT (plane_angle_measure, unlimited_range);
+        END_TYPE;
+        TYPE measure_value = SELECT (plane_angle_measure, count_measure, descriptive_measure);
+        END_TYPE;
+        FUNCTION valid_measure_value(m : measure_value) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(m) THEN
+            RETURN(m > 0.0);
+          ELSE
+            IF 'INTEGER' IN TYPEOF(m) THEN
+              RETURN(m > 0);
+            END_IF;
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
+        FUNCTION scale_measure(m : measure_value) : REAL;
+          IF 'STRING' IN TYPEOF(m) THEN RETURN(?); END_IF;
+          RETURN(2.0 * m);
+        END_FUNCTION;
+        ENTITY sample;
+          lower_limit : rotational_range_measure;
+          upper_limit : rotational_range_measure;
+          measured : measure_value;
+        WHERE
+          ordered_range : ('NUMERIC_SELECT_ORDERING_MODEL.UNLIMITED_RANGE' IN TYPEOF(lower_limit))
+            OR ('NUMERIC_SELECT_ORDERING_MODEL.UNLIMITED_RANGE' IN TYPEOF(upper_limit))
+            XOR (lower_limit < upper_limit);
+          positive_measure : valid_measure_value(measured);
+          scalable_measure : EXISTS(scale_measure(measured)) OR NOT EXISTS(scale_measure(measured));
+        END_ENTITY;
+        END_SCHEMA;
         """;
 
     private const string DEFINED_RETURN_BOUNDARY_SCHEMA = """
@@ -4348,6 +4780,140 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA = """
+        SCHEMA repeated_cyclic_derived_model;
+        ENTITY sample;
+          seed : INTEGER;
+        DERIVE
+          dimensions : INTEGER := derive_dimensions(SELF);
+        WHERE
+          dimensions_match : dimensions = seed;
+        END_ENTITY;
+        FUNCTION derive_dimensions(item : sample) : INTEGER;
+          IF item.seed = 0 THEN
+            RETURN(0);
+          END_IF;
+          RETURN(item.dimensions);
+        END_FUNCTION;
+        END_SCHEMA;
+        """;
+
+    private const string CYCLIC_DERIVED_DEPENDENCY_CONSUMER = """
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel;
+
+        internal static class CyclicDerivedDependencyConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["derived-recursion"], "3;1"),
+                        new FileName(
+                            "derived-recursion.step",
+                            "2026-08-28T00:00:00+08:00",
+                            [],
+                            [],
+                            "tests",
+                            "tests",
+                            ""),
+                        new FileSchema(["repeated_cyclic_derived_model"])),
+                    [TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("repeated_cyclic_derived_model"));
+                structure.DataSections.Add(section);
+                _ = structure.Add(section, new Sample(BigInteger.Zero));
+                return structure.Validate();
+            }
+        }
+        """;
+
+    private const string ALGORITHM_CONTROL_SCHEMA = """
+        SCHEMA algorithm_control_model;
+        FUNCTION sum_while(input : INTEGER) : INTEGER;
+          LOCAL
+            remaining : INTEGER := input;
+            result : INTEGER := 0;
+          END_LOCAL;
+          REPEAT WHILE remaining > 0;
+            result := result + remaining;
+            remaining := remaining - 1;
+          END_REPEAT;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION classify(input : INTEGER) : BOOLEAN;
+          IF input < 0 THEN
+            RETURN(FALSE);
+          END_IF;
+          CASE input OF
+            0 : RETURN(TRUE);
+            1 : RETURN(TRUE);
+          END_CASE;
+        END_FUNCTION;
+        FUNCTION outer_check(values : LIST [1:?] OF INTEGER) : BOOLEAN;
+          FUNCTION all_positive(items : LIST [1:?] OF INTEGER) : BOOLEAN;
+            REPEAT i := 1 TO SIZEOF(items);
+              IF items[i] <= 0 THEN
+                RETURN(FALSE);
+              END_IF;
+            END_REPEAT;
+            RETURN(TRUE);
+          END_FUNCTION;
+          RETURN(all_positive(values));
+        END_FUNCTION;
+        FUNCTION repeat_shadow(values : LIST [1:?] OF INTEGER) : INTEGER;
+          LOCAL
+            i : INTEGER := 99;
+          END_LOCAL;
+          REPEAT i := 1 TO SIZEOF(values);
+            IF i < 0 THEN
+              RETURN(0);
+            END_IF;
+          END_REPEAT;
+          RETURN(i);
+        END_FUNCTION;
+        ENTITY sample;
+          values : LIST [1:?] OF INTEGER;
+        WHERE
+          while_control : sum_while(3) = 6;
+          guarded_case : classify(1);
+          nested_function : outer_check(values);
+          repeat_scope : repeat_shadow(values) = 99;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string ALGORITHM_CONTROL_CONSUMER = """
+        using System.Numerics;
+        using TedToolkit.Step21;
+        using TedToolkit.Step21.Generated.AlgorithmControlModel;
+
+        internal static class AlgorithmControlConsumer
+        {
+            internal static ValidationResult Validate()
+            {
+                var structure = new ExchangeStructure(
+                    new HeaderSection(
+                        new FileDescription(["algorithm-control"], "3;1"),
+                        new FileName(
+                            "algorithm-control.step",
+                            "2026-08-28T00:00:00+08:00",
+                            [],
+                            [],
+                            "tests",
+                            "tests",
+                            ""),
+                        new FileSchema(["algorithm_control_model"])),
+                    [TedToolkit.Step21.Generated.AlgorithmControlModel.SchemaDescriptor.Instance]);
+                var section = new DataSection(new SchemaName("algorithm_control_model"));
+                structure.DataSections.Add(section);
+                _ = structure.Add(section, new Sample(
+                    new ExpressList<BigInteger>(1) { BigInteger.One, new BigInteger(2) }));
+                return structure.Validate();
+            }
+        }
+        """;
+
     private const string SELF_RECURSIVE_FUNCTION_SCHEMA = """
         SCHEMA self_recursive_model;
         FUNCTION countdown(input_value : INTEGER) : BOOLEAN;
@@ -5412,6 +5978,60 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string AGGREGATE_MULTI_SELECT_UNION_SCHEMA = """
+        SCHEMA aggregate_multi_select_union_model;
+        ENTITY root_item;
+        END_ENTITY;
+        ENTITY first_item SUBTYPE OF (root_item);
+        END_ENTITY;
+        ENTITY derived_first_item SUBTYPE OF (first_item);
+        END_ENTITY;
+        ENTITY second_item SUBTYPE OF (root_item);
+        END_ENTITY;
+        TYPE item_choice = SELECT (first_item, second_item);
+        END_TYPE;
+        ENTITY path_holder;
+          candidate : item_choice;
+        WHERE
+          narrowed_path_reachable : SIZEOF(narrow_path(SELF)) <= 1;
+        END_ENTITY;
+        FUNCTION narrow_item(candidate : item_choice) : SET OF first_item;
+          LOCAL
+            result : SET OF first_item := [];
+          END_LOCAL;
+          IF 'AGGREGATE_MULTI_SELECT_UNION_MODEL.FIRST_ITEM' IN TYPEOF(candidate) THEN
+            result := result + candidate;
+          END_IF;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION narrow_path(holder_instance : path_holder) : SET OF derived_first_item;
+          LOCAL
+            result : SET OF derived_first_item := [];
+          END_LOCAL;
+          IF 'AGGREGATE_MULTI_SELECT_UNION_MODEL.DERIVED_FIRST_ITEM' IN TYPEOF(holder_instance.candidate) THEN
+            result := result + holder_instance.candidate;
+          END_IF;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION merge_items(values : SET OF root_item;
+                             selections : SET OF item_choice) : SET OF item_choice;
+          RETURN(selections + values);
+        END_FUNCTION;
+        FUNCTION unwrap_items(values : SET OF root_item;
+                              selections : SET OF item_choice) : SET OF root_item;
+          RETURN(values + selections);
+        END_FUNCTION;
+        ENTITY sample;
+          values : SET [1:?] OF root_item;
+          selections : SET [1:?] OF item_choice;
+        WHERE
+          reachable : SIZEOF(merge_items(values, selections)) > 0;
+          reverse_reachable : SIZEOF(unwrap_items(values, selections)) > 0;
+          narrowed_reachable : SIZEOF(narrow_item(selections[1])) <= 1;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string NESTED_AGGREGATE_EQUALITY_SCHEMA = """
         SCHEMA nested_aggregate_equality_model;
         ENTITY item;
@@ -5589,6 +6209,138 @@ public sealed class ReachableRuleTests
         }
         """;
 
+    private const string TYPEOF_GUARDED_ATTRIBUTE_SCHEMA = """
+        SCHEMA typeof_guarded_attribute_model;
+        ENTITY item;
+        END_ENTITY;
+        ENTITY applied_assignment;
+          items : SET [1:?] OF item;
+        END_ENTITY;
+        ENTITY property_definition;
+          name : STRING;
+          description : STRING;
+        END_ENTITY;
+        ENTITY thread_definition SUBTYPE OF (property_definition);
+        END_ENTITY;
+        ENTITY external_definition SUBTYPE OF (property_definition);
+        END_ENTITY;
+        TYPE definition_select = SELECT (
+          item,
+          property_definition,
+          thread_definition,
+          external_definition);
+        END_TYPE;
+        ENTITY property_definition_representation;
+          definition : definition_select;
+        END_ENTITY;
+        RULE guarded_assignment_items FOR (item);
+        WHERE
+          guarded_attribute : SIZEOF(QUERY(candidate <* item |
+            SIZEOF(QUERY(assignment <* USEDIN(candidate, '') |
+              (('TYPEOF_GUARDED_ATTRIBUTE_MODEL.' + 'APPLIED_ASSIGNMENT') IN TYPEOF(assignment)) AND
+              (SIZEOF(assignment.items) > 0))) >= 0)) >= 0;
+        END_RULE;
+        RULE guarded_select_path FOR (property_definition_representation);
+        WHERE
+          guarded_path : SIZEOF(QUERY(pdr <* property_definition_representation |
+            ('TYPEOF_GUARDED_ATTRIBUTE_MODEL.PROPERTY_DEFINITION' IN TYPEOF(pdr.definition)) AND
+            (pdr.definition.name = 'document property') AND
+            ((('TYPEOF_GUARDED_ATTRIBUTE_MODEL.THREAD_DEFINITION' IN TYPEOF(pdr.definition)) OR
+              ('TYPEOF_GUARDED_ATTRIBUTE_MODEL.EXTERNAL_DEFINITION' IN TYPEOF(pdr.definition))) AND
+            (pdr.definition.description = 'thread')))) >= 0;
+        END_RULE;
+        END_SCHEMA;
+        """;
+
+    private const string TYPEOF_GUARDED_DEFINED_SELECT_SCHEMA = """
+        SCHEMA typeof_guarded_defined_select_model;
+        ENTITY precision_qualifier;
+        END_ENTITY;
+        ENTITY uncertainty_qualifier;
+          measure_name : STRING;
+        END_ENTITY;
+        TYPE value_qualifier = SELECT (precision_qualifier, uncertainty_qualifier);
+        END_TYPE;
+        ENTITY qualified_item;
+          qualifiers : SET [1:?] OF value_qualifier;
+        WHERE
+          unique_uncertainty : SIZEOF(QUERY(u1 <* qualifiers |
+            ('TYPEOF_GUARDED_DEFINED_SELECT_MODEL.UNCERTAINTY_QUALIFIER' IN TYPEOF(u1)) AND
+            (SIZEOF(QUERY(u2 <* qualifiers |
+              ('TYPEOF_GUARDED_DEFINED_SELECT_MODEL.UNCERTAINTY_QUALIFIER' IN TYPEOF(u2)) AND
+              (u2\uncertainty_qualifier.measure_name = u1\uncertainty_qualifier.measure_name))) > 0))) > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_SCHEMA = """
+        SCHEMA typeof_guarded_redeclared_attribute_model;
+        ENTITY representation_item;
+        END_ENTITY;
+        ENTITY annotation_symbol SUBTYPE OF (representation_item);
+        END_ENTITY;
+        TYPE annotation_item = SELECT (annotation_symbol);
+        END_TYPE;
+        ENTITY styled_item;
+          item : representation_item;
+        END_ENTITY;
+        ENTITY annotation_occurrence SUBTYPE OF (styled_item);
+        END_ENTITY;
+        ENTITY annotation_symbol_occurrence SUBTYPE OF (annotation_occurrence);
+          SELF\styled_item.item : annotation_item;
+        END_ENTITY;
+        ENTITY draughting_annotation_occurrence SUBTYPE OF (annotation_occurrence);
+        WHERE
+          valid_symbol : NOT ('TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_MODEL.ANNOTATION_SYMBOL_OCCURRENCE'
+            IN TYPEOF(SELF)) OR ('TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_MODEL.ANNOTATION_SYMBOL'
+            IN TYPEOF(SELF.item));
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string QUERY_INTERFACE_AGGREGATE_SCHEMA = """
+        SCHEMA query_interface_aggregate_model;
+        ENTITY child;
+          enabled : BOOLEAN;
+        END_ENTITY;
+        ENTITY parent;
+          children : SET [1:?] OF child;
+        WHERE
+          has_enabled_child : SIZEOF(QUERY(candidate <* children | candidate.enabled)) > 0;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string TYPEOF_GUARDED_NUMERIC_SELECT_SCHEMA = """
+        SCHEMA typeof_guarded_numeric_select_model;
+        TYPE length_measure = REAL;
+        END_TYPE;
+        TYPE count_measure = INTEGER;
+        END_TYPE;
+        TYPE measure_value = SELECT (length_measure, count_measure);
+        END_TYPE;
+        FUNCTION project_real(item : measure_value) : REAL;
+          LOCAL
+            result : REAL;
+          END_LOCAL;
+          result := item;
+          RETURN(result);
+        END_FUNCTION;
+        ENTITY measure_holder;
+          value_component : measure_value;
+        WHERE
+          non_negative : ('NUMBER' IN TYPEOF(value_component)) AND (value_component >= 0.0);
+          projected_real : project_real(value_component) >= 0.0;
+        END_ENTITY;
+        ENTITY measure_container;
+          measurement : measure_holder;
+        WHERE
+          non_negative : ('NUMBER' IN TYPEOF(measurement.value_component)) AND
+            (measurement.value_component >= 0.0);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string QUERY_RESULT_NARROWING_SCHEMA = """
         SCHEMA query_result_narrowing_model;
         ENTITY representation_item;
@@ -5653,6 +6405,9 @@ public sealed class ReachableRuleTests
             NOT polyline_ok(shape))) = 0;
           result_outside_query : SIZEOF(QUERY (candidate <* choices |
             'QUERY_RESULT_NARROWING_MODEL.POINT' IN TYPEOF(candidate))) = 1;
+          nested_shadow : SIZEOF(QUERY (candidate <* items |
+            (candidate.code > 0) AND (SIZEOF(QUERY (candidate <* items |
+              candidate.code > 0)) > 0))) > 0;
           generic_bag_result : SIZEOF(generic_bag_items(generic_item)) = 1;
         END_ENTITY;
         END_SCHEMA;
@@ -5935,8 +6690,18 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
+        var multiple = GeneratorHostTests.Run(
+            ("schemas/aggregate-multi-select-union.exp", AGGREGATE_MULTI_SELECT_UNION_SCHEMA));
+        var multipleDiagnostics = multiple.Diagnostics.Concat(multiple.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var multipleGenerated = string.Join(
+            Environment.NewLine,
+            multiple.GeneratedSources.Select(source => source.SourceText.ToString()));
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
+        await Assert.That(multipleDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, multipleDiagnostics));
         var assembly = Emit(result.OutputCompilation);
         var validation = (ValidationResult)assembly.GetType(
                 "AggregateSelectUnionConsumer",
@@ -5978,6 +6743,8 @@ public sealed class ReachableRuleTests
         {
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+            await Assert.That(multipleGenerated).Contains("ItemChoice.FromFirstItem");
+            await Assert.That(multipleGenerated).Contains("ItemChoice.FromSecondItem");
             foreach (var invalid in invalidResults)
             {
                 var invalidGenerated = string.Join(
@@ -6118,7 +6885,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
         var assembly = Emit(result.OutputCompilation);
@@ -6131,6 +6897,82 @@ public sealed class ReachableRuleTests
             .Invoke(null, null)!;
         await Assert.That(validation.IsValid).IsTrue()
             .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+    }
+
+    /// <summary>
+    /// Verifies a positive TYPEOF guard narrows a generic entity for the guarded side of AND.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_attribute_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-attribute.exp", TYPEOF_GUARDED_ATTRIBUTE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a TYPEOF guard unwraps a defined SELECT query element before a group-qualified access.
+    /// </summary>
+    [Test]
+    public async Task Should_unwrap_a_defined_select_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-defined-select.exp", TYPEOF_GUARDED_DEFINED_SELECT_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a TYPEOF path proof reads a redeclared attribute through its declaring interface.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_a_redeclared_attribute_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-redeclared-attribute.exp", TYPEOF_GUARDED_REDECLARED_ATTRIBUTE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Verifies QUERY accepts the covariant aggregate interface exposed by an entity contract.</summary>
+    [Test]
+    public async Task Should_query_an_entity_interface_aggregate()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/query-interface-aggregate.exp", QUERY_INTERFACE_AGGREGATE_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Verifies a TYPEOF proof promotes numeric SELECT alternatives to one NUMBER representation.</summary>
+    [Test]
+    public async Task Should_compare_a_numeric_select_after_static_typeof_guard()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-numeric-select.exp", TYPEOF_GUARDED_NUMERIC_SELECT_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>
@@ -6974,6 +7816,48 @@ public sealed class ReachableRuleTests
         }
     }
 
+    /// <summary>Projects a SELECT-valued attribute proven by TYPEOF into an entity function formal.</summary>
+    [Test]
+    public async Task Should_project_typeof_guarded_select_paths_at_function_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/typeof-guarded-select-path-argument.exp", TYPEOF_GUARDED_SELECT_PATH_ARGUMENT_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Preserves AP214-style nominal, aggregate, and guarded SELECT boundaries.</summary>
+    [Test]
+    public async Task Should_adapt_ap214_algorithm_and_guarded_member_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/ap214-boundary-adaptation.exp", AP214_BOUNDARY_ADAPTATION_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>Preserves complex derived overrides and flattened SELECT entity arguments.</summary>
+    [Test]
+    public async Task Should_adapt_ap214_complex_entity_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/ap214-complex-boundary.exp", AP214_COMPLEX_BOUNDARY_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
     /// <summary>
     /// Verifies a dynamically compatible entity application invokes only a matching runtime alternative.
     /// </summary>
@@ -7104,7 +7988,7 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
-            await Assert.That(Regex.Matches(generated, "ItemChoice\\.FromBaseItem\\(")).Count().IsEqualTo(4);
+            await Assert.That(Regex.Matches(generated, "ItemChoice\\.FromBaseItem\\(")).Count().IsEqualTo(6);
             await Assert.That(incompatible.Diagnostics.Concat(incompatible.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsNotEmpty();
@@ -7177,7 +8061,8 @@ public sealed class ReachableRuleTests
             await Assert.That(generated).Contains("ItemChoice.FromBaseItem(");
             await Assert.That(narrowingDiagnostics.Any(diagnostic => diagnostic.Id == "CS1503")).IsTrue();
             await Assert.That(differentDefinedDiagnostics).IsNotEmpty();
-            await Assert.That(optionalDefinedDiagnostics).IsNotEmpty();
+            await Assert.That(optionalDefinedDiagnostics).IsEmpty()
+                .Because("An explicit EXPRESS indeterminate actual propagates UNKNOWN before invocation.");
         }
     }
 
@@ -7506,6 +8391,50 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies a SELECT of defined aggregate categories satisfies a general AGGREGATE formal without becoming a LIST.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_selected_aggregate_categories_at_general_formals()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-aggregate-application.exp", SELECT_AGGREGATE_APPLICATION_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains(
+                "global::TedToolkit.Step21.IExpressAggregate<global::TedToolkit.Step21.Generated."
+                + "SelectAggregateApplicationModel.IRepresentationItem>");
+            await Assert.That(generated).Contains(".Match(");
+            await Assert.That(generated).Contains(".Value");
+            await Assert.That(generated).Contains(".HighBound");
+            await Assert.That(generated).Contains(".LowBound");
+        }
+    }
+
+    /// <summary>
+    /// Verifies ordered numeric SELECT values are projected only for compatible runtime alternatives.
+    /// </summary>
+    [Test]
+    public async Task Should_order_numeric_select_alternatives_without_comparing_the_carriers()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/numeric-select-ordering.exp", NUMERIC_SELECT_ORDERING_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
     /// Verifies OPTIONAL defined values retain nullability until their nominal wrappers are safely unwrapped.
     /// </summary>
     [Test]
@@ -7743,7 +8672,13 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(invalidResults.All(invalid => invalid.Diagnostics
                 .Concat(invalid.OutputCompilation.GetDiagnostics())
-                .Any(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)))
+                .All(diagnostic => diagnostic.Severity is not DiagnosticSeverity.Error
+                    and not DiagnosticSeverity.Warning)))
+                .IsTrue();
+            await Assert.That(invalidResults.All(invalid => string.Join(
+                    Environment.NewLine,
+                    invalid.GeneratedSources.Select(source => source.SourceText.ToString()))
+                .Contains(" switch {", StringComparison.Ordinal)))
                 .IsTrue();
         }
     }
@@ -7792,8 +8727,17 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(invalidResults.All(invalid => invalid.Diagnostics
                 .Concat(invalid.OutputCompilation.GetDiagnostics())
-                .Any(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)))
+                .All(diagnostic => diagnostic.Severity is not DiagnosticSeverity.Error
+                    and not DiagnosticSeverity.Warning)))
                 .IsTrue();
+            await Assert.That(invalidResults.All(invalid =>
+            {
+                var generated = string.Join(
+                    Environment.NewLine,
+                    invalid.GeneratedSources.Select(source => source.SourceText.ToString()));
+                return generated.Contains(" is { }", StringComparison.Ordinal)
+                    && generated.Contains("?)null", StringComparison.Ordinal);
+            })).IsTrue();
         }
     }
 
@@ -7826,10 +8770,10 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
-    /// Verifies TYPEOF-proven scalar SELECT values participate in numeric operations only inside the proven branch.
+    /// Verifies scalar SELECT values dispatch numeric operations over compatible runtime alternatives.
     /// </summary>
     [Test]
-    public async Task Should_narrow_lexical_select_references_to_terminal_scalars()
+    public async Task Should_dispatch_lexical_select_references_to_terminal_scalars()
     {
         var result = GeneratorHostTests.Run(
             SELECT_SCALAR_NARROWING_CONSUMER,
@@ -7853,7 +8797,7 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(unguarded.Diagnostics.Concat(unguarded.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
         }
 
         var assembly = Emit(result.OutputCompilation);
@@ -8770,7 +9714,11 @@ public sealed class ReachableRuleTests
             await Assert.That(narrowedApplications.All(application => application.Type.CanBeIndeterminate)).IsTrue();
             await Assert.That(unprotected.Diagnostics.Concat(unprotected.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
+            await Assert.That(string.Join(
+                    Environment.NewLine,
+                    unprotected.GeneratedSources.Select(source => source.SourceText.ToString())))
+                .Contains(".Match(");
             await Assert.That(immediateMethod).DoesNotContain("__parameter_InputValue =");
         }
 
@@ -8856,7 +9804,8 @@ public sealed class ReachableRuleTests
                 .IsEmpty();
             await Assert.That(nestedMethod.TypeParameters.Select(parameter => parameter.Name))
                 .IsEquivalentTo(["TT", "TU"]);
-            await Assert.That(validation.IsValid).IsTrue();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
         }
     }
 
@@ -9035,6 +9984,52 @@ public sealed class ReachableRuleTests
             await Assert.That(cycleDiagnostic.GetMessage()).Contains("dependency cycle");
             await Assert.That(cycleDiagnostic.Location.GetLineSpan().Path).IsEqualTo("schemas/cyclic.exp");
         }
+    }
+
+    /// <summary>
+    /// Verifies a function/derived-attribute recursion component may terminate from runtime instance state.
+    /// </summary>
+    [Test]
+    public async Task Should_execute_runtime_guarded_derived_attribute_recursion()
+    {
+        var result = GeneratorHostTests.Run(
+            CYCLIC_DERIVED_DEPENDENCY_CONSUMER,
+            ("schemas/repeated-cyclic-derived.exp", REPEATED_CYCLIC_DERIVED_DEPENDENCY_SCHEMA));
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType(
+                "CyclicDerivedDependencyConsumer",
+                throwOnError: true)!
+            .GetMethod("Validate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
+    }
+
+    /// <summary>
+    /// Verifies ISO conditional REPEAT control, guarded fallthrough, and closure-free nested functions emit statically.
+    /// </summary>
+    [Test]
+    public async Task Should_execute_supported_iso_algorithm_control_shapes()
+    {
+        var result = GeneratorHostTests.Run(
+            ALGORITHM_CONTROL_CONSUMER,
+            ("schemas/algorithm-control.exp", ALGORITHM_CONTROL_SCHEMA));
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validation = (ValidationResult)assembly.GetType("AlgorithmControlConsumer", throwOnError: true)!
+            .GetMethod("Validate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
     }
 
     /// <summary>

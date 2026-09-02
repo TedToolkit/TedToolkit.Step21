@@ -115,6 +115,10 @@ internal static class ExpressReachableRuleEmitter
         IReadOnlyDictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>?
             scalarNarrowings = null)
     {
+        var temporaryOrdinal = 0;
+        allocateTemporaryName ??= prefix => prefix
+            + (temporaryOrdinal++).ToString(CultureInfo.InvariantCulture);
+
         string ResolveBoundReference(
             ExpressBoundName reference,
             ExpressBoundType? narrowedType,
@@ -174,7 +178,26 @@ internal static class ExpressReachableRuleEmitter
             ResolveBoundReference,
             selfExpression,
             resolveModelFunction: (operation, expression, arguments) =>
-                ResolveModelFunction(plan, operation, expression, arguments, populationExpression),
+                ResolveModelFunction(
+                    plan,
+                    operation,
+                    expression,
+                    arguments,
+                    populationExpression,
+                    aggregateUnionSourceTypeOverrides: operation == "AGGREGATE_UNION"
+                        ? expression.Children.Select(child => (ExpressBoundType?)ResolveNarrowedReferenceType(
+                            child,
+                            selectNarrowings)).ToArray()
+                        : null,
+                    aggregateUnionAllowsRuntimeNarrowing: operation == "AGGREGATE_UNION"
+                        && expression.Children.Any(child => IsNarrowedEntityExpression(
+                            child,
+                            selectNarrowings,
+                            pathNarrowings)),
+                    typeOfCarrierTypeOverride: operation == "TYPEOF"
+                        && expression.Children[0].Reference is { } typeOfReference
+                        ? ResolveLexicalBound(typeOfReference.Name)?.Type
+                        : null),
             resolveValueEquality: (left, leftCode, right, rightCode, leftTypeOverride) =>
                 ResolveValueEquality(plan, left, leftCode, right, rightCode, leftTypeOverride),
             resolveAttribute: (sourceExpression, reference, source) =>
@@ -184,15 +207,14 @@ internal static class ExpressReachableRuleEmitter
                     reference,
                     source,
                     populationExpression,
-                    selectNarrowings),
+                    selectNarrowings,
+                    pathNarrowings),
             resolveApplication: (expression, arguments) =>
                 ResolveApplication(
                     plan,
                     expression,
                     arguments,
                     populationExpression,
-                    selfExpression,
-                    lexicalNames,
                     selectNarrowings,
                     pathNarrowings),
             safeIndices: safeIndices,
@@ -234,7 +256,50 @@ internal static class ExpressReachableRuleEmitter
                 && selectNarrowings?.TryGetValue(groupSourceReference, out var groupAlternative) == true
                 && plan.EntityProjections.Single(projection =>
                         projection.Entity.Symbol == groupAlternative)
-                    .PhysicalComponents.Any(component => component.Symbol == group)));
+                    .PhysicalComponents.Any(component => component.Symbol == group)),
+            mayReturnIndeterminate: expression => expression.Kind == ExpressExpressionKind.Application
+                && expression.Reference?.SchemaDeclaration is { } application
+                && plan.Schema.IndeterminateFunctions.Contains(application),
+            resolveNarrowedScalarReference: (reference, carrierType, carrier, narrowedScalar) =>
+                ResolveNarrowedScalarReference(
+                    plan,
+                    reference,
+                    selfExpression,
+                    populationExpression,
+                    lexicalNames,
+                    selectNarrowings,
+                    carrierType,
+                    carrier,
+                    narrowedScalar),
+            resolveSelectToEntityValue: (expression, source, target) =>
+                ResolveSelectToEntityValue(plan, expression, source, target, allocateTemporaryName),
+            resolveNarrowedEntityCarrier: (carrierType, carrier, target) =>
+                ResolveNarrowedEntityCarrier(plan, carrierType, carrier, target.Declaration),
+            resolveAggregateElement: (expression, source, target) =>
+                ResolveDefinedScalarValue(plan, expression, source, target));
+    }
+
+    private static ExpressBoundNamedType? ResolveNarrowedReferenceType(
+        ExpressBoundExpression expression,
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings)
+    {
+        return expression.Reference is { } reference
+            && selectNarrowings?.TryGetValue(reference, out var alternative) == true
+            && alternative.Kind == ExpressDeclarationKind.Entity
+                ? new(alternative, expression.Type.DeclaredType?.Span ?? alternative.Span)
+                : null;
+    }
+
+    private static bool IsNarrowedEntityExpression(
+        ExpressBoundExpression expression,
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
+    {
+        return (expression.Reference is { } reference
+                && selectNarrowings?.TryGetValue(reference, out var alternative) == true
+                && alternative.Kind == ExpressDeclarationKind.Entity)
+            || pathNarrowings?.Any(narrowing => narrowing.Value.Kind == ExpressDeclarationKind.Entity
+                && SameDirectReferencePath(narrowing.Key, expression)) == true;
     }
 
     private static string ResolveValueEquality(
@@ -457,7 +522,7 @@ internal static class ExpressReachableRuleEmitter
         }
 
         var method = CreateMethod(
-            FunctionMethodName(declaration.Symbol),
+            FunctionMethodName(plan, declaration.Symbol),
             returnType);
         var temporaryOrdinal = 0;
         Func<string, string> allocateTemporaryName = prefix => prefix
@@ -472,8 +537,7 @@ internal static class ExpressReachableRuleEmitter
             foreach (var parameter in formal.ChildRules("parameterId"))
             {
                 var name = parameter.Identifier!;
-                var boundName = plan.Schema.NameReferences
-                    .Select(reference => reference.Target)
+                var boundName = plan.Schema.LexicalNames
                     .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
                         && SameStart(candidate.Span, parameter.Span))
                     .Distinct()
@@ -481,9 +545,19 @@ internal static class ExpressReachableRuleEmitter
                 var generatedName = ParameterName(name);
                 lexicalNames.Add(name, (generatedName, boundName.Type!));
                 formalTypes.Add(boundName.Type!);
-                var parameterType = resolver.IsSupported(boundName.Type!)
-                    ? resolver.Resolve(plan.Schema.Identity, boundName.Type!).DataType
-                    : new DataType(ExpressExpressionEmitter.BoundTypeName(boundName.Type!));
+                DataType parameterType;
+                if (boundName.Type is ExpressBoundAggregateType aggregateParameter)
+                {
+                    parameterType = new(
+                        ExpressExpressionEmitter.AggregateInterfaceTypeName(aggregateParameter));
+                }
+                else
+                {
+                    parameterType = resolver.IsSupported(boundName.Type!)
+                        ? resolver.Resolve(plan.Schema.Identity, boundName.Type!).DataType
+                        : new DataType(ExpressExpressionEmitter.BoundTypeName(boundName.Type!));
+                }
+
                 method.AddParameter(SourceComposer.Parameter(parameterType, generatedName));
             }
         }
@@ -498,8 +572,7 @@ internal static class ExpressReachableRuleEmitter
         {
             foreach (var variable in local.ChildRules("variableId"))
             {
-                var boundName = plan.Schema.NameReferences
-                    .Select(reference => reference.Target)
+                var boundName = plan.Schema.LexicalNames
                     .Where(candidate => candidate.Kind == ExpressBoundNameKind.Variable
                         && SameStart(candidate.Span, variable.Span))
                     .Distinct()
@@ -527,7 +600,126 @@ internal static class ExpressReachableRuleEmitter
                             "entities",
                             lexicalNames,
                             allocateTemporaryName: allocateTemporaryName));
-                    variableExpression.AddDefault(new CustomExpression(generated.Code));
+                    var initializerCode = generated.Code;
+                    if (boundName.Type is ExpressBoundNamedType
+                        { Declaration.Kind: not ExpressDeclarationKind.Entity, }
+                        && initializerExpression.Kind != ExpressExpressionKind.Indeterminate)
+                    {
+                        var definedTypes = new List<ExpressBoundNamedType>();
+                        var underlyingTarget = boundName.Type;
+                        while (underlyingTarget is ExpressBoundNamedType definedType
+                               && definedType.Declaration.Kind != ExpressDeclarationKind.Entity)
+                        {
+                            definedTypes.Add(definedType);
+                            underlyingTarget = plan.Resolver.GetDefinedType(
+                                definedType.Declaration).UnderlyingType;
+                        }
+
+                        var actualNominal = initializerExpression.Type.DeclaredType
+                            as ExpressBoundNamedType;
+                        var primitiveActual = actualNominal is null;
+                        var sameDefinedActual = definedTypes.Count > 0
+                            && actualNominal is not null
+                            && ReferenceEquals(
+                                actualNominal.Declaration,
+                                definedTypes[0].Declaration);
+                        var exactScalar = underlyingTarget is ExpressBoundScalarType targetScalar
+                            && targetScalar.Kind switch
+                            {
+                                ExpressScalarKind.Binary =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Binary,
+                                ExpressScalarKind.Boolean =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Boolean,
+                                ExpressScalarKind.Integer =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Integer,
+                                ExpressScalarKind.Logical =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Logical,
+                                ExpressScalarKind.Number =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Number,
+                                ExpressScalarKind.Real =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.Real,
+                                ExpressScalarKind.String =>
+                                    initializerExpression.Type.Kind == ExpressExpressionTypeKind.String,
+                                _ => false,
+                            };
+                        if ((primitiveActual || sameDefinedActual) && exactScalar)
+                        {
+                            var sourceCode = initializerCode;
+                            var presentValue = initializerExpression.Type.CanBeIndeterminate
+                                ? allocateTemporaryName("__expressInitializedDefinedValue")
+                                : null;
+                            initializerCode = presentValue ?? initializerCode;
+                            for (var definedIndex = definedTypes.Count - 1;
+                                 definedIndex >= 0;
+                                 definedIndex--)
+                            {
+                                initializerCode = "new "
+                                    + ExpressExpressionEmitter.BoundTypeName(definedTypes[definedIndex])
+                                    + $"({initializerCode})";
+                            }
+
+                            if (presentValue is not null)
+                            {
+                                initializerCode = $"(({sourceCode}) is {{ }} {presentValue} ? "
+                                    + initializerCode
+                                    + " : ("
+                                    + ExpressExpressionEmitter.BoundTypeName(boundName.Type)
+                                    + "?)null)";
+                            }
+                        }
+                    }
+
+                    if (boundName.Type is ExpressBoundNamedType
+                        { Declaration.Kind: ExpressDeclarationKind.Entity, } initializerTargetEntity
+                        && initializerExpression.Type.DeclaredType is ExpressBoundNamedType initializerSelect
+                        && initializerSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(initializerSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType)
+                    {
+                        initializerCode = ResolveSelectToEntityValue(
+                            plan,
+                            initializerExpression,
+                            initializerCode,
+                            initializerTargetEntity,
+                            allocateTemporaryName);
+                    }
+                    else if (boundName.Type is ExpressBoundNamedType
+                    { Declaration.Kind: ExpressDeclarationKind.Entity, } initializerSubtype
+                             && initializerExpression.Type.DeclaredType is ExpressBoundNamedType
+                             { Declaration.Kind: ExpressDeclarationKind.Entity, } initializerSupertype
+                             && !ReferenceEquals(
+                                 initializerSubtype.Declaration,
+                                 initializerSupertype.Declaration)
+                             && plan.EntityProjections.Single(projection =>
+                                     projection.Entity.Symbol == initializerSubtype.Declaration)
+                                 .PhysicalComponents.Any(component =>
+                                     component.Symbol == initializerSupertype.Declaration))
+                    {
+                        var targetName = ExpressExpressionEmitter.BoundTypeName(initializerSubtype);
+                        var typedValue = allocateTemporaryName("__expressInitializedSubtype");
+                        initializerCode = $"(({initializerCode}) is {targetName} {typedValue} ? "
+                            + $"{typedValue} : ({targetName}?)null)";
+                    }
+
+                    if (boundName.Type is ExpressBoundScalarType
+                        { Kind: ExpressScalarKind.Logical, }
+                        && initializerExpression.Type.Kind == ExpressExpressionTypeKind.Boolean)
+                    {
+                        initializerCode = ExpressExpressionEmitter.AsLogical(
+                            initializerExpression,
+                            initializerCode);
+                    }
+                    else if (boundName.Type is ExpressBoundScalarType
+                    { Kind: ExpressScalarKind.Real, }
+                             && initializerExpression.Type.Kind == ExpressExpressionTypeKind.Integer)
+                    {
+                        initializerCode = ExpressExpressionEmitter.PromoteNumeric(
+                            initializerExpression,
+                            initializerCode,
+                            ExpressExpressionTypeKind.Real);
+                    }
+
+                    variableExpression.AddDefault(new CustomExpression(initializerCode));
                     if (!boundName.IsOptional && !initializerExpression.Type.CanBeIndeterminate)
                     {
                         determinateLexicals.Add(boundName);
@@ -554,9 +746,15 @@ internal static class ExpressReachableRuleEmitter
             string,
             (string StorageCode, string Code, ExpressBoundType Type)>(
             StringComparer.OrdinalIgnoreCase);
+        var fallsThrough = true;
         foreach (var statement in declarationRule.ChildRules("stmt"))
         {
-            if (!EmitFunctionStatement(
+            if (!fallsThrough)
+            {
+                break;
+            }
+
+            fallsThrough = EmitFunctionStatement(
                 plan,
                 statement,
                 declaration.DeclaredType!,
@@ -566,9 +764,23 @@ internal static class ExpressReachableRuleEmitter
                 allocateTemporaryName,
                 sizeAliases: sizeAliases,
                 determinateLexicals: determinateLexicals,
-                scalarNarrowings: scalarNarrowings))
+                scalarNarrowings: scalarNarrowings);
+        }
+
+        if (fallsThrough)
+        {
+            if (canReturnIndeterminate)
             {
-                break;
+                var indeterminateResult = declaration.DeclaredType is ExpressBoundScalarType
+                { Kind: ExpressScalarKind.Logical, }
+                    ? "global::TedToolkit.Step21.LogicalValue.Unknown"
+                    : "null";
+                method.AddStatement(new CustomExpression(indeterminateResult).Return);
+            }
+            else
+            {
+                method.AddStatement(new CustomExpression(
+                    "throw new global::System.InvalidOperationException(\"EXPRESS function completed without RETURN.\")"));
             }
         }
 
@@ -665,7 +877,14 @@ internal static class ExpressReachableRuleEmitter
             }
 
             var valueExpression = plan.GetExpression(operation.RequiredChild("expression"));
-            var valueIsKnownDeterminate = !valueExpression.Type.CanBeIndeterminate
+            var valueCanBeIndeterminate = valueExpression.Type.CanBeIndeterminate
+                || (valueExpression.Operation is "+" or "-" or "*" or "/"
+                    && valueExpression.Children.Any(child =>
+                        child.Type.DeclaredType is ExpressBoundNamedType dynamicSelect
+                        && dynamicSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(dynamicSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType));
+            var valueIsKnownDeterminate = !valueCanBeIndeterminate
                 || (valueExpression.Kind == ExpressExpressionKind.Reference
                     && valueExpression.Reference is { } valueReference
                     && ((ReferenceEquals(valueReference, target) && targetWasDeterminate)
@@ -775,16 +994,215 @@ internal static class ExpressReachableRuleEmitter
             }
 
             var valueCode = value.Code;
-            if (targetType is ExpressBoundAggregateType targetSet
-                && targetSet.Kind == ExpressAggregateKind.Set
-                && targetSet.ElementType is ExpressBoundNamedType targetEntity
-                && targetEntity.Declaration.Kind == ExpressDeclarationKind.Entity
-                && valueExpression.Type.DeclaredType is ExpressBoundAggregateType sourceSet
-                && sourceSet.Kind == ExpressAggregateKind.Set)
+            if (targetType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } projectedTargetEntity
+                && !IsNarrowedEntityExpression(
+                    valueExpression,
+                    selectNarrowings,
+                    pathNarrowings)
+                && valueExpression.Type.DeclaredType is ExpressBoundNamedType sourceName
+                && sourceName.Declaration.Kind != ExpressDeclarationKind.Entity
+                && plan.Resolver.GetDefinedType(sourceName.Declaration).UnderlyingType
+                    is ExpressBoundSelectType)
             {
-                var sourceCanContainTarget = sourceSet.ElementType
+                valueCode = ResolveSelectToEntityValue(
+                    plan,
+                    valueExpression,
+                    valueCode,
+                    projectedTargetEntity,
+                    allocateTemporaryName);
+            }
+
+            if (targetType is ExpressBoundScalarType scalarAssignmentTarget
+                && valueExpression.Reference is { } selectValueReference
+                && valueExpression.Type.DeclaredType is ExpressBoundNamedType selectValueName
+                && selectValueName.Declaration.Kind != ExpressDeclarationKind.Entity
+                && plan.Resolver.GetDefinedType(selectValueName.Declaration).UnderlyingType
+                    is ExpressBoundSelectType)
+            {
+                var targetName = ExpressExpressionEmitter.BoundTypeName(scalarAssignmentTarget);
+                var incompatible = $"({targetName}?)null";
+                if (valueCanBeIndeterminate)
+                {
+                    var presentSelect = allocateTemporaryName("__expressAssignedScalarSelect");
+                    var projected = ResolveReference(
+                        plan,
+                        selectValueReference,
+                        selfExpression: null,
+                        "entities",
+                        lexicalNames,
+                        selectNarrowings,
+                        selectValueName,
+                        presentSelect,
+                        narrowedScalarType: scalarAssignmentTarget,
+                        incompatibleScalarCode: incompatible);
+                    valueCode = $"(({valueCode}) is {{ }} {presentSelect} ? {projected} : {incompatible})";
+                }
+                else
+                {
+                    valueCode = ResolveReference(
+                        plan,
+                        selectValueReference,
+                        selfExpression: null,
+                        "entities",
+                        lexicalNames,
+                        selectNarrowings,
+                        selectValueName,
+                        valueCode,
+                        narrowedScalarType: scalarAssignmentTarget,
+                        incompatibleScalarCode: incompatible);
+                }
+
+                valueCanBeIndeterminate = true;
+            }
+
+            if (targetType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } subtypeTarget
+                && valueExpression.Type.DeclaredType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } assignedSourceEntity
+                && !ReferenceEquals(assignedSourceEntity.Declaration, subtypeTarget.Declaration)
+                && plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == subtypeTarget.Declaration)
+                    .PhysicalComponents.Any(component =>
+                        component.Symbol == assignedSourceEntity.Declaration))
+            {
+                var targetName = ExpressExpressionEmitter.BoundTypeName(subtypeTarget);
+                var typedValue = allocateTemporaryName("__expressAssignedSubtype");
+                valueCode = $"(({valueCode}) is {targetName} {typedValue} ? {typedValue} : "
+                    + $"({targetName}?)null)";
+                valueCanBeIndeterminate = true;
+            }
+
+            if (targetType is ExpressBoundNamedType
+                { Declaration.Kind: not ExpressDeclarationKind.Entity, })
+            {
+                var definedTypes = new List<ExpressBoundNamedType>();
+                var underlyingTarget = targetType;
+                while (underlyingTarget is ExpressBoundNamedType definedType
+                       && definedType.Declaration.Kind != ExpressDeclarationKind.Entity)
+                {
+                    definedTypes.Add(definedType);
+                    underlyingTarget = plan.Resolver.GetDefinedType(definedType.Declaration).UnderlyingType;
+                }
+
+                var actualNominal = valueExpression.Type.DeclaredType as ExpressBoundNamedType;
+                var primitiveActual = actualNominal is null;
+                var sameDefinedActual = definedTypes.Count > 0
+                    && actualNominal is not null
+                    && ReferenceEquals(actualNominal.Declaration, definedTypes[0].Declaration);
+                var exactScalar = underlyingTarget is ExpressBoundScalarType targetScalar
+                    && targetScalar.Kind switch
+                    {
+                        ExpressScalarKind.Binary => valueExpression.Type.Kind == ExpressExpressionTypeKind.Binary,
+                        ExpressScalarKind.Boolean => valueExpression.Type.Kind == ExpressExpressionTypeKind.Boolean,
+                        ExpressScalarKind.Integer => valueExpression.Type.Kind == ExpressExpressionTypeKind.Integer,
+                        ExpressScalarKind.Logical => valueExpression.Type.Kind == ExpressExpressionTypeKind.Logical,
+                        ExpressScalarKind.Number => valueExpression.Type.Kind == ExpressExpressionTypeKind.Number,
+                        ExpressScalarKind.Real => valueExpression.Type.Kind == ExpressExpressionTypeKind.Real,
+                        ExpressScalarKind.String => valueExpression.Type.Kind == ExpressExpressionTypeKind.String,
+                        _ => false,
+                    };
+                if ((primitiveActual || sameDefinedActual) && exactScalar)
+                {
+                    if (valueCanBeIndeterminate)
+                    {
+                        var presentValue = allocateTemporaryName("__expressAssignedDefinedValue");
+                        var presentCode = presentValue;
+                        for (var definedIndex = definedTypes.Count - 1; definedIndex >= 0; definedIndex--)
+                        {
+                            presentCode = "new "
+                                + ExpressExpressionEmitter.BoundTypeName(definedTypes[definedIndex])
+                                + $"({presentCode})";
+                        }
+
+                        valueCode = $"(({valueCode}) is {{ }} {presentValue} ? {presentCode} : ("
+                            + ExpressExpressionEmitter.BoundTypeName(targetType)
+                            + "?)null)";
+                    }
+                    else
+                    {
+                        for (var definedIndex = definedTypes.Count - 1; definedIndex >= 0; definedIndex--)
+                        {
+                            valueCode = "new "
+                                + ExpressExpressionEmitter.BoundTypeName(definedTypes[definedIndex])
+                                + $"({valueCode})";
+                        }
+                    }
+                }
+            }
+
+            if (targetType is ExpressBoundAggregateType targetAggregate
+                && targetAggregate.Kind is ExpressAggregateKind.Bag
+                    or ExpressAggregateKind.List
+                    or ExpressAggregateKind.Set
+                && valueExpression.Type.DeclaredType is ExpressBoundAggregateType assignedSourceAggregate
+                && assignedSourceAggregate.Kind == targetAggregate.Kind
+                && StringComparer.Ordinal.Equals(
+                    ExpressExpressionEmitter.BoundTypeName(assignedSourceAggregate.ElementType),
+                    ExpressExpressionEmitter.BoundTypeName(targetAggregate.ElementType)))
+            {
+                var targetAggregateName = ExpressExpressionEmitter.BoundTypeName(targetAggregate);
+                if (valueCanBeIndeterminate)
+                {
+                    var presentAggregate = allocateTemporaryName("__expressAssignedAggregate");
+                    valueCode = $"(({valueCode}) is {{ }} {presentAggregate} ? "
+                        + $"({targetAggregateName})[..{presentAggregate}] : "
+                        + $"({targetAggregateName}?)null)";
+                }
+                else
+                {
+                    valueCode = $"({targetAggregateName})[..{valueCode}]";
+                }
+            }
+
+            if (targetType is ExpressBoundAggregateType targetSelectSet
+                && targetSelectSet.Kind == ExpressAggregateKind.Set
+                && targetSelectSet.ElementType is ExpressBoundNamedType targetSelectElement
+                && targetSelectElement.Declaration.Kind != ExpressDeclarationKind.Entity
+                && plan.Resolver.GetDefinedType(targetSelectElement.Declaration).UnderlyingType
+                    is ExpressBoundSelectType
+                && valueExpression.Type.DeclaredType is ExpressBoundAggregateType sourceSelectSet
+                && sourceSelectSet.Kind == ExpressAggregateKind.Set
+                && sourceSelectSet.ElementType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } sourceSelectEntity)
+            {
+                var sourceItem = allocateTemporaryName("__expressAssignedSelectSetItem");
+                if (ResolveEntityToSelectValue(
+                        plan,
+                        targetSelectElement,
+                        sourceSelectEntity.Declaration,
+                        sourceItem) is { } selectedItem)
+                {
+                    var targetSetName = ExpressExpressionEmitter.BoundTypeName(targetSelectSet);
+                    var projected = $"({targetSetName})[..global::System.Linq.Enumerable.Select("
+                        + $"({valueCode}), {sourceItem} => {selectedItem})]";
+                    if (valueCanBeIndeterminate)
+                    {
+                        var presentSet = allocateTemporaryName("__expressAssignedSelectSet");
+                        valueCode = $"(({valueCode}) is {{ }} {presentSet} ? "
+                            + $"({targetSetName})[..global::System.Linq.Enumerable.Select("
+                            + $"{presentSet}, {sourceItem} => {selectedItem})] : "
+                            + $"({targetSetName}?)null)";
+                    }
+                    else
+                    {
+                        valueCode = projected;
+                    }
+                }
+            }
+
+            if (targetType is ExpressBoundAggregateType targetEntityAggregate
+                && (targetEntityAggregate.Kind == ExpressAggregateKind.Set
+                    || (targetEntityAggregate.Kind == ExpressAggregateKind.Bag
+                        && valueExpression.Kind == ExpressExpressionKind.Query))
+                && targetEntityAggregate.ElementType is ExpressBoundNamedType targetEntity
+                && targetEntity.Declaration.Kind == ExpressDeclarationKind.Entity
+                && valueExpression.Type.DeclaredType is ExpressBoundAggregateType sourceEntityAggregate
+                && sourceEntityAggregate.Kind == targetEntityAggregate.Kind)
+            {
+                var sourceCanContainTarget = sourceEntityAggregate.ElementType
                     is ExpressBoundGenericType { IsEntity: true, };
-                if (sourceSet.ElementType is ExpressBoundNamedType
+                if (sourceEntityAggregate.ElementType is ExpressBoundNamedType
                     { Declaration.Kind: ExpressDeclarationKind.Entity, } sourceEntity
                     && !ReferenceEquals(sourceEntity.Declaration, targetEntity.Declaration))
                 {
@@ -800,7 +1218,7 @@ internal static class ExpressReachableRuleEmitter
                     var testedItem = allocateTemporaryName("__expressTestedSetItem");
                     var selectedItem = allocateTemporaryName("__expressSelectedSetItem");
                     var typedItem = allocateTemporaryName("__expressTypedSetItem");
-                    var targetSetName = ExpressExpressionEmitter.BoundTypeName(targetSet);
+                    var targetSetName = ExpressExpressionEmitter.BoundTypeName(targetEntityAggregate);
                     var targetEntityName = ExpressExpressionEmitter.BoundTypeName(targetEntity);
                     valueCode = $"(({valueCode}) is {{ }} {source} && "
                         + "global::System.Linq.Enumerable.All("
@@ -816,30 +1234,22 @@ internal static class ExpressReachableRuleEmitter
             if (targetType is ExpressBoundNamedType targetSelectName
                 && targetSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
                 && plan.Resolver.GetDefinedType(targetSelectName.Declaration).UnderlyingType
-                    is ExpressBoundSelectType targetSelect
+                    is ExpressBoundSelectType
                 && valueExpression.Type.DeclaredType is ExpressBoundNamedType
-                { Declaration.Kind: ExpressDeclarationKind.Entity, } valueEntity)
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } valueEntity
+                && ResolveEntityToSelectValue(
+                    plan,
+                    targetSelectName,
+                    valueEntity.Declaration,
+                    valueCode) is { } selectedValue)
             {
-                var valueProjection = plan.EntityProjections.Single(projection =>
-                    projection.Entity.Symbol == valueEntity.Declaration);
-                var alternatives = plan.Resolver.GetSelectAlternatives(targetSelect)
-                    .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
-                        && valueProjection.PhysicalComponents.Any(component =>
-                            component.Symbol == alternative))
-                    .ToArray();
-                if (alternatives.Length == 1)
-                {
-                    valueCode = ExpressExpressionEmitter.BoundTypeName(targetSelectName)
-                        + ".From"
-                        + ExpressEntityProjection.ToPascalCase(alternatives[0].Name)
-                        + $"({valueCode})";
-                }
+                valueCode = selectedValue;
             }
 
             if (targetType is ExpressBoundScalarType { Kind: ExpressScalarKind.Real, }
                 && valueExpression.Type.Kind == ExpressExpressionTypeKind.Integer)
             {
-                if (valueExpression.Type.CanBeIndeterminate)
+                if (valueCanBeIndeterminate)
                 {
                     var presentInteger = allocateTemporaryName("__expressAssignedInteger");
                     valueCode = $"(({valueCode}) is {{ }} {presentInteger} ? "
@@ -872,7 +1282,7 @@ internal static class ExpressReachableRuleEmitter
                     + "global::TedToolkit.Step21.LogicalValue.Unknown => (global::System.Boolean?)null })";
             }
 
-            if (valueExpression.Type.CanBeIndeterminate)
+            if (valueCanBeIndeterminate)
             {
                 var unknownResult = functionResultType is ExpressBoundScalarType
                 { Kind: ExpressScalarKind.Logical, }
@@ -953,6 +1363,60 @@ internal static class ExpressReachableRuleEmitter
                     safeIndexPaths,
                     scalarNarrowings));
             var expressionCode = expression.Code;
+            var expressionCanBeIndeterminate = boundExpression.Type.CanBeIndeterminate
+                || (boundExpression.Operation is "+" or "-" or "*" or "/"
+                    && boundExpression.Children.Any(child =>
+                        child.Type.DeclaredType is ExpressBoundNamedType dynamicSelect
+                        && dynamicSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                        && plan.Resolver.GetDefinedType(dynamicSelect.Declaration).UnderlyingType
+                            is ExpressBoundSelectType));
+            if (functionResultType is ExpressBoundScalarType returnedScalar
+                && returnedScalar.Kind is ExpressScalarKind.Integer
+                    or ExpressScalarKind.Number
+                    or ExpressScalarKind.Real
+                && boundExpression.Type.DeclaredType is ExpressBoundNamedType returnedSelect
+                && returnedSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                && plan.Resolver.GetDefinedType(returnedSelect.Declaration).UnderlyingType
+                    is ExpressBoundSelectType)
+            {
+                var fallback = "("
+                    + ExpressExpressionEmitter.BoundTypeName(returnedScalar)
+                    + "?)null";
+                if (expressionCanBeIndeterminate)
+                {
+                    var present = allocateTemporaryName("__expressReturnedScalarSelect");
+                    expressionCode = $"(({expressionCode}) is {{ }} {present} ? "
+                        + ResolveSelectScalarValue(plan, returnedSelect, present, returnedScalar)
+                        + $" : {fallback})";
+                }
+                else
+                {
+                    expressionCode = ResolveSelectScalarValue(
+                        plan,
+                        returnedSelect,
+                        expressionCode,
+                        returnedScalar);
+                }
+            }
+
+            if (functionResultType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } returnedSubtype
+                && boundExpression.Type.DeclaredType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } returnedSupertype
+                && !ReferenceEquals(
+                    returnedSubtype.Declaration,
+                    returnedSupertype.Declaration)
+                && plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == returnedSubtype.Declaration)
+                    .PhysicalComponents.Any(component =>
+                        component.Symbol == returnedSupertype.Declaration))
+            {
+                var targetName = ExpressExpressionEmitter.BoundTypeName(returnedSubtype);
+                var typedValue = allocateTemporaryName("__expressReturnedSubtype");
+                expressionCode = $"(({expressionCode}) is {targetName} {typedValue} ? "
+                    + $"{typedValue} : ({targetName}?)null)";
+            }
+
             if (functionResultType is ExpressBoundNamedType resultSelectName
                 && resultSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
                 && plan.Resolver.GetDefinedType(resultSelectName.Declaration).UnderlyingType
@@ -973,6 +1437,34 @@ internal static class ExpressReachableRuleEmitter
                         + ".From"
                         + ExpressEntityProjection.ToPascalCase(alternatives[0].Name)
                         + $"({expressionCode})";
+                }
+                else if (alternatives.Length == 0)
+                {
+                    var runtimeAlternatives = plan.Resolver.GetSelectAlternatives(resultSelect)
+                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
+                            && plan.EntityProjections.Single(projection =>
+                                    projection.Entity.Symbol == alternative)
+                                .PhysicalComponents.Any(component =>
+                                    component.Symbol == resultEntity.Declaration))
+                        .OrderByDescending(alternative => plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == alternative)
+                            .PhysicalComponents.Count)
+                        .ToArray();
+                    if (runtimeAlternatives.Length > 0)
+                    {
+                        var resultTypeName = ExpressExpressionEmitter.BoundTypeName(resultSelectName);
+                        var branches = runtimeAlternatives.Select(alternative =>
+                        {
+                            var alternativeType = ExpressExpressionEmitter.BoundTypeName(
+                                new ExpressBoundNamedType(alternative, resultSelect.Span));
+                            var value = allocateTemporaryName("__expressReturnedSelectEntity");
+                            return $"{alternativeType} {value} => {resultTypeName}.From"
+                                + ExpressEntityProjection.ToPascalCase(alternative.Name)
+                                + $"({value})";
+                        });
+                        expressionCode = $"((object?)({expressionCode})) switch {{ "
+                            + $"{string.Join(", ", branches)}, _ => ({resultTypeName}?)null }}";
+                    }
                 }
             }
 
@@ -1008,7 +1500,7 @@ internal static class ExpressReachableRuleEmitter
                     };
                 if ((primitiveActual || sameDefinedActual) && exactScalar)
                 {
-                    if (boundExpression.Type.CanBeIndeterminate)
+                    if (expressionCanBeIndeterminate)
                     {
                         var presentValue = allocateTemporaryName("__expressReturnedValue");
                         var presentCode = presentValue;
@@ -1035,6 +1527,30 @@ internal static class ExpressReachableRuleEmitter
                 }
             }
 
+            if (functionResultType is ExpressBoundAggregateType returnedAggregate
+                && returnedAggregate.Kind is ExpressAggregateKind.Bag
+                    or ExpressAggregateKind.List
+                    or ExpressAggregateKind.Set
+                && boundExpression.Kind != ExpressExpressionKind.Indeterminate
+                && boundExpression.Type.DeclaredType is ExpressBoundAggregateType sourceAggregate
+                && sourceAggregate.Kind == returnedAggregate.Kind
+                && StringComparer.Ordinal.Equals(
+                    ExpressExpressionEmitter.BoundTypeName(sourceAggregate.ElementType),
+                    ExpressExpressionEmitter.BoundTypeName(returnedAggregate.ElementType)))
+            {
+                var aggregateType = ExpressExpressionEmitter.BoundTypeName(returnedAggregate);
+                if (expressionCanBeIndeterminate)
+                {
+                    var presentAggregate = allocateTemporaryName("__expressReturnedAggregate");
+                    expressionCode = $"(({expressionCode}) is {{ }} {presentAggregate} ? "
+                        + $"({aggregateType})[..{presentAggregate}] : ({aggregateType}?)null)";
+                }
+                else
+                {
+                    expressionCode = $"({aggregateType})[..{expressionCode}]";
+                }
+            }
+
             if (functionResultType is ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, }
                 && boundExpression.Type.Kind == ExpressExpressionTypeKind.Boolean)
             {
@@ -1055,7 +1571,27 @@ internal static class ExpressReachableRuleEmitter
 
         if (operation.Role == "repeatStmt")
         {
-            var increment = operation.RequiredChild("repeatControl").RequiredChild("incrementControl");
+            var repeatControl = operation.RequiredChild("repeatControl");
+            var increment = repeatControl.ChildRules("incrementControl").SingleOrDefault();
+            if (increment is null)
+            {
+                return EmitConditionalRepeat(
+                    plan,
+                    operation,
+                    functionResultType,
+                    canReturnIndeterminate,
+                    owner,
+                    lexicalNames,
+                    allocateTemporaryName,
+                    safeIndices,
+                    sizeAliases,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings);
+            }
+
             var variable = increment.RequiredChild("variableId");
             var variableName = variable.Identifier!;
             var generatedName = "__repeat_"
@@ -1073,7 +1609,7 @@ internal static class ExpressReachableRuleEmitter
             var nestedNames = lexicalNames.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
             if (repeatName?.Type is not null)
             {
-                nestedNames.Add(variableName, (generatedName, repeatName.Type));
+                nestedNames[variableName] = (generatedName, repeatName.Type);
             }
 
             var lower = plan.GetExpression(increment.RequiredChild("bound1").RequiredChild("numericExpression"));
@@ -1125,30 +1661,48 @@ internal static class ExpressReachableRuleEmitter
                         determinateLexicals,
                         safeIndexPaths,
                         scalarNarrowings));
+            var boundGuards = new List<string>();
+            string PresentControlValue(ExpressBoundExpression expression, string code, string prefix)
+            {
+                if (!expression.Type.CanBeIndeterminate)
+                {
+                    return code;
+                }
+
+                var present = allocateTemporaryName(prefix);
+                boundGuards.Add($"({code}) is {{ }} {present}");
+                return present;
+            }
+
+            var lowerPresent = PresentControlValue(lower, lowerValue.Code, "__expressRepeatLower");
+            var upperPresent = PresentControlValue(upper, upperValue.Code, "__expressRepeatUpper");
+            var stepPresent = step is null
+                ? null
+                : PresentControlValue(step, stepValue!.Code, "__expressRepeatStep");
             var lowerCode = lower.Type.Kind switch
             {
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({lowerValue.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({lowerPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({lowerValue.Code})",
-                _ => lowerValue.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({lowerPresent})",
+                _ => lowerPresent,
             };
             var upperCode = upper.Type.Kind switch
             {
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({upperValue.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({upperPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({upperValue.Code})",
-                _ => upperValue.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({upperPresent})",
+                _ => upperPresent,
             };
             var stepCode = step?.Type.Kind switch
             {
                 null => "global::TedToolkit.Step21.NumberValue.FromInteger(global::System.Numerics.BigInteger.One)",
                 ExpressExpressionTypeKind.Integer =>
-                    $"global::TedToolkit.Step21.NumberValue.FromInteger({stepValue!.Code})",
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({stepPresent})",
                 ExpressExpressionTypeKind.Real =>
-                    $"global::TedToolkit.Step21.NumberValue.FromReal({stepValue!.Code})",
-                _ => stepValue!.Code,
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({stepPresent})",
+                _ => stepPresent!,
             };
             var repeatSafeIndices = safeIndices?.ToList() ?? [];
             var repeatSafeIndexPaths = safeIndexPaths?.ToList()
@@ -1306,7 +1860,7 @@ internal static class ExpressReachableRuleEmitter
                     repeatSafeIndexPaths);
             }
 
-            owner.AddStatement(new Custom((ref SourceBuilder source) =>
+            var loopStatement = new Custom((ref SourceBuilder source) =>
             {
                 source.Append($"for (var {generatedName} = {lowerCode}; "
                     + $"{generatedName} <= {upperCode}; {generatedName} += {stepCode})");
@@ -1318,7 +1872,17 @@ internal static class ExpressReachableRuleEmitter
                 }
 
                 source.EndBlock();
-            }));
+            });
+            if (boundGuards.Count == 0)
+            {
+                owner.AddStatement(loopStatement);
+            }
+            else
+            {
+                owner.AddStatement(new IfStatement(new CustomExpression(string.Join(" && ", boundGuards)))
+                    .AddStatement(loopStatement));
+            }
+
             return true;
         }
 
@@ -1841,6 +2405,23 @@ internal static class ExpressReachableRuleEmitter
                     alternative.DeclaringSchema.Name + "." + alternative.Name,
                     qualifiedName,
                     StringComparison.OrdinalIgnoreCase));
+                if (selected is null)
+                {
+                    var selectedEntity = plan.EntityProjections
+                        .Select(projection => projection.Entity.Symbol)
+                        .SingleOrDefault(entity => string.Equals(
+                            entity.DeclaringSchema.Name + "." + entity.Name,
+                            qualifiedName,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (selectedEntity is not null
+                        && plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == selectedEntity)
+                            .PhysicalComponents.Any(component => alternatives.Contains(component.Symbol)))
+                    {
+                        selected = selectedEntity;
+                    }
+                }
+
                 if (selected is not null)
                 {
                     if (narrowedReference is not null)
@@ -1853,7 +2434,9 @@ internal static class ExpressReachableRuleEmitter
                     }
 
                     var remaining = alternatives.Where(alternative => alternative != selected).ToArray();
-                    if (allAlternativesClosed && remaining.Length == 1)
+                    if (alternatives.Contains(selected)
+                        && allAlternativesClosed
+                        && remaining.Length == 1)
                     {
                         if (narrowedReference is not null)
                         {
@@ -1870,7 +2453,9 @@ internal static class ExpressReachableRuleEmitter
                     ExpressScalarKind? selectedScalarKind = qualifiedName.ToUpperInvariant() switch
                     {
                         "INTEGER" => ExpressScalarKind.Integer,
+                        "NUMBER" => ExpressScalarKind.Number,
                         "REAL" => ExpressScalarKind.Real,
+                        "STRING" => ExpressScalarKind.String,
                         _ => null,
                     };
                     if (selectedScalarKind is not null
@@ -1935,13 +2520,25 @@ internal static class ExpressReachableRuleEmitter
                             })
                             .Where(kind => kind is not null)
                             .ToArray();
+                        ExpressScalarKind? remainingKind = null;
+                        if (remaining.Length > 0 && remaining.All(kind => kind == remaining[0]))
+                        {
+                            remainingKind = remaining[0];
+                        }
+                        else if (remaining.Length > 0
+                                 && remaining.All(kind => kind is ExpressScalarKind.Integer
+                                     or ExpressScalarKind.Number
+                                     or ExpressScalarKind.Real))
+                        {
+                            remainingKind = ExpressScalarKind.Number;
+                        }
+
                         if (allAlternativesClosed
                             && scalarAlternatives.Count == alternatives.Count
-                            && remaining.Length > 0
-                            && remaining.All(kind => kind == remaining[0]))
+                            && remainingKind is not null)
                         {
                             var terminalType = new ExpressBoundScalarType(
-                                remaining[0]!.Value,
+                                remainingKind.Value,
                                 constraintText: null,
                                 isFixed: false,
                                 narrowedSelect.Span);
@@ -2209,6 +2806,204 @@ internal static class ExpressReachableRuleEmitter
         return thenFallsThrough || elseFallsThrough;
     }
 
+    private static bool EmitConditionalRepeat(
+        ExpressReachableRulePlan plan,
+        ExpressSemanticRule operation,
+        ExpressBoundType functionResultType,
+        bool canReturnIndeterminate,
+        IStatementOwner owner,
+        Dictionary<string, (string Code, ExpressBoundType Type)> lexicalNames,
+        Func<string, string> allocateTemporaryName,
+        List<KeyValuePair<ExpressBoundName, ExpressBoundName>>? safeIndices,
+        IDictionary<ExpressBoundName, ExpressBoundName>? sizeAliases,
+        Dictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        List<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings,
+        ISet<ExpressBoundName>? determinateLexicals,
+        List<KeyValuePair<ExpressBoundExpression, ExpressBoundName>>? safeIndexPaths,
+        Dictionary<string, (string StorageCode, string Code, ExpressBoundType Type)>? scalarNarrowings)
+    {
+        var control = operation.RequiredChild("repeatControl");
+        var whileControl = control.ChildRules("whileControl").SingleOrDefault();
+        var untilControl = control.ChildRules("untilControl").SingleOrDefault();
+        if (whileControl is null && untilControl is null)
+        {
+            throw new InvalidOperationException("A conditional EXPRESS REPEAT requires WHILE or UNTIL control.");
+        }
+
+        var incomingSafeIndices = safeIndices?.ToList() ?? [];
+        var incomingAliases = sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
+        var incomingSelectNarrowings = selectNarrowings?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
+        var incomingPathNarrowings = pathNarrowings?.ToList() ?? [];
+        var incomingDeterminateLexicals = determinateLexicals?.ToArray() ?? Array.Empty<ExpressBoundName>();
+        var incomingSafeIndexPaths = safeIndexPaths?.ToList() ?? [];
+        var incomingScalarNarrowings = scalarNarrowings?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase)
+            ?? new(StringComparer.OrdinalIgnoreCase);
+        var nestedSafeIndices = incomingSafeIndices.ToList();
+        var nestedAliases = incomingAliases.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var nestedSelectNarrowings = incomingSelectNarrowings.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var nestedPathNarrowings = incomingPathNarrowings.ToList();
+        var nestedDeterminateLexicals = new HashSet<ExpressBoundName>(incomingDeterminateLexicals);
+        var nestedSafeIndexPaths = incomingSafeIndexPaths.ToList();
+        var nestedScalarNarrowings = incomingScalarNarrowings.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        var nestedNames = lexicalNames.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+
+        string? whileCode = null;
+        if (whileControl is not null)
+        {
+            var condition = plan.GetExpression(
+                whileControl.RequiredChild("logicalExpression").RequiredChild("expression"));
+            var emitted = ExpressExpressionEmitter.Emit(
+                condition,
+                CreateContext(
+                    plan,
+                    selfExpression: null,
+                    "entities",
+                    lexicalNames,
+                    safeIndices,
+                    allocateTemporaryName,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings));
+            whileCode = $"({ExpressExpressionEmitter.AsLogical(condition, emitted.Code)}) "
+                + "== global::TedToolkit.Step21.LogicalValue.True";
+        }
+
+        var bodyOwner = new IfStatement(new CustomExpression("true"));
+        var bodyFallsThrough = true;
+        foreach (var nested in operation.ChildRules("stmt"))
+        {
+            if (!bodyFallsThrough)
+            {
+                break;
+            }
+
+            bodyFallsThrough = EmitFunctionStatement(
+                plan,
+                nested,
+                functionResultType,
+                canReturnIndeterminate,
+                bodyOwner,
+                nestedNames,
+                allocateTemporaryName,
+                nestedSafeIndices,
+                nestedAliases,
+                nestedSelectNarrowings,
+                nestedPathNarrowings,
+                nestedDeterminateLexicals,
+                nestedSafeIndexPaths,
+                nestedScalarNarrowings);
+        }
+
+        string? untilCode = null;
+        if (bodyFallsThrough && untilControl is not null)
+        {
+            var condition = plan.GetExpression(
+                untilControl.RequiredChild("logicalExpression").RequiredChild("expression"));
+            var emitted = ExpressExpressionEmitter.Emit(
+                condition,
+                CreateContext(
+                    plan,
+                    selfExpression: null,
+                    "entities",
+                    nestedNames,
+                    nestedSafeIndices,
+                    allocateTemporaryName,
+                    nestedSelectNarrowings,
+                    nestedPathNarrowings,
+                    nestedDeterminateLexicals,
+                    nestedSafeIndexPaths,
+                    nestedScalarNarrowings));
+            untilCode = $"({ExpressExpressionEmitter.AsLogical(condition, emitted.Code)}) "
+                + "== global::TedToolkit.Step21.LogicalValue.True";
+        }
+
+        if (bodyFallsThrough)
+        {
+            IntersectDictionaryFacts(
+                scalarNarrowings,
+                static (left, right) => string.Equals(left.StorageCode, right.StorageCode, StringComparison.Ordinal)
+                    && string.Equals(left.Code, right.Code, StringComparison.Ordinal)
+                    && ReferenceEquals(left.Type, right.Type),
+                incomingScalarNarrowings,
+                nestedScalarNarrowings);
+            IntersectCollectionFacts(
+                safeIndices,
+                static (left, right) => ReferenceEquals(left.Key, right.Key)
+                    && ReferenceEquals(left.Value, right.Value),
+                incomingSafeIndices,
+                nestedSafeIndices);
+            IntersectDictionaryFacts(
+                sizeAliases,
+                static (left, right) => ReferenceEquals(left, right),
+                incomingAliases,
+                nestedAliases);
+            JoinSelectFacts(
+                selectNarrowings,
+                static (left, right) => ReferenceEquals(left, right),
+                key => key.Type is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
+                incomingSelectNarrowings,
+                nestedSelectNarrowings);
+            JoinSelectFacts(
+                pathNarrowings,
+                SameDirectReferencePath,
+                key => key.Type.DeclaredType is ExpressBoundNamedType declaredSelect
+                    && declaredSelect.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(declaredSelect.Declaration).UnderlyingType is ExpressBoundSelectType
+                        ? declaredSelect.Declaration
+                        : null,
+                incomingPathNarrowings,
+                nestedPathNarrowings);
+            IntersectCollectionFacts(
+                determinateLexicals,
+                static (left, right) => ReferenceEquals(left, right),
+                incomingDeterminateLexicals,
+                nestedDeterminateLexicals);
+            IntersectCollectionFacts(
+                safeIndexPaths,
+                static (left, right) => ReferenceEquals(left.Key, right.Key)
+                    && ReferenceEquals(left.Value, right.Value),
+                incomingSafeIndexPaths,
+                nestedSafeIndexPaths);
+        }
+
+        owner.AddStatement(new Custom((ref SourceBuilder source) =>
+        {
+            source.Append($"while ({whileCode ?? "true"})");
+            source.BeginBlock();
+            foreach (var bodyStatement in bodyOwner.Statements)
+            {
+                bodyStatement.ToCode(ref source);
+                source.AppendLine();
+            }
+
+            if (untilCode is not null)
+            {
+                source.Append($"if ({untilCode})");
+                source.BeginBlock();
+                source.AppendLine("break;");
+                source.EndBlock();
+            }
+
+            source.EndBlock();
+        }));
+        return whileControl is not null || bodyFallsThrough;
+    }
+
     private static Method CreateDerivedMethod(
         ExpressReachableRulePlan plan,
         ExpressBoundAttribute attribute,
@@ -2299,6 +3094,85 @@ internal static class ExpressReachableRuleEmitter
                     }
                 }
             }
+        }
+
+        if (attribute.Type is ExpressBoundNamedType derivedSelectName
+            && derivedSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+            && plan.Resolver.GetDefinedType(derivedSelectName.Declaration).UnderlyingType
+                is ExpressBoundSelectType derivedSelect
+            && expression.Type.DeclaredType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } derivedEntity)
+        {
+            if (ResolveEntityToSelectValue(
+                    plan,
+                    derivedSelectName,
+                    derivedEntity.Declaration,
+                    generatedCode) is { } selectedValue)
+            {
+                generatedCode = selectedValue;
+            }
+            else
+            {
+                var sourceProjection = plan.EntityProjections.Single(projection =>
+                    projection.Entity.Symbol == derivedEntity.Declaration);
+                var directlyCompatible = plan.Resolver.GetSelectAlternatives(derivedSelect)
+                    .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
+                        && sourceProjection.PhysicalComponents.Any(component =>
+                            component.Symbol == alternative))
+                    .ToArray();
+                if (directlyCompatible.Length == 0)
+                {
+                    var resultTypeName = ExpressExpressionEmitter.BoundTypeName(derivedSelectName);
+                    var runtimeAlternatives = plan.Resolver.GetSelectAlternatives(derivedSelect)
+                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
+                            && plan.EntityProjections.Single(projection =>
+                                    projection.Entity.Symbol == alternative)
+                                .PhysicalComponents.Any(component =>
+                                    component.Symbol == derivedEntity.Declaration))
+                        .OrderByDescending(alternative => plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == alternative)
+                            .PhysicalComponents.Count)
+                        .ToArray();
+                    if (runtimeAlternatives.Length > 0)
+                    {
+                        var branches = runtimeAlternatives.Select(alternative =>
+                        {
+                            var alternativeType = ExpressExpressionEmitter.BoundTypeName(
+                                new ExpressBoundNamedType(alternative, derivedSelect.Span));
+                            var value = allocateTemporaryName("__expressDerivedSelectEntity");
+                            return $"{alternativeType} {value} => {resultTypeName}.From"
+                                + ExpressEntityProjection.ToPascalCase(alternative.Name)
+                                + $"({value})";
+                        });
+                        generatedCode = $"((object)({generatedCode})) switch {{ "
+                            + $"{string.Join(", ", branches)}, _ => throw new "
+                            + "global::System.InvalidOperationException() }";
+                    }
+                }
+            }
+        }
+
+        if (attribute.Type is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } derivedEntityTarget
+            && expression.Type.DeclaredType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } derivedEntitySource
+            && !ReferenceEquals(
+                derivedEntityTarget.Declaration,
+                derivedEntitySource.Declaration)
+            && (plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == derivedEntitySource.Declaration)
+                    .PhysicalComponents.Any(component =>
+                        component.Symbol == derivedEntityTarget.Declaration)
+                || plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == derivedEntityTarget.Declaration)
+                    .PhysicalComponents.Any(component =>
+                        component.Symbol == derivedEntitySource.Declaration)))
+        {
+            generatedCode = ResolveNarrowedEntityCarrier(
+                plan,
+                derivedEntitySource,
+                generatedCode,
+                derivedEntityTarget.Declaration);
         }
 
         method.AddStatement(new CustomExpression(generatedCode).Return);
@@ -2576,7 +3450,10 @@ internal static class ExpressReachableRuleEmitter
         int usedInDepth = 0,
         ExpressBoundType? aggregateUnionSourceType = null,
         ExpressBoundType? aggregateUnionTargetType = null,
-        int aggregateUnionDepth = 0)
+        int aggregateUnionDepth = 0,
+        ExpressBoundType?[]? aggregateUnionSourceTypeOverrides = null,
+        bool aggregateUnionAllowsRuntimeNarrowing = false,
+        ExpressBoundType? typeOfCarrierTypeOverride = null)
     {
         if (operation == "AGGREGATE_UNION_ELEMENT")
         {
@@ -2613,16 +3490,32 @@ internal static class ExpressReachableRuleEmitter
                     projection.Entity.Symbol == source.Declaration);
                 if (target.Declaration.Kind == ExpressDeclarationKind.Entity)
                 {
-                    if (!sourceProjection.PhysicalComponents.Any(component =>
-                            component.Symbol == target.Declaration))
-                    {
-                        throw new InvalidOperationException(
-                            "Aggregate SELECT union entity alternative is incompatible with the result element type.");
-                    }
-
                     if (source.Declaration == target.Declaration)
                     {
                         return arguments[0];
+                    }
+
+                    var targetProjection = plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == target.Declaration);
+                    var sourceIsTargetSubtype = sourceProjection.PhysicalComponents.Any(component =>
+                        component.Symbol == target.Declaration);
+                    var targetIsSourceSubtype = targetProjection.PhysicalComponents.Any(component =>
+                        component.Symbol == source.Declaration);
+                    if (!sourceIsTargetSubtype && !targetIsSourceSubtype)
+                    {
+                        if (!aggregateUnionAllowsRuntimeNarrowing)
+                        {
+                            throw new InvalidOperationException(
+                                "Aggregate SELECT union entity alternative is incompatible with the result element type.");
+                        }
+
+                        return "throw new global::System.InvalidOperationException()";
+                    }
+
+                    if (!sourceIsTargetSubtype && !aggregateUnionAllowsRuntimeNarrowing)
+                    {
+                        throw new InvalidOperationException(
+                            "Aggregate SELECT union entity alternative is incompatible with the result element type.");
                     }
 
                     entityTargetType = ExpressExpressionEmitter.BoundTypeName(target);
@@ -2637,21 +3530,60 @@ internal static class ExpressReachableRuleEmitter
                     }
 
                     var targetAlternatives = plan.Resolver.GetSelectAlternatives(targetSelect)
-                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
-                            && sourceProjection.PhysicalComponents.Any(component =>
-                                component.Symbol == alternative))
+                        .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity)
+                        .Select(alternative => (
+                            Alternative: alternative,
+                            Projection: plan.EntityProjections.Single(projection =>
+                                projection.Entity.Symbol == alternative)))
+                        .Where(candidate => sourceProjection.PhysicalComponents.Any(component =>
+                                component.Symbol == candidate.Alternative)
+                            || candidate.Projection.PhysicalComponents.Any(component =>
+                                component.Symbol == source.Declaration))
                         .ToArray();
-                    if (targetAlternatives.Length != 1
-                        || plan.Resolver.GetSelectAlternatives(targetSelect).Count != 1)
+                    if (targetAlternatives.Length == 0)
                     {
                         throw new InvalidOperationException(
-                            "Aggregate union SELECT target must have exactly one compatible entity alternative.");
+                            "Aggregate union SELECT target has no compatible entity alternative.");
                     }
 
-                    return ExpressExpressionEmitter.BoundTypeName(target)
-                        + ".From"
-                        + ExpressEntityProjection.ToPascalCase(targetAlternatives[0].Name)
-                        + $"({arguments[0]})";
+                    var directAlternatives = targetAlternatives
+                        .Where(candidate => sourceProjection.PhysicalComponents.Any(component =>
+                            component.Symbol == candidate.Alternative))
+                        .ToArray();
+                    if (targetAlternatives.Length == 1 && directAlternatives.Length == 1)
+                    {
+                        return ExpressExpressionEmitter.BoundTypeName(target)
+                            + ".From"
+                            + ExpressEntityProjection.ToPascalCase(
+                                targetAlternatives[0].Alternative.Name)
+                            + $"({arguments[0]})";
+                    }
+
+                    if (directAlternatives.Length > 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Aggregate union SELECT target is ambiguous for the statically known entity element.");
+                    }
+
+                    var targetType = ExpressExpressionEmitter.BoundTypeName(target);
+                    var branches = targetAlternatives
+                        .OrderByDescending(candidate => candidate.Projection.PhysicalComponents.Count)
+                        .Select((candidate, index) =>
+                        {
+                            var alternativeType = ExpressExpressionEmitter.BoundTypeName(
+                                new ExpressBoundNamedType(candidate.Alternative, targetSelect.Span));
+                            var selected = "__expressAggregateUnionSelected"
+                                + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + index.ToString(CultureInfo.InvariantCulture);
+                            return alternativeType + " " + selected + " => "
+                                + targetType
+                                + ".From"
+                                + ExpressEntityProjection.ToPascalCase(candidate.Alternative.Name)
+                                + $"({selected})";
+                        });
+                    return $"({arguments[0]}) switch {{ {string.Join(", ", branches)}, "
+                        + "_ => throw new global::System.InvalidOperationException() }";
                 }
             }
 
@@ -2680,7 +3612,8 @@ internal static class ExpressReachableRuleEmitter
                     populationExpression,
                     aggregateUnionSourceType: namedUnderlying,
                     aggregateUnionTargetType: target,
-                    aggregateUnionDepth: aggregateUnionDepth);
+                    aggregateUnionDepth: aggregateUnionDepth,
+                    aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
             }
 
             if (underlying is not ExpressBoundSelectType select)
@@ -2690,25 +3623,26 @@ internal static class ExpressReachableRuleEmitter
             }
 
             var alternatives = plan.Resolver.GetSelectAlternatives(select);
-            if (alternatives.Count != 1)
+            var sourceBranches = alternatives.Select((alternative, index) =>
             {
-                throw new InvalidOperationException(
-                    "Aggregate union SELECT element must have exactly one alternative.");
-            }
-
-            var selected = "__expressAggregateUnionSelected"
-                + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture);
-            return $"({arguments[0]}).Match({selected} => "
-                + ResolveModelFunction(
+                var selected = "__expressAggregateUnionSelected"
+                    + aggregateUnionDepth.ToString(CultureInfo.InvariantCulture)
+                    + "_"
+                    + index.ToString(CultureInfo.InvariantCulture);
+                return selected + " => " + ResolveModelFunction(
                     plan,
                     operation,
                     expression,
                     [selected,],
                     populationExpression,
-                    aggregateUnionSourceType: new ExpressBoundNamedType(alternatives[0], select.Span),
+                    aggregateUnionSourceType: new ExpressBoundNamedType(alternative, select.Span),
                     aggregateUnionTargetType: target,
-                    aggregateUnionDepth: aggregateUnionDepth + 1)
-                + ")";
+                    aggregateUnionDepth: aggregateUnionDepth + 1,
+                    aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
+            });
+            return $"({arguments[0]}).Match<"
+                + ExpressExpressionEmitter.BoundTypeName(target)
+                + $">({string.Join(", ", sourceBranches)})";
         }
 
         if (operation == "AGGREGATE_UNION")
@@ -2732,7 +3666,8 @@ internal static class ExpressReachableRuleEmitter
             var values = new string[2];
             for (var index = 0; index < operandAggregates.Length; index++)
             {
-                var source = operandAggregates[index]?.ElementType
+                var source = aggregateUnionSourceTypeOverrides?[index]
+                    ?? operandAggregates[index]?.ElementType
                     ?? expression.Children[index].Type.DeclaredType;
                 if (source is null)
                 {
@@ -2760,18 +3695,20 @@ internal static class ExpressReachableRuleEmitter
                         populationExpression,
                         aggregateUnionSourceType: source,
                         aggregateUnionTargetType: target,
-                        aggregateUnionDepth: index);
+                        aggregateUnionDepth: index,
+                        aggregateUnionAllowsRuntimeNarrowing: aggregateUnionAllowsRuntimeNarrowing);
                 values[index] = operandAggregates[index] is null
                     ? adapted
                     : "global::System.Linq.Enumerable.Select("
                         + $"({arguments[index]}), {item} => {adapted})";
             }
 
+            var targetName = ExpressExpressionEmitter.BoundTypeName(target);
             var combined = (operandAggregates[0] is not null, operandAggregates[1] is not null) switch
             {
-                (true, true) => $"global::System.Linq.Enumerable.Concat({values[0]}, {values[1]})",
-                (true, false) => $"global::System.Linq.Enumerable.Append({values[0]}, {values[1]})",
-                (false, true) => $"global::System.Linq.Enumerable.Prepend({values[1]}, {values[0]})",
+                (true, true) => $"global::System.Linq.Enumerable.Concat<{targetName}>({values[0]}, {values[1]})",
+                (true, false) => $"global::System.Linq.Enumerable.Append<{targetName}>({values[0]}, {values[1]})",
+                (false, true) => $"global::System.Linq.Enumerable.Prepend<{targetName}>({values[1]}, {values[0]})",
                 _ => throw new InvalidOperationException(
                     "Aggregate union requires at least one aggregate operand."),
             };
@@ -2820,7 +3757,8 @@ internal static class ExpressReachableRuleEmitter
                             new ExpressBoundNamedType(alternative, select.Span),
                             usedInDepth + 1);
                 });
-                return $"({carrier}).Match({string.Join(", ", branches)})";
+                return $"({carrier}).Match<global::TedToolkit.Step21.ExpressBag<"
+                    + $"{usedInElementType}>>({string.Join(", ", branches)})";
             }
 
             if (!(carrierType is ExpressBoundNamedType namedEntityCarrier
@@ -2837,7 +3775,20 @@ internal static class ExpressReachableRuleEmitter
 
         return operation switch
         {
+            "SELECT_AGGREGATE_SIZE" => ResolveAggregateSize(
+                plan,
+                expression.Children[0].Type.DeclaredType!,
+                arguments[0],
+                expression.Children[0].Type.DefinedValueDepth),
             "COMPLEX_CONSTRUCTOR" => LowerComplexConstructor(plan, expression, arguments),
+            "ORDERED_SELECT_COMPARISON" => ResolveOrderedSelectComparison(
+                plan,
+                expression,
+                arguments),
+            "NUMERIC_SELECT_BINARY" => ResolveNumericSelectBinary(
+                plan,
+                expression,
+                arguments),
             "INSTANCE_EQUALITY" => ResolveValueEquality(
                 plan,
                 expression.Children[0],
@@ -2848,12 +3799,313 @@ internal static class ExpressReachableRuleEmitter
                 instanceEquality: true),
             "TYPEOF" => LowerTypeOf(
                 plan,
-                expression.Children[0].Type.DeclaredType,
+                typeOfCarrierTypeOverride ?? expression.Children[0].Type.DeclaredType,
                 arguments[0]),
             "ROLESOF" => "__ExpressRolesOf("
                 + $"(global::TedToolkit.Step21.Entity)({arguments[0]}), {populationExpression})",
             _ => throw new InvalidOperationException($"{operation}: {expression.SourceText}"),
         };
+    }
+
+    private static string ResolveAggregateSize(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType carrierType,
+        string carrier,
+        int unwrappedDepth = 0,
+        int dispatchDepth = 0)
+    {
+        while (unwrappedDepth > 0
+               && carrierType is ExpressBoundNamedType unwrappedName
+               && unwrappedName.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            carrierType = plan.Resolver.GetDefinedType(unwrappedName.Declaration).UnderlyingType;
+            unwrappedDepth--;
+        }
+
+        while (carrierType is ExpressBoundNamedType namedCarrier
+               && namedCarrier.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            var underlying = plan.Resolver.GetDefinedType(namedCarrier.Declaration).UnderlyingType;
+            if (underlying is ExpressBoundSelectType)
+            {
+                carrierType = underlying;
+                break;
+            }
+
+            carrier = $"({carrier}).Value";
+            carrierType = underlying;
+        }
+
+        if (carrierType is ExpressBoundSelectType select)
+        {
+            var branches = plan.Resolver.GetSelectAlternatives(select)
+                .Select((alternative, index) =>
+                {
+                    var variable = "__expressSizedAggregate"
+                        + dispatchDepth.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + index.ToString(CultureInfo.InvariantCulture);
+                    var value = ResolveAggregateSize(
+                        plan,
+                        new ExpressBoundNamedType(alternative, select.Span),
+                        variable,
+                        dispatchDepth: dispatchDepth + 1);
+                    return $"{variable} => {value}";
+                });
+            return $"({carrier}).Match<global::System.Numerics.BigInteger>("
+                + $"{string.Join(", ", branches)})";
+        }
+
+        if (carrierType is ExpressBoundAggregateType)
+        {
+            return "new global::System.Numerics.BigInteger("
+                + $"global::System.Linq.Enumerable.Count({carrier}))";
+        }
+
+        return "throw new global::System.InvalidOperationException()";
+    }
+
+    private static string ResolveOrderedSelectComparison(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        IReadOnlyList<string> arguments)
+    {
+        const string unknown = "global::TedToolkit.Step21.LogicalValue.Unknown";
+        const string trueValue = "global::TedToolkit.Step21.LogicalValue.True";
+        const string falseValue = "global::TedToolkit.Step21.LogicalValue.False";
+
+        static string Promote(string value, ExpressScalarKind source, ExpressScalarKind target)
+        {
+            return (source, target) switch
+            {
+                (ExpressScalarKind.Integer, ExpressScalarKind.Real) =>
+                    $"new global::TedToolkit.Step21.RealValue(({value}), "
+                    + "global::System.Numerics.BigInteger.Zero)",
+                (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({value})",
+                (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({value})",
+                _ => value,
+            };
+        }
+
+        string Compare(string left, ExpressScalarKind leftKind, string right, ExpressScalarKind rightKind)
+        {
+            var target = ExpressScalarKind.Integer;
+            if (leftKind == ExpressScalarKind.Number || rightKind == ExpressScalarKind.Number)
+            {
+                target = ExpressScalarKind.Number;
+            }
+            else if (leftKind == ExpressScalarKind.Real || rightKind == ExpressScalarKind.Real)
+            {
+                target = ExpressScalarKind.Real;
+            }
+
+            return $"(({Promote(left, leftKind, target)}) {expression.Operation} "
+                + $"({Promote(right, rightKind, target)}) ? {trueValue} : {falseValue})";
+        }
+
+        return ProjectSelectScalar(
+            plan,
+            expression.Children[0].Type.DeclaredType,
+            arguments[0],
+            0,
+            (left, leftKind) => ProjectSelectScalar(
+                plan,
+                expression.Children[1].Type.DeclaredType,
+                arguments[1],
+                1,
+                (right, rightKind) => Compare(left, leftKind, right, rightKind),
+                unknown,
+                "global::TedToolkit.Step21.LogicalValue",
+                "Ordered",
+                []),
+            unknown,
+            "global::TedToolkit.Step21.LogicalValue",
+            "Ordered",
+            []);
+    }
+
+    private static string ResolveNumericSelectBinary(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        IReadOnlyList<string> arguments)
+    {
+        var fallbackType = expression.Type.Kind switch
+        {
+            ExpressExpressionTypeKind.Integer => "global::System.Numerics.BigInteger",
+            ExpressExpressionTypeKind.Number => "global::TedToolkit.Step21.NumberValue",
+            ExpressExpressionTypeKind.Real => "global::TedToolkit.Step21.RealValue",
+            _ => throw new InvalidOperationException(
+                "SELECT arithmetic requires a numeric result type."),
+        };
+        var fallback = $"({fallbackType}?)null";
+
+        static ExpressExpressionTypeKind ExpressionKind(ExpressScalarKind kind)
+        {
+            return kind switch
+            {
+                ExpressScalarKind.Integer => ExpressExpressionTypeKind.Integer,
+                ExpressScalarKind.Number => ExpressExpressionTypeKind.Number,
+                ExpressScalarKind.Real => ExpressExpressionTypeKind.Real,
+                _ => ExpressExpressionTypeKind.Unresolved,
+            };
+        }
+
+        return ProjectSelectScalar(
+            plan,
+            expression.Children[0].Type.DeclaredType,
+            arguments[0],
+            0,
+            (left, leftKind) => ProjectSelectScalar(
+                plan,
+                expression.Children[1].Type.DeclaredType,
+                arguments[1],
+                1,
+                (right, rightKind) => ExpressExpressionEmitter.EmitNumericBinary(
+                    expression,
+                    expression.Operation!,
+                    expression.Children[0],
+                    left,
+                    expression.Children[1],
+                    right,
+                    ExpressionKind(leftKind),
+                    ExpressionKind(rightKind)),
+                fallback,
+                fallbackType + "?",
+                "Numeric",
+                []),
+            fallback,
+            fallbackType + "?",
+            "Numeric",
+            []);
+    }
+
+    private static string ResolveSelectScalarValue(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType carrierType,
+        string carrier,
+        ExpressBoundScalarType target)
+    {
+        var targetName = ExpressExpressionEmitter.BoundTypeName(target);
+        bool AllAlternativesConvert(ExpressBoundType type, HashSet<ExpressBoundSymbol> visited)
+        {
+            while (type is ExpressBoundNamedType named
+                   && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+            {
+                if (!visited.Add(named.Declaration))
+                {
+                    return false;
+                }
+
+                var underlying = plan.Resolver.GetDefinedType(named.Declaration).UnderlyingType;
+                if (underlying is ExpressBoundSelectType select)
+                {
+                    return plan.Resolver.GetSelectAlternatives(select).All(alternative =>
+                        AllAlternativesConvert(
+                            new ExpressBoundNamedType(alternative, select.Span),
+                            new HashSet<ExpressBoundSymbol>(visited)));
+                }
+
+                type = underlying;
+            }
+
+            return type is ExpressBoundScalarType scalar
+                && CanProjectScalar(scalar.Kind, target.Kind);
+        }
+
+        var allAlternativesConvert = AllAlternativesConvert(carrierType, []);
+        var incompatible = allAlternativesConvert
+            ? "throw new global::System.InvalidOperationException()"
+            : $"({targetName}?)null";
+        string Convert(string value, ExpressScalarKind source)
+        {
+            return (source, target.Kind) switch
+            {
+                (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({value})",
+                (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({value})",
+                (ExpressScalarKind.Integer, ExpressScalarKind.Real) =>
+                    $"new global::TedToolkit.Step21.RealValue(({value}), "
+                    + "global::System.Numerics.BigInteger.Zero)",
+                (ExpressScalarKind.Number, ExpressScalarKind.Integer) =>
+                    $"({value}).ToIntegerTruncated()",
+                (ExpressScalarKind.Number, ExpressScalarKind.Real) => $"({value}).ToReal()",
+                _ when source == target.Kind => value,
+                _ => incompatible,
+            };
+        }
+
+        return ProjectSelectScalar(
+            plan,
+            carrierType,
+            carrier,
+            0,
+            Convert,
+            incompatible,
+            targetName + (allAlternativesConvert ? "" : "?"),
+            "Projected",
+            []);
+    }
+
+    private static string ProjectSelectScalar(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType? type,
+        string value,
+        int depth,
+        Func<string, ExpressScalarKind, string> continuation,
+        string incompatible,
+        string resultType,
+        string name,
+        HashSet<ExpressBoundSymbol> visited)
+    {
+        while (type is ExpressBoundNamedType named
+               && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            if (!visited.Add(named.Declaration))
+            {
+                return incompatible;
+            }
+
+            var underlying = plan.Resolver.GetDefinedType(named.Declaration).UnderlyingType;
+            if (underlying is ExpressBoundSelectType select)
+            {
+                var branches = plan.Resolver.GetSelectAlternatives(select)
+                    .Select((alternative, index) =>
+                    {
+                        var selected = "__express" + name + "Select"
+                            + depth.ToString(CultureInfo.InvariantCulture)
+                            + "_"
+                            + index.ToString(CultureInfo.InvariantCulture);
+                        return selected + " => " + ProjectSelectScalar(
+                            plan,
+                            new ExpressBoundNamedType(alternative, select.Span),
+                            selected,
+                            depth + 1,
+                            continuation,
+                            incompatible,
+                            resultType,
+                            name,
+                            new HashSet<ExpressBoundSymbol>(visited));
+                    });
+                return $"({value}).Match<{resultType}>({string.Join(", ", branches)})";
+            }
+
+            value = $"({value}).Value";
+            type = underlying;
+        }
+
+        if (type is not ExpressBoundScalarType scalar)
+        {
+            return incompatible;
+        }
+
+        return scalar.Kind is ExpressScalarKind.Integer
+            or ExpressScalarKind.Number
+            or ExpressScalarKind.Real
+                ? continuation(value, scalar.Kind)
+                : incompatible;
     }
 
     private static string LowerTypeOf(
@@ -2881,7 +4133,8 @@ internal static class ExpressReachableRuleEmitter
                         var selectedType = new ExpressBoundNamedType(alternative, type.Span);
                         return $"{selected} => {LowerTypeOf(plan, selectedType, selected)}";
                     });
-                return $"({value}).Match({string.Join(", ", branches)})";
+                return $"({value}).Match<global::TedToolkit.Step21.ExpressSet<global::System.String>>("
+                    + $"{string.Join(", ", branches)})";
             }
 
             if (defined.UnderlyingType is ExpressBoundAggregateType aggregate)
@@ -2981,6 +4234,13 @@ internal static class ExpressReachableRuleEmitter
             .ToArray();
         var supplied = new Dictionary<(ExpressBoundSymbol Entity, string Attribute), string>();
         var argumentIndex = 0;
+        var temporaryOrdinal = 0;
+        Func<string, string> allocateTemporaryName = prefix => prefix
+            + expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+            + "_"
+            + expression.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+            + "_"
+            + (temporaryOrdinal++).ToString(CultureInfo.InvariantCulture);
         foreach (var component in components)
         {
             if (component.Kind == ExpressExpressionKind.Application
@@ -3045,6 +4305,29 @@ internal static class ExpressReachableRuleEmitter
                         }
                     }
 
+                    if (attribute.Type is ExpressBoundNamedType
+                        { Declaration.Kind: ExpressDeclarationKind.Entity, } targetEntity
+                        && ResolveSelectCarrierType(plan, actual) is { } selectCarrier)
+                    {
+                        value = actual.Type.DeclaredType is ExpressBoundNamedType
+                        { Declaration.Kind: ExpressDeclarationKind.Entity, } staticallyNarrowed
+                            && plan.EntityProjections.Single(projection =>
+                                    projection.Entity.Symbol == staticallyNarrowed.Declaration)
+                                .PhysicalComponents.Any(component =>
+                                    component.Symbol == targetEntity.Declaration)
+                                ? ResolveNarrowedEntityCarrier(
+                                    plan,
+                                    selectCarrier,
+                                    value,
+                                    targetEntity.Declaration)
+                                : ResolveSelectToEntityValue(
+                                    plan,
+                                    actual,
+                                    value,
+                                    targetEntity,
+                                    allocateTemporaryName);
+                    }
+
                     supplied.Add(
                         (attribute.StorageEntity.Symbol, attribute.StorageAttributeName),
                         value);
@@ -3100,13 +4383,14 @@ internal static class ExpressReachableRuleEmitter
         var parameterTypes = plan.Analysis.GetDeclaration(declaration).RequiredChild("functionHead")
             .ChildRules("formalParameter")
             .SelectMany(formal => formal.ChildRules("parameterId"))
-            .Select(parameter => plan.Schema.NameReferences
-                .Select(reference => reference.Target)
+            .Select(parameter => plan.Schema.LexicalNames
                 .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
                     && SameStart(candidate.Span, parameter.Span))
                 .Distinct()
                 .Single())
-            .Select(parameter => ExpressExpressionEmitter.BoundTypeName(parameter.Type!))
+            .Select(parameter => parameter.Type is ExpressBoundAggregateType aggregate
+                ? ExpressExpressionEmitter.AggregateInterfaceTypeName(aggregate)
+                : ExpressExpressionEmitter.BoundTypeName(parameter.Type!))
             .ToArray();
         var parameters = Enumerable.Range(0, parameterTypes.Length)
             .Select(index => $"__argument{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}")
@@ -3118,7 +4402,7 @@ internal static class ExpressReachableRuleEmitter
         var delegateTypes = parameterTypes.Append(returnType);
         return $"((global::System.Func<{string.Join(", ", delegateTypes)}>)("
             + $"({string.Join(", ", parameters)}) => "
-            + $"{FunctionMethodName(symbol)}({string.Join(", ", invocationArguments)})))";
+            + $"{FunctionMethodName(plan, symbol)}({string.Join(", ", invocationArguments)})))";
     }
 
     private static string ResolveApplication(
@@ -3126,8 +4410,6 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundExpression expression,
         IReadOnlyList<string> arguments,
         string populationExpression,
-        string? selfExpression,
-        IReadOnlyDictionary<string, (string Code, ExpressBoundType Type)>? lexicalNames,
         IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
         IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
     {
@@ -3136,7 +4418,7 @@ internal static class ExpressReachableRuleEmitter
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
             && ExpressTypeAnalysis.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
         {
-            return $"{FunctionMethodName(symbol)}({string.Join(", ", arguments.Append(
+            return $"{FunctionMethodName(plan, symbol)}({string.Join(", ", arguments.Append(
                 populationExpression + ValidationContextArgumentSuffix(plan)))})";
         }
 
@@ -3158,8 +4440,7 @@ internal static class ExpressReachableRuleEmitter
             formalTypes = plan.Analysis.GetDeclaration(function).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
-                .Select(parameter => plan.Schema.NameReferences
-                    .Select(reference => reference.Target)
+                .Select(parameter => plan.Schema.LexicalNames
                     .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
                         && SameStart(candidate.Span, parameter.Span))
                     .Distinct()
@@ -3173,7 +4454,8 @@ internal static class ExpressReachableRuleEmitter
             string Carrier,
             string Placeholder,
             IReadOnlyList<(string Pattern, string? Value)> Branches,
-            bool UsesSelectMatch)>();
+            bool UsesSelectMatch,
+            bool HasStaticProof)>();
         if (formalTypes.Length == expression.Children.Count
             && formalTypes.Length == emittedArguments.Length)
         {
@@ -3181,58 +4463,60 @@ internal static class ExpressReachableRuleEmitter
             {
                 var targetType = formalTypes[index];
                 var actual = expression.Children[index];
-                var wasPathNarrowed = false;
-                if (targetType is ExpressBoundNamedType
-                    { Declaration.Kind: ExpressDeclarationKind.Entity, } formalEntity
-                    && pathNarrowings is not null)
+                var wasEntityAdapted = false;
+                ExpressBoundSymbol? projectedEntity = null;
+                var directEntityProjection = false;
+                if (actual.Reference is { } actualReference
+                    && selectNarrowings?.TryGetValue(actualReference, out var directProjection) == true
+                    && directProjection.Kind == ExpressDeclarationKind.Entity)
                 {
-                    var narrowedAlternatives = pathNarrowings
-                        .Where(narrowing => SameDirectReferencePath(narrowing.Key, actual))
+                    projectedEntity = directProjection;
+                    directEntityProjection = true;
+                }
+                else
+                {
+                    var pathProjections = pathNarrowings
+                        ?.Where(narrowing => SameDirectReferencePath(narrowing.Key, actual)
+                            && narrowing.Value.Kind == ExpressDeclarationKind.Entity)
                         .Select(narrowing => narrowing.Value)
                         .Distinct()
                         .ToArray();
-                    if (narrowedAlternatives.Length == 1
-                        && narrowedAlternatives[0].Kind == ExpressDeclarationKind.Entity
-                        && plan.EntityProjections.Single(projection =>
-                                projection.Entity.Symbol == narrowedAlternatives[0])
-                            .PhysicalComponents.Any(component =>
-                                component.Symbol == formalEntity.Declaration))
+                    if (pathProjections is { Length: 1, })
                     {
-                        var narrowedAlternative = narrowedAlternatives[0];
-                        var pathReference = actual.DescendantsAndSelf()
-                            .Select(candidate => candidate.Reference)
-                            .First(reference => reference is not null)!;
-                        emittedArguments[index] = ResolveReference(
-                            plan,
-                            pathReference,
-                            selfExpression,
-                            populationExpression,
-                            lexicalNames,
-                            selectNarrowings,
-                            actual.Type.DeclaredType,
-                            emittedArguments[index],
-                            narrowedAlternative);
-                        wasPathNarrowed = true;
+                        projectedEntity = pathProjections[0];
                     }
                 }
 
-                if (!wasPathNarrowed
+                ExpressBoundSymbol? inferredAttributeProjection = null;
+                if (actual.Kind == ExpressExpressionKind.AttributeQualifier
+                    && actual.Type.DeclaredType is ExpressBoundNamedType
+                    { Declaration.Kind: ExpressDeclarationKind.Entity, } inferredAttributeEntity
+                    && actual.Reference?.Type is ExpressBoundNamedType
+                    { Declaration.Kind: not ExpressDeclarationKind.Entity, } inferredAttributeCarrier
+                    && plan.Resolver.GetDefinedType(inferredAttributeCarrier.Declaration).UnderlyingType
+                        is ExpressBoundSelectType)
+                {
+                    inferredAttributeProjection = inferredAttributeEntity.Declaration;
+                }
+
+                var emittedProjection = inferredAttributeProjection ?? projectedEntity;
+                var emittedEntityAlreadyProjected = targetType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } projectedFormal
+                    && emittedProjection is not null
+                    && (inferredAttributeProjection is not null
+                        || directEntityProjection)
+                    && plan.EntityProjections.Single(projection =>
+                            projection.Entity.Symbol == emittedProjection)
+                        .PhysicalComponents.Any(component =>
+                            component.Symbol == projectedFormal.Declaration);
+                var actualSelectCarrier = ResolveSelectCarrierType(plan, actual);
+
+                if (!emittedEntityAlreadyProjected
                     && targetType is ExpressBoundNamedType
                     { Declaration.Kind: ExpressDeclarationKind.Entity, } formalEntityTarget
-                    && actual.Type.DeclaredType is ExpressBoundNamedType actualSelectName
-                    && actualSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && actualSelectCarrier is { } actualSelectName
                     && plan.Resolver.GetDefinedType(actualSelectName.Declaration).UnderlyingType
-                        is ExpressBoundSelectType actualSelect
-                    && ((actual.Reference is { } invalidatedReference
-                            && selectNarrowings?.TryGetValue(
-                                invalidatedReference,
-                                out var invalidatedAlternative) == true
-                            && ReferenceEquals(
-                                invalidatedAlternative,
-                                actualSelectName.Declaration))
-                        || pathNarrowings?.Any(narrowing =>
-                            ReferenceEquals(narrowing.Value, actualSelectName.Declaration)
-                            && SameDirectReferencePath(narrowing.Key, actual)) == true))
+                        is ExpressBoundSelectType actualSelect)
                 {
                     var actualAlternatives = plan.Resolver.GetSelectAlternatives(actualSelect);
                     var compatibleAlternatives = actualAlternatives
@@ -3272,15 +4556,22 @@ internal static class ExpressReachableRuleEmitter
                             emittedArguments[index],
                             placeholder,
                             branches,
-                            true));
+                            true,
+                            actual.Type.DeclaredType is ExpressBoundNamedType
+                            { Declaration.Kind: ExpressDeclarationKind.Entity, } staticallyNarrowedActual
+                                && plan.EntityProjections.Single(projection =>
+                                        projection.Entity.Symbol == staticallyNarrowedActual.Declaration)
+                                    .PhysicalComponents.Any(component =>
+                                        component.Symbol == formalEntityTarget.Declaration)));
                         emittedArguments[index] = placeholder;
                     }
                 }
 
-                if (!wasPathNarrowed
-                    && actual.Type.DeclaredType is ExpressBoundNamedType
+                if (actual.Type.DeclaredType is ExpressBoundNamedType
                     { Declaration.Kind: ExpressDeclarationKind.Entity, } actualEntity)
                 {
+                    var actualEntityProjection = plan.EntityProjections.Single(candidate =>
+                        candidate.Entity.Symbol == actualEntity.Declaration);
                     var pendingTypes = new Stack<(
                         ExpressBoundType Type,
                         IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
@@ -3305,9 +4596,19 @@ internal static class ExpressReachableRuleEmitter
                         {
                             var projection = plan.EntityProjections.Single(candidate =>
                                 candidate.Entity.Symbol == pendingNamed.Declaration);
-                            if (!ReferenceEquals(pendingNamed.Declaration, actualEntity.Declaration)
-                                && projection.PhysicalComponents.Any(component =>
-                                    component.Symbol == actualEntity.Declaration))
+                            var isExact = ReferenceEquals(
+                                pendingNamed.Declaration,
+                                actualEntity.Declaration);
+                            var actualIsAssignableToFormal = isExact
+                                || actualEntityProjection.PhysicalComponents.Any(component =>
+                                    component.Symbol == pendingNamed.Declaration);
+                            var canShareComplexInstance = projection.PhysicalComponents.Any(
+                                formalComponent => actualEntityProjection.PhysicalComponents.Any(
+                                    actualComponent => actualComponent.Symbol == formalComponent.Symbol));
+                            if (!actualIsAssignableToFormal
+                                && (projection.PhysicalComponents.Any(component =>
+                                        component.Symbol == actualEntity.Declaration)
+                                    || canShareComplexInstance))
                             {
                                 matchingEntities.Add((pendingNamed.Declaration, projection, pending.Path));
                             }
@@ -3381,7 +4682,173 @@ internal static class ExpressReachableRuleEmitter
                                 return (Pattern: pattern, Value: (string?)value);
                             })
                             .ToArray();
-                        dynamicArguments.Add((emittedArguments[index], placeholder, branches, false));
+                        dynamicArguments.Add((emittedArguments[index], placeholder, branches, false, false));
+                        emittedArguments[index] = placeholder;
+                        wasEntityAdapted = true;
+                    }
+                }
+
+                if (targetType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Aggregate, }
+                    && actual.Type.DeclaredType is ExpressBoundNamedType actualAggregateSelectName
+                    && actualAggregateSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(actualAggregateSelectName.Declaration).UnderlyingType
+                        is ExpressBoundSelectType actualAggregateSelect)
+                {
+                    var placeholder = "__expressDynamicAggregateArgument_"
+                        + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + index.ToString(CultureInfo.InvariantCulture)
+                        + "__";
+                    var branches = plan.Resolver.GetSelectAlternatives(actualAggregateSelect)
+                        .Select((alternative, branchIndex) =>
+                        {
+                            var variable = "__expressDynamicAggregateValue_"
+                                + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + index.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + branchIndex.ToString(CultureInfo.InvariantCulture);
+                            var value = variable;
+                            ExpressBoundType pending = new ExpressBoundNamedType(
+                                alternative,
+                                actualAggregateSelect.Span);
+                            var visited = new HashSet<ExpressBoundSymbol>();
+                            while (pending is ExpressBoundNamedType pendingNamed
+                                   && pendingNamed.Declaration.Kind != ExpressDeclarationKind.Entity
+                                   && visited.Add(pendingNamed.Declaration))
+                            {
+                                pending = plan.Resolver.GetDefinedType(pendingNamed.Declaration).UnderlyingType;
+                                value = $"({value}).Value";
+                            }
+
+                            return (
+                                Pattern: variable,
+                                Value: pending is ExpressBoundAggregateType ? value : null);
+                        })
+                        .ToArray();
+                    if (branches.Any(branch => branch.Value is not null))
+                    {
+                        dynamicArguments.Add((
+                            emittedArguments[index],
+                            placeholder,
+                            branches,
+                            true,
+                            false));
+                        emittedArguments[index] = placeholder;
+                    }
+                }
+
+                if (targetType is ExpressBoundNamedType formalSelectName
+                    && formalSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && plan.Resolver.GetDefinedType(formalSelectName.Declaration).UnderlyingType
+                        is ExpressBoundSelectType formalSelectType
+                    && actual.Type.DeclaredType is ExpressBoundNamedType actualApplicationSelectName
+                    && actualApplicationSelectName.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && !ReferenceEquals(
+                        formalSelectName.Declaration,
+                        actualApplicationSelectName.Declaration)
+                    && plan.Resolver.GetDefinedType(actualApplicationSelectName.Declaration).UnderlyingType
+                        is ExpressBoundSelectType actualSelectType)
+                {
+                    var pendingFormalSelects = new Stack<(
+                        ExpressBoundSymbol Wrapper,
+                        ExpressBoundSelectType Select,
+                        IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
+                    pendingFormalSelects.Push((
+                        formalSelectName.Declaration,
+                        formalSelectType,
+                        Array.Empty<(ExpressBoundSymbol, ExpressBoundSymbol)>()));
+                    var visitedFormalSelects = new HashSet<ExpressBoundSymbol>();
+                    var formalEntityPaths = new List<(
+                        ExpressBoundSymbol Leaf,
+                        IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
+                    while (pendingFormalSelects.Count > 0)
+                    {
+                        var pending = pendingFormalSelects.Pop();
+                        if (!visitedFormalSelects.Add(pending.Wrapper))
+                        {
+                            continue;
+                        }
+
+                        foreach (var alternative in plan.Resolver.GetSelectAlternatives(pending.Select))
+                        {
+                            var path = pending.Path
+                                .Append((pending.Wrapper, alternative))
+                                .ToArray();
+                            if (alternative.Kind == ExpressDeclarationKind.Entity)
+                            {
+                                formalEntityPaths.Add((alternative, path));
+                            }
+                            else if (plan.Resolver.GetDefinedType(alternative).UnderlyingType
+                                     is ExpressBoundSelectType nestedSelect)
+                            {
+                                pendingFormalSelects.Push((alternative, nestedSelect, path));
+                            }
+                        }
+                    }
+
+                    var placeholder = "__expressDynamicSelectApplicationArgument_"
+                        + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + index.ToString(CultureInfo.InvariantCulture)
+                        + "__";
+                    var branches = plan.Resolver.GetSelectAlternatives(actualSelectType)
+                        .Select((alternative, branchIndex) =>
+                        {
+                            var variable = "__expressDynamicSelectApplicationValue_"
+                                + actual.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + actual.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + index.ToString(CultureInfo.InvariantCulture)
+                                + "_"
+                                + branchIndex.ToString(CultureInfo.InvariantCulture);
+                            if (alternative.Kind != ExpressDeclarationKind.Entity)
+                            {
+                                return (Pattern: variable, Value: (string?)null);
+                            }
+
+                            var projection = plan.EntityProjections.Single(candidate =>
+                                candidate.Entity.Symbol == alternative);
+                            var compatiblePaths = formalEntityPaths
+                                .Where(candidate => projection.PhysicalComponents.Any(component =>
+                                    component.Symbol == candidate.Leaf))
+                                .ToArray();
+                            if (compatiblePaths.Length != 1)
+                            {
+                                return (Pattern: variable, Value: (string?)null);
+                            }
+
+                            var value = variable;
+                            var path = compatiblePaths[0].Path;
+                            for (var pathIndex = path.Count - 1; pathIndex >= 0; pathIndex--)
+                            {
+                                var step = path[pathIndex];
+                                value = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+                                        step.Wrapper,
+                                        formalSelectName.Span))
+                                    + ".From"
+                                    + ExpressEntityProjection.ToPascalCase(step.Alternative.Name)
+                                    + $"({value})";
+                            }
+
+                            return (Pattern: variable, Value: (string?)value);
+                        })
+                        .ToArray();
+                    if (branches.Any(branch => branch.Value is not null))
+                    {
+                        dynamicArguments.Add((
+                            emittedArguments[index],
+                            placeholder,
+                            branches,
+                            true,
+                            false));
                         emittedArguments[index] = placeholder;
                     }
                 }
@@ -3433,7 +4900,7 @@ internal static class ExpressReachableRuleEmitter
                     }
                 }
 
-                if (declaration is not ExpressBoundOpaqueDeclaration)
+                if (wasEntityAdapted || declaration is not ExpressBoundOpaqueDeclaration)
                 {
                     continue;
                 }
@@ -3451,17 +4918,66 @@ internal static class ExpressReachableRuleEmitter
 
                 var actualProjection = plan.EntityProjections.Single(projection =>
                     projection.Entity.Symbol == actualNamed.Declaration);
-                var alternatives = plan.Resolver.GetSelectAlternatives(formalSelect)
-                    .Where(alternative => alternative.Kind == ExpressDeclarationKind.Entity
-                        && actualProjection.PhysicalComponents.Any(component =>
-                            component.Symbol == alternative))
-                    .ToArray();
-                if (alternatives.Length == 1)
+                var pendingSelectTypes = new Stack<(
+                    ExpressBoundSymbol Wrapper,
+                    ExpressBoundSelectType Select,
+                    IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
+                pendingSelectTypes.Push((
+                    formalNamed.Declaration,
+                    formalSelect,
+                    Array.Empty<(ExpressBoundSymbol, ExpressBoundSymbol)>()));
+                var visitedSelectTypes = new HashSet<ExpressBoundSymbol>();
+                var alternatives = new List<(
+                    ExpressBoundSymbol Leaf,
+                    IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
+                while (pendingSelectTypes.Count > 0)
                 {
-                    emittedArguments[index] = ExpressExpressionEmitter.BoundTypeName(formalNamed)
-                        + ".From"
-                        + ExpressEntityProjection.ToPascalCase(alternatives[0].Name)
-                        + $"({emittedArguments[index]})";
+                    var pending = pendingSelectTypes.Pop();
+                    if (!visitedSelectTypes.Add(pending.Wrapper))
+                    {
+                        continue;
+                    }
+
+                    foreach (var alternative in plan.Resolver.GetSelectAlternatives(pending.Select))
+                    {
+                        var path = pending.Path
+                            .Append((pending.Wrapper, alternative))
+                            .ToArray();
+                        if (alternative.Kind == ExpressDeclarationKind.Entity)
+                        {
+                            if (actualProjection.PhysicalComponents.Any(component =>
+                                    component.Symbol == alternative))
+                            {
+                                alternatives.Add((alternative, path));
+                            }
+
+                            continue;
+                        }
+
+                        if (plan.Resolver.GetDefinedType(alternative).UnderlyingType
+                            is ExpressBoundSelectType nestedSelect)
+                        {
+                            pendingSelectTypes.Push((alternative, nestedSelect, path));
+                        }
+                    }
+                }
+
+                if (alternatives.Count == 1)
+                {
+                    var adapted = emittedArguments[index];
+                    var path = alternatives[0].Path;
+                    for (var pathIndex = path.Count - 1; pathIndex >= 0; pathIndex--)
+                    {
+                        var step = path[pathIndex];
+                        adapted = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+                                step.Wrapper,
+                                formalNamed.Span))
+                            + ".From"
+                            + ExpressEntityProjection.ToPascalCase(step.Alternative.Name)
+                            + $"({adapted})";
+                    }
+
+                    emittedArguments[index] = adapted;
                 }
             }
         }
@@ -3474,12 +4990,27 @@ internal static class ExpressReachableRuleEmitter
         {
             var dynamicArgument = dynamicArguments[index];
             var branches = dynamicArgument.Branches.Select(branch =>
-                branch.Pattern + " => " + (branch.Value is null
-                    ? nullResult
-                    : result.Replace(dynamicArgument.Placeholder, branch.Value)));
+            {
+                string branchResult;
+                if (branch.Value is not null)
+                {
+                    branchResult = result.Replace(dynamicArgument.Placeholder, branch.Value);
+                }
+                else
+                {
+                    branchResult = dynamicArgument.HasStaticProof
+                        ? "throw new global::System.InvalidOperationException()"
+                        : nullResult;
+                }
+
+                return branch.Pattern + " => " + branchResult;
+            });
             result = dynamicArgument.UsesSelectMatch
-                ? $"({dynamicArgument.Carrier}).Match({string.Join(", ", branches)})"
-                : $"({dynamicArgument.Carrier}) switch {{ {string.Join(", ", branches)}, "
+                ? $"({dynamicArgument.Carrier}).Match<"
+                    + ExpressExpressionEmitter.BoundTypeName(expression.Type.DeclaredType!)
+                    + (expression.Type.CanBeIndeterminate ? "?" : "")
+                    + $">({string.Join(", ", branches)})"
+                : $"((object)({dynamicArgument.Carrier})) switch {{ {string.Join(", ", branches)}, "
                     + $"_ => {nullResult} }}";
         }
 
@@ -3713,17 +5244,17 @@ internal static class ExpressReachableRuleEmitter
         string right,
         string activePairs)
     {
-        var projection = resolver.Resolve(plan.Schema.Identity, attribute.StorageType);
+        var projection = resolver.Resolve(plan.Schema.Identity, attribute.Type);
         var canBeNull = attribute.Attribute.IsOptional || projection.IsReferenceType;
         if (!canBeNull)
         {
-            return CreateBoundValueEquality(plan, resolver, attribute.StorageType, left, right, activePairs);
+            return CreateBoundValueEquality(plan, resolver, attribute.Type, left, right, activePairs);
         }
 
         var leftValue = projection.IsReferenceType ? left : $"({left}).Value";
         var rightValue = projection.IsReferenceType ? right : $"({right}).Value";
         return $"(({left}) is null || ({right}) is null ? global::TedToolkit.Step21.LogicalValue.Unknown : "
-            + CreateBoundValueEquality(plan, resolver, attribute.StorageType, leftValue, rightValue, activePairs)
+            + CreateBoundValueEquality(plan, resolver, attribute.Type, leftValue, rightValue, activePairs)
             + ")";
     }
 
@@ -4108,6 +5639,237 @@ internal static class ExpressReachableRuleEmitter
         return method;
     }
 
+    private static string ResolveDefinedScalarValue(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        string source,
+        ExpressBoundType target)
+    {
+        var definedTypes = new List<ExpressBoundNamedType>();
+        while (target is ExpressBoundNamedType definedType
+               && definedType.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            definedTypes.Add(definedType);
+            target = plan.Resolver.GetDefinedType(definedType.Declaration).UnderlyingType;
+        }
+
+        if (definedTypes.Count == 0 || target is not ExpressBoundScalarType targetScalar)
+        {
+            return source;
+        }
+
+        var actualNominal = expression.Type.DeclaredType as ExpressBoundNamedType;
+        if (actualNominal is not null
+            && !ReferenceEquals(actualNominal.Declaration, definedTypes[0].Declaration))
+        {
+            return source;
+        }
+
+        var exactScalar = targetScalar.Kind switch
+        {
+            ExpressScalarKind.Binary => expression.Type.Kind == ExpressExpressionTypeKind.Binary,
+            ExpressScalarKind.Boolean => expression.Type.Kind == ExpressExpressionTypeKind.Boolean,
+            ExpressScalarKind.Integer => expression.Type.Kind == ExpressExpressionTypeKind.Integer,
+            ExpressScalarKind.Logical => expression.Type.Kind == ExpressExpressionTypeKind.Logical,
+            ExpressScalarKind.Number => expression.Type.Kind == ExpressExpressionTypeKind.Number,
+            ExpressScalarKind.Real => expression.Type.Kind == ExpressExpressionTypeKind.Real,
+            ExpressScalarKind.String => expression.Type.Kind == ExpressExpressionTypeKind.String,
+            _ => false,
+        };
+        var widensToReal = expression.Type.Kind == ExpressExpressionTypeKind.Integer
+            && targetScalar.Kind == ExpressScalarKind.Real;
+        if (!exactScalar && !widensToReal)
+        {
+            return source;
+        }
+
+        if (widensToReal)
+        {
+            source = ExpressExpressionEmitter.PromoteNumeric(
+                expression,
+                source,
+                ExpressExpressionTypeKind.Real);
+        }
+
+        for (var index = definedTypes.Count - 1; index >= 0; index--)
+        {
+            source = "new " + ExpressExpressionEmitter.BoundTypeName(definedTypes[index])
+                + $"({source})";
+        }
+
+        return source;
+    }
+
+    private static string? ResolveNarrowedScalarReference(
+        ExpressReachableRulePlan plan,
+        ExpressBoundName reference,
+        string? selfExpression,
+        string populationExpression,
+        IReadOnlyDictionary<string, (string Code, ExpressBoundType Type)>? lexicalNames,
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        ExpressBoundType carrierType,
+        string carrier,
+        ExpressBoundScalarType narrowedScalar)
+    {
+        var pendingType = carrierType;
+        while (pendingType is ExpressBoundNamedType named
+               && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            pendingType = plan.Resolver.GetDefinedType(named.Declaration).UnderlyingType;
+        }
+
+        return pendingType is ExpressBoundSelectType
+            ? ResolveReference(
+                plan,
+                reference,
+                selfExpression,
+                populationExpression,
+                lexicalNames,
+                selectNarrowings,
+                carrierType,
+                carrier,
+                narrowedScalarType: narrowedScalar)
+            : null;
+    }
+
+    private static string ResolveSelectToEntityValue(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression,
+        string source,
+        ExpressBoundNamedType target,
+        Func<string, string> allocateTemporaryName)
+    {
+        if (ResolveSelectCarrierType(plan, expression) is not { } sourceName
+            || plan.Resolver.GetDefinedType(sourceName.Declaration).UnderlyingType
+                is not ExpressBoundSelectType sourceSelect)
+        {
+            return source;
+        }
+
+        var targetName = ExpressExpressionEmitter.BoundTypeName(target);
+        var alternatives = plan.Resolver.GetSelectAlternatives(sourceSelect);
+        var branches = alternatives.Select(alternative =>
+        {
+            var variable = allocateTemporaryName("__expressSelectedEntity");
+            var isCompatible = alternative.Kind == ExpressDeclarationKind.Entity
+                && plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == alternative)
+                    .PhysicalComponents.Any(component =>
+                        component.Symbol == target.Declaration);
+            return variable + " => " + (isCompatible
+                ? $"({targetName}?){variable}"
+                : $"({targetName}?)null");
+        });
+        var match = $".Match<{targetName}?>({string.Join(", ", branches)})";
+        if (!expression.Type.CanBeIndeterminate)
+        {
+            return $"({source}){match}";
+        }
+
+        var present = allocateTemporaryName("__expressPresentSelect");
+        return $"(({source}) is {{ }} {present} ? {present}{match} : ({targetName}?)null)";
+    }
+
+    private static ExpressBoundNamedType? ResolveSelectCarrierType(
+        ExpressReachableRulePlan plan,
+        ExpressBoundExpression expression)
+    {
+        var declarationType = expression.Reference?.SchemaDeclaration is { } declaration
+            && plan.GetDeclaration(declaration) is ExpressBoundOpaqueDeclaration opaque
+                ? opaque.DeclaredType
+                : null;
+        ExpressBoundType?[] candidates =
+        {
+            expression.Type.DeclaredType,
+            expression.Reference?.Type,
+            expression.Reference?.Attribute?.Type,
+            declarationType,
+        };
+        return candidates
+            .OfType<ExpressBoundNamedType>()
+            .FirstOrDefault(named => named.Declaration.Kind != ExpressDeclarationKind.Entity
+                && plan.Resolver.GetDefinedType(named.Declaration).UnderlyingType
+                    is ExpressBoundSelectType);
+    }
+
+    private static string? ResolveEntityToSelectValue(
+        ExpressReachableRulePlan plan,
+        ExpressBoundNamedType target,
+        ExpressBoundSymbol sourceEntity,
+        string source)
+    {
+        if (plan.Resolver.GetDefinedType(target.Declaration).UnderlyingType
+            is not ExpressBoundSelectType targetSelect)
+        {
+            return null;
+        }
+
+        var pendingSelects = new Stack<(
+            ExpressBoundSymbol Wrapper,
+            ExpressBoundSelectType Select,
+            IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)> Path)>();
+        pendingSelects.Push((
+            target.Declaration,
+            targetSelect,
+            Array.Empty<(ExpressBoundSymbol, ExpressBoundSymbol)>()));
+        var visitedSelects = new HashSet<ExpressBoundSymbol>();
+        var sourceProjection = plan.EntityProjections.Single(projection =>
+            projection.Entity.Symbol == sourceEntity);
+        var compatiblePaths = new List<
+            IReadOnlyList<(ExpressBoundSymbol Wrapper, ExpressBoundSymbol Alternative)>>();
+        while (pendingSelects.Count > 0)
+        {
+            var pending = pendingSelects.Pop();
+            if (!visitedSelects.Add(pending.Wrapper))
+            {
+                continue;
+            }
+
+            foreach (var alternative in plan.Resolver.GetSelectAlternatives(pending.Select))
+            {
+                var path = pending.Path
+                    .Append((pending.Wrapper, alternative))
+                    .ToArray();
+                if (alternative.Kind == ExpressDeclarationKind.Entity)
+                {
+                    if (sourceProjection.PhysicalComponents.Any(component =>
+                            component.Symbol == alternative))
+                    {
+                        compatiblePaths.Add(path);
+                    }
+
+                    continue;
+                }
+
+                if (plan.Resolver.GetDefinedType(alternative).UnderlyingType
+                    is ExpressBoundSelectType nestedSelect)
+                {
+                    pendingSelects.Push((alternative, nestedSelect, path));
+                }
+            }
+        }
+
+        if (compatiblePaths.Count != 1)
+        {
+            return null;
+        }
+
+        var result = source;
+        var compatiblePath = compatiblePaths[0];
+        for (var pathIndex = compatiblePath.Count - 1; pathIndex >= 0; pathIndex--)
+        {
+            var step = compatiblePath[pathIndex];
+            result = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+                    step.Wrapper,
+                    target.Span))
+                + ".From"
+                + ExpressEntityProjection.ToPascalCase(step.Alternative.Name)
+                + $"({result})";
+        }
+
+        return result;
+    }
+
     private static string ResolveReference(
         ExpressReachableRulePlan plan,
         ExpressBoundName reference,
@@ -4119,12 +5881,27 @@ internal static class ExpressReachableRuleEmitter
         string? narrowedCode = null,
         ExpressBoundSymbol? narrowedAlternative = null,
         ExpressBoundScalarType? narrowedScalarType = null,
-        int narrowingDepth = 0)
+        int narrowingDepth = 0,
+        string? incompatibleScalarCode = null)
     {
+        if (narrowedType is not null
+            && narrowedCode is null
+            && lexicalNames?.TryGetValue(reference.Name, out var narrowedLexical) == true)
+        {
+            narrowedCode = narrowedLexical.Code;
+        }
+
         if (narrowedType is not null
             && narrowedCode is not null
             && (narrowedAlternative is not null || narrowedScalarType is not null))
         {
+            if (narrowedAlternative is not null
+                && narrowedType is ExpressBoundNamedType narrowedNamed
+                && ReferenceEquals(narrowedNamed.Declaration, narrowedAlternative))
+            {
+                return narrowedCode;
+            }
+
             if (narrowedAlternative is { Kind: not ExpressDeclarationKind.Entity, }
                 && plan.Resolver.GetDefinedType(narrowedAlternative).UnderlyingType
                     is ExpressBoundSelectType targetSelect)
@@ -4201,7 +5978,7 @@ internal static class ExpressReachableRuleEmitter
                                 new ExpressBoundNamedType(candidate.Leaf, targetSelect.Span));
                             return $"{leafType} {variable} => {value}";
                         });
-                    return $"({narrowedCode}) switch {{ {string.Join(", ", branches)}, "
+                    return $"((object)({narrowedCode})) switch {{ {string.Join(", ", branches)}, "
                         + "_ => throw new global::System.InvalidOperationException() }";
                 }
             }
@@ -4215,7 +5992,7 @@ internal static class ExpressReachableRuleEmitter
                     new ExpressBoundNamedType(narrowedAlternative, carrierType.Span));
                 var narrowedVariable = "__expressNarrowedReference"
                     + narrowingDepth.ToString(CultureInfo.InvariantCulture);
-                return $"({carrier}) switch {{ {narrowedTypeName} {narrowedVariable} => "
+                return $"((object)({carrier})) switch {{ {narrowedTypeName} {narrowedVariable} => "
                     + $"{narrowedVariable}, _ => throw new global::System.InvalidOperationException() }}";
             }
 
@@ -4238,7 +6015,7 @@ internal static class ExpressReachableRuleEmitter
                             new ExpressBoundNamedType(narrowedAlternative, namedCarrier.Span));
                         var narrowedVariable = "__expressNarrowedReference"
                             + narrowingDepth.ToString(CultureInfo.InvariantCulture);
-                        return $"({carrier}) switch {{ {narrowedTypeName} {narrowedVariable} => "
+                        return $"((object)({carrier})) switch {{ {narrowedTypeName} {narrowedVariable} => "
                             + $"{narrowedVariable}, _ => throw new global::System.InvalidOperationException() }}";
                     }
 
@@ -4324,10 +6101,7 @@ internal static class ExpressReachableRuleEmitter
                                 }
                                 else if (pendingType is ExpressBoundScalarType pendingScalar
                                          && narrowedScalarType is not null
-                                         && (pendingScalar.Kind == narrowedScalarType.Kind
-                                             || (pendingScalar.Kind == ExpressScalarKind.Number
-                                                 && narrowedScalarType.Kind
-                                                 is ExpressScalarKind.Integer or ExpressScalarKind.Real)))
+                                         && CanProjectScalar(pendingScalar.Kind, narrowedScalarType.Kind))
                                 {
                                     containsNarrowing = true;
                                 }
@@ -4346,21 +6120,36 @@ internal static class ExpressReachableRuleEmitter
                                 variable,
                                 narrowedAlternative,
                                 narrowedScalarType,
-                                narrowingDepth + 1)
-                            : "throw new global::System.InvalidOperationException()";
+                                narrowingDepth + 1,
+                                incompatibleScalarCode)
+                            : incompatibleScalarCode
+                                ?? "throw new global::System.InvalidOperationException()";
                         return $"{variable} => {value}";
                     });
-                return $"({carrier}).Match({string.Join(", ", branches)})";
+                if (narrowedAlternative is null)
+                {
+                    return $"({carrier}).Match({string.Join(", ", branches)})";
+                }
+
+                var resultType = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+                    narrowedAlternative,
+                    select.Span));
+                return $"({carrier}).Match<{resultType}>({string.Join(", ", branches)})";
             }
 
             if (carrierType is ExpressBoundScalarType scalar
                 && narrowedScalarType is not null
-                && (scalar.Kind == narrowedScalarType.Kind
-                    || (scalar.Kind == ExpressScalarKind.Number
-                        && narrowedScalarType.Kind is ExpressScalarKind.Integer or ExpressScalarKind.Real)))
+                && CanProjectScalar(scalar.Kind, narrowedScalarType.Kind))
             {
                 return (scalar.Kind, narrowedScalarType.Kind) switch
                 {
+                    (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                        $"global::TedToolkit.Step21.NumberValue.FromInteger({carrier})",
+                    (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                        $"global::TedToolkit.Step21.NumberValue.FromReal({carrier})",
+                    (ExpressScalarKind.Integer, ExpressScalarKind.Real) =>
+                        $"new global::TedToolkit.Step21.RealValue(({carrier}), "
+                        + "global::System.Numerics.BigInteger.Zero)",
                     (ExpressScalarKind.Number, ExpressScalarKind.Integer) =>
                         $"({carrier}).ToIntegerTruncated()",
                     (ExpressScalarKind.Number, ExpressScalarKind.Real) => $"({carrier}).ToReal()",
@@ -4368,7 +6157,8 @@ internal static class ExpressReachableRuleEmitter
                 };
             }
 
-            return "throw new global::System.InvalidOperationException()";
+            return incompatibleScalarCode
+                ?? "throw new global::System.InvalidOperationException()";
         }
 
         if (lexicalNames is not null
@@ -4408,7 +6198,7 @@ internal static class ExpressReachableRuleEmitter
                     $"Unqualified attribute '{reference.Name}' has no enclosing entity value.");
             }
 
-            return ResolveAttribute(plan, null, reference, selfExpression, populationExpression, null);
+            return ResolveAttribute(plan, null, reference, selfExpression, populationExpression, null, null);
         }
 
         if (reference.SchemaDeclaration is { } symbol)
@@ -4430,22 +6220,109 @@ internal static class ExpressReachableRuleEmitter
             $"Lexical reference '{reference.Name}' has no generated spelling in this operation.");
     }
 
+    private static bool CanProjectScalar(ExpressScalarKind carrier, ExpressScalarKind target)
+    {
+        return carrier == target
+            || (carrier == ExpressScalarKind.Number
+                && target is ExpressScalarKind.Integer or ExpressScalarKind.Real)
+            || (target == ExpressScalarKind.Number
+                && carrier is ExpressScalarKind.Integer or ExpressScalarKind.Real)
+            || (carrier == ExpressScalarKind.Integer && target == ExpressScalarKind.Real);
+    }
+
     private static string ResolveAttribute(
         ExpressReachableRulePlan plan,
         ExpressBoundExpression? sourceExpression,
         ExpressBoundName reference,
         string source,
         string populationExpression,
-        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings)
+        IReadOnlyDictionary<ExpressBoundName, ExpressBoundSymbol>? selectNarrowings,
+        IReadOnlyList<KeyValuePair<ExpressBoundExpression, ExpressBoundSymbol>>? pathNarrowings)
     {
         ExpressBoundType? sourceType = sourceExpression?.Type.DeclaredType;
+        var sourceCarrierType = sourceExpression?.Reference?.Type is ExpressBoundNamedType
+        { Declaration.Kind: not ExpressDeclarationKind.Entity, } declaredCarrier
+            && plan.Resolver.GetDefinedType(declaredCarrier.Declaration).UnderlyingType
+                is ExpressBoundSelectType
+                ? declaredCarrier
+                : sourceType;
         ExpressBoundSymbol? narrowedAlternative = null;
         if (sourceExpression?.Reference is { } sourceReference
             && selectNarrowings?.TryGetValue(sourceReference, out narrowedAlternative) == true)
         {
+            if (sourceReference.Kind == ExpressBoundNameKind.Attribute
+                && sourceExpression.Kind != ExpressExpressionKind.AttributeQualifier
+                && sourceCarrierType is not null)
+            {
+                source = ResolveNarrowedEntityCarrier(
+                    plan,
+                    sourceCarrierType,
+                    source,
+                    narrowedAlternative);
+            }
+
             sourceType = new ExpressBoundNamedType(
                 narrowedAlternative,
                 sourceType?.Span ?? narrowedAlternative.Span);
+        }
+
+        if (narrowedAlternative is null
+            && sourceType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } staticallyNarrowedSource
+            && sourceCarrierType is ExpressBoundNamedType
+            { Declaration.Kind: not ExpressDeclarationKind.Entity, } staticallyNarrowedCarrier
+            && plan.Resolver.GetDefinedType(staticallyNarrowedCarrier.Declaration).UnderlyingType
+                is ExpressBoundSelectType)
+        {
+            narrowedAlternative = staticallyNarrowedSource.Declaration;
+            if (sourceExpression?.Kind != ExpressExpressionKind.AttributeQualifier)
+            {
+                source = ResolveNarrowedEntityCarrier(
+                    plan,
+                    sourceCarrierType,
+                    source,
+                    narrowedAlternative);
+            }
+        }
+
+        if (narrowedAlternative is null && sourceExpression is not null)
+        {
+            var matchingPathNarrowings = pathNarrowings
+                ?.Where(narrowing => SameDirectReferencePath(narrowing.Key, sourceExpression))
+                .ToArray();
+            var pathAlternatives = matchingPathNarrowings
+                ?.Select(narrowing => narrowing.Value)
+                .Distinct()
+                .ToArray();
+            if (pathAlternatives is { Length: 1, }
+                && pathAlternatives[0].Kind == ExpressDeclarationKind.Entity)
+            {
+                narrowedAlternative = pathAlternatives[0];
+                if (sourceCarrierType is not ExpressBoundNamedType
+                    { Declaration.Kind: not ExpressDeclarationKind.Entity, }
+                    && matchingPathNarrowings?.Select(narrowing => narrowing.Key.Type.DeclaredType)
+                        .OfType<ExpressBoundNamedType>()
+                        .FirstOrDefault(candidate =>
+                            candidate.Declaration.Kind != ExpressDeclarationKind.Entity
+                            && plan.Resolver.GetDefinedType(candidate.Declaration).UnderlyingType
+                                is ExpressBoundSelectType) is { } pathCarrierType)
+                {
+                    sourceCarrierType = pathCarrierType;
+                }
+
+                if (sourceCarrierType is not null)
+                {
+                    source = ResolveNarrowedEntityCarrier(
+                        plan,
+                        sourceCarrierType,
+                        source,
+                        narrowedAlternative);
+                }
+
+                sourceType = new ExpressBoundNamedType(
+                    narrowedAlternative,
+                    sourceType?.Span ?? narrowedAlternative.Span);
+            }
         }
 
         while (sourceType is ExpressBoundNamedType namedSource
@@ -4456,12 +6333,14 @@ internal static class ExpressReachableRuleEmitter
 
         if (reference.Kind == ExpressBoundNameKind.Entity
             && reference.SchemaDeclaration is { } narrowedGroup
-            && narrowedAlternative?.Kind == ExpressDeclarationKind.Entity
-            && plan.EntityProjections.Single(candidate =>
-                    candidate.Entity.Symbol == narrowedAlternative)
-                .PhysicalComponents.Any(component => component.Symbol == narrowedGroup))
+            && sourceType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, })
         {
-            return source;
+            return ResolveNarrowedEntityCarrier(
+                plan,
+                sourceType,
+                source,
+                narrowedGroup);
         }
 
         if (sourceType is ExpressBoundSelectType select)
@@ -4479,7 +6358,11 @@ internal static class ExpressReachableRuleEmitter
                     && plan.EntityProjections.Single(candidate => candidate.Entity.Symbol == alternative)
                         .PhysicalComponents.Any(component => component.Symbol == group)))
             {
-                return $"(({ExpressExpressionEmitter.BoundTypeName(resultType)})({source}))";
+                return ResolveNarrowedEntityCarrier(
+                    plan,
+                    sourceCarrierType ?? select,
+                    source,
+                    group);
             }
 
             var branches = alternatives.Select((alternative, index) =>
@@ -4550,7 +6433,7 @@ internal static class ExpressReachableRuleEmitter
                     }
                     else
                     {
-                        value = ResolveAttribute(plan, null, reference, variable, populationExpression, null);
+                        value = ResolveAttribute(plan, null, reference, variable, populationExpression, null, null);
                     }
                 }
                 else
@@ -4603,7 +6486,12 @@ internal static class ExpressReachableRuleEmitter
                         $"{DerivedMethodName(owner, candidate)}({source}, {populationExpression}{ValidationContextArgumentSuffix(plan)})",
                     ExpressAttributeKind.Inverse =>
                         $"{InverseMethodName(owner, candidate)}((global::TedToolkit.Step21.Entity)({source}), {populationExpression}{ValidationContextArgumentSuffix(plan)})",
-                    _ => $"({source}).{ExpressEntityProjection.ToPascalCase(candidate.Name)}",
+                    _ => ResolveExplicitAttribute(
+                        plan,
+                        sourceProjection,
+                        candidate,
+                        source,
+                        populationExpression),
                 };
             }
 
@@ -4635,7 +6523,8 @@ internal static class ExpressReachableRuleEmitter
                 };
                 return $"{ownerType} {variable} => {access}";
             });
-            return $"({source}) switch {{ {string.Join(", ", cases)}, _ => throw new global::System.InvalidOperationException() }}";
+            return $"((object)({source})) switch {{ {string.Join(", ", cases)}, "
+                + "_ => throw new global::System.InvalidOperationException() }";
         }
 
         var attribute = reference.Attribute;
@@ -4666,6 +6555,70 @@ internal static class ExpressReachableRuleEmitter
         return $"({source}).{ExpressEntityProjection.ToPascalCase(reference.Name)}";
     }
 
+    private static string ResolveNarrowedEntityCarrier(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType carrierType,
+        string carrier,
+        ExpressBoundSymbol target,
+        int depth = 0)
+    {
+        while (carrierType is ExpressBoundNamedType namedCarrier
+               && namedCarrier.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            var underlying = plan.Resolver.GetDefinedType(namedCarrier.Declaration).UnderlyingType;
+            if (underlying is ExpressBoundSelectType)
+            {
+                carrierType = underlying;
+                break;
+            }
+
+            carrier = $"({carrier}).Value";
+            carrierType = underlying;
+        }
+
+        var targetType = ExpressExpressionEmitter.BoundTypeName(new ExpressBoundNamedType(
+            target,
+            carrierType.Span));
+        if (carrierType is ExpressBoundSelectType select)
+        {
+            var branches = plan.Resolver.GetSelectAlternatives(select)
+                .Select((alternative, index) =>
+                {
+                    var variable = "__expressNarrowedCarrier"
+                        + depth.ToString(CultureInfo.InvariantCulture)
+                        + "_"
+                        + index.ToString(CultureInfo.InvariantCulture);
+                    var value = ResolveNarrowedEntityCarrier(
+                        plan,
+                        new ExpressBoundNamedType(alternative, select.Span),
+                        variable,
+                        target,
+                        depth + 1);
+                    return $"{variable} => {value}";
+                });
+            return $"({carrier}).Match<{targetType}>({string.Join(", ", branches)})";
+        }
+
+        if (carrierType is ExpressBoundNamedType
+            { Declaration.Kind: ExpressDeclarationKind.Entity, } entityCarrier)
+        {
+            if (ReferenceEquals(entityCarrier.Declaration, target)
+                || plan.EntityProjections.Single(projection =>
+                        projection.Entity.Symbol == entityCarrier.Declaration)
+                    .PhysicalComponents.Any(component => component.Symbol == target))
+            {
+                return carrier;
+            }
+
+            var variable = "__expressNarrowedCarrier"
+                + depth.ToString(CultureInfo.InvariantCulture);
+            return $"((object)({carrier})) switch {{ {targetType} {variable} => {variable}, "
+                + "_ => throw new global::System.InvalidOperationException() }";
+        }
+
+        return "throw new global::System.InvalidOperationException()";
+    }
+
     private static string ResolveExplicitAttribute(
         ExpressReachableRulePlan plan,
         ExpressEntityProjection? sourceProjection,
@@ -4674,10 +6627,16 @@ internal static class ExpressReachableRuleEmitter
         string populationExpression)
     {
         var property = ExpressEntityProjection.ToPascalCase(attribute.Name);
+        var owner = plan.GetAttributeOwner(attribute);
+        var ownerType = "global::TedToolkit.Step21.Generated."
+            + ExpressEntityProjection.ToPascalCase(owner.Symbol.DeclaringSchema.Name)
+            + ".I"
+            + ExpressEntityProjection.ToPascalCase(owner.Name);
+        var explicitAccess = $"(({ownerType})({source})).{property}";
         var derivedOverrides = GetDerivedOverrides(plan, sourceProjection, attribute);
         if (derivedOverrides.Length == 0)
         {
-            return $"({source}).{property}";
+            return explicitAccess;
         }
 
         var cases = derivedOverrides.Select((item, index) =>
@@ -4691,7 +6650,7 @@ internal static class ExpressReachableRuleEmitter
                 + $"{DerivedMethodName(item.Owner, item.Attribute)}("
                 + $"{variable}, {populationExpression}{ValidationContextArgumentSuffix(plan)})";
         });
-        return $"({source}) switch {{ {string.Join(", ", cases)}, _ => ({source}).{property} }}";
+        return $"((object)({source})) switch {{ {string.Join(", ", cases)}, _ => {explicitAccess} }}";
     }
 
     private static ExpressEntityProjection? GetSourceProjection(
@@ -4745,9 +6704,18 @@ internal static class ExpressReachableRuleEmitter
         return $"__ExpressConstant_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
     }
 
-    private static string FunctionMethodName(ExpressBoundSymbol symbol)
+    private static string FunctionMethodName(
+        ExpressReachableRulePlan plan,
+        ExpressBoundSymbol symbol)
     {
-        return $"__ExpressFunction_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
+        var name = $"__ExpressFunction_{ExpressEntityProjection.ToPascalCase(symbol.Name)}";
+        return plan.Schema.NestedDeclarations.Any(declaration => ReferenceEquals(declaration.Symbol, symbol))
+            ? name
+                + "_"
+                + symbol.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                + "_"
+                + symbol.Span.Start.Column.ToString(CultureInfo.InvariantCulture)
+            : name;
     }
 
     private static string DerivedMethodName(
