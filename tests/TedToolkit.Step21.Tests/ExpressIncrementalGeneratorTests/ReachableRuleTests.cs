@@ -8410,12 +8410,13 @@ public sealed class ReachableRuleTests
             await Assert.That(diagnostics).IsEmpty()
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(generated).Contains(
-                "global::TedToolkit.Step21.IExpressAggregate<global::TedToolkit.Step21.Generated."
+                "global::System.Collections.Generic.IReadOnlyCollection<global::TedToolkit.Step21.Generated."
                 + "SelectAggregateApplicationModel.IRepresentationItem>");
             await Assert.That(generated).Contains(".Match(");
             await Assert.That(generated).Contains(".Value");
-            await Assert.That(generated).Contains(".HighBound");
-            await Assert.That(generated).Contains(".LowBound");
+            await Assert.That(generated).Contains("IExpressArray<");
+            await Assert.That(generated).Contains("IExpressList<");
+            await Assert.That(generated).Contains("IExpressSet<");
         }
     }
 

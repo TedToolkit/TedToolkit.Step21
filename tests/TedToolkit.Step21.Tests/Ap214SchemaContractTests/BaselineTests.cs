@@ -73,6 +73,11 @@ internal sealed class BaselineTests
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
             .IsEmpty()
             .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics();
+        await Assert.That(compilationDiagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilationDiagnostics));
 
         var descriptor = RequiredType(result.OutputCompilation, "SchemaDescriptor");
         var advancedFace = RequiredType(result.OutputCompilation, "IAdvancedFace");
@@ -84,8 +89,8 @@ internal sealed class BaselineTests
         var axis2PlacementKind = RequiredType(result.OutputCompilation, "Axis2PlacementKind");
         var descriptorSource = result.GeneratedSources.Single(source =>
             source.HintName == "ExpressSchema_AUTOMOTIVE_DESIGN.g.cs").SourceText.ToString();
-        var publicApi = RenderPublicApi(descriptorSource);
-        var publicApiHash = ComputeTextHash(publicApi);
+        var generatedSurface = RenderGeneratedSurface(result.GeneratedSources);
+        var publicApiHash = ComputeTextHash(generatedSurface);
         var approvedPublicApiHash = File.ReadAllText(Path.Combine(directory, "PublicApi.approved.sha256")).Trim();
 
         using (Assert.Multiple())
@@ -131,16 +136,17 @@ internal sealed class BaselineTests
         compilation.GetTypeByMetadataName($"TedToolkit.Step21.Generated.AutomotiveDesign.{name}")
         ?? throw new InvalidOperationException($"The generated AP214 {name} type was not found.");
 
-    private static string RenderPublicApi(string generatedSource) =>
-        string.Join(
-            '\n',
-            generatedSource
-                .Split('\n')
-                .Select(line => line.Trim())
-                .Where(line => line.StartsWith("public ", StringComparison.Ordinal)
-                    || line.StartsWith("protected ", StringComparison.Ordinal))
-                .OrderBy(line => line, StringComparer.Ordinal))
-        + '\n';
+    private static string RenderGeneratedSurface(IEnumerable<GeneratedSourceResult> generatedSources)
+    {
+        var result = new StringBuilder();
+        foreach (var source in generatedSources.OrderBy(source => source.HintName, StringComparer.Ordinal))
+        {
+            result.Append("// ").Append(source.HintName).Append('\n');
+            result.Append(source.SourceText.ToString().ReplaceLineEndings("\n")).Append('\n');
+        }
+
+        return result.ToString();
+    }
 
     private static string ComputeCanonicalTextFileHash(string path) =>
         ComputeTextHash(File.ReadAllText(path).ReplaceLineEndings("\n"));

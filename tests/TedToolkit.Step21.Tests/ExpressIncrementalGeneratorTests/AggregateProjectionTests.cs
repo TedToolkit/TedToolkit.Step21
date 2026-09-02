@@ -92,11 +92,6 @@ public sealed class AggregateProjectionTests
                     new Matrix(matrixValue),
                     direct);
 
-                IExpressAggregate<BigInteger> generalList = listValue;
-                IExpressAggregate<BigInteger> generalBag = bagCandidate;
-                IExpressAggregate<BigInteger> generalSet = setCandidate;
-                IExpressAggregate<BigInteger> generalArray = arrayCandidate;
-
                 holder.DirectList.Add("third");
                 return listValue.Validate().Failures.Count == 2
                     && bagCandidate.Validate().Failures.Count == 1
@@ -105,18 +100,6 @@ public sealed class AggregateProjectionTests
                     && bagValue.Validate().IsValid
                     && setValue.Validate().Failures.Count == 1
                     && matrixValue.Validate().Failures.Count == 1
-                    && (generalList.LowBound, generalList.HighBound,
-                        generalList.LowIndex, generalList.HighIndex, generalList.IsUnique)
-                        == (1, 2, 1, 3, true)
-                    && (generalBag.LowBound, generalBag.HighBound,
-                        generalBag.LowIndex, generalBag.HighIndex, generalBag.IsUnique)
-                        == (0, 2, 1, 3, false)
-                    && (generalSet.LowBound, generalSet.HighBound,
-                        generalSet.LowIndex, generalSet.HighIndex, generalSet.IsUnique)
-                        == (0, 2, 1, 3, true)
-                    && (generalArray.LowBound, generalArray.HighBound,
-                        generalArray.LowIndex, generalArray.HighIndex, generalArray.IsUnique)
-                        == (0, 2, 0, 2, true)
                     && holder.DirectList.SequenceEqual(["first", "second", "third"]);
             }
         }

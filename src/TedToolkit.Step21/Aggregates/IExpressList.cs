@@ -5,7 +5,7 @@ namespace TedToolkit.Step21;
 /// </summary>
 /// <typeparam name="T">The element type exposed by the view.</typeparam>
 /// <remarks>The view does not copy storage; a compatible <see cref="ExpressList{T}"/> implements it directly.</remarks>
-public interface IExpressList<out T> : IReadOnlyList<T>, IExpressAggregate<T>
+public interface IExpressList<out T> : IReadOnlyList<T>
 {
     /// <summary>Gets the inclusive minimum permitted cardinality.</summary>
     int LowerBound { get; }
@@ -13,13 +13,8 @@ public interface IExpressList<out T> : IReadOnlyList<T>, IExpressAggregate<T>
     /// <summary>Gets the inclusive maximum permitted cardinality, or <see langword="null"/> when unbounded.</summary>
     int? UpperBound { get; }
 
-    int IExpressAggregate<T>.LowBound => LowerBound;
-
-    int? IExpressAggregate<T>.HighBound => UpperBound;
-
-    int IExpressAggregate<T>.LowIndex => 1;
-
-    int IExpressAggregate<T>.HighIndex => Count;
+    /// <summary>Gets whether explicit validation requires distinct element values.</summary>
+    bool IsUnique { get; }
 
     /// <summary>Validates the visible candidate state without mutation.</summary>
     /// <param name="path">The deterministic caller path assigned to produced failures.</param>

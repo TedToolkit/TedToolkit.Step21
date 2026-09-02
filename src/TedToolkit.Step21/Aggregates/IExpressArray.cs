@@ -5,7 +5,7 @@ namespace TedToolkit.Step21;
 /// </summary>
 /// <typeparam name="T">The slot value type exposed by the view.</typeparam>
 /// <remarks>The view does not copy storage; a compatible <see cref="ExpressArray{T}"/> implements it directly.</remarks>
-public interface IExpressArray<out T> : IExpressAggregate<T>
+public interface IExpressArray<out T> : IEnumerable<T>
 {
     /// <summary>Gets the inclusive lower EXPRESS index.</summary>
     int LowerIndex { get; }
@@ -13,16 +13,14 @@ public interface IExpressArray<out T> : IExpressAggregate<T>
     /// <summary>Gets the inclusive upper EXPRESS index.</summary>
     int UpperIndex { get; }
 
+    /// <summary>Gets the fixed number of slots in the declared index domain.</summary>
+    int Count { get; }
+
     /// <summary>Gets whether unset slots are permitted by the declaration.</summary>
     bool IsOptional { get; }
 
-    int IExpressAggregate<T>.LowBound => LowerIndex;
-
-    int? IExpressAggregate<T>.HighBound => UpperIndex;
-
-    int IExpressAggregate<T>.LowIndex => LowerIndex;
-
-    int IExpressAggregate<T>.HighIndex => UpperIndex;
+    /// <summary>Gets whether assigned slot values must be distinct.</summary>
+    bool IsUnique { get; }
 
     /// <summary>Gets one assigned value by its declared EXPRESS index.</summary>
     /// <param name="index">The declared EXPRESS index.</param>

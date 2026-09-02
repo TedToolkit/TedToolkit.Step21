@@ -1194,8 +1194,7 @@ internal static class ExpressExpressionEmitter
             ExpressAggregateKind.Bag => $"new {resultType}(0, {input}.UpperBound)",
             ExpressAggregateKind.List =>
                 $"new {resultType}(0, {input}.UpperBound, {input}.IsUnique)",
-            ExpressAggregateKind.Aggregate =>
-                $"new {resultType}(0, {input}.HighBound, {input}.IsUnique)",
+            ExpressAggregateKind.Aggregate => $"new {resultType}()",
             ExpressAggregateKind.Set => $"new {resultType}(0, {input}.UpperBound)",
             _ => throw new InvalidOperationException(
                 $"Unknown query aggregate kind '{aggregate.Kind.ToString()}'."),
@@ -2005,7 +2004,7 @@ internal static class ExpressExpressionEmitter
             ? aggregate.Kind switch
             {
                 ExpressAggregateKind.Array => $"({argument}).UpperIndex",
-                ExpressAggregateKind.Aggregate => $"({argument}).HighIndex",
+                ExpressAggregateKind.Aggregate => GeneralAggregateHighIndex(aggregate, argument),
                 _ => $"global::System.Linq.Enumerable.Count({argument})",
             }
             : $"global::System.Linq.Enumerable.Count({argument})";
@@ -2018,11 +2017,10 @@ internal static class ExpressExpressionEmitter
             return BigIntegerExpression($"({argument}).UpperIndex");
         }
 
-        if (parameter.Type.DeclaredType is ExpressBoundAggregateType { Kind: ExpressAggregateKind.Aggregate, })
+        if (parameter.Type.DeclaredType is ExpressBoundAggregateType
+            { Kind: ExpressAggregateKind.Aggregate, } aggregate)
         {
-            return $"(({argument}).HighBound.HasValue ? "
-                + $"new global::System.Numerics.BigInteger(({argument}).HighBound.Value) : "
-                + "(global::System.Numerics.BigInteger?)null)";
+            return GeneralAggregateHighBound(aggregate, argument);
         }
 
         if (parameter.Type.DeclaredType is ExpressBoundAggregateType
@@ -2044,7 +2042,7 @@ internal static class ExpressExpressionEmitter
             ? aggregate.Kind switch
             {
                 ExpressAggregateKind.Array => $"({argument}).LowerIndex",
-                ExpressAggregateKind.Aggregate => $"({argument}).LowBound",
+                ExpressAggregateKind.Aggregate => GeneralAggregateLowBound(aggregate, argument),
                 _ => $"({argument}).LowerBound",
             }
             : $"({argument}).LowerBound";
@@ -2056,7 +2054,7 @@ internal static class ExpressExpressionEmitter
             ? aggregate.Kind switch
             {
                 ExpressAggregateKind.Array => $"({argument}).LowerIndex",
-                ExpressAggregateKind.Aggregate => $"({argument}).LowIndex",
+                ExpressAggregateKind.Aggregate => GeneralAggregateLowIndex(aggregate, argument),
                 _ => "1",
             }
             : "1";
@@ -2065,6 +2063,52 @@ internal static class ExpressExpressionEmitter
     private static string BigIntegerExpression(string code)
     {
         return $"new global::System.Numerics.BigInteger({code})";
+    }
+
+    private static string GeneralAggregateHighBound(ExpressBoundAggregateType aggregate, string argument)
+    {
+        var elementType = BoundTypeName(aggregate.ElementType);
+        var array = $"global::TedToolkit.Step21.IExpressArray<{elementType}>";
+        var bag = $"global::TedToolkit.Step21.IExpressBag<{elementType}>";
+        var list = $"global::TedToolkit.Step21.IExpressList<{elementType}>";
+        var set = $"global::TedToolkit.Step21.IExpressSet<{elementType}>";
+        return $"({argument}) switch {{ "
+            + $"{array} __array => new global::System.Numerics.BigInteger(__array.UpperIndex), "
+            + $"{bag} __bag => __bag.UpperBound.HasValue ? "
+            + "new global::System.Numerics.BigInteger(__bag.UpperBound.Value) : "
+            + "(global::System.Numerics.BigInteger?)null, "
+            + $"{list} __list => __list.UpperBound.HasValue ? "
+            + "new global::System.Numerics.BigInteger(__list.UpperBound.Value) : "
+            + "(global::System.Numerics.BigInteger?)null, "
+            + $"{set} __set => __set.UpperBound.HasValue ? "
+            + "new global::System.Numerics.BigInteger(__set.UpperBound.Value) : "
+            + "(global::System.Numerics.BigInteger?)null, "
+            + "_ => (global::System.Numerics.BigInteger?)null }";
+    }
+
+    private static string GeneralAggregateHighIndex(ExpressBoundAggregateType aggregate, string argument)
+    {
+        var elementType = BoundTypeName(aggregate.ElementType);
+        return $"({argument}) is global::TedToolkit.Step21.IExpressArray<{elementType}> __array "
+            + $"? __array.UpperIndex : global::System.Linq.Enumerable.Count({argument})";
+    }
+
+    private static string GeneralAggregateLowBound(ExpressBoundAggregateType aggregate, string argument)
+    {
+        var elementType = BoundTypeName(aggregate.ElementType);
+        return $"({argument}) switch {{ "
+            + $"global::TedToolkit.Step21.IExpressArray<{elementType}> __array => __array.LowerIndex, "
+            + $"global::TedToolkit.Step21.IExpressBag<{elementType}> __bag => __bag.LowerBound, "
+            + $"global::TedToolkit.Step21.IExpressList<{elementType}> __list => __list.LowerBound, "
+            + $"global::TedToolkit.Step21.IExpressSet<{elementType}> __set => __set.LowerBound, "
+            + "_ => 0 }";
+    }
+
+    private static string GeneralAggregateLowIndex(ExpressBoundAggregateType aggregate, string argument)
+    {
+        var elementType = BoundTypeName(aggregate.ElementType);
+        return $"({argument}) is global::TedToolkit.Step21.IExpressArray<{elementType}> __array "
+            + "? __array.LowerIndex : 1";
     }
 
     private static string RealMath(
@@ -2235,12 +2279,18 @@ internal static class ExpressExpressionEmitter
     /// <exception cref="InvalidOperationException">The aggregate kind is unknown.</exception>
     internal static string AggregateInterfaceTypeName(ExpressBoundAggregateType aggregate)
     {
+        if (aggregate.Kind == ExpressAggregateKind.Aggregate)
+        {
+            return "global::System.Collections.Generic.IReadOnlyCollection<"
+                + BoundTypeName(aggregate.ElementType)
+                + ">";
+        }
+
         var definition = aggregate.Kind switch
         {
             ExpressAggregateKind.Array => "IExpressArray",
             ExpressAggregateKind.Bag => "IExpressBag",
             ExpressAggregateKind.List => "IExpressList",
-            ExpressAggregateKind.Aggregate => "IExpressAggregate",
             ExpressAggregateKind.Set => "IExpressSet",
             _ => throw new InvalidOperationException(
                 $"Unknown aggregate kind '{aggregate.Kind.ToString()}'."),
