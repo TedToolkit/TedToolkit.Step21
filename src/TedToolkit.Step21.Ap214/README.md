@@ -33,7 +33,7 @@ Distinct custom EXPRESS schemas remain supported through the Analyzer workflow.
 
 ## Schema identity and provenance
 
-- Package version: `1.0.0`.
+- Candidate package version: `1.0.0-rc.1` (prerelease; not the stable `1.0.0` release).
 - EXPRESS nominal name: `AUTOMOTIVE_DESIGN`.
 - Generated descriptor: `TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor.Instance`.
 - Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,

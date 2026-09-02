@@ -145,7 +145,7 @@ internal sealed class Ap214PackageTests
 
             var packagePath = Directory.GetFiles(
                 packageDirectory,
-                "TedToolkit.Step21.Ap214.1.0.0.nupkg").Single();
+                "TedToolkit.Step21.Ap214.1.0.0-rc.1.nupkg").Single();
             var packageEntries = ReadPackageEntries(packagePath);
             var packageSpecification = ReadPackageText(packagePath, "TedToolkit.Step21.Ap214.nuspec");
             var packageReadme = ReadPackageText(packagePath, "README.md");
@@ -164,13 +164,15 @@ internal sealed class Ap214PackageTests
                 await Assert.That(packageEntries.Any(path => path.StartsWith("analyzers/", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(packageEntries.Any(path => path.Contains("RoslynHelper", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(packageSpecification).Contains(
+                    "<version>1.0.0-rc.1</version>");
+                await Assert.That(packageSpecification).Contains(
                     "<dependency id=\"TedToolkit.Step21\" version=\"[1.0.0, 2.0.0)\" exclude=\"Build,Analyzers\" />");
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.Step21.Ap203");
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.Step21.Analyzer");
                 await Assert.That(packageReadme).Contains("Do not add `AP214E3_2010.exp`");
                 await Assert.That(packageReadme).Contains("Distinct custom EXPRESS schemas remain supported");
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
-                    "TedToolkit.Step21.Ap214/1.0.0",
+                    "TedToolkit.Step21.Ap214/1.0.0-rc.1",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21/1.0.0",
