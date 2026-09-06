@@ -141,13 +141,17 @@ public sealed class ExchangeStructure
     /// <exception cref="ExchangeStructureCapabilityException">
     /// A required provider or converter is absent, re-enters reading, or exceeds a resource limit.
     /// </exception>
-    /// <exception cref="ExchangeStructureSyntaxException">A supplied structure is not valid ISO 10303-21 syntax.</exception>
+    /// <exception cref="ExchangeStructureSyntaxException">The root source is not valid ISO 10303-21 syntax.</exception>
     /// <exception cref="ExchangeStructureBindingException">
-    /// A supplied structure cannot be bound completely to the closed descriptor set.
+    /// The root structure cannot be bound completely to the closed descriptor set.
     /// </exception>
     /// <exception cref="ExchangeStructureReadValidationException">
-    /// A bound local or external structure fails structural or reachable EXPRESS validation.
+    /// The bound root structure fails structural or reachable EXPRESS validation.
     /// </exception>
+    /// <remarks>
+    /// A delivered external exchange structure that cannot be parsed, bound, or validated resolves its reference
+    /// to the ISO 10303-21 null result; capability, quota, and archive-integrity failures remain atomic exceptions.
+    /// </remarks>
     public static ExchangeStructure Read(
         TextReader source,
         IReadOnlyCollection<SchemaDescriptor> schemaDescriptors,

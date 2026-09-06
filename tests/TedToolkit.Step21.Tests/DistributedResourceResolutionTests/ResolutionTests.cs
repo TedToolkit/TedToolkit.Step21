@@ -172,6 +172,29 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Exposes directory entries as an immutable snapshot.</summary>
+    [Test]
+    public async Task Should_expose_an_immutable_directory_snapshot()
+    {
+        var original = new Dictionary<string, ReadOnlyMemory<byte>>
+        {
+            ["ISO-10303.p21"] = Utf8("original"),
+        };
+        var content = new Part21ResourceContent(new Uri("https://example.test/snapshot/"), original);
+        original["ISO-10303.p21"] = Utf8("changed");
+        var exposed = (IDictionary<string, ReadOnlyMemory<byte>>)content.Entries;
+
+        var mutation = Assert.Throws<NotSupportedException>(() =>
+            exposed["ISO-10303.p21"] = Utf8("mutated"));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(Encoding.UTF8.GetString(content.Entries["ISO-10303.p21"].Span))
+                .IsEqualTo("original");
+            await Assert.That(mutation).IsNotNull();
+        }
+    }
+
     /// <summary>Keeps ZIP compression and nesting limits independent from directory transport.</summary>
     [Test]
     public async Task Should_not_apply_zip_ratio_or_depth_to_directory_content()
@@ -225,6 +248,55 @@ public sealed class ResolutionTests
                 .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
             await Assert.That(nested.References.Single().ResolutionStatus)
                 .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+        }
+    }
+
+    /// <summary>Nulls an invalid subsidiary without discarding a valid directory or ZIP root.</summary>
+    [Test]
+    public async Task Should_keep_valid_container_roots_when_unrelated_subsidiaries_are_invalid()
+    {
+        var root = Exchange(
+            "ANCHOR;<local>=#1;ENDSEC;",
+            "REFERENCE;#90=<bad.p21#target>;ENDSEC;",
+            "#1=NODE('valid root',$);#2=HOLDER(#90);");
+        var invalidAfterHydration = Exchange(
+            "ANCHOR;<target>=#1;ENDSEC;",
+            string.Empty,
+            "#1=NODE($,$);");
+        const string directoryIdentity = "https://example.test/invalid-subsidiary/";
+        const string zipIdentity = "https://example.test/invalid-subsidiary.zip";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [directoryIdentity] = new(
+                new Uri(directoryIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(root),
+                    ["bad.p21"] = Utf8("not an ISO 10303-21 exchange structure"),
+                }),
+            [zipIdentity] = new(
+                new Uri(zipIdentity),
+                Part21ResourceContentKind.ZipArchive,
+                CreateZip(new Dictionary<string, string>
+                {
+                    ["ISO-10303.p21"] = root,
+                    ["bad.p21"] = invalidAfterHydration,
+                })),
+        });
+
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{directoryIdentity}#local>;#91=<{zipIdentity}#local>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.All(reference =>
+                    reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved))
+                .IsTrue();
+            await Assert.That(structure.Validate().IsValid).IsTrue();
         }
     }
 
@@ -583,6 +655,88 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Charges every supplied canonical alias representation before cache reuse.</summary>
+    [Test]
+    public async Task Should_charge_clear_directory_zip_and_converted_canonical_alias_bytes()
+    {
+        var childSource = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('canonical',$);");
+        var childBytes = Utf8(childSource);
+        var archive = CreateZip(new Dictionary<string, string> { ["ISO-10303.p21"] = childSource });
+
+        var clearFailure = ReadCanonicalAliasesPastLimit(
+            "https://example.test/clear-a.p21",
+            "https://example.test/clear-b.p21",
+            ClearText("https://example.test/clear-canonical.p21", childSource),
+            ClearText("https://example.test/clear-canonical.p21", childSource),
+            maximumTotalBytes: childBytes.Length * 2L - 1);
+        var directoryFailure = ReadCanonicalAliasesPastLimit(
+            "https://example.test/directory-a/",
+            "https://example.test/directory-b/",
+            new Part21ResourceContent(
+                new Uri("https://example.test/directory-canonical/"),
+                new Dictionary<string, ReadOnlyMemory<byte>> { ["ISO-10303.p21"] = childBytes }),
+            new Part21ResourceContent(
+                new Uri("https://example.test/directory-canonical/"),
+                new Dictionary<string, ReadOnlyMemory<byte>> { ["ISO-10303.p21"] = childBytes }),
+            maximumTotalBytes: childBytes.Length * 2L - 1);
+        var zipFailure = ReadCanonicalAliasesPastLimit(
+            "https://example.test/archive-a.zip",
+            "https://example.test/archive-b.zip",
+            new Part21ResourceContent(
+                new Uri("https://example.test/archive-canonical.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                archive),
+            new Part21ResourceContent(
+                new Uri("https://example.test/archive-canonical.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                archive),
+            maximumTotalBytes: archive.Length * 2L - 1);
+
+        const string convertedA = "https://example.test/converted-a.jt";
+        const string convertedB = "https://example.test/converted-b.jt";
+        var convertedProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [convertedA] = new(new Uri(convertedA), Part21ResourceContentKind.Other, Utf8("a")),
+            [convertedB] = new(new Uri(convertedB), Part21ResourceContentKind.Other, Utf8("b")),
+        });
+        var converter = new StaticConverter(ClearText("https://example.test/converted-canonical.p21", childSource));
+        var convertedFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{convertedA}#target>;#91=<{convertedB}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: convertedProvider,
+                resourceConverter: converter,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: childBytes.Length + 2L))));
+
+        await Assert.That(new[] { clearFailure, directoryFailure, zipFailure, convertedFailure }
+                .Select(failure => failure.Diagnostics.Single().Code))
+            .IsEquivalentTo(Enumerable.Repeat("P21-RESOURCE-LIMIT", 4));
+    }
+
+    private static ExchangeStructureCapabilityException ReadCanonicalAliasesPastLimit(
+        string firstAlias,
+        string secondAlias,
+        Part21ResourceContent firstContent,
+        Part21ResourceContent secondContent,
+        long maximumTotalBytes)
+    {
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [firstAlias] = firstContent,
+            [secondAlias] = secondContent,
+        });
+        return Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{firstAlias}#target>;#91=<{secondAlias}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: maximumTotalBytes))));
+    }
+
     /// <summary>Reconciles provider aliases to one canonical model and terminates canonical self-cycles.</summary>
     [Test]
     public async Task Should_share_canonical_provider_identity_and_resolve_canonical_cycles_to_null()
@@ -632,6 +786,56 @@ public sealed class ResolutionTests
             await Assert.That(structure.Validate().IsValid).IsTrue();
             await Assert.That(output.ToString()).Contains("#1=HOLDER(#91);");
             await Assert.That(output.ToString()).DoesNotContain("#90=<");
+        }
+    }
+
+    /// <summary>Rolls back descendants loaded through an invalid ancestor before later direct reuse.</summary>
+    [Test]
+    public async Task Should_rollback_transitive_documents_when_an_ancestor_fails_validation()
+    {
+        const string aIdentity = "https://example.test/a-invalid.p21";
+        const string bIdentity = "https://example.test/b-valid.p21";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [aIdentity] = ClearText(
+                aIdentity,
+                Exchange(
+                    "ANCHOR;<target>=#1;ENDSEC;",
+                    $"REFERENCE;#90=<{bIdentity}#target>;ENDSEC;",
+                    "#1=NODE($,#90);")),
+            [bIdentity] = ClearText(
+                bIdentity,
+                Exchange(
+                    "ANCHOR;<target>=#1;ENDSEC;",
+                    $"REFERENCE;#90=<{aIdentity}#target>;ENDSEC;",
+                    "#1=NODE('valid b',#90);")),
+        });
+
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{aIdentity}#target>;#91=<{bIdentity}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+        var holders = structure.Registrations
+            .OrderBy(registration => registration.Name.CanonicalDigits, StringComparer.Ordinal)
+            .Select(registration => registration.Entity)
+            .ToArray();
+        var firstTarget = holders[0].GetType().GetProperty("Target")!.GetValue(holders[0]);
+        var secondTarget = holders[1].GetType().GetProperty("Target")!.GetValue(holders[1]);
+        var secondNext = secondTarget!.GetType().GetProperty("NextNode")!.GetValue(secondTarget);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.Single(reference => reference.CanonicalDigits == "90").ResolutionStatus)
+                .IsEqualTo(Part21ReferenceResolutionStatus.Null);
+            await Assert.That(structure.References.Single(reference => reference.CanonicalDigits == "91").ResolutionStatus)
+                .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+            await Assert.That(firstTarget).IsNull();
+            await Assert.That(secondNext).IsNull();
+            await Assert.That(provider.Requests.Count(request => request == aIdentity)).IsEqualTo(1);
+            await Assert.That(provider.Requests.Count(request => request == bIdentity)).IsEqualTo(2);
+            await Assert.That(structure.Validate().IsValid).IsTrue();
         }
     }
 

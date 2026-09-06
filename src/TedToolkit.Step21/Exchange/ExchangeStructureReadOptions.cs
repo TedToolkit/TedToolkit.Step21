@@ -51,7 +51,8 @@ public sealed class Part21ResourceContent
         Identity = identity;
         Kind = Part21ResourceContentKind.Directory;
         Bytes = ReadOnlyMemory<byte>.Empty;
-        Entries = new Dictionary<string, ReadOnlyMemory<byte>>(entries, StringComparer.Ordinal);
+        Entries = new ReadOnlyDictionary<string, ReadOnlyMemory<byte>>(
+            new Dictionary<string, ReadOnlyMemory<byte>>(entries, StringComparer.Ordinal));
     }
 
     /// <summary>Gets the stable identity used by the per-read cache.</summary>
