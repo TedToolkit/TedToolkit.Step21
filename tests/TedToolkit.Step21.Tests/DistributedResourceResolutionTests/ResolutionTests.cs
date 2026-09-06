@@ -16,6 +16,8 @@ public sealed class ResolutionTests
         ENTITY node;
           label : STRING;
           next_node : OPTIONAL node;
+        WHERE
+          valid_label : label <> 'invalid';
         END_ENTITY;
         ENTITY other;
           label : STRING;
@@ -262,7 +264,10 @@ public sealed class ResolutionTests
         var invalidAfterHydration = Exchange(
             "ANCHOR;<target>=#1;ENDSEC;",
             string.Empty,
-            "#1=NODE($,$);");
+            "#1=NODE('invalid',$);");
+        _ = Assert.Throws<ExchangeStructureReadValidationException>(() => Read(
+            invalidAfterHydration,
+            new ExchangeStructureReadOptions()));
         const string directoryIdentity = "https://example.test/invalid-subsidiary/";
         const string zipIdentity = "https://example.test/invalid-subsidiary.zip";
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
@@ -802,7 +807,7 @@ public sealed class ResolutionTests
                 Exchange(
                     "ANCHOR;<target>=#1;ENDSEC;",
                     $"REFERENCE;#90=<{bIdentity}#target>;ENDSEC;",
-                    "#1=NODE($,#90);")),
+                    "#1=NODE('invalid',#90);")),
             [bIdentity] = ClearText(
                 bIdentity,
                 Exchange(
