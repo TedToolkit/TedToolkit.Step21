@@ -44,7 +44,7 @@ internal sealed class CapabilityDocumentationTests
             await Assert.That(conformanceReadme).Contains("Syntax recognized; operation unsupported");
             await Assert.That(conformanceReadme).Contains("Outside the public contract");
             await Assert.That(conformanceReadme).Contains("Explicit distributed reference");
-            await Assert.That(conformanceReadme).Contains("Typed value-instance parameters");
+            await Assert.That(conformanceReadme).Contains("EXPRESS constant occurrences");
             await Assert.That(conformanceReadme).Contains("signature verification");
             await Assert.That(conformanceReadme).Contains("flat `ANDOR`");
             await Assert.That(conformanceReadme).Contains("Normative evidence");

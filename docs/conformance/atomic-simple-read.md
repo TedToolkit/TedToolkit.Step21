@@ -41,8 +41,9 @@ originating record location when the generated diagnostic has no EXPRESS source 
   diagnostics;
 - an invalid hydrated population throws `ExchangeStructureReadValidationException` with the complete
   `ValidationResult`; and
-- signature operations and typed DATA value/constant occurrences throw `ExchangeStructureCapabilityException`.
-  External-resource resolution is available only through explicit per-read options and reports missing capability,
+- signature operations and constant DATA occurrences throw `ExchangeStructureCapabilityException`. The explicit
+  resource-options overload binds resolved `@n` values through direct, aggregate, and typed DATA positions.
+  External-resource resolution reports missing capability,
   provider re-entry, archive, and quota failures through the same atomic exception boundary. Supported flat-`ANDOR`
   complex instances and multiple governing schemas are handled by their dedicated mapping/population contracts.
 

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -88,7 +89,7 @@ internal sealed class Part21ResourceResolutionContext
 
         var path = resource[..hash];
         var fragment = resource[(hash + 1)..];
-        if (path.Length == 0 && !Guid.TryParse(fragment, out _))
+        if (path.Length == 0 && !Guid.TryParseExact(fragment, "D", out _))
             return ResolveFragment(owner, address, fragment, depth);
 
         LoadedDocument? document;
@@ -234,8 +235,21 @@ internal sealed class Part21ResourceResolutionContext
 
         if (content is null)
             return null;
+        var canonicalKey = content.Identity.IsAbsoluteUri
+            ? content.Identity.AbsoluteUri
+            : content.Identity.OriginalString;
+        if (!string.Equals(canonicalKey, key, StringComparison.Ordinal)
+            && _documents.TryGetValue(canonicalKey, out var canonical))
+        {
+            _documents[key] = canonical;
+            return canonical;
+        }
+
+        if (!string.Equals(canonicalKey, key, StringComparison.Ordinal))
+            _documents[canonicalKey] = null;
         var loaded = LoadContent(content, depth, archiveDepth: 0);
         _documents[key] = loaded;
+        _documents[canonicalKey] = loaded;
         if (loaded is not null)
             _documents[loaded.Address.Key] = loaded;
         return loaded;
@@ -246,6 +260,7 @@ internal sealed class Part21ResourceResolutionContext
         EnsureDepth(depth);
         if (content.Kind == Part21ResourceContentKind.Other)
         {
+            CountBytes(content.Bytes.Length);
             var converter = _options.ResourceConverter;
             if (converter is null)
                 ThrowCapability("P21-CAP-RESOURCE-CONVERTER", $"Resource '{content.Identity}' requires an explicit converter.");
@@ -333,6 +348,7 @@ internal sealed class Part21ResourceResolutionContext
         if (archiveDepth > _options.ResourceLimits.MaximumArchiveDepth)
             ThrowCapability("P21-RESOURCE-ARCHIVE-RECURSION", "Nested archive depth exceeds the configured limit.");
         CountBytes(bytes.Length);
+        ValidatePkZip204(bytes.Span);
         var result = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
         try
         {
@@ -470,6 +486,135 @@ internal sealed class Part21ResourceResolutionContext
             return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false, publiclyVisible: true);
         return new MemoryStream(bytes.ToArray(), writable: false);
     }
+
+    private static void ValidatePkZip204(ReadOnlySpan<byte> bytes)
+    {
+        const uint endSignature = 0x06054b50;
+        var end = -1;
+        var firstPossible = Math.Max(0, bytes.Length - 65557);
+        for (var index = bytes.Length - 22; index >= firstPossible; index--)
+        {
+            if (ReadUInt32(bytes, index) == endSignature)
+            {
+                end = index;
+                break;
+            }
+        }
+        if (end < 0 || end + 22 + ReadUInt16(bytes, end + 20) != bytes.Length)
+            ThrowArchiveFormat("The ZIP end-of-central-directory record is missing or invalid.");
+
+        if (ReadUInt16(bytes, end + 4) != 0 || ReadUInt16(bytes, end + 6) != 0)
+            ThrowArchiveFormat("Multi-disk ZIP archives are outside PKZip 2.04g transport.");
+        var entriesOnDisk = ReadUInt16(bytes, end + 8);
+        var entryCount = ReadUInt16(bytes, end + 10);
+        var centralSize = ReadUInt32(bytes, end + 12);
+        var centralOffset = ReadUInt32(bytes, end + 16);
+        if (entriesOnDisk == ushort.MaxValue
+            || entryCount == ushort.MaxValue
+            || centralSize == uint.MaxValue
+            || centralOffset == uint.MaxValue
+            || entriesOnDisk != entryCount)
+        {
+            ThrowArchiveFormat("ZIP64 transport is outside PKZip 2.04g.");
+        }
+        if ((ulong)centralOffset + centralSize != (ulong)end)
+            ThrowArchiveFormat("The ZIP central-directory bounds are invalid.");
+
+        var position = checked((int)centralOffset);
+        for (var index = 0; index < entryCount; index++)
+        {
+            if (ReadUInt32(bytes, position) != 0x02014b50 || position + 46 > end)
+                ThrowArchiveFormat("A ZIP central-directory entry is invalid.");
+            var versionNeeded = ReadUInt16(bytes, position + 6);
+            var flags = ReadUInt16(bytes, position + 8);
+            var method = ReadUInt16(bytes, position + 10);
+            var nameLength = ReadUInt16(bytes, position + 28);
+            var extraLength = ReadUInt16(bytes, position + 30);
+            var commentLength = ReadUInt16(bytes, position + 32);
+            var diskStart = ReadUInt16(bytes, position + 34);
+            var localOffset = ReadUInt32(bytes, position + 42);
+            var entryEnd = (long)position + 46 + nameLength + extraLength + commentLength;
+            if (entryEnd > end)
+                ThrowArchiveFormat("A ZIP central-directory entry exceeds its declared bounds.");
+            ValidatePkZipEntry(versionNeeded, flags, method, diskStart, localOffset);
+            ValidateExtraFields(bytes.Slice(position + 46 + nameLength, extraLength));
+
+            var local = checked((int)localOffset);
+            if (ReadUInt32(bytes, local) != 0x04034b50 || local + 30 > bytes.Length)
+                ThrowArchiveFormat("A ZIP local-file header is missing or invalid.");
+            var localNameLength = ReadUInt16(bytes, local + 26);
+            var localExtraLength = ReadUInt16(bytes, local + 28);
+            if (ReadUInt16(bytes, local + 4) != versionNeeded
+                || ReadUInt16(bytes, local + 6) != flags
+                || ReadUInt16(bytes, local + 8) != method
+                || localNameLength != nameLength
+                || (long)local + 30 + localNameLength + localExtraLength > bytes.Length
+                || !bytes.Slice(local + 30, localNameLength).SequenceEqual(bytes.Slice(position + 46, nameLength)))
+            {
+                ThrowArchiveFormat("ZIP local and central entry metadata do not agree.");
+            }
+            ValidateExtraFields(bytes.Slice(local + 30 + localNameLength, localExtraLength));
+            position = checked((int)entryEnd);
+        }
+        if (position != end)
+            ThrowArchiveFormat("The ZIP central-directory entry count is inconsistent.");
+    }
+
+    private static void ValidatePkZipEntry(
+        ushort versionNeeded,
+        ushort flags,
+        ushort method,
+        ushort diskStart,
+        uint localOffset)
+    {
+        if (versionNeeded > 20)
+            ThrowArchiveFormat("The ZIP entry requires a feature newer than PKZip 2.04g.");
+        if ((flags & 0x0041) != 0)
+            ThrowArchiveFormat("Encrypted ZIP entries are outside PKZip 2.04g transport.");
+        if ((flags & 0x0800) != 0)
+            ThrowArchiveFormat("Unicode ZIP entry-name flags are outside PKZip 2.04g transport.");
+        if (method is not (0 or 8))
+            ThrowArchiveFormat("Only stored or deflated PKZip 2.04g entries are supported.");
+        if (diskStart != 0 || localOffset == uint.MaxValue)
+            ThrowArchiveFormat("Multi-disk or ZIP64 entries are outside PKZip 2.04g transport.");
+    }
+
+    private static void ValidateExtraFields(ReadOnlySpan<byte> fields)
+    {
+        var position = 0;
+        while (position < fields.Length)
+        {
+            if (position + 4 > fields.Length)
+                ThrowArchiveFormat("A ZIP extra field is truncated.");
+            var identifier = BinaryPrimitives.ReadUInt16LittleEndian(fields[position..]);
+            var length = BinaryPrimitives.ReadUInt16LittleEndian(fields[(position + 2)..]);
+            position += 4;
+            if (position + length > fields.Length)
+                ThrowArchiveFormat("A ZIP extra field exceeds its declared bounds.");
+            if (identifier == 0x0001)
+                ThrowArchiveFormat("ZIP64 extra fields are outside PKZip 2.04g.");
+            if (identifier == 0x7075)
+                ThrowArchiveFormat("Unicode ZIP entry-name fields are outside PKZip 2.04g transport.");
+            position += length;
+        }
+    }
+
+    private static ushort ReadUInt16(ReadOnlySpan<byte> bytes, int offset)
+    {
+        if ((uint)offset > (uint)(bytes.Length - 2))
+            ThrowArchiveFormat("The ZIP structure is truncated.");
+        return BinaryPrimitives.ReadUInt16LittleEndian(bytes[offset..]);
+    }
+
+    private static uint ReadUInt32(ReadOnlySpan<byte> bytes, int offset)
+    {
+        if ((uint)offset > (uint)(bytes.Length - 4))
+            ThrowArchiveFormat("The ZIP structure is truncated.");
+        return BinaryPrimitives.ReadUInt32LittleEndian(bytes[offset..]);
+    }
+
+    private static void ThrowArchiveFormat(string message) =>
+        ThrowCapability("P21-RESOURCE-ARCHIVE-FORMAT", message);
 
     private static void ThrowLimit(string limit) =>
         ThrowCapability("P21-RESOURCE-LIMIT", $"The configured {limit} limit was exceeded.");

@@ -23,6 +23,15 @@ public sealed class ResolutionTests
         ENTITY holder;
           target : OPTIONAL node;
         END_ENTITY;
+        TYPE measure = INTEGER;
+        END_TYPE;
+        TYPE scalar_choice = SELECT (measure);
+        END_TYPE;
+        ENTITY value_holder;
+          amount : INTEGER;
+          amounts : LIST [1:?] OF INTEGER;
+          selected : scalar_choice;
+        END_ENTITY;
         END_SCHEMA;
         """;
 
@@ -44,8 +53,8 @@ public sealed class ResolutionTests
         var structure = Read(
             Exchange(
                 "ANCHOR;<local>=#1;<forward>=#93;ENDSEC;",
-                "REFERENCE;#90=<#local>;#91=<child.p21#target>;@92=<child.p21#size>;#94=<#forward>;#93=<child.p21#target>;ENDSEC;",
-                "#1=NODE('local',$);#2=HOLDER(#90);#3=HOLDER(#91);#4=HOLDER(#94);"),
+                "REFERENCE;#90=<#local>;#91=<child.p21#target>;@92=<child.p21#size>;#94=<#forward>;#93=<child.p21#target>;#95=<child.p21#1>;ENDSEC;",
+                "#1=NODE('local',$);#2=HOLDER(#90);#3=HOLDER(#91);#4=HOLDER(#94);#5=VALUE_HOLDER(@92,(@92,@92),MEASURE(@92));#6=HOLDER(#95);"),
             new ExchangeStructureReadOptions(
                 new Uri("https://example.test/models/root.p21"),
                 provider));
@@ -54,9 +63,12 @@ public sealed class ResolutionTests
         var localTarget = entities["2"].GetType().GetProperty("Target")!.GetValue(entities["2"]);
         var externalTarget = entities["3"].GetType().GetProperty("Target")!.GetValue(entities["3"]);
         var forwardedTarget = entities["4"].GetType().GetProperty("Target")!.GetValue(entities["4"]);
+        var numericTarget = entities["6"].GetType().GetProperty("Target")!.GetValue(entities["6"]);
         var externalReference = structure.References.Single(item => item.CanonicalDigits == "91");
         var valueReference = structure.References.Single(item => item.CanonicalDigits == "92");
         _ = valueReference.TryGetResolvedValue(out var resolvedValue);
+        using var output = new StringWriter();
+        structure.Write(output);
 
         using (Assert.Multiple())
         {
@@ -66,10 +78,12 @@ public sealed class ResolutionTests
             await Assert.That(externalValue!.TryGetEntity(out var externalEntity)).IsTrue();
             await Assert.That(externalTarget).IsSameReferenceAs(externalEntity);
             await Assert.That(forwardedTarget).IsSameReferenceAs(externalEntity);
+            await Assert.That(numericTarget).IsSameReferenceAs(externalEntity);
             await Assert.That(valueReference.ResolutionStatus).IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
             await Assert.That(resolvedValue!.TryGetInteger(out var integer)).IsTrue();
             await Assert.That(integer).IsEqualTo(42);
             await Assert.That(provider.Requests).IsEquivalentTo(["https://example.test/models/child.p21"]);
+            await Assert.That(output.ToString()).Contains("VALUE_HOLDER(42,(42,42),MEASURE(42));");
             await Assert.That(structure.Validate().IsValid).IsTrue();
         }
     }
@@ -258,11 +272,114 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Counts opaque input before conversion and does not invoke a converter past quota.</summary>
+    [Test]
+    public async Task Should_count_other_format_input_before_conversion()
+    {
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            ["https://example.test/model.jt"] = new(
+                new Uri("https://example.test/model.jt"),
+                Part21ResourceContentKind.Other,
+                Utf8("opaque")),
+        });
+        var converter = new StaticConverter(ClearText(
+            "https://example.test/model.jt",
+            Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('converted',$);")));
+
+        var failure = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/model.jt#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceConverter: converter,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: 5))));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(converter.CallCount).IsEqualTo(0);
+        }
+    }
+
+    /// <summary>Reconciles provider aliases to one canonical model and terminates canonical self-cycles.</summary>
+    [Test]
+    public async Task Should_share_canonical_provider_identity_and_resolve_canonical_cycles_to_null()
+    {
+        const string canonical = "https://example.test/canonical.p21";
+        const string canonicalLoop = "https://example.test/canonical-loop.p21";
+        var shared = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('shared',$);");
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            ["https://example.test/alias-a.p21"] = ClearText(canonical, shared),
+            ["https://example.test/alias-b.p21"] = ClearText(canonical, shared),
+            ["https://example.test/alias-loop.p21"] = ClearText(
+                canonicalLoop,
+                Exchange($"ANCHOR;<loop>=<{canonicalLoop}#loop>;ENDSEC;", string.Empty, "#1=NODE('loop',$);")),
+        });
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                "REFERENCE;#90=<https://example.test/alias-a.p21#target>;#91=<https://example.test/alias-b.p21#target>;#92=<https://example.test/alias-loop.p21#loop>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);#3=HOLDER(#92);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+
+        var holders = structure.Registrations
+            .OrderBy(item => item.Name.CanonicalDigits, StringComparer.Ordinal)
+            .Select(item => item.Entity)
+            .ToArray();
+        var first = holders[0].GetType().GetProperty("Target")!.GetValue(holders[0]);
+        var second = holders[1].GetType().GetProperty("Target")!.GetValue(holders[1]);
+        var loop = holders[2].GetType().GetProperty("Target")!.GetValue(holders[2]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(first).IsNotNull();
+            await Assert.That(second).IsSameReferenceAs(first);
+            await Assert.That(loop).IsNull();
+            await Assert.That(provider.Requests).IsEquivalentTo([
+                "https://example.test/alias-a.p21",
+                "https://example.test/alias-b.p21",
+                "https://example.test/alias-loop.p21",
+            ]);
+        }
+    }
+
+    /// <summary>Rejects ZIP features excluded from the Annex A.4 PKZip 2.04g transport.</summary>
+    [Test]
+    public async Task Should_reject_zip64_encryption_unicode_names_and_deflate64()
+    {
+        var valid = CreateZip(new Dictionary<string, string>
+        {
+            ["ISO-10303.p21"] = Exchange(string.Empty, string.Empty, "#1=NODE('root',$);"),
+        });
+        var invalidArchives = new[]
+        {
+            MutateZip(valid, versionNeeded: 45),
+            MutateZip(valid, flags: 0x0001),
+            MutateZip(valid, flags: 0x0800),
+            MutateZip(valid, method: 9),
+        };
+        var codes = invalidArchives.Select((archive, index) =>
+        {
+            var identity = $"https://example.test/invalid-{index}.zip";
+            var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+            {
+                [identity] = new(new Uri(identity), Part21ResourceContentKind.ZipArchive, archive),
+            });
+            return Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+                Exchange(string.Empty, $"REFERENCE;#90=<{identity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+                new ExchangeStructureReadOptions(resourceProvider: provider))).Diagnostics.Single().Code;
+        }).ToArray();
+
+        await Assert.That(codes).IsEquivalentTo(Enumerable.Repeat("P21-RESOURCE-ARCHIVE-FORMAT", 4));
+    }
+
     /// <summary>Uses a UUID registry and preserves type mismatch evidence.</summary>
     [Test]
     public async Task Should_use_uuid_registry_and_report_external_schema_or_type_mismatch_atomically()
     {
         const string uuid = "97c6e1f0-3544-11e5-a2cb-0800200c9a66";
+        const string nonUuidNeighbor = "97c6e1f0354411e5a2cb0800200c9a66";
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
             ["#" + uuid] = ClearText(
@@ -273,7 +390,10 @@ public sealed class ResolutionTests
                 Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=OTHER('wrong type');")),
         });
         var resolved = Read(
-            Exchange(string.Empty, $"REFERENCE;#90=<#{uuid}>;ENDSEC;", "#1=HOLDER(#90);"),
+            Exchange(
+                $"ANCHOR;<{nonUuidNeighbor}>=#1;ENDSEC;",
+                $"REFERENCE;#90=<#{uuid}>;#91=<#{nonUuidNeighbor}>;ENDSEC;",
+                "#1=NODE('local neighbor',$);#2=HOLDER(#90);#3=HOLDER(#91);"),
             new ExchangeStructureReadOptions(resourceProvider: provider));
         var mismatch = Assert.Throws<ExchangeStructureReadValidationException>(() => Read(
             Exchange(string.Empty, "REFERENCE;#90=<https://example.test/wrong.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
@@ -281,9 +401,14 @@ public sealed class ResolutionTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(resolved.References.Single().ResolutionStatus)
+            await Assert.That(resolved.References.Single(reference => reference.CanonicalDigits == "90").ResolutionStatus)
                 .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
             await Assert.That(provider.Requests).Contains("#" + uuid);
+            await Assert.That(provider.Requests).DoesNotContain("#" + nonUuidNeighbor);
+            await Assert.That(resolved.Registrations.Single(item => item.Name.CanonicalDigits == "3").Entity
+                    .GetType().GetProperty("Target")!.GetValue(
+                        resolved.Registrations.Single(item => item.Name.CanonicalDigits == "3").Entity))
+                .IsSameReferenceAs(resolved.Registrations.Single(item => item.Name.CanonicalDigits == "1").Entity);
             await Assert.That(mismatch.ValidationResult.Failures.Single().Code)
                 .IsEqualTo("P21.READ.REFERENCE.TYPE");
         }
@@ -339,7 +464,7 @@ public sealed class ResolutionTests
     private static string Exchange(string anchors, string references, string records) => $$"""
         ISO-10303-21;
         HEADER;
-        FILE_DESCRIPTION(('distributed resource test'),'3;2');
+        FILE_DESCRIPTION(('distributed resource test'),'4;2');
         FILE_NAME('resource.p21','2026-09-07T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('distributed_resource'));
         ENDSEC;
@@ -373,6 +498,49 @@ public sealed class ResolutionTests
             }
         }
         return stream.ToArray();
+    }
+
+    private static ReadOnlyMemory<byte> MutateZip(
+        ReadOnlyMemory<byte> archive,
+        ushort? versionNeeded = null,
+        ushort? flags = null,
+        ushort? method = null)
+    {
+        var bytes = archive.ToArray();
+        var local = FindSignature(bytes, [0x50, 0x4b, 0x03, 0x04]);
+        var central = FindSignature(bytes, [0x50, 0x4b, 0x01, 0x02]);
+        if (versionNeeded is { } version)
+        {
+            WriteUInt16(bytes, local + 4, version);
+            WriteUInt16(bytes, central + 6, version);
+        }
+        if (flags is { } generalFlags)
+        {
+            WriteUInt16(bytes, local + 6, generalFlags);
+            WriteUInt16(bytes, central + 8, generalFlags);
+        }
+        if (method is { } compressionMethod)
+        {
+            WriteUInt16(bytes, local + 8, compressionMethod);
+            WriteUInt16(bytes, central + 10, compressionMethod);
+        }
+        return bytes;
+    }
+
+    private static int FindSignature(byte[] bytes, ReadOnlySpan<byte> signature)
+    {
+        for (var index = 0; index <= bytes.Length - signature.Length; index++)
+        {
+            if (bytes.AsSpan(index, signature.Length).SequenceEqual(signature))
+                return index;
+        }
+        throw new InvalidOperationException("The ZIP fixture does not contain the expected record.");
+    }
+
+    private static void WriteUInt16(byte[] bytes, int offset, ushort value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
     }
 
     private static SchemaDescriptor CreateDescriptor()

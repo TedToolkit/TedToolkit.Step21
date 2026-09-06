@@ -64,7 +64,7 @@ internal static class ExchangeStructureReader
     {
         var syntax = ExchangeStructureSyntaxParser.Parse(source, address?.Key ?? SOURCE_NAME);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
-        ThrowIfReadCapabilityIsExceeded(syntax);
+        ThrowIfReadCapabilityIsExceeded(syntax, allowValueInstanceParameters: resolutionContext is not null);
 
         var bindingDiagnostics = new List<Step21Diagnostic>();
         var referenceFailures = new List<ValidationFailure>();
@@ -240,7 +240,9 @@ internal static class ExchangeStructureReader
         return structure;
     }
 
-    private static void ThrowIfReadCapabilityIsExceeded(ExchangeStructureSyntax syntax)
+    private static void ThrowIfReadCapabilityIsExceeded(
+        ExchangeStructureSyntax syntax,
+        bool allowValueInstanceParameters)
     {
         var diagnostics = new List<Step21Diagnostic>();
         foreach (var additionalHeader in syntax.Header.AdditionalEntities)
@@ -276,7 +278,7 @@ internal static class ExchangeStructureReader
                      syntax.Header.FileSchema,
                  }.SelectMany(entity => entity.Parameters))
         {
-            CollectUnsupportedValueDiagnostics(headerValue, diagnostics);
+            CollectUnsupportedValueDiagnostics(headerValue, diagnostics, allowValueInstanceParameters: false);
         }
 
         foreach (var section in syntax.DataSections)
@@ -284,7 +286,7 @@ internal static class ExchangeStructureReader
             foreach (var instance in section.EntityInstances)
             {
                 foreach (var value in instance.Records.SelectMany(record => record.Parameters))
-                    CollectUnsupportedValueDiagnostics(value, diagnostics);
+                    CollectUnsupportedValueDiagnostics(value, diagnostics, allowValueInstanceParameters);
             }
         }
 
@@ -310,14 +312,15 @@ internal static class ExchangeStructureReader
 
     private static void CollectUnsupportedValueDiagnostics(
         ValueSyntax value,
-        ICollection<Step21Diagnostic> diagnostics)
+        ICollection<Step21Diagnostic> diagnostics,
+        bool allowValueInstanceParameters)
     {
-        if (value.Kind is Part21ValueKind.ValueInstanceName
-            or Part21ValueKind.ConstantEntityName
+        if (value.Kind is Part21ValueKind.ConstantEntityName
             or Part21ValueKind.ConstantValueName
             or Part21ValueKind.AnchorName
             or Part21ValueKind.Resource
-            or Part21ValueKind.Signature)
+            or Part21ValueKind.Signature
+            || value.Kind == Part21ValueKind.ValueInstanceName && !allowValueInstanceParameters)
         {
             diagnostics.Add(new Step21Diagnostic(
                 "P21-CAP-OCCURRENCE-REFERENCE",
@@ -327,7 +330,7 @@ internal static class ExchangeStructureReader
         }
 
         foreach (var child in value.Values)
-            CollectUnsupportedValueDiagnostics(child, diagnostics);
+            CollectUnsupportedValueDiagnostics(child, diagnostics, allowValueInstanceParameters);
     }
 
     private static HeaderSection? BindHeader(
@@ -1086,6 +1089,56 @@ internal static class ExchangeStructureReader
             return false;
         }
 
+        if (value.Kind == Part21ValueKind.ValueInstanceName)
+        {
+            ValueInstanceName name;
+            try
+            {
+                name = new ValueInstanceName(value.Text[1..]);
+            }
+            catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
+            {
+                referenceFailures.Add(new ValidationFailure(
+                    "P21.READ.REFERENCE.MISSING",
+                    path,
+                    $"Value reference '{value.Text}' is not a valid occurrence name.",
+                    value.Span.Start));
+                converted = ParameterValue.Omitted;
+                return false;
+            }
+
+            var reference = structure.ReferenceEntries.SingleOrDefault(candidate =>
+                candidate.TryGetValueInstance(out var candidateName) && candidateName.Equals(name));
+            if (reference is null)
+            {
+                referenceFailures.Add(new ValidationFailure(
+                    "P21.READ.REFERENCE.MISSING",
+                    path,
+                    $"Value reference '{value.Text}' is not defined in this exchange structure.",
+                    value.Span.Start));
+                converted = ParameterValue.Omitted;
+                return false;
+            }
+            if (reference.TryGetResolvedValue(out var resolved) && resolved is not null)
+            {
+                converted = resolved;
+                return true;
+            }
+            if (reference.ResolutionStatus == Part21ReferenceResolutionStatus.Null)
+            {
+                converted = ParameterValue.Omitted;
+                return true;
+            }
+
+            referenceFailures.Add(new ValidationFailure(
+                "P21.READ.REFERENCE.EXTERNAL",
+                path,
+                $"Value reference '{value.Text}' denotes an external resource that is not resolved.",
+                value.Span.Start));
+            converted = ParameterValue.Omitted;
+            return false;
+        }
+
         if (value.Kind is Part21ValueKind.List or Part21ValueKind.Typed)
         {
             var values = new List<ParameterValue>(value.Values.Count);
@@ -1171,10 +1224,13 @@ internal static class ExchangeStructureReader
         EntityRecordSyntax record,
         out ValidationFailure failure)
     {
-        if (TryGetReferenceParameterIndex(diagnostic.Code, out var parameterIndex)
+        var hasReferenceParameter = TryGetReferenceParameterIndex(diagnostic.Code, out var parameterIndex)
+            || diagnostic.Code == "P21-BIND-PARAMETER"
+            && TryGetParameterIndex(diagnostic.Message, out parameterIndex);
+        if (hasReferenceParameter
             && parameterIndex >= 0
             && parameterIndex < record.Parameters.Count
-            && ContainsEntityReference(record.Parameters[parameterIndex]))
+            && ContainsOccurrenceReference(record.Parameters[parameterIndex]))
         {
             var componentIndex = allocation.Syntax.Records
                 .Select((candidate, index) => (candidate, index))
@@ -1240,8 +1296,9 @@ internal static class ExchangeStructureReader
             || message.Contains("for " + record.Name + ".", StringComparison.Ordinal));
     }
 
-    private static bool ContainsEntityReference(ValueSyntax value) =>
-        value.Kind == Part21ValueKind.EntityInstanceName || value.Values.Any(ContainsEntityReference);
+    private static bool ContainsOccurrenceReference(ValueSyntax value) =>
+        value.Kind is Part21ValueKind.EntityInstanceName or Part21ValueKind.ValueInstanceName
+        || value.Values.Any(ContainsOccurrenceReference);
 
     private static RealValue ParseReal(string text)
     {

@@ -22,7 +22,7 @@ Repository-owned semantic round-trip fixtures compare entity identity, generated
 
 | Facility | Observable boundary |
 | --- | --- |
-| Typed value-instance parameters and EXPRESS constants | Schema-neutral external value results are retained, but binding `@n` or constant occurrence names directly into generated DATA parameters remains a separately tracked capability. |
+| EXPRESS constant occurrences | Constant occurrence names remain a separately tracked DATA-binding capability. |
 | `SIGNATURE` sections | Parsing succeeds; signature verification reports `P21-CAP-SIGNATURE`. |
 
 These are operational capability failures, not syntax errors. The public `ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.
