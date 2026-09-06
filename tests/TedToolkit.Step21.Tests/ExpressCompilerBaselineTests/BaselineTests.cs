@@ -41,6 +41,9 @@ internal sealed class BaselineTests
         var approved = File.ReadAllText(approvedPath).ReplaceLineEndings("\n");
         var actual = CreateManifest();
         var serialized = (JsonSerializer.Serialize(actual, SerializerOptions) + "\n").ReplaceLineEndings("\n");
+        var resultsDirectory = Path.Combine(AppContext.BaseDirectory, "TestResults");
+        Directory.CreateDirectory(resultsDirectory);
+        File.WriteAllText(Path.Combine(resultsDirectory, "compiler-baseline.received.json"), serialized);
 
         await Assert.That(serialized).IsEqualTo(approved);
     }

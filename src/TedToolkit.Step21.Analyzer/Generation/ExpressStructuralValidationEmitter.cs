@@ -21,6 +21,8 @@ namespace TedToolkit.Step21.Analyzer.Generation;
 /// </summary>
 internal static class ExpressStructuralValidationEmitter
 {
+    private const int VALIDATION_BRANCHES_PER_METHOD = 32;
+
     private const string FAILURE_LIST_TYPE =
         "global::System.Collections.Generic.List<global::TedToolkit.Step21.ValidationFailure>";
 
@@ -39,21 +41,24 @@ internal static class ExpressStructuralValidationEmitter
     /// <param name="complexEntities">The generated multi-leaf entity projections.</param>
     /// <param name="resolver">The closed-set generated type resolver.</param>
     /// <param name="rulePlan">The validated reachable rule closure.</param>
+    /// <param name="shards">The structural descriptor partitions.</param>
     /// <returns>The protected descriptor override.</returns>
-    internal static Method CreateDispatchMethod(
+    internal static List<Method> CreateDispatchMethods(
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        ExpressDescriptorShards shards)
     {
-        return CreateDispatchMethod(
+        return CreateDispatchMethods(
             "ValidateCore",
             schema,
             entities,
             complexEntities,
             resolver,
             rulePlan,
+            shards,
             recognizeImportedEntities: true,
             executeGlobalRules: true);
     }
@@ -66,32 +71,36 @@ internal static class ExpressStructuralValidationEmitter
     /// <param name="complexEntities">The generated multi-leaf entity projections.</param>
     /// <param name="resolver">The closed-set generated type resolver.</param>
     /// <param name="rulePlan">The validated reachable rule closure.</param>
+    /// <param name="shards">The structural descriptor partitions.</param>
     /// <returns>The protected entity-population descriptor override.</returns>
-    internal static Method CreateEntityPopulationDispatchMethod(
+    internal static List<Method> CreateEntityPopulationDispatchMethods(
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
-        ExpressReachableRulePlan rulePlan)
+        ExpressReachableRulePlan rulePlan,
+        ExpressDescriptorShards shards)
     {
-        return CreateDispatchMethod(
+        return CreateDispatchMethods(
             "ValidateEntityPopulationCore",
             schema,
             entities,
             complexEntities,
             resolver,
             rulePlan,
+            shards,
             recognizeImportedEntities: false,
             executeGlobalRules: false);
     }
 
-    private static Method CreateDispatchMethod(
+    private static List<Method> CreateDispatchMethods(
         string methodName,
         ExpressBoundSchema schema,
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
+        ExpressDescriptorShards shards,
         bool recognizeImportedEntities,
         bool executeGlobalRules)
     {
@@ -120,27 +129,33 @@ internal static class ExpressStructuralValidationEmitter
         var temporaryOrdinal = 0;
         Func<string, string> allocateTemporaryName = prefix => prefix + Invariant(temporaryOrdinal++);
 
-        var loop = new ForEachStatement(DataType.Var, "entry", new CustomExpression("entities"));
-        loop.AddStatement(new CustomExpression("var recognized = false"));
-        foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
+        var methods = new List<Method>() { method, };
+        var concreteEntityNames = entities
+            .Where(candidate => !candidate.Entity.IsAbstract)
+            .Select(entity => entity.Name)
+            .Concat(complexEntities.Select(entity => entity.Name))
+            .ToArray();
+        var groupCalls = new List<string>();
+        var groupPrefix = executeGlobalRules
+            ? "__ExpressTryValidateGroup"
+            : "__ExpressTryValidateEntityPopulationGroup";
+        for (var offset = 0; offset < concreteEntityNames.Length; offset += VALIDATION_BRANCHES_PER_METHOD)
         {
-            var localName = $"typed{entity.Name}";
-            var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
-                .AddStatement(new CustomExpression("recognized = true"))
-                .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities{inverseArgument})"));
-            loop.AddStatement(branch);
+            var groupIndex = offset / VALIDATION_BRANCHES_PER_METHOD;
+            var groupName = groupPrefix
+                + groupIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            groupCalls.Add($"{groupName}(entry.Value, entry.Key, failures, entities{inverseArgument})");
+            methods.Add(CreateValidationGroupMethod(
+                groupName,
+                concreteEntityNames.Skip(offset).Take(VALIDATION_BRANCHES_PER_METHOD),
+                rulePlan,
+                shards,
+                offset));
         }
 
-        foreach (var entity in complexEntities)
-        {
-            var localName = $"typed{entity.Name}";
-            var branch = new IfStatement(new CustomExpression($"entry.Value is {entity.Name} {localName}"))
-                .AddStatement(new CustomExpression("recognized = true"))
-                .AddStatement(new CustomExpression(
-                    $"Validate{entity.Name}({localName}, entry.Key, failures, entities{inverseArgument})"));
-            loop.AddStatement(branch);
-        }
+        var loop = new ForEachStatement(DataType.Var, "entry", new CustomExpression("entities"));
+        var recognitionExpression = groupCalls.Count == 0 ? "false" : string.Join(" || ", groupCalls);
+        loop.AddStatement(new CustomExpression($"var recognized = {recognitionExpression}"));
 
         if (recognizeImportedEntities)
         {
@@ -175,7 +190,53 @@ internal static class ExpressStructuralValidationEmitter
         AddSummary(method, executeGlobalRules
             ? "Validates the ordered registered entities in a population governed by this EXPRESS schema."
             : "Validates entity-local and UNIQUE rules when schema-owned entities enter another population.");
+        return methods;
+    }
+
+    private static Method CreateValidationGroupMethod(
+        string name,
+        IEnumerable<string> entityNames,
+        ExpressReachableRulePlan rulePlan,
+        ExpressDescriptorShards shards,
+        int offset)
+    {
+        var method = CreateMethod(
+            name,
+            DataType.Bool,
+            TedToolkit.RoslynHelper.Accessibility.PRIVATE);
+        method.IsStatic = true;
+        method.AddParameter(SourceComposer.Parameter(
+            new DataType("global::TedToolkit.Step21.Entity"),
+            "value"));
+        method.AddParameter(SourceComposer.Parameter(DataType.String, "path"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(FAILURE_LIST_TYPE), "failures"));
+        method.AddParameter(SourceComposer.Parameter(new DataType(POPULATION_TYPE), "entities"));
+        AddInverseCacheParameter(method, rulePlan);
+        var inverseArgument = rulePlan.ReachableSingularInverseAttributes.Count > 0 ? ", inverseCache" : "";
+        foreach (var entityName in entityNames)
+        {
+            var localName = $"typed{entityName}";
+            var validationName = shards.Qualify($"Validate{entityName}", ValidationShardName(offset++));
+            method.AddStatement(new IfStatement(new CustomExpression($"value is {entityName} {localName}"))
+                .AddStatement(new CustomExpression(
+                    $"{validationName}({localName}, path, failures, entities{inverseArgument})"))
+                .AddStatement(new CustomExpression("true").Return));
+        }
+
+        method.AddStatement(new CustomExpression("false").Return);
         return method;
+    }
+
+    /// <summary>
+    /// Gets the shared declaration/dispatch container for an entity validation method.
+    /// </summary>
+    /// <param name="entityIndex">The index in concrete entity dispatch order.</param>
+    /// <returns>The deterministic private shard name.</returns>
+    internal static string ValidationShardName(int entityIndex)
+    {
+        // Each validator can contain thousands of lambdas. Combining validators also combines
+        // their compiler-generated static caches into one Native AOT GC-layout symbol.
+        return "__ExpressValidationShard" + Invariant(entityIndex);
     }
 
     private static void AddGlobalRuleValidation(
@@ -234,6 +295,13 @@ internal static class ExpressStructuralValidationEmitter
                     .AddStatement(new CustomExpression($"{populationName}.Add({valueName})")));
                 owner.AddStatement(loop);
             }
+
+            ExpressReachableRuleEmitter.EmitRuleAlgorithm(
+                rulePlan,
+                declaration,
+                owner,
+                lexicalNames,
+                allocateTemporaryName);
 
             var rules = declarationRule.RequiredChild("whereClause")
                 .ChildRules("domainRule")
@@ -306,6 +374,13 @@ internal static class ExpressStructuralValidationEmitter
                 var attributes = rule.ChildRules("referencedAttribute")
                     .Select(rulePlan.GetReferencedAttribute)
                     .ToArray();
+                var projectedAttributes = attributes
+                    .Select(attribute => ResolveUniqueKeyProjection(entity, attribute, resolver))
+                    .ToArray();
+                var keyTypes = attributes
+                    .Select((attribute, attributeIndex) =>
+                        projectedAttributes[attributeIndex]?.Type ?? attribute.Type)
+                    .ToArray();
                 var populationName = $"uniquePopulation{Invariant(ruleIndex)}";
                 var duplicatesName = $"uniqueDuplicates{Invariant(ruleIndex)}";
                 var duplicateName = $"uniqueDuplicate{Invariant(ruleIndex)}";
@@ -316,23 +391,27 @@ internal static class ExpressStructuralValidationEmitter
                     + $"entry => entry.Value is {interfaceName}), "
                     + "entry => new global::System.Collections.Generic.KeyValuePair<"
                     + $"global::System.String, {interfaceName}>(entry.Key, ({interfaceName})entry.Value))"));
-                var rawKeyParts = attributes.Select(attribute => UniqueKeyExpression(
+                var rawKeyParts = attributes.Select((attribute, attributeIndex) => UniqueKeyExpression(
                     rulePlan,
                     attribute,
+                    projectedAttributes[attributeIndex],
                     "item.Value")).ToArray();
-                var rawPreviousKeyParts = attributes.Select(attribute => UniqueKeyExpression(
+                var rawPreviousKeyParts = attributes.Select((attribute, attributeIndex) => UniqueKeyExpression(
                     rulePlan,
                     attribute,
+                    projectedAttributes[attributeIndex],
                     "previous.Value")).ToArray();
                 var keyParts = rawKeyParts.ToArray();
                 var previousKeyParts = rawPreviousKeyParts.ToArray();
                 for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
                 {
-                    if ((attributes[attributeIndex].IsOptional
+                    var keyAttribute = projectedAttributes[attributeIndex]?.Attribute
+                        ?? attributes[attributeIndex];
+                    if ((keyAttribute.IsOptional
                             || (attributes[attributeIndex].Kind == ExpressAttributeKind.Derived
                                 && rulePlan.GetDerivedExpression(attributes[attributeIndex])
                                     .Type.CanBeIndeterminate))
-                        && !resolver.Resolve(rulePlan.Schema.Identity, attributes[attributeIndex].Type).IsReferenceType)
+                        && !resolver.Resolve(rulePlan.Schema.Identity, keyTypes[attributeIndex]).IsReferenceType)
                     {
                         keyParts[attributeIndex] = $"({keyParts[attributeIndex]}).Value";
                         previousKeyParts[attributeIndex] = $"({previousKeyParts[attributeIndex]}).Value";
@@ -342,8 +421,8 @@ internal static class ExpressStructuralValidationEmitter
                 var equalityVariable = 0;
                 var equality = string.Join(
                     " && ",
-                    attributes.Select((attribute, attributeIndex) => UniqueKeyEquals(
-                        attribute.Type,
+                    attributes.Select((_, attributeIndex) => UniqueKeyEquals(
+                        keyTypes[attributeIndex],
                         keyParts[attributeIndex],
                         previousKeyParts[attributeIndex],
                         resolver,
@@ -353,6 +432,7 @@ internal static class ExpressStructuralValidationEmitter
                     " && ",
                     attributes.Select((attribute, attributeIndex) => UniqueKeyIsDeterminate(
                         attribute,
+                        projectedAttributes[attributeIndex],
                         rawKeyParts[attributeIndex],
                         resolver,
                         rulePlan,
@@ -361,6 +441,7 @@ internal static class ExpressStructuralValidationEmitter
                     " && ",
                     attributes.Select((attribute, attributeIndex) => UniqueKeyIsDeterminate(
                         attribute,
+                        projectedAttributes[attributeIndex],
                         rawPreviousKeyParts[attributeIndex],
                         resolver,
                         rulePlan,
@@ -396,9 +477,38 @@ internal static class ExpressStructuralValidationEmitter
         }
     }
 
+    private static ExpressEntityAttributeProjection? ResolveUniqueKeyProjection(
+        ExpressEntityProjection entity,
+        ExpressBoundAttribute attribute,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        if (attribute.Kind != ExpressAttributeKind.Explicit)
+        {
+            return null;
+        }
+
+        var storageAttribute = attribute;
+        var visited = new HashSet<ExpressBoundAttribute>();
+        while (visited.Add(storageAttribute)
+               && resolver.TryGetRedeclaredAttribute(storageAttribute, out var inherited))
+        {
+            storageAttribute = inherited;
+        }
+
+        var propertyName = ExpressEntityProjection.ToPascalCase(attribute.Name);
+        return entity.FlattenedAttributes.FirstOrDefault(candidate =>
+            StringComparer.Ordinal.Equals(candidate.Name, propertyName)
+            && (ReferenceEquals(candidate.Attribute, attribute)
+                || (ReferenceEquals(candidate.StorageEntity.Symbol, storageAttribute.DeclaringEntity)
+                    && StringComparer.OrdinalIgnoreCase.Equals(
+                        candidate.StorageAttributeName,
+                        storageAttribute.Name))));
+    }
+
     private static string UniqueKeyExpression(
         ExpressReachableRulePlan rulePlan,
         ExpressBoundAttribute attribute,
+        ExpressEntityAttributeProjection? projection,
         string valueExpression)
     {
         if (attribute.Kind == ExpressAttributeKind.Derived)
@@ -414,24 +524,45 @@ internal static class ExpressStructuralValidationEmitter
                     : ")");
         }
 
-        return $"{valueExpression}.{ExpressEntityProjection.ToPascalCase(attribute.Name)}";
+        if (attribute.Kind == ExpressAttributeKind.Inverse)
+        {
+            var owner = rulePlan.GetAttributeOwner(attribute);
+            return "__ExpressInverse_"
+                + ExpressEntityProjection.ToPascalCase(owner.Name)
+                + "_"
+                + ExpressEntityProjection.ToPascalCase(attribute.Name)
+                + $"((global::TedToolkit.Step21.Entity)({valueExpression}), entities"
+                + (rulePlan.ReachableSingularInverseAttributes.Count > 0
+                    ? ", failures, inverseCache)"
+                    : ")");
+        }
+
+        var accessOwner = projection?.DeclaringEntity ?? rulePlan.GetAttributeOwner(attribute);
+        var interfaceName = GetGeneratedEntityInterface(rulePlan.Schema.Identity, accessOwner.Symbol);
+        return $"(({interfaceName})({valueExpression})).{ExpressEntityProjection.ToPascalCase(attribute.Name)}";
     }
 
     private static string UniqueKeyIsDeterminate(
         ExpressBoundAttribute attribute,
+        ExpressEntityAttributeProjection? projection,
         string valueExpression,
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
         ref int variable)
     {
-        if (attribute.IsOptional
+        if ((projection?.Attribute.IsOptional ?? attribute.IsOptional)
             || (attribute.Kind == ExpressAttributeKind.Derived
                 && rulePlan.GetDerivedExpression(attribute).Type.CanBeIndeterminate))
         {
             return $"({valueExpression}) is not null";
         }
 
-        return UniqueValueIsDeterminate(attribute.Type, valueExpression, resolver, rulePlan, ref variable);
+        return UniqueValueIsDeterminate(
+            projection?.Type ?? attribute.Type,
+            valueExpression,
+            resolver,
+            rulePlan,
+            ref variable);
     }
 
     private static string UniqueValueIsDeterminate(
@@ -1011,8 +1142,10 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         ExpressReachableRulePlan rulePlan,
         Func<string, string> allocateTemporaryName,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol>? activeNames = null)
     {
+        activeNames ??= new HashSet<ExpressBoundSymbol>();
         if (type is ExpressBoundAggregateType aggregate)
         {
             if (!ContainsDefinedTypeWhere(
@@ -1036,7 +1169,8 @@ internal static class ExpressStructuralValidationEmitter
                 resolver,
                 rulePlan,
                 allocateTemporaryName,
-                ref variable);
+                ref variable,
+                activeNames);
             loop.AddStatement(new CustomExpression($"{indexName}++"));
             owner.AddStatement(loop);
             return;
@@ -1048,60 +1182,74 @@ internal static class ExpressStructuralValidationEmitter
             return;
         }
 
-        var declaration = resolver.GetDefinedType(named.Declaration);
-        AddDefinedTypeWhereRules(
-            owner,
-            declaration,
-            valueExpression,
-            pathExpression,
-            rulePlan,
-            allocateTemporaryName);
-        switch (declaration.UnderlyingType)
+        if (!activeNames.Add(named.Declaration))
         {
-            case ExpressBoundEnumerationType:
-                return;
+            return;
+        }
 
-            case ExpressBoundSelectType select:
-                foreach (var alternative in resolver.GetSelectAlternatives(select))
-                {
-                    var alternativeType = new ExpressBoundNamedType(alternative, named.Span);
-                    if (!ContainsDefinedTypeWhere(
+        try
+        {
+            var declaration = resolver.GetDefinedType(named.Declaration);
+            AddDefinedTypeWhereRules(
+                owner,
+                declaration,
+                valueExpression,
+                pathExpression,
+                rulePlan,
+                allocateTemporaryName);
+            switch (declaration.UnderlyingType)
+            {
+                case ExpressBoundEnumerationType:
+                    return;
+
+                case ExpressBoundSelectType select:
+                    foreach (var alternative in resolver.GetSelectAlternatives(select))
+                    {
+                        var alternativeType = new ExpressBoundNamedType(alternative, named.Span);
+                        if (!ContainsDefinedTypeWhere(
+                                alternativeType,
+                                resolver,
+                                rulePlan,
+                                new HashSet<ExpressBoundSymbol>()))
+                        {
+                            continue;
+                        }
+
+                        var selectedName = $"ruleSelected{Invariant(variable++)}";
+                        var branch = new IfStatement(new CustomExpression(
+                            $"{valueExpression}.TryGet{ExpressEntityProjection.ToPascalCase(alternative.Name)}(out var {selectedName})"));
+                        AddTypeWhereValidation(
+                            branch,
                             alternativeType,
+                            selectedName,
+                            pathExpression,
                             resolver,
                             rulePlan,
-                            new HashSet<ExpressBoundSymbol>()))
-                    {
-                        continue;
+                            allocateTemporaryName,
+                            ref variable,
+                            activeNames);
+                        owner.AddStatement(branch);
                     }
 
-                    var selectedName = $"ruleSelected{Invariant(variable++)}";
-                    var branch = new IfStatement(new CustomExpression(
-                        $"{valueExpression}.TryGet{ExpressEntityProjection.ToPascalCase(alternative.Name)}(out var {selectedName})"));
+                    return;
+
+                default:
                     AddTypeWhereValidation(
-                        branch,
-                        alternativeType,
-                        selectedName,
+                        owner,
+                        declaration.UnderlyingType,
+                        $"{valueExpression}.Value",
                         pathExpression,
                         resolver,
                         rulePlan,
                         allocateTemporaryName,
-                        ref variable);
-                    owner.AddStatement(branch);
-                }
-
-                return;
-
-            default:
-                AddTypeWhereValidation(
-                    owner,
-                    declaration.UnderlyingType,
-                    $"{valueExpression}.Value",
-                    pathExpression,
-                    resolver,
-                    rulePlan,
-                    allocateTemporaryName,
-                    ref variable);
-                return;
+                        ref variable,
+                        activeNames);
+                    return;
+            }
+        }
+        finally
+        {
+            activeNames.Remove(named.Declaration);
         }
     }
 
@@ -1228,7 +1376,8 @@ internal static class ExpressStructuralValidationEmitter
                     rulePlan,
                     "value",
                     "entities",
-                    allocateTemporaryName: allocateTemporaryName));
+                    allocateTemporaryName: allocateTemporaryName,
+                    selfEntity: candidateEntity.Entity.Symbol));
             var failed = RuleFailureCondition(expression, generated.Code);
             var label = rule.ChildRules("ruleLabelId").SingleOrDefault()?.Identifier
                 ?? $"RULE_{Invariant(index + 1)}";
@@ -1435,6 +1584,14 @@ internal static class ExpressStructuralValidationEmitter
                 $"{prefix}.REQUIRED",
                 null,
                 ref variable);
+            AddDynamicAggregateUpperBoundValidation(
+                owner,
+                entity,
+                attribute,
+                valueName,
+                pathName,
+                prefix,
+                resolver);
             return;
         }
 
@@ -1467,6 +1624,78 @@ internal static class ExpressStructuralValidationEmitter
             ref variable);
         owner.AddStatement(nullBranch);
         owner.AddStatement(presentBranch);
+        AddDynamicAggregateUpperBoundValidation(
+            owner,
+            entity,
+            attribute,
+            valueName,
+            pathName,
+            prefix,
+            resolver);
+    }
+
+    private static void AddDynamicAggregateUpperBoundValidation(
+        IStatementOwner owner,
+        ExpressEntityProjection entity,
+        ExpressEntityAttributeProjection attribute,
+        string valueExpression,
+        string pathExpression,
+        string prefix,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        if (attribute.Type is not ExpressBoundAggregateType aggregate
+            || aggregate.UpperBoundText is not { } upperBoundName
+            || int.TryParse(
+                aggregate.ResolvedUpperBoundText ?? upperBoundName,
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out _))
+        {
+            return;
+        }
+
+        var boundAttribute = entity.EffectiveAttributes.SingleOrDefault(candidate =>
+            StringComparer.OrdinalIgnoreCase.Equals(candidate.Attribute.Name, upperBoundName));
+        if (boundAttribute?.Attribute.IsOptional != false)
+        {
+            return;
+        }
+
+        var ownerInterface = "I" + ExpressEntityProjection.ToPascalCase(
+            boundAttribute.DeclaringEntity.Name);
+        if (!ReferenceEquals(entity.Schema.Identity, boundAttribute.DeclaringEntity.Symbol.DeclaringSchema))
+        {
+            ownerInterface = "global::TedToolkit.Step21.Generated."
+                + ExpressEntityProjection.ToPascalCase(boundAttribute.DeclaringEntity.Symbol.DeclaringSchema.Name)
+                + "."
+                + ownerInterface;
+        }
+
+        var boundCode = $"(({ownerInterface})value).{boundAttribute.Name}";
+        var boundType = boundAttribute.Type;
+        while (boundType is ExpressBoundNamedType named
+               && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            boundCode = $"({boundCode}).Value";
+            boundType = resolver.GetDefinedType(named.Declaration).UnderlyingType;
+        }
+
+        boundCode = boundType switch
+        {
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Integer, } =>
+                $"checked((int)({boundCode}))",
+            ExpressBoundScalarType { Kind: ExpressScalarKind.Number, } =>
+                $"checked((int)({boundCode}).ToIntegerTruncated())",
+            _ => throw new InvalidOperationException(
+                "A dynamic aggregate bound must resolve to an integer-valued attribute."),
+        };
+        owner.AddStatement(new IfStatement(new CustomExpression(
+                $"{valueExpression} is not null && {valueExpression}.Count > {boundCode}"))
+            .AddStatement(AddFailure(
+                $"{prefix}.AGGREGATE_0.UPPER_BOUND",
+                pathExpression,
+                $"The aggregate cardinality must not exceed the current '{upperBoundName}' attribute value.",
+                attribute.Attribute.Span)));
     }
 
     private static void AddValueValidation(
@@ -1481,8 +1710,10 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         string missingCode,
         string? invalidEntityCode,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol>? activeNamedTypes = null)
     {
+        activeNamedTypes ??= new HashSet<ExpressBoundSymbol>();
         var immediateReference = resolver.Resolve(schema, type).IsReferenceType;
         if (!immediateReference)
         {
@@ -1498,7 +1729,8 @@ internal static class ExpressStructuralValidationEmitter
                 resolver,
                 missingCode,
                 invalidEntityCode,
-                ref variable);
+                ref variable,
+                activeNamedTypes);
             return;
         }
 
@@ -1523,7 +1755,8 @@ internal static class ExpressStructuralValidationEmitter
             resolver,
             missingCode,
             invalidEntityCode,
-            ref variable);
+            ref variable,
+            activeNamedTypes);
         owner.AddStatement(nullBranch);
         owner.AddStatement(presentBranch);
     }
@@ -1540,8 +1773,10 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         string missingCode,
         string? invalidEntityCode,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol>? activeNamedTypes = null)
     {
+        activeNamedTypes ??= new HashSet<ExpressBoundSymbol>();
         switch (type)
         {
             case ExpressBoundScalarType:
@@ -1558,7 +1793,8 @@ internal static class ExpressStructuralValidationEmitter
                     source,
                     aggregateDepth,
                     resolver,
-                    ref variable);
+                    ref variable,
+                    activeNamedTypes);
                 return;
 
             case ExpressBoundNamedType named when named.Declaration.Kind == ExpressDeclarationKind.Entity:
@@ -1584,7 +1820,8 @@ internal static class ExpressStructuralValidationEmitter
                     resolver,
                     missingCode,
                     invalidEntityCode,
-                    ref variable);
+                    ref variable,
+                    activeNamedTypes);
                 return;
 
             default:
@@ -1605,8 +1842,14 @@ internal static class ExpressStructuralValidationEmitter
         ExpressGeneratedTypeResolver resolver,
         string missingCode,
         string? invalidEntityCode,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol> activeNamedTypes)
     {
+        if (!activeNamedTypes.Add(named.Declaration))
+        {
+            return;
+        }
+
         var declaration = resolver.GetDefinedType(named.Declaration);
         switch (declaration.UnderlyingType)
         {
@@ -1656,7 +1899,8 @@ internal static class ExpressStructuralValidationEmitter
                         resolver,
                         missingCode,
                         invalidEntityCode,
-                        ref variable);
+                        ref variable,
+                        new HashSet<ExpressBoundSymbol>(activeNamedTypes));
                     owner.AddStatement(branch);
                 }
 
@@ -1675,7 +1919,8 @@ internal static class ExpressStructuralValidationEmitter
                     resolver,
                     missingCode,
                     invalidEntityCode,
-                    ref variable);
+                    ref variable,
+                    activeNamedTypes);
                 return;
         }
     }
@@ -1690,7 +1935,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressSourceSpan source,
         int aggregateDepth,
         ExpressGeneratedTypeResolver resolver,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol> activeNamedTypes)
     {
         var aggregatePrefix = $"{prefix}.AGGREGATE_{Invariant(aggregateDepth)}";
         var hasLowerBound = TryGetLowerBound(aggregate, out var lowerBound);
@@ -1791,7 +2037,8 @@ internal static class ExpressStructuralValidationEmitter
                 source,
                 aggregateDepth,
                 resolver,
-                ref variable);
+                ref variable,
+                activeNamedTypes);
             return;
         }
 
@@ -1806,7 +2053,8 @@ internal static class ExpressStructuralValidationEmitter
             source,
             aggregateDepth,
             resolver,
-            ref variable);
+            ref variable,
+            activeNamedTypes);
     }
 
     private static void AddArrayElements(
@@ -1820,7 +2068,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressSourceSpan source,
         int aggregateDepth,
         ExpressGeneratedTypeResolver resolver,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol> activeNamedTypes)
     {
         var indexName = $"arrayIndex{Invariant(variable++)}";
         var itemName = $"{valueExpression}[{indexName}]";
@@ -1854,7 +2103,8 @@ internal static class ExpressStructuralValidationEmitter
             resolver,
             $"{aggregatePrefix}.ELEMENT",
             $"{aggregatePrefix}.ELEMENT",
-            ref variable);
+            ref variable,
+            activeNamedTypes);
         loop.AddStatement(missing);
         loop.AddStatement(present);
         owner.AddStatement(loop);
@@ -1871,7 +2121,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressSourceSpan source,
         int aggregateDepth,
         ExpressGeneratedTypeResolver resolver,
-        ref int variable)
+        ref int variable,
+        ISet<ExpressBoundSymbol> activeNamedTypes)
     {
         var indexName = $"aggregateIndex{Invariant(variable++)}";
         var itemName = $"aggregateItem{Invariant(variable++)}";
@@ -1889,7 +2140,8 @@ internal static class ExpressStructuralValidationEmitter
             resolver,
             $"{aggregatePrefix}.ELEMENT",
             $"{aggregatePrefix}.ELEMENT",
-            ref variable);
+            ref variable,
+            activeNamedTypes);
         loop.AddStatement(new CustomExpression($"{indexName}++"));
         owner.AddStatement(loop);
     }
@@ -1929,7 +2181,8 @@ internal static class ExpressStructuralValidationEmitter
             prefix,
             0,
             resolver,
-            insideAggregate: false);
+            insideAggregate: false,
+            visitedNamedTypes: new HashSet<ExpressBoundSymbol>());
         return constraints
             .GroupBy(constraint => constraint.Code, StringComparer.Ordinal)
             .Select(group => group.First())
@@ -1942,7 +2195,8 @@ internal static class ExpressStructuralValidationEmitter
         string prefix,
         int aggregateDepth,
         ExpressGeneratedTypeResolver resolver,
-        bool insideAggregate)
+        bool insideAggregate,
+        ISet<ExpressBoundSymbol> visitedNamedTypes)
     {
         switch (type)
         {
@@ -1955,7 +2209,8 @@ internal static class ExpressStructuralValidationEmitter
                     aggregate,
                     prefix,
                     aggregateDepth,
-                    resolver);
+                    resolver,
+                    visitedNamedTypes);
                 return;
 
             case ExpressBoundNamedType named when named.Declaration.Kind == ExpressDeclarationKind.Entity:
@@ -1967,6 +2222,11 @@ internal static class ExpressStructuralValidationEmitter
                 return;
 
             case ExpressBoundNamedType named:
+                if (!visitedNamedTypes.Add(named.Declaration))
+                {
+                    return;
+                }
+
                 var underlying = resolver.GetDefinedType(named.Declaration).UnderlyingType;
                 if (underlying is ExpressBoundEnumerationType enumeration)
                 {
@@ -1990,7 +2250,8 @@ internal static class ExpressStructuralValidationEmitter
                             prefix,
                             aggregateDepth,
                             resolver,
-                            insideAggregate);
+                            insideAggregate,
+                            visitedNamedTypes);
                     }
 
                     return;
@@ -2002,7 +2263,8 @@ internal static class ExpressStructuralValidationEmitter
                     prefix,
                     aggregateDepth,
                     resolver,
-                    insideAggregate);
+                    insideAggregate,
+                    visitedNamedTypes);
                 return;
         }
     }
@@ -2012,7 +2274,8 @@ internal static class ExpressStructuralValidationEmitter
         ExpressBoundAggregateType aggregate,
         string prefix,
         int aggregateDepth,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        ISet<ExpressBoundSymbol> visitedNamedTypes)
     {
         var aggregatePrefix = $"{prefix}.AGGREGATE_{Invariant(aggregateDepth)}";
         var hasLowerBound = TryGetLowerBound(aggregate, out var lowerBound);
@@ -2068,21 +2331,32 @@ internal static class ExpressStructuralValidationEmitter
             prefix,
             aggregateDepth + 1,
             resolver,
-            insideAggregate: true);
+            insideAggregate: true,
+            visitedNamedTypes: visitedNamedTypes);
     }
 
     private static bool CanRepresentMissing(
         ExpressBoundType type,
         ExpressGeneratedTypeResolver resolver)
     {
+        return CanRepresentMissing(type, resolver, new HashSet<ExpressBoundSymbol>());
+    }
+
+    private static bool CanRepresentMissing(
+        ExpressBoundType type,
+        ExpressGeneratedTypeResolver resolver,
+        ISet<ExpressBoundSymbol> visitedNamedTypes)
+    {
         return type switch
         {
             ExpressBoundScalarType scalar => scalar.Kind is ExpressScalarKind.String or ExpressScalarKind.Binary,
             ExpressBoundAggregateType => true,
             ExpressBoundNamedType named when named.Declaration.Kind == ExpressDeclarationKind.Entity => true,
+            ExpressBoundNamedType named when !visitedNamedTypes.Add(named.Declaration) => true,
             ExpressBoundNamedType named => CanRepresentMissing(
                 resolver.GetDefinedType(named.Declaration).UnderlyingType,
-                resolver),
+                resolver,
+                visitedNamedTypes),
             ExpressBoundEnumerationType => true,
             ExpressBoundSelectType => true,
             _ => false,

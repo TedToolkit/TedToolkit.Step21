@@ -18,7 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\TedToolkit.Step21.PackedConsumer\Part21FixtureSignature.cs"
+             Link="PackageFixtureTests\Part21FixtureSignature.cs" />
     <None Update="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\schemas\ap242\*"
+          Link="TestData\Express\Ap242\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\schemas\ap203\ap203.exp"
           Link="TestData\Express\Ap203\ap203.exp"
           CopyToOutputDirectory="PreserveNewest" />

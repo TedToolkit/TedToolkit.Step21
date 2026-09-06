@@ -1027,6 +1027,16 @@ internal static class ExpressSchemaBinder
                         syntax.RequiredChild("generalRef"),
                         scope,
                         expectedKind: null);
+                    if (assignmentTarget?.Kind == ExpressBoundNameKind.Constant)
+                    {
+                        schema.IsInvalid = true;
+                        AddDiagnostic(
+                            _diagnostics,
+                            "EXPRESS-BIND-CONSTANT-ASSIGNMENT",
+                            $"Constant '{assignmentTarget.Name}' cannot be assigned or modified through a qualifier.",
+                            syntax.RequiredChild("generalRef").Span.Start);
+                    }
+
                     foreach (var qualifier in syntax.ChildRules("qualifier"))
                     {
                         var child = qualifier.ChildRules().Single();
@@ -1042,19 +1052,9 @@ internal static class ExpressSchemaBinder
                                 scope,
                                 ExpressBoundNameKind.Entity);
                         }
-                        else if (child.Production == "indexQualifier"
-                                 && assignmentTarget?.Type is ExpressBoundAggregateType aggregate)
+                        else if (child.Production == "indexQualifier")
                         {
-                            VisitNames(schema, child, scope);
-                            assignmentTarget = new(
-                                assignmentTarget.Name,
-                                assignmentTarget.Kind,
-                                aggregate.ElementType,
-                                assignmentTarget.SchemaDeclaration,
-                                assignmentTarget.Span,
-                                assignmentTarget.IsOptional,
-                                assignmentTarget.Attribute,
-                                assignmentTarget.AttributeCandidates);
+                            assignmentTarget = BindIndexedName(schema, child, scope, assignmentTarget);
                         }
                         else
                         {
@@ -1075,6 +1075,20 @@ internal static class ExpressSchemaBinder
                     foreach (var parameters in syntax.ChildRules("actualParameterList"))
                     {
                         VisitNames(schema, parameters, scope);
+                        if (syntax.ChildRules("builtInProcedure").Any()
+                            && parameters.ChildRules("parameter").FirstOrDefault() is { } mutableArgument
+                            && mutableArgument.DescendantTokens().FirstOrDefault(token => token.TokenName == "SimpleId")
+                                is { } mutableName
+                            && scope.TryResolve(mutableName.Text, out var mutableTarget)
+                            && mutableTarget.Kind == ExpressBoundNameKind.Constant)
+                        {
+                            schema.IsInvalid = true;
+                            AddDiagnostic(
+                                _diagnostics,
+                                "EXPRESS-BIND-CONSTANT-ASSIGNMENT",
+                                $"Constant '{mutableTarget.Name}' cannot be modified by a list procedure.",
+                                mutableName.Span.Start);
+                        }
                     }
 
                     return;
@@ -1168,23 +1182,73 @@ internal static class ExpressSchemaBinder
                         scope,
                         ExpressBoundNameKind.Entity);
                 }
-                else if (child.Production == "indexQualifier"
-                         && target?.Type is ExpressBoundAggregateType aggregate)
+                else if (child.Production == "indexQualifier")
                 {
-                    VisitNames(schema, child, scope);
-                    target = new(
-                        target.Name,
-                        target.Kind,
-                        aggregate.ElementType,
-                        target.SchemaDeclaration,
-                        target.Span,
-                        target.IsOptional,
-                        target.Attribute,
-                        target.AttributeCandidates);
+                    target = BindIndexedName(schema, child, scope, target);
                 }
                 else
                 {
                     VisitNames(schema, child, scope);
+                }
+            }
+        }
+
+        private ExpressBoundName? BindIndexedName(
+            SchemaDraft schema,
+            ExpressRuleSyntax qualifier,
+            NameScope scope,
+            ExpressBoundName? source)
+        {
+            VisitNames(schema, qualifier, scope);
+            if (source is null)
+            {
+                return null;
+            }
+
+            var elements = EnumerateIndexedElementTypes(source.Type, new HashSet<ExpressBoundSymbol>()).ToArray();
+            if (elements.Length == 0 || !elements.All(element => HaveSameMemberType(element, elements[0])))
+            {
+                return source;
+            }
+
+            return new(
+                source.Name,
+                source.Kind,
+                elements[0],
+                source.SchemaDeclaration,
+                source.Span,
+                source.IsOptional,
+                source.Attribute,
+                source.AttributeCandidates);
+        }
+
+        private IEnumerable<ExpressBoundType> EnumerateIndexedElementTypes(
+            ExpressBoundType? type,
+            ISet<ExpressBoundSymbol> visited)
+        {
+            if (type is ExpressBoundAggregateType aggregate)
+            {
+                yield return aggregate.ElementType;
+            }
+            else if (type is ExpressBoundNamedType named && visited.Add(named.Declaration))
+            {
+                foreach (var element in EnumerateIndexedElementTypes(FindSymbol(named.Declaration)?.BoundType, visited))
+                {
+                    yield return element;
+                }
+            }
+            else if (type is ExpressBoundSelectType select)
+            {
+                var alternatives = select.BaseType is null
+                    ? select.Alternatives
+                    : select.Alternatives.Concat([select.BaseType,]);
+                foreach (var alternative in alternatives)
+                {
+                    foreach (var element in EnumerateIndexedElementTypes(
+                                 new ExpressBoundNamedType(alternative, select.Span), visited))
+                    {
+                        yield return element;
+                    }
                 }
             }
         }
@@ -1231,6 +1295,8 @@ internal static class ExpressSchemaBinder
                 .Distinct()
                 .ToArray();
             var effectiveAttribute = attributes.Length == 1 ? attributes[0] : null;
+            var ambiguousEntityMember = attributes.Length > 1
+                && source.Type is ExpressBoundNamedType { Declaration.Kind: ExpressDeclarationKind.Entity, };
             if (effectiveAttribute is not null
                 && source.Type is ExpressBoundNamedType sourceEntity
                 && FindSymbol(sourceEntity.Declaration) is { } sourceEntityDraft
@@ -1256,21 +1322,33 @@ internal static class ExpressSchemaBinder
             }
 
             var compatibleAttributes = effectiveAttribute is not null
-                || (attributes.Length > 0
-                && attributes.All(candidate => ReferenceEquals(candidate.Type, attributes[0].Type)
-                    || (candidate.Type is ExpressBoundNamedType candidateNamed
-                        && attributes[0].Type is ExpressBoundNamedType firstNamed
-                        && ReferenceEquals(candidateNamed.Declaration, firstNamed.Declaration))));
-            if (compatibleAttributes)
+                || (!ambiguousEntityMember && attributes.Length > 0
+                && attributes.All(candidate => HaveSameMemberType(candidate.Type, attributes[0].Type)));
+            var selectSource = IsSelectType(source.Type);
+            var commonSlot = !compatibleAttributes && !ambiguousEntityMember && selectSource
+                ? FindCommonInheritedSlot(attributes)
+                : null;
+            var heterogeneousEntityMembers = !compatibleAttributes && commonSlot is null && !ambiguousEntityMember
+                && selectSource && attributes.Length > 0
+                && attributes.All(candidate => candidate.Type is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, });
+            if (compatibleAttributes || commonSlot is not null || heterogeneousEntityMembers)
             {
-                var attribute = effectiveAttribute ?? attributes[0];
+                var attribute = effectiveAttribute ?? commonSlot ?? attributes[0];
+                if (commonSlot is not null)
+                {
+                    attributes = attributes.Concat([commonSlot,]).Distinct().ToArray();
+                }
+
                 target = new(
                     attribute.Name,
                     ExpressBoundNameKind.Attribute,
-                    attribute.Type,
+                    heterogeneousEntityMembers
+                        ? new ExpressBoundGenericType(isEntity: true, typeLabel: null, span)
+                        : attribute.Type,
                     schemaDeclaration: null,
                     attribute.Span,
-                    attribute.IsOptional,
+                    effectiveAttribute?.IsOptional ?? attributes.Any(candidate => candidate.IsOptional),
                     attribute,
                     attributes);
             }
@@ -1304,6 +1382,62 @@ internal static class ExpressSchemaBinder
 
             schema.NameReferences.Add(new ExpressBoundNameReference(target, isApplication: false, span));
             return target;
+        }
+
+        private ExpressBoundAttribute? FindCommonInheritedSlot(IEnumerable<ExpressBoundAttribute> attributes)
+        {
+            var slots = attributes.Select(FindOriginalSlot).Distinct().ToArray();
+            return slots.Length == 1 ? slots[0] : null;
+        }
+
+        private ExpressBoundAttribute? FindOriginalSlot(ExpressBoundAttribute attribute)
+        {
+            var visited = new HashSet<ExpressBoundAttribute>();
+            while (attribute.RedeclaredEntity is { } redeclaredEntity && visited.Add(attribute))
+            {
+                var owner = FindSymbol(redeclaredEntity);
+                if (owner is null)
+                {
+                    return null;
+                }
+
+                var inherited = EnumerateVisibleAttributes(owner)
+                    .Where(candidate => _nameComparer.Equals(candidate.Name, attribute.RedeclaredAttributeName))
+                    .ToArray();
+                if (inherited.Length != 1)
+                {
+                    return null;
+                }
+
+                attribute = inherited[0];
+            }
+
+            return attribute.RedeclaredEntity is null ? attribute : null;
+        }
+
+        private bool IsSelectType(ExpressBoundType? type)
+        {
+            var visited = new HashSet<ExpressBoundSymbol>();
+            while (type is ExpressBoundNamedType named && visited.Add(named.Declaration))
+            {
+                type = FindSymbol(named.Declaration)?.BoundType;
+            }
+
+            return type is ExpressBoundSelectType;
+        }
+
+        private static bool HaveSameMemberType(ExpressBoundType left, ExpressBoundType right)
+        {
+            return ReferenceEquals(left, right) || (left, right) switch
+            {
+                (ExpressBoundNamedType first, ExpressBoundNamedType second) =>
+                    ReferenceEquals(first.Declaration, second.Declaration),
+                (ExpressBoundScalarType first, ExpressBoundScalarType second) =>
+                    first.Kind == second.Kind
+                    && first.ConstraintText == second.ConstraintText
+                    && first.IsFixed == second.IsFixed,
+                _ => false,
+            };
         }
 
         private IEnumerable<ExpressBoundAttribute> EnumerateAttributes(
@@ -1492,13 +1626,46 @@ internal static class ExpressSchemaBinder
             foreach (var attribute in attributes)
             {
                 var isRedeclaredSlot = attributes.Any(candidate =>
-                    ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
-                    && _nameComparer.Equals(candidate.RedeclaredAttributeName, attribute.Name));
+                    candidate.RedeclaredEntity is not null
+                    && _nameComparer.Equals(candidate.RedeclaredAttributeName, attribute.Name)
+                    && (ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                        || (ReferenceEquals(candidate.RedeclaredEntity, attribute.RedeclaredEntity)
+                            && IsStrictSubtypeOf(candidate.DeclaringEntity, attribute.DeclaringEntity))));
                 if (!isRedeclaredSlot)
                 {
                     yield return attribute;
                 }
             }
+        }
+
+        private bool IsStrictSubtypeOf(ExpressBoundSymbol entity, ExpressBoundSymbol ancestor)
+        {
+            var pending = new Stack<ExpressBoundSymbol>();
+            var visited = new HashSet<ExpressBoundSymbol>() { entity, };
+            pending.Push(entity);
+            while (pending.Count > 0)
+            {
+                var current = FindSymbol(pending.Pop());
+                if (current is null)
+                {
+                    continue;
+                }
+
+                foreach (var supertype in current.Supertypes)
+                {
+                    if (ReferenceEquals(supertype, ancestor))
+                    {
+                        return true;
+                    }
+
+                    if (visited.Add(supertype))
+                    {
+                        pending.Push(supertype);
+                    }
+                }
+            }
+
+            return false;
         }
 
         private ExpressBoundName? BindNeutralName(
@@ -1558,6 +1725,15 @@ internal static class ExpressSchemaBinder
             {
                 ReportUnresolvedName(schema, token);
                 return null;
+            }
+
+            // A RULE population denotes values in ordinary expressions, but a group
+            // qualifier still names the underlying entity data type (ISO 10303-11 12.7.4).
+            if (expectedKind == ExpressBoundNameKind.Entity
+                && target.Kind == ExpressBoundNameKind.Population
+                && target.SchemaDeclaration is { Kind: ExpressDeclarationKind.Entity, } entity)
+            {
+                target = CreateSchemaName(entity, token.Text);
             }
 
             if (expectedKind is not null && target.Kind != expectedKind)
@@ -2539,7 +2715,7 @@ internal static class ExpressSchemaBinder
 
             states[type.Symbol] = VisitState.Visiting;
             path.Add(type);
-            foreach (var dependency in EnumerateTypeDependencies(type.BoundType))
+            foreach (var dependency in EnumerateNonAggregateTypeDependencies(type.BoundType))
             {
                 if (types.TryGetValue(dependency, out var target))
                 {
@@ -2572,7 +2748,7 @@ internal static class ExpressSchemaBinder
             }
         }
 
-        private static IEnumerable<ExpressBoundSymbol> EnumerateTypeDependencies(ExpressBoundType? type)
+        private static IEnumerable<ExpressBoundSymbol> EnumerateNonAggregateTypeDependencies(ExpressBoundType? type)
         {
             switch (type)
             {
@@ -2580,12 +2756,9 @@ internal static class ExpressSchemaBinder
                     yield return named.Declaration;
                     break;
 
-                case ExpressBoundAggregateType aggregate:
-                    foreach (var dependency in EnumerateTypeDependencies(aggregate.ElementType))
-                    {
-                        yield return dependency;
-                    }
-
+                case ExpressBoundAggregateType:
+                    // Aggregate-contained recursion represents finite nested values, as in
+                    // ISO 10303-50 4.4.8–4.4.11; it is not a circular alias expansion.
                     break;
 
                 case ExpressBoundEnumerationType enumeration when enumeration.BaseType is not null:

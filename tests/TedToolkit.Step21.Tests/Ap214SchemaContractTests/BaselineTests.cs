@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 using TedToolkit.Step21.Analyzer.Express.Binding;
 using TedToolkit.Step21.Tests.ExpressGeneratorTests;
@@ -23,6 +24,44 @@ internal sealed class BaselineTests
     private const string UpstreamSha256 = "71AB140FE7F774321BEEE6A31E6FEE2AFC3973FD60350AE2018C74C211FB4295";
 
     private const string CanonicalLfSha256 = "9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7";
+
+    /// <summary>
+    /// Ensures the public API oracle observes compatibility changes, not just member names.
+    /// </summary>
+    [Test]
+    [Arguments("public string Value { get; set; }", "public int Value { get; set; }")]
+    [Arguments("public string Value { get; set; }", "public string? Value { get; set; }")]
+    [Arguments("public void Apply(int value) { }", "public void Apply(string value) { }")]
+    [Arguments("public void Apply(int value = 1) { }", "public void Apply(int value = 2) { }")]
+    [Arguments("public const int Value = 1;", "public const int Value = 2;")]
+    [Arguments("public int Value { get; set; }", "public static int Value { get; set; }")]
+    [Arguments("public int Value { get; set; }", "public int Value { get; init; }")]
+    [Arguments("public int Value { get; set; }", "public required int Value { get; set; }")]
+    [Arguments("public void Apply<T>() where T : class { }", "public void Apply<T>() where T : struct { }")]
+    [Arguments("public class Nested { }", "public sealed class Nested { }")]
+    [Arguments("public enum Kind { First, Second }", "public enum Kind { Second, First }")]
+    public async Task Should_detect_public_contract_changes(string before, string after)
+    {
+        await Assert.That(RenderPublicApi(CompileApi(before))).IsNotEqualTo(RenderPublicApi(CompileApi(after)));
+    }
+
+    /// <summary>
+    /// Keeps private implementation layout outside the compatibility snapshot.
+    /// </summary>
+    [Test]
+    public async Task Should_ignore_private_implementation_changes()
+    {
+        const string before = "public int Value => Compute(); private static int Compute() => 1;";
+        const string after = "public int Value => Shard.Compute(); private static class Shard { internal static int Compute() => 1; }";
+        await Assert.That(RenderPublicApi(CompileApi(before))).IsEqualTo(RenderPublicApi(CompileApi(after)));
+    }
+
+    private static Compilation CompileApi(string members) => CSharpCompilation.Create(
+        "ApiOracle",
+        [CSharpSyntaxTree.ParseText(
+            "#nullable enable\nnamespace TedToolkit.Step21.Generated.AutomotiveDesign; public class Sample { "
+            + members + " }")],
+        [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
     /// <summary>
     /// Verifies the checked-in AP214 source and STEPcode attribution retain every approved identity and hash.
@@ -83,11 +122,13 @@ internal sealed class BaselineTests
         var axis2PlacementKind = RequiredType(result.OutputCompilation, "Axis2PlacementKind");
         var descriptorSource = result.GeneratedSources.Single(source =>
             source.HintName == "ExpressSchema_AUTOMOTIVE_DESIGN.g.cs").SourceText.ToString();
-        var generatedSurface = RenderGeneratedSurface(result.GeneratedSources);
-        var publicApiHash = ComputeTextHash(generatedSurface);
+        var publicApi = RenderPublicApi(result.OutputCompilation);
+        var publicApiHash = ComputeTextHash(publicApi);
         var approvedPublicApiHash = File.ReadAllText(Path.Combine(directory, "PublicApi.approved.sha256")).Trim();
-        await Assert.That(publicApiHash).IsEqualTo(approvedPublicApiHash)
-            .Because($"Actual AP214 generated public API SHA-256: {publicApiHash}");
+        var resultsDirectory = Path.Combine(AppContext.BaseDirectory, "TestResults");
+        Directory.CreateDirectory(resultsDirectory);
+        File.WriteAllText(Path.Combine(resultsDirectory, "ap214-public-api.received.txt"), publicApi);
+        Console.WriteLine($"AP214_GENERATED_PUBLIC_API_SHA256={publicApiHash}");
 
         var compilationDiagnostics = result.OutputCompilation.GetDiagnostics();
         await Assert.That(compilationDiagnostics
@@ -124,6 +165,9 @@ internal sealed class BaselineTests
                     .SequenceEqual(["Axis2Placement2d", "Axis2Placement3d"]))
                 .IsTrue();
         }
+
+        await Assert.That(publicApiHash).IsEqualTo(approvedPublicApiHash)
+            .Because($"Actual AP214 generated public API SHA-256: {publicApiHash}");
     }
 
     private static string TestDataDirectory() => Path.Combine(
@@ -136,17 +180,8 @@ internal sealed class BaselineTests
         compilation.GetTypeByMetadataName($"TedToolkit.Step21.Generated.AutomotiveDesign.{name}")
         ?? throw new InvalidOperationException($"The generated AP214 {name} type was not found.");
 
-    private static string RenderGeneratedSurface(IEnumerable<GeneratedSourceResult> generatedSources)
-    {
-        var result = new StringBuilder();
-        foreach (var source in generatedSources.OrderBy(source => source.HintName, StringComparer.Ordinal))
-        {
-            result.Append("// ").Append(source.HintName).Append('\n');
-            result.Append(source.SourceText.ToString().ReplaceLineEndings("\n")).Append('\n');
-        }
-
-        return result.ToString();
-    }
+    private static string RenderPublicApi(Compilation compilation) =>
+        GeneratedPublicApi.Render(compilation, "AutomotiveDesign");
 
     private static string ComputeCanonicalTextFileHash(string path) =>
         ComputeTextHash(File.ReadAllText(path).ReplaceLineEndings("\n"));

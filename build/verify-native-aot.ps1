@@ -5,7 +5,10 @@
 # </copyright>
 # -----------------------------------------------------------------------
 
-param([switch] $Ap203)
+param(
+    [switch] $Ap203,
+    [switch] $Ap214,
+    [switch] $Ap242)
 
 $ErrorActionPreference = 'Stop'
 $runtimeIdentifier = 'win-x64'
@@ -13,12 +16,17 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $isWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
     [System.Runtime.InteropServices.OSPlatform]::Windows)
 
+if (@($Ap203, $Ap214, $Ap242).Where({ $_ }).Count -gt 1) {
+    throw 'Select at most one precompiled schema package proof.'
+}
+
 if (-not $isWindowsHost) {
     throw "Native AOT proof '$runtimeIdentifier' must run on Windows."
 }
 
 $proofRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
     'TedToolkit.Step21.NativeAot.' + [Guid]::NewGuid().ToString('N'))
+$proofSucceeded = $false
 $packageDirectory = Join-Path $proofRoot 'packages'
 $consumerPackagesDirectory = Join-Path $proofRoot 'consumer-packages'
 $intermediateDirectory = (Join-Path $proofRoot 'obj') + [System.IO.Path]::DirectorySeparatorChar
@@ -27,9 +35,15 @@ $nugetConfigPath = Join-Path $proofRoot 'NuGet.Config'
 $productProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21/TedToolkit.Step21.csproj'
 $analyzerProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj'
 $ap203Project = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap203/TedToolkit.Step21.Ap203.csproj'
+$ap214Project = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap214/TedToolkit.Step21.Ap214.csproj'
+$ap242Project = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap242/TedToolkit.Step21.Ap242.csproj'
 $consumerProject = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.PackedConsumer/TedToolkit.Step21.PackedConsumer.csproj'
-$fixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-box-10x20x30-ap203.step'
-$extensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-unsupported-extension-ap203.step'
+$ap203FixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-box-10x20x30-ap203.step'
+$ap203ExtensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-unsupported-extension-ap203.step'
+$ap214FixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap214/occt-box-10x20x30-ap214.step'
+$ap214ExtensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap214/occt-unsupported-extension-ap214.step'
+$ap242FixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap242/occt-box-10x20x30-ap242.step'
+$ap242ExtensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap242/occt-unsupported-extension-ap242.step'
 
 function Invoke-DotNet {
     param(
@@ -66,10 +80,10 @@ function Invoke-DotNet {
     return $output
 }
 
-function Get-GlobalPackagesDirectory {
+function Get-GlobalPackagesDirectories {
     $assetsPath = Join-Path $repositoryRoot 'src/TedToolkit.Step21/obj/project.assets.json'
     $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
-    return $assets.packageFolders.PSObject.Properties.Name | Select-Object -First 1
+    return $assets.packageFolders.PSObject.Properties.Name
 }
 
 function Copy-CachedPackage {
@@ -77,11 +91,13 @@ function Copy-CachedPackage {
         [Parameter(Mandatory = $true)][string] $Id,
         [Parameter(Mandatory = $true)][string] $Version)
 
-    $globalPackagesDirectory = Get-GlobalPackagesDirectory
     $normalizedId = $Id.ToLowerInvariant()
-    $packagePath = Join-Path $globalPackagesDirectory "$normalizedId/$Version/$normalizedId.$Version.nupkg"
-    if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
-        throw "Required cached Native AOT toolchain package is missing: $packagePath"
+    $packagePath = Get-GlobalPackagesDirectories |
+        ForEach-Object { Join-Path $_ "$normalizedId/$Version/$normalizedId.$Version.nupkg" } |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+    if (-not $packagePath) {
+        throw "Required cached Native AOT toolchain package '$Id/$Version' is missing from all configured package folders."
     }
 
     Copy-Item -LiteralPath $packagePath -Destination $packageDirectory
@@ -91,9 +107,12 @@ function Get-LatestCachedPackageVersion {
     param([Parameter(Mandatory = $true)][string] $Id)
 
     $normalizedId = $Id.ToLowerInvariant()
-    $packageRoot = Join-Path (Get-GlobalPackagesDirectory) $normalizedId
-    $versions = Get-ChildItem -LiteralPath $packageRoot -Directory -ErrorAction SilentlyContinue |
+    $versions = Get-GlobalPackagesDirectories |
+        ForEach-Object {
+            Get-ChildItem -LiteralPath (Join-Path $_ $normalizedId) -Directory -ErrorAction SilentlyContinue
+        } |
         Where-Object { $_.Name -match '^10\.' } |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "$normalizedId.$($_.Name).nupkg") -PathType Leaf } |
         Sort-Object { [Version]$_.Name } -Descending
     if (-not $versions) {
         throw "No cached .NET 10 package was found for '$Id'. Restore the repository's Native AOT toolchain once before running the offline proof."
@@ -122,7 +141,18 @@ try {
         '--no-restore',
         '--disable-build-servers'
     ) | Out-Null
-    $buildProject = if ($Ap203) { $ap203Project } else { $productProject }
+    $buildProject = if ($Ap203) {
+        $ap203Project
+    }
+    elseif ($Ap214) {
+        $ap214Project
+    }
+    elseif ($Ap242) {
+        $ap242Project
+    }
+    else {
+        $productProject
+    }
     Invoke-DotNet -Arguments @(
         'build',
         $buildProject,
@@ -147,6 +177,26 @@ try {
             '--output', $packageDirectory
         ) | Out-Null
     }
+    elseif ($Ap214) {
+        Invoke-DotNet -Arguments @(
+            'pack',
+            $ap214Project,
+            '--configuration', 'Release',
+            '--no-build',
+            '--no-restore',
+            '--output', $packageDirectory
+        ) | Out-Null
+    }
+    elseif ($Ap242) {
+        Invoke-DotNet -Arguments @(
+            'pack',
+            $ap242Project,
+            '--configuration', 'Release',
+            '--no-build',
+            '--no-restore',
+            '--output', $packageDirectory
+        ) | Out-Null
+    }
 
     Copy-CachedPackage -Id 'Antlr4.Runtime.Standard' -Version '4.13.1'
     $compilerVersion = Get-LatestCachedPackageVersion -Id 'Microsoft.DotNet.ILCompiler'
@@ -161,8 +211,14 @@ try {
         Copy-CachedPackage -Id $toolchainPackage -Version $compilerVersion
     }
 
-    $ap203Properties = if ($Ap203) {
+    $schemaProperties = if ($Ap203) {
         @('--property:Ap203PackageProof=true', '--property:Ap203FixtureProof=true')
+    }
+    elseif ($Ap214) {
+        @('--property:Ap214PackageProof=true', '--property:Ap214FixtureProof=true')
+    }
+    elseif ($Ap242) {
+        @('--property:Ap242PackageProof=true', '--property:Ap242FixtureProof=true')
     }
     else {
         @()
@@ -179,7 +235,7 @@ try {
         "--property:BaseIntermediateOutputPath=$intermediateDirectory",
         "--property:MSBuildProjectExtensionsPath=$intermediateDirectory"
     )
-    $restoreArguments += $ap203Properties
+    $restoreArguments += $schemaProperties
     $restoreLog = Invoke-DotNet -Arguments $restoreArguments
     $publishArguments = @(
         'publish',
@@ -194,7 +250,7 @@ try {
         "--property:BaseIntermediateOutputPath=$intermediateDirectory",
         "--property:MSBuildProjectExtensionsPath=$intermediateDirectory"
     )
-    $publishArguments += $ap203Properties
+    $publishArguments += $schemaProperties
     $publishLog = Invoke-DotNet -Arguments $publishArguments
 
     $analysisWarnings = ($restoreLog + [Environment]::NewLine + $publishLog) |
@@ -214,7 +270,18 @@ try {
         throw "Native executable was not produced at '$executablePath'."
     }
 
-    $runArguments = if ($Ap203) { @($fixturePath, $extensionFixturePath) } else { @() }
+    $runArguments = if ($Ap203) {
+        @($ap203FixturePath, $ap203ExtensionFixturePath)
+    }
+    elseif ($Ap214) {
+        @($ap214FixturePath, $ap214ExtensionFixturePath, $ap203FixturePath)
+    }
+    elseif ($Ap242) {
+        @($ap242FixturePath, $ap242ExtensionFixturePath)
+    }
+    else {
+        @()
+    }
     $runOutput = @(& $executablePath @runArguments 2>&1)
     $runExitCode = $LASTEXITCODE
     foreach ($line in $runOutput) {
@@ -228,6 +295,24 @@ try {
             'AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
             'AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0',
             'AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6')
+    }
+    elseif ($Ap214) {
+        @(
+            'AP214_RAW_EDITION_REJECTED rules=application-protocol-definition-required,product-requires-id-owner partial-model=false',
+            'AP214_FIXTURE_OK entities=173 products=1 faces=6 edges=12 vertices=8 points=27 units=3 extents=10x20x30',
+            'AP214_REFERENCE_GRAPH_OK entities=173 values-and-named-references=preserved',
+            'AP214_ROUND_TRIP_OK edit=product.name entities=173 faces=6 edges=12 vertices=8 points=27 units=millimetre,radian,steradian extents=10x20x30 shared-vertex-degrees=3,3,3,3,3,3,3,3',
+            'AP214_INVALID_EDIT_REJECTED failures=',
+            'codes=product.frame-of-reference,face.bounds output-bytes=0',
+            'AP214_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6 partial-model=false',
+            'AP214_SCHEMA_REJECTED code=P21-BIND-SCHEMA partial-model=false')
+    }
+    elseif ($Ap242) {
+        @(
+            'AP242_FIXTURE_OK entities=170 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
+            'AP242_ROUND_TRIP_OK edit=product.name entities=170 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
+            'AP242_INVALID_EDIT_REJECTED failures=8 output-bytes=0',
+            'AP242_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6')
     }
     else {
         @('PACKED_AOT_OK')
@@ -245,15 +330,30 @@ try {
     }
 
     $executableBytes = (Get-Item -LiteralPath $executablePath).Length
-    $proofName = if ($Ap203) { 'AP203_NATIVE_AOT_PACKAGE_PROOF_OK' } else { 'NATIVE_AOT_PACKAGE_PROOF_OK' }
+    $proofName = if ($Ap203) {
+        'AP203_NATIVE_AOT_PACKAGE_PROOF_OK'
+    }
+    elseif ($Ap214) {
+        'AP214_NATIVE_AOT_PACKAGE_PROOF_OK'
+    }
+    elseif ($Ap242) {
+        'AP242_NATIVE_AOT_PACKAGE_PROOF_OK'
+    }
+    else {
+        'NATIVE_AOT_PACKAGE_PROOF_OK'
+    }
     Write-Host "$proofName $runtimeIdentifier executable-bytes=$executableBytes compiler-package=$compilerVersion"
+    $proofSucceeded = $true
 }
 finally {
     $resolvedProofRoot = Resolve-Path -LiteralPath $proofRoot -ErrorAction SilentlyContinue
     $temporaryDirectory = [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
-    if ($resolvedProofRoot -and $resolvedProofRoot.Path.StartsWith(
+    if ($proofSucceeded -and $resolvedProofRoot -and $resolvedProofRoot.Path.StartsWith(
         "$temporaryDirectory\TedToolkit.Step21.NativeAot.",
         [StringComparison]::OrdinalIgnoreCase)) {
         Remove-Item -LiteralPath $resolvedProofRoot.Path -Recurse -Force
+    }
+    elseif ($resolvedProofRoot) {
+        Write-Host "Native AOT proof failed; diagnostic artifacts retained at $($resolvedProofRoot.Path)"
     }
 }

@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P2
@@ -93,8 +93,8 @@ Scenario: 检查候选包的 schema 身份和生成表面
 ```gherkin
 Scenario: 处理固定 OCCT AP214 样本
   Given 固定样本声明 AUTOMOTIVE_DESIGN canonical OID、一个 10 × 20 × 30 mm 原点 box、1 个 product、6 个 face、12 个 edge 和 8 个 vertex
-  When 用 AP214 descriptor 读取，将 product name 改为 `TedToolkit AP214 OCCT box 10x20x30 mm - edited`，验证、写出并重读
-  Then product name、box extents、millimetre/radian/steradian units、实体种类与数量、实例身份和共享引用关系保持该固定语义签名
+  When 原样读取先证明两个已知 edition 规则差异，再确定性补齐 2007-DIS AIM identity 与唯一 id-owner assignment，将 product name 改为 `TedToolkit AP214 OCCT box 10x20x30 mm - edited`，验证、写出并重读
+  Then 原始 byte/hash 保持不变、原始读取不发布部分模型，迁移后的 product name、box extents、millimetre/radian/steradian units、实体种类与数量、实例身份和共享引用关系保持该固定语义签名
 ```
 
 <!-- acceptance-case: AC-04 -->
@@ -254,7 +254,7 @@ OCCT 语义旅程与失败原子性、offline/AOT/版本兼容和最终集成证
 | --- | --- | --- | --- |
 | AC-01 | Primary | AP214 package-only consumer compiles and executes without schema source or Analyzer runtime assets | Pack to an isolated local source, then restore, build, and run the AP214 packed-consumer mode offline |
 | AC-02 | Primary | Descriptor, generated API, metadata and provenance match the pinned AP214 source and approved snapshot | Run focused descriptor-fidelity, provenance and complete public-API contract checks |
-| AC-03 | Primary | Fixed AP214 fixture completes typed read/edit/validate/write/reread with the approved semantic signature | Run the focused AP214 journey in `TedToolkit.Step21.IntegrationTests` |
+| AC-03 | Primary | Raw AP214IS fixture proves its two known edition-rule failures atomically; deterministic 2007-DIS migration then completes typed read/edit/validate/write/reread with the approved semantic signature | Run the focused AP214 journey in `TedToolkit.Step21.IntegrationTests` |
 | AC-04 | Primary | Descriptor ambiguity, binding failure and invalid edit preserve the approved exception/diagnostic/atomic-output boundaries | Run the focused schema-bound negative matrix and assert pre-consumption `ArgumentException`, positioned-when-available diagnostics, aggregate validation and zero partial output |
 | AC-05 | Primary | AP203 and AP214 coexist with explicit selection, one runtime and no schema-package dependency edge | Build and run an isolated two-package consumer, then inspect candidate dependency assets |
 | AC-06 | Primary | Two forced offline builds are equivalent and the candidate version classification matches ADR-0006 | Compare normalized package/API/provenance outputs, then evaluate source/edition/descriptor/closed-set/runtime-range/public/semantic differences against the approved `1.0.0` input manifest and latest stable baseline when one exists |

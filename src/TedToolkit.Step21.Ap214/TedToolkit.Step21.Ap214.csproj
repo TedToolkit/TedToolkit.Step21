@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>1.0.0-rc.1</Version>
+    <Version>1.0.0</Version>
     <Description>Precompiled AP214 Edition 3 AUTOMOTIVE_DESIGN types for TedToolkit.Step21.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
@@ -32,6 +32,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\schemas\ap214\COPYING;..\..\schemas\ap214\AUTHORS;..\..\schemas\ap214\INTENT.md;..\..\schemas\ap214\PROVENANCE.md"
+          Pack="true"
+          PackagePath="third-party/stepcode/"
+          Visible="false" />
     <None Include="README.md"
           Pack="true"
           PackagePath="\"

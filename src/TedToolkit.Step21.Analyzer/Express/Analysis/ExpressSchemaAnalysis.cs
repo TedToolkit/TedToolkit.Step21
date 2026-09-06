@@ -18,6 +18,10 @@ internal sealed class ExpressSchemaAnalysis
 {
     private readonly ReadOnlyDictionary<ExpressBoundDeclaration, ExpressSemanticRule> _declarations;
 
+    private readonly ReadOnlyDictionary<
+        (string Path, int StartLine, int StartColumn, int EndLine, int EndColumn),
+        ExpressBoundExpression> _expressions;
+
     /// <summary>
     /// Initializes one syntax-detached schema analysis.
     /// </summary>
@@ -28,6 +32,7 @@ internal sealed class ExpressSchemaAnalysis
         Func<ExpressBoundDeclaration, ExpressRuleSyntax> syntaxOf)
     {
         Schema = schema;
+        _expressions = new(schema.Expressions.ToDictionary(expression => ExpressionKey(expression.Span)));
         _declarations = new(
             schema.Declarations
                 .Concat(schema.NestedDeclarations)
@@ -42,6 +47,16 @@ internal sealed class ExpressSchemaAnalysis
     internal ExpressBoundSchema Schema { get; }
 
     /// <summary>
+    /// Gets the existing bound expression by its exact source range.
+    /// </summary>
+    /// <param name="span">The retained expression range.</param>
+    /// <returns>The shared expression tree, without a new projection or copy.</returns>
+    internal ExpressBoundExpression GetExpression(ExpressSourceSpan span)
+    {
+        return _expressions[ExpressionKey(span)];
+    }
+
+    /// <summary>
     /// Gets the semantic rule model rooted at one declaration.
     /// </summary>
     /// <param name="declaration">The analyzed declaration.</param>
@@ -49,5 +64,11 @@ internal sealed class ExpressSchemaAnalysis
     internal ExpressSemanticRule GetDeclaration(ExpressBoundDeclaration declaration)
     {
         return _declarations[declaration];
+    }
+
+    private static (string Path, int StartLine, int StartColumn, int EndLine, int EndColumn) ExpressionKey(
+        ExpressSourceSpan span)
+    {
+        return (span.Start.FilePath, span.Start.Line, span.Start.Column, span.End.Line, span.End.Column);
     }
 }

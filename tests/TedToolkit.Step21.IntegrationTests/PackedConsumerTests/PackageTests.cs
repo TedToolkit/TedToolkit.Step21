@@ -68,7 +68,7 @@ internal sealed class PackageTests
                 "--output",
                 packageDirectory);
             var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
-            CopyCachedPackage(
+            PackageCache.Copy(
                 packageDirectory,
                 Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
                 "antlr4.runtime.standard",
@@ -304,7 +304,7 @@ internal sealed class PackageTests
                 "--output",
                 packageDirectory);
             var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.1.0.0.nupkg").Single();
-            CopyCachedPackage(
+            PackageCache.Copy(
                 packageDirectory,
                 Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
                 "antlr4.runtime.standard",
@@ -478,28 +478,6 @@ internal sealed class PackageTests
             .EnumerateObject()
             .Select(property => property.Name)
             .ToArray();
-    }
-
-    private static void CopyCachedPackage(
-        string destinationDirectory,
-        string producerAssetsPath,
-        string packageId,
-        string version)
-    {
-        using var stream = File.OpenRead(producerAssetsPath);
-        using var document = JsonDocument.Parse(stream);
-        var globalPackages = document.RootElement
-            .GetProperty("packageFolders")
-            .EnumerateObject()
-            .Select(property => property.Name)
-            .Single();
-
-        var packagePath = Path.Combine(
-            globalPackages,
-            packageId,
-            version,
-            $"{packageId}.{version}.nupkg");
-        File.Copy(packagePath, Path.Combine(destinationDirectory, Path.GetFileName(packagePath)));
     }
 
     private static string[] ReadPackageEntries(string packagePath)

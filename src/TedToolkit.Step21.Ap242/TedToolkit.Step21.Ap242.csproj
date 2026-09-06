@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Version>1.0.0</Version>
+    <Description>Precompiled AP242 N11521 MIM long-form types for TedToolkit.Step21.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
+    <PackageTags>step;iso-10303;ap242;managed-model-based-3d-engineering</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.Step21\TedToolkit.Step21.csproj"
+                      PrivateAssets="all" />
+    <PackageReference Include="TedToolkit.Step21"
+                      VersionOverride="[1.0.0,2.0.0)" />
+    <ProjectReference Include="..\TedToolkit.Step21.Analyzer\TedToolkit.Step21.Analyzer.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Analyzer Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.Step21.Analyzer.dll" />
+    <Analyzer Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\Antlr4.Runtime.Standard.dll" />
+    <Analyzer Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\System.Memory.dll" />
+    <Analyzer Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll" />
+    <Analyzer Include="..\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\ZString.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="..\..\schemas\ap242\242_mim_lf.exp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\schemas\ap242\COPYING;..\..\schemas\ap242\AUTHORS;..\..\schemas\ap242\INTENT.md;..\..\schemas\ap242\PROVENANCE.md"
+          Pack="true"
+          PackagePath="third-party/stepcode/"
+          Visible="false" />
+    <None Include="README.md"
+          Pack="true"
+          PackagePath="\"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

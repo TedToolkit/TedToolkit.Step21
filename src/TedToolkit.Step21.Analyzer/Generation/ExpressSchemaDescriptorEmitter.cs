@@ -19,6 +19,10 @@ namespace TedToolkit.Step21.Analyzer.Generation;
 /// </summary>
 internal static class ExpressSchemaDescriptorEmitter
 {
+    private const int HYDRATION_BRANCHES_PER_METHOD = 32;
+
+    private const int SELECT_HYDRATION_METHODS_PER_SHARD = 16;
+
     /// <summary>
     /// Emits one path-independent sealed schema descriptor through RoslynHelper.
     /// </summary>
@@ -42,6 +46,9 @@ internal static class ExpressSchemaDescriptorEmitter
         descriptor.AddBaseType(new DataType("global::TedToolkit.Step21.SchemaDescriptor"));
         AddSummary(descriptor, $"Provides reflection-free mapping infrastructure for the {schema.Name} EXPRESS schema.");
         ExpressStructuralValidationEmitter.AddDescriptorDocumentation(descriptor, schema, entities, rulePlan);
+        var shards = new ExpressDescriptorShards(
+            descriptor,
+            ExpressDescriptorShards.IsRequired(entities.Count + complexEntities.Count));
 
         descriptor.AddMember(CreateConstructor());
         descriptor.AddMember(CreateInstanceProperty());
@@ -52,37 +59,51 @@ internal static class ExpressSchemaDescriptorEmitter
 
         descriptor.AddMember(CreateNameProperty(schema));
         descriptor.AddMember(CreateAllocateMethod(entities, complexEntities));
-        descriptor.AddMember(CreateHydrateMethod(entities, complexEntities, resolver));
-        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateDispatchMethod(
-            schema,
-            entities,
-            complexEntities,
-            resolver,
-            rulePlan));
-        descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityPopulationDispatchMethod(
-            schema,
-            entities,
-            complexEntities,
-            resolver,
-            rulePlan));
+        descriptor.AddMember(CreateHydrateMethod(schema.Identity, entities, complexEntities, resolver, shards));
+
+        foreach (var method in ExpressStructuralValidationEmitter.CreateDispatchMethods(
+                     schema,
+                     entities,
+                     complexEntities,
+                     resolver,
+                     rulePlan,
+                     shards))
+        {
+            descriptor.AddMember(method);
+        }
+
+        foreach (var method in ExpressStructuralValidationEmitter.CreateEntityPopulationDispatchMethods(
+                     schema,
+                     entities,
+                     complexEntities,
+                     resolver,
+                     rulePlan,
+                     shards))
+        {
+            descriptor.AddMember(method);
+        }
+
+        var validationIndex = 0;
         foreach (var entity in entities.Where(candidate => !candidate.Entity.IsAbstract))
         {
-            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver, rulePlan));
+            shards.Add(
+                ExpressStructuralValidationEmitter.CreateEntityMethod(entity, resolver, rulePlan),
+                ExpressStructuralValidationEmitter.ValidationShardName(validationIndex++));
         }
 
         foreach (var entity in complexEntities)
         {
-            descriptor.AddMember(ExpressStructuralValidationEmitter.CreateComplexEntityMethod(
-                entity,
-                resolver,
-                rulePlan));
+            shards.Add(
+                ExpressStructuralValidationEmitter.CreateComplexEntityMethod(entity, resolver, rulePlan),
+                ExpressStructuralValidationEmitter.ValidationShardName(validationIndex++));
         }
 
         foreach (var method in ExpressReachableRuleEmitter.CreateDependencyMethods(
                      rulePlan,
                      resolver,
                      entities,
-                     complexEntities))
+                     complexEntities,
+                     shards))
         {
             descriptor.AddMember(method);
         }
@@ -92,9 +113,7 @@ internal static class ExpressSchemaDescriptorEmitter
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
 
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
-        SourceComposer.File()
-            .AddNameSpace(SourceComposer.NameSpace(generatedNamespace).AddMember(descriptor))
-            .Generate(in context, $"ExpressSchema_{schema.Name.ToUpperInvariant()}");
+        shards.Emit(context, generatedNamespace, schema.Name.ToUpperInvariant());
     }
 
     private static Constructor CreateConstructor()
@@ -204,13 +223,68 @@ internal static class ExpressSchemaDescriptorEmitter
     }
 
     private static Method CreateHydrateMethod(
+        ExpressBoundSchemaIdentity currentSchema,
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        ExpressDescriptorShards shards)
     {
-        var diagnosticsType = new DataType(
-            "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.Step21Diagnostic>");
-        var method = CreateOverrideMethod("HydrateEntityCore", diagnosticsType);
+        const string diagnosticsTypeName =
+            "global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.Step21Diagnostic>";
+        var diagnosticsType = new DataType(diagnosticsTypeName);
+        var selectHydrationHelpers = new SelectHydrationHelpers(
+            currentSchema,
+            resolver,
+            shards);
+        var branches = new List<IfStatement>();
+        foreach (var entity in entities.Where(entity => CanMapEntity(entity, resolver)))
+        {
+            branches.Add(CreateHydrateEntityBranch(entity, resolver, selectHydrationHelpers));
+        }
+
+        foreach (var entity in complexEntities)
+        {
+            branches.Add(CreateHydrateComplexEntityBranch(entity, resolver, selectHydrationHelpers));
+        }
+
+        var dispatch = CreateOverrideMethod("HydrateEntityCore", diagnosticsType);
+        AddHydrationParameters(dispatch);
+        for (var offset = 0; offset < branches.Count; offset += HYDRATION_BRANCHES_PER_METHOD)
+        {
+            var groupIndex = offset / HYDRATION_BRANCHES_PER_METHOD;
+            var methodName = $"__ExpressTryHydrateGroup{groupIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var shardName = $"__ExpressHydrationShard{groupIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var resultName = $"hydrationResult{groupIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            dispatch.AddStatement(new CustomExpression(
+                $"var {resultName} = {shards.Qualify(methodName, shardName)}(structure, value, components)"));
+            dispatch.AddStatement(new IfStatement(new CustomExpression($"{resultName} is not null"))
+                .AddStatement(new CustomExpression(resultName).Return));
+
+            var group = SourceComposer<ExpressIncrementalGenerator>.Method(
+                methodName,
+                SourceComposer.ReturnType(new DataType(diagnosticsTypeName).Null));
+            group.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+            group.IsStatic = true;
+            AddHydrationParameters(group);
+            foreach (var branch in branches.Skip(offset).Take(HYDRATION_BRANCHES_PER_METHOD))
+            {
+                group.AddStatement(branch);
+            }
+
+            group.AddStatement(new CustomExpression("null").Return);
+            shards.Add(group, shardName);
+        }
+
+        dispatch.AddStatement(new CustomExpression(
+            "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-ENTITY\", "
+            + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
+            + "\"The entity is not supported by this schema descriptor.\")]").Return);
+        AddSummary(dispatch, "Hydrates one supported entity from strong physical components and parameters.");
+        return dispatch;
+    }
+
+    private static void AddHydrationParameters(Method method)
+    {
         method.AddParameter(SourceComposer.Parameter(
             new DataType("global::TedToolkit.Step21.ExchangeStructure"),
             "structure"));
@@ -219,22 +293,6 @@ internal static class ExpressSchemaDescriptorEmitter
             new DataType(
                 "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>>"),
             "components"));
-        foreach (var entity in entities.Where(entity => CanMapEntity(entity, resolver)))
-        {
-            method.AddStatement(CreateHydrateEntityBranch(entity, resolver));
-        }
-
-        foreach (var entity in complexEntities)
-        {
-            method.AddStatement(CreateHydrateComplexEntityBranch(entity, resolver));
-        }
-
-        method.AddStatement(new CustomExpression(
-            "[new global::TedToolkit.Step21.Step21Diagnostic(\"P21-BIND-ENTITY\", "
-            + "global::TedToolkit.Step21.Step21DiagnosticSeverity.Error, "
-            + "\"The entity is not supported by this schema descriptor.\")]").Return);
-        AddSummary(method, "Hydrates one supported entity from strong physical components and parameters.");
-        return method;
     }
 
     private static Method CreateCapabilityMethod()
@@ -310,7 +368,8 @@ internal static class ExpressSchemaDescriptorEmitter
 
     private static IfStatement CreateHydrateEntityBranch(
         ExpressEntityProjection entity,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         var typedName = $"typed{entity.Name}";
         var branch = new IfStatement(new CustomExpression($"value is {entity.Name} {typedName}"))
@@ -332,7 +391,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 index,
                 typedName,
                 resolver,
-                entity.Entity.Name));
+                entity.Entity.Name,
+                selectHydrationHelpers));
         }
 
         branch.AddStatement(new CustomExpression("diagnostics").Return);
@@ -341,7 +401,8 @@ internal static class ExpressSchemaDescriptorEmitter
 
     private static IfStatement CreateHydrateComplexEntityBranch(
         ExpressComplexEntityProjection entity,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         var typedName = $"typed{entity.Name}";
         var branch = new IfStatement(new CustomExpression($"value is {entity.Name} {typedName}"))
@@ -380,6 +441,7 @@ internal static class ExpressSchemaDescriptorEmitter
                     typedName,
                     resolver,
                     component.Entity.Name,
+                    selectHydrationHelpers,
                     entity.IsDerivedRedeclared(physicalAttribute)));
             }
 
@@ -408,6 +470,7 @@ internal static class ExpressSchemaDescriptorEmitter
         string typedName,
         ExpressGeneratedTypeResolver resolver,
         string physicalEntityName,
+        SelectHydrationHelpers selectHydrationHelpers,
         bool isDerivedRedeclared = false)
     {
         var parameterName = $"parameter{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
@@ -426,6 +489,7 @@ internal static class ExpressSchemaDescriptorEmitter
             typedName,
             invalid,
             resolver,
+            selectHydrationHelpers,
             isDerivedRedeclared);
         IfStatement hydration;
         if (attribute.Attribute.IsOptional)
@@ -656,6 +720,7 @@ internal static class ExpressSchemaDescriptorEmitter
         string typedName,
         CustomExpression invalid,
         ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers,
         bool isDerivedRedeclared)
     {
         if (isDerivedRedeclared || entity.IsDerivedRedeclared(attribute))
@@ -685,14 +750,13 @@ internal static class ExpressSchemaDescriptorEmitter
             && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
         {
             return CreateSelectHydrationBranch(
-                entity.Schema.Identity,
                 namedSelect,
                 select,
                 index,
                 parameterName,
                 target,
                 invalid,
-                resolver);
+                selectHydrationHelpers);
         }
 
         var terminalType = ExpressDescriptorTypeSupport.GetTerminalType(attribute.Type, resolver);
@@ -706,7 +770,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 parameterName,
                 target,
                 invalid,
-                resolver);
+                resolver,
+                selectHydrationHelpers);
         }
 
         if (terminalType is ExpressBoundScalarType scalar)
@@ -838,7 +903,8 @@ internal static class ExpressSchemaDescriptorEmitter
         string parameterName,
         string target,
         CustomExpression invalid,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         if (!ExpressDescriptorTypeSupport.TryGetAggregateBounds(
                 aggregate,
@@ -863,7 +929,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 aggregate.ElementType,
                 element,
                 raw,
-                resolver);
+                resolver,
+                selectHydrationHelpers);
             if (aggregate.IsOptional)
             {
                 elementCondition = $"{element}.Kind == global::TedToolkit.Step21.ParameterValueKind.Omitted"
@@ -880,7 +947,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 aggregate.ElementType,
                 element,
                 raw,
-                resolver);
+                resolver,
+                selectHydrationHelpers);
             condition += " && global::System.Linq.Enumerable.All("
                 + $"{elements}, {element} => {elementCondition})";
         }
@@ -897,7 +965,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 aggregate.ElementType,
                 $"{item}.{element}",
                 arrayRaw,
-                resolver);
+                resolver,
+                selectHydrationHelpers);
             populated = "global::System.Linq.Enumerable.Aggregate("
                 + $"global::System.Linq.Enumerable.Select({elements}, ({element}, {offset}) => ({element}, {offset})), "
                 + $"{candidate}, (aggregateCandidate, {item}) => {{ "
@@ -915,7 +984,8 @@ internal static class ExpressSchemaDescriptorEmitter
                 aggregate.ElementType,
                 element,
                 aggregateRaw,
-                resolver);
+                resolver,
+                selectHydrationHelpers);
             populated = "global::System.Linq.Enumerable.Aggregate("
                 + $"{elements}, {candidate}, (aggregateCandidate, {element}) => {{ "
                 + $"aggregateCandidate.Add({read}); return aggregateCandidate; }})";
@@ -1001,7 +1071,8 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressBoundType type,
         string parameter,
         string rawName,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         if (type is ExpressBoundNamedType namedEntity
             && namedEntity.Declaration.Kind == ExpressDeclarationKind.Entity)
@@ -1013,15 +1084,7 @@ internal static class ExpressSchemaDescriptorEmitter
         if (type is ExpressBoundNamedType namedSelect
             && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
         {
-            var branches = CreateSelectReadBranches(
-                currentSchema,
-                namedSelect,
-                select,
-                parameter,
-                rawName,
-                resolver,
-                new HashSet<ExpressBoundSymbol>());
-            return $"({string.Join(" || ", branches.Select(branch => $"({branch.Condition})"))})";
+            return selectHydrationHelpers.CreateCall(namedSelect, select, parameter, "_");
         }
 
         var terminal = ExpressDescriptorTypeSupport.GetTerminalType(type, resolver);
@@ -1050,7 +1113,8 @@ internal static class ExpressSchemaDescriptorEmitter
         ExpressBoundType type,
         string parameter,
         string rawName,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         if (type is ExpressBoundNamedType namedEntity
             && namedEntity.Declaration.Kind == ExpressDeclarationKind.Entity)
@@ -1063,16 +1127,9 @@ internal static class ExpressSchemaDescriptorEmitter
         if (type is ExpressBoundNamedType namedSelect
             && resolver.GetDefinedType(namedSelect.Declaration).UnderlyingType is ExpressBoundSelectType select)
         {
-            var branches = CreateSelectReadBranches(
-                currentSchema,
-                namedSelect,
-                select,
-                parameter,
-                rawName,
-                resolver,
-                new HashSet<ExpressBoundSymbol>());
-            return string.Concat(branches.Select(branch => $"{branch.Condition} ? {branch.Value} : "))
-                + "throw new global::System.InvalidOperationException()";
+            var valueName = rawName + "Select";
+            return selectHydrationHelpers.CreateCall(namedSelect, select, parameter, $"var {valueName}")
+                + $" ? {valueName} : throw new global::System.InvalidOperationException()";
         }
 
         var terminal = ExpressDescriptorTypeSupport.GetTerminalType(type, resolver);
@@ -1249,39 +1306,19 @@ internal static class ExpressSchemaDescriptorEmitter
     }
 
     private static IfStatement CreateSelectHydrationBranch(
-        ExpressBoundSchemaIdentity currentSchema,
         ExpressBoundNamedType namedSelect,
         ExpressBoundSelectType select,
         int index,
         string parameterName,
         string target,
         CustomExpression invalid,
-        ExpressGeneratedTypeResolver resolver)
+        SelectHydrationHelpers selectHydrationHelpers)
     {
         var parameter = $"parameters[{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}]";
-        var branches = CreateSelectReadBranches(
-            currentSchema,
-            namedSelect,
-            select,
-            parameter,
-            parameterName,
-            resolver,
-            new HashSet<ExpressBoundSymbol>());
-        IfStatement? result = null;
-        foreach (var branch in branches)
-        {
-            var assignment = new CustomExpression($"{target} = {branch.Value}");
-            if (result is null)
-            {
-                result = new IfStatement(new CustomExpression(branch.Condition)).AddStatement(assignment);
-            }
-            else
-            {
-                result.ElseIf(new CustomExpression(branch.Condition)).AddStatement(assignment);
-            }
-        }
-
-        return (result ?? new(new CustomExpression("false")))
+        var valueName = parameterName + "Select";
+        return new IfStatement(new CustomExpression(
+                selectHydrationHelpers.CreateCall(namedSelect, select, parameter, $"var {valueName}")))
+            .AddStatement(new CustomExpression($"{target} = {valueName}"))
             .Else()
             .AddStatement(invalid);
     }
@@ -1478,6 +1515,97 @@ internal static class ExpressSchemaDescriptorEmitter
     private static ExpressBoundNamedType CreateNamedType(ExpressBoundSymbol symbol)
     {
         return new(symbol, symbol.Span);
+    }
+
+    /// <summary>
+    /// Owns one shared parameter reader per named SELECT used by descriptor hydration.
+    /// </summary>
+    private sealed class SelectHydrationHelpers
+    {
+        private readonly ExpressBoundSchemaIdentity _currentSchema;
+
+        private readonly ExpressGeneratedTypeResolver _resolver;
+
+        private readonly ExpressDescriptorShards _shards;
+
+        private readonly Dictionary<ExpressBoundSymbol, string> _calls = [];
+
+        /// <summary>
+        /// Initializes shared SELECT readers for one generated descriptor.
+        /// </summary>
+        /// <param name="currentSchema">The schema owning generated use sites.</param>
+        /// <param name="resolver">The generated value-type resolver.</param>
+        /// <param name="shards">The structural descriptor partitions.</param>
+        internal SelectHydrationHelpers(
+            ExpressBoundSchemaIdentity currentSchema,
+            ExpressGeneratedTypeResolver resolver,
+            ExpressDescriptorShards shards)
+        {
+            _currentSchema = currentSchema;
+            _resolver = resolver;
+            _shards = shards;
+        }
+
+        /// <summary>
+        /// Creates a call to the shared reader for one named SELECT.
+        /// </summary>
+        /// <param name="namedSelect">The named SELECT type.</param>
+        /// <param name="select">The resolved SELECT domain.</param>
+        /// <param name="parameter">The parameter-value expression.</param>
+        /// <param name="output">The generated out argument without the <c>out</c> modifier.</param>
+        /// <returns>The generated reader call.</returns>
+        internal string CreateCall(
+            ExpressBoundNamedType namedSelect,
+            ExpressBoundSelectType select,
+            string parameter,
+            string output)
+        {
+            if (!_calls.TryGetValue(namedSelect.Declaration, out var callName))
+            {
+                var ordinal = _calls.Count;
+                var suffix = ExpressEntityProjection.ToPascalCase(namedSelect.Declaration.Name)
+                    + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var methodName = "__ExpressTryReadSelect" + suffix;
+                var shardName = "__ExpressSelectHydrationShard"
+                    + (ordinal / SELECT_HYDRATION_METHODS_PER_SHARD)
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture);
+                callName = _shards.Qualify(methodName, shardName);
+                _calls.Add(namedSelect.Declaration, callName);
+
+                var method = SourceComposer<ExpressIncrementalGenerator>.Method(
+                    methodName,
+                    SourceComposer.ReturnType(new DataType("global::System.Boolean")));
+                method.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+                method.IsStatic = true;
+                var selectType = GetGeneratedTypeName(_currentSchema, namedSelect.Declaration);
+                method.AddParameter(SourceComposer.Parameter(
+                    new DataType("global::TedToolkit.Step21.ParameterValue"),
+                    "parameter"));
+                method.AddParameter(SourceComposer.Parameter(new DataType("out " + selectType), "value"));
+
+                var branches = CreateSelectReadBranches(
+                    _currentSchema,
+                    namedSelect,
+                    select,
+                    "parameter",
+                    "selectRead" + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    _resolver,
+                    new HashSet<ExpressBoundSymbol>());
+                foreach (var branch in branches)
+                {
+                    method.AddStatement(new IfStatement(new CustomExpression(branch.Condition))
+                        .AddStatement(new CustomExpression($"value = {branch.Value}"))
+                        .AddStatement(new CustomExpression("true").Return));
+                }
+
+                method.AddStatement(new CustomExpression("value = default!"));
+                method.AddStatement(new CustomExpression("false").Return);
+                AddSummary(method, "Reads one named SELECT value through its compatible typed alternative.");
+                _shards.Add(method, shardName);
+            }
+
+            return $"{callName}({parameter}, out {output})";
+        }
     }
 
     private sealed class SelectReadBranch(string condition, string value)

@@ -68,7 +68,24 @@ internal static class ExpressValueEmitter
             projection.Schema.Name,
             $"TYPE {projection.Declaration.Name}");
         record.AddMember(CreateValueProperty(valueType, isReferenceType));
-        record.AddMember(CreateValueConstructor(projection.Name, valueType, isReferenceType, isPublic: true));
+        var constructor = CreateValueConstructor(
+            projection.Name,
+            valueType,
+            isReferenceType,
+            isPublic: true);
+        if (projection.Declaration.UnderlyingType is ExpressBoundAggregateType aggregateType)
+        {
+            var viewType = projection.Resolver.ResolveAggregateView(
+                projection.Schema.Identity,
+                aggregateType);
+            record.AddMember(CreateAggregateViewProperty(viewType));
+            constructor.AddStatement("ReadOnlyValue".ToSimpleName().Assign("value".ToSimpleName()));
+            record.AddMember(CreateAggregateViewConstructor(
+                projection.Name,
+                viewType));
+        }
+
+        record.AddMember(constructor);
         return record;
     }
 
@@ -135,14 +152,11 @@ internal static class ExpressValueEmitter
             projection.Schema.Name,
             $"TYPE {projection.Declaration.Name}");
         record.AddMember(CreateKindProperty(kindName));
-        foreach (var alternative in alternatives)
-        {
-            record.AddMember(CreateSelectField(alternative));
-        }
+        record.AddMember(CreateSelectValueField());
 
         foreach (var alternative in alternatives)
         {
-            record.AddMember(CreateSelectConstructor(kindName, alternatives, alternative));
+            record.AddMember(CreateSelectConstructor(kindName, alternative));
             record.AddMember(CreateSelectFactory(projection.Name, alternative));
             record.AddMember(CreateSelectTryGet(kindName, alternative));
         }
@@ -164,6 +178,37 @@ internal static class ExpressValueEmitter
 
         AddSummary(property, "Gets the retained strongly typed value.");
         return property;
+    }
+
+    private static Property CreateAggregateViewProperty(DataType viewType)
+    {
+        var property = SourceComposer<ExpressIncrementalGenerator>.Property(viewType, "ReadOnlyValue");
+        property.Accessibility = TedToolkit.RoslynHelper.Accessibility.PUBLIC;
+        property.AddAccessor(SourceComposer<ExpressIncrementalGenerator>.Accessor(AccessorType.GET));
+        property.AddAttribute(SourceComposer.Attribute(new DataType(
+            "global::System.Diagnostics.CodeAnalysis.NotNullAttribute")));
+        AddSummary(property, "Gets the retained aggregate through its live read-only view.");
+        return property;
+    }
+
+    private static Constructor CreateAggregateViewConstructor(
+        string ownerName,
+        DataType viewType)
+    {
+        var constructor = SourceComposer<ExpressIncrementalGenerator>.Constructor();
+        constructor.Accessibility = TedToolkit.RoslynHelper.Accessibility.INTERNAL;
+        var parameter = SourceComposer.Parameter(viewType, "value");
+        parameter.AddAttribute(SourceComposer.Attribute(new DataType(
+            "global::System.Diagnostics.CodeAnalysis.DisallowNullAttribute")));
+        constructor.AddParameter(parameter);
+        constructor.AddStatement("Value".ToSimpleName()
+            .Assign(new CustomExpression("default!")));
+        constructor.AddStatement("ReadOnlyValue".ToSimpleName().Assign("value".ToSimpleName()));
+        AddSummary(constructor, $"Initializes a projected read-only {ownerName} aggregate view.");
+        constructor.AddRootDescription(new DescriptionParam(
+            "value",
+            new IDescriptionItem[] { new DescriptionText("The retained live aggregate view."), }));
+        return constructor;
     }
 
     private static Constructor CreateValueConstructor(
@@ -223,12 +268,11 @@ internal static class ExpressValueEmitter
         return property;
     }
 
-    private static Field CreateSelectField(SelectAlternative alternative)
+    private static Field CreateSelectValueField()
     {
-        var fieldType = alternative.Type.IsReferenceType
-            ? new DataType(alternative.Type.DataType.Type).Null
-            : alternative.Type.DataType;
-        var field = SourceComposer<ExpressIncrementalGenerator>.Field(fieldType, FieldName(alternative));
+        var field = SourceComposer<ExpressIncrementalGenerator>.Field(
+            new DataType("global::System.Object"),
+            "_value");
         field.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
         field.IsReadonly = true;
         return field;
@@ -236,7 +280,6 @@ internal static class ExpressValueEmitter
 
     private static Constructor CreateSelectConstructor(
         string kindName,
-        IReadOnlyList<SelectAlternative> alternatives,
         SelectAlternative selected)
     {
         var constructor = SourceComposer<ExpressIncrementalGenerator>.Constructor();
@@ -244,13 +287,7 @@ internal static class ExpressValueEmitter
         var parameterName = ParameterName(selected);
         constructor.AddParameter(SourceComposer.Parameter(selected.Type.DataType, parameterName));
         constructor.AddStatement("Kind".ToSimpleName().Assign($"{kindName}.{selected.Name}".ToSimpleName()));
-        foreach (var alternative in alternatives)
-        {
-            constructor.AddStatement(FieldName(alternative).ToSimpleName().Assign(
-                ReferenceEquals(alternative, selected)
-                    ? parameterName.ToSimpleName()
-                    : "default".ToSimpleName()));
-        }
+        constructor.AddStatement("_value".ToSimpleName().Assign(parameterName.ToSimpleName()));
 
         AddSummary(constructor, $"Initializes the {selected.Symbol.Name} select alternative.");
         constructor.AddRootDescription(new DescriptionParam(
@@ -303,7 +340,7 @@ internal static class ExpressValueEmitter
         method.AddParameter(parameter);
         var whenSelected = new IfStatement(
             "Kind".ToSimpleName().EqualTo($"{kindName}.{alternative.Name}".ToSimpleName()))
-            .AddStatement("value".ToSimpleName().Assign(FieldName(alternative).ToSimpleName()))
+            .AddStatement("value".ToSimpleName().Assign(SelectValue(alternative)))
             .AddStatement(true.ToLiteral().Return);
         method.AddStatement(whenSelected);
         method.AddStatement("value".ToSimpleName().Assign("default".ToSimpleName()));
@@ -343,7 +380,7 @@ internal static class ExpressValueEmitter
         {
             var invoke = ParameterName(alternative).ToSimpleName()
                 .Invoke()
-                .AddArgument(SourceComposer.Argument(FieldName(alternative).ToSimpleName()));
+                .AddArgument(SourceComposer.Argument(SelectValue(alternative)));
             method.AddStatement(new IfStatement(
                     "Kind".ToSimpleName().EqualTo($"{kindName}.{alternative.Name}".ToSimpleName()))
                 .AddStatement(invoke.Return));
@@ -373,9 +410,9 @@ internal static class ExpressValueEmitter
             .AddArgument(SourceComposer.Argument(argument));
     }
 
-    private static string FieldName(SelectAlternative alternative)
+    private static CastExpression SelectValue(SelectAlternative alternative)
     {
-        return $"_{LowerFirst(alternative.Name)}";
+        return new(alternative.Type.DataType, "_value".ToSimpleName());
     }
 
     private static string ParameterName(SelectAlternative alternative)

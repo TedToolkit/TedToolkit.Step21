@@ -40,8 +40,9 @@ internal static class ExpressExpressionFlowAnalysisStage
         ExpressBoundSchema schema,
         ExpressBindingCompilation compilation)
     {
+        var declarations = schema.Declarations.Concat(schema.NestedDeclarations).ToArray();
         var facts = ExpressExpressionBinder.Bind(
-            schema.Declarations,
+            declarations,
             schema.NameReferences.Concat(schema.LexicalNames.Select(name =>
                 new ExpressBoundNameReference(name, isApplication: false, name.Span))).ToArray(),
             compilation.GetSyntax);

@@ -1,0 +1,19 @@
+{
+  "packageId": "TedToolkit.Step21.Ap214",
+  "targetFramework": "net10.0",
+  "intendedFirstStableVersion": "1.0.0",
+  "previousStableBaseline": null,
+  "upstreamRevision": "9baa5dadaa1dcfcdc623220d865d36d61ea351e9",
+  "upstreamPath": "data/ap214e3/AP214E3_2010.exp",
+  "sourceFile": "AP214E3_2010.exp",
+  "sourceCanonicalLfSha256": "9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7",
+  "edition": "ISO/DIS 10303-214:2007",
+  "closedSchemas": ["AUTOMOTIVE_DESIGN"],
+  "descriptor": "TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor",
+  "runtimeRange": "[1.0.0,2.0.0)",
+  "publicApiSnapshot": "PublicApi.approved.sha256",
+  "sourceLicense": "BSD-3-Clause",
+  "fixtureSha256": "84B04D7AEFF27157B0FBEE09D681977E516C4F16C6CD6C4EF41E34FE8C4EC722",
+  "fixtureEdition": "OCCT AP214IS; test-only migration to the pinned 2007-DIS baseline",
+  "conformanceScope": "Fixed manifold B-rep box: product, topology, geometry, units, values, instance identity and named references; not complete AP214 conformance"
+}

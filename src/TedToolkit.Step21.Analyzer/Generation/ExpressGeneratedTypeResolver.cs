@@ -5,6 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Globalization;
+using System.Numerics;
+
 using TedToolkit.RoslynHelper.Syntaxes;
 
 using TedToolkit.Step21.Analyzer.Express.Analysis;
@@ -24,6 +27,8 @@ internal sealed class ExpressGeneratedTypeResolver
     private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundEntity> _entities;
 
     private readonly HashSet<ExpressBoundSymbol> _supportedDefinedTypes = [];
+
+    private readonly Dictionary<ExpressBoundSelectType, IReadOnlyList<ExpressBoundSymbol>> _selectAlternatives = [];
 
     private ExpressGeneratedTypeResolver(
         IReadOnlyList<ExpressBoundDefinedType> orderedDefinedTypes,
@@ -57,6 +62,21 @@ internal sealed class ExpressGeneratedTypeResolver
             .SelectMany(schema => schema.Declarations.OfType<ExpressBoundEntity>())
             .ToArray();
         return new(definedTypes, entities);
+    }
+
+    /// <summary>
+    /// Resolves the aggregate domain beneath any nominal aliases without changing their generated identity.
+    /// </summary>
+    /// <param name="type">The declared value domain.</param>
+    /// <returns>The underlying aggregate, or null for a non-aggregate domain.</returns>
+    internal ExpressBoundAggregateType? GetAggregateType(ExpressBoundType type)
+    {
+        while (type is ExpressBoundNamedType named && named.Declaration.Kind != ExpressDeclarationKind.Entity)
+        {
+            type = GetDefinedType(named.Declaration).UnderlyingType;
+        }
+
+        return type as ExpressBoundAggregateType;
     }
 
     /// <summary>
@@ -174,6 +194,11 @@ internal sealed class ExpressGeneratedTypeResolver
     /// <returns>The distinct declared alternatives.</returns>
     internal IReadOnlyList<ExpressBoundSymbol> GetSelectAlternatives(ExpressBoundSelectType select)
     {
+        if (_selectAlternatives.TryGetValue(select, out var cached))
+        {
+            return cached;
+        }
+
         var alternatives = new List<ExpressBoundSymbol>();
         if (select.BaseType is not null
             && GetDefinedType(select.BaseType).UnderlyingType is ExpressBoundSelectType baseSelect)
@@ -192,7 +217,9 @@ internal sealed class ExpressGeneratedTypeResolver
                 .SelectMany(candidate => candidate.Alternatives));
         }
 
-        return alternatives.Distinct().ToArray();
+        var result = alternatives.Distinct().ToArray();
+        _selectAlternatives.Add(select, result);
+        return result;
     }
 
     /// <summary>
@@ -234,21 +261,84 @@ internal sealed class ExpressGeneratedTypeResolver
             return ExpressRedeclarationClassification.Equivalent;
         }
 
-        if (TryGetClosedEntityLeaves(original, out var originalLeaves)
-            && TryGetClosedEntityLeaves(narrowed, out var narrowedLeaves))
+        if (TryGetTransparentAlias(original, out var inheritedAlias))
         {
-            if (!narrowedLeaves.All(candidate => originalLeaves.Any(parent => IsEntitySubtype(candidate, parent))))
+            return ClassifySpecialization(inheritedAlias, narrowed);
+        }
+
+        if (narrowed is ExpressBoundNamedType namedAlternative)
+        {
+            var nominalPaths = FindNominalSelectProjection(original, namedAlternative.Declaration, out _);
+            if (nominalPaths > 0)
+            {
+                return nominalPaths == 1
+                    ? ExpressRedeclarationClassification.Supported
+                    : ExpressRedeclarationClassification.Unsupported;
+            }
+
+            var aggregatePaths = FindAggregateSelectProjection(
+                original,
+                namedAlternative.Declaration,
+                out _);
+            if (aggregatePaths > 0)
+            {
+                return aggregatePaths == 1
+                    ? ExpressRedeclarationClassification.Supported
+                    : ExpressRedeclarationClassification.Unsupported;
+            }
+        }
+
+        if (TryGetSpecializedAlias(original, narrowed, out _))
+        {
+            return ExpressRedeclarationClassification.Supported;
+        }
+
+        if (TryGetClosedSelect(original, out var inheritedSelect)
+            && TryGetClosedSelect(narrowed, out var narrowedSelect))
+        {
+            var classification = ExpressRedeclarationClassification.Supported;
+            foreach (var alternative in GetSelectAlternatives(narrowedSelect))
+            {
+                var branchClassification = ClassifySpecialization(
+                    original,
+                    new ExpressBoundNamedType(alternative, narrowed.Span));
+                if (branchClassification == ExpressRedeclarationClassification.Invalid)
+                {
+                    return branchClassification;
+                }
+
+                if (branchClassification == ExpressRedeclarationClassification.Unsupported)
+                {
+                    classification = branchClassification;
+                }
+            }
+
+            return classification;
+        }
+
+        if (TryGetClosedSelect(original, out inheritedSelect)
+            && TryGetClosedEntityLeaves(narrowed, out var selectedLeaves))
+        {
+            if (!selectedLeaves.All(candidate => GetSelectAlternatives(inheritedSelect)
+                    .Any(alternative => CanProjectEntityTo(candidate, alternative))))
             {
                 return ExpressRedeclarationClassification.Invalid;
             }
 
-            return TryGetClosedSelect(original, out var originalSelect)
-                && narrowedLeaves.Any(candidate => !TrySelectProjectionAlternative(
+            return selectedLeaves.Any(candidate => !TrySelectProjectionAlternative(
                     candidate,
-                    originalSelect,
+                    inheritedSelect,
                     out _))
                     ? ExpressRedeclarationClassification.Unsupported
                     : ExpressRedeclarationClassification.Supported;
+        }
+
+        if (TryGetClosedEntityLeaves(original, out var originalLeaves)
+            && TryGetClosedEntityLeaves(narrowed, out var narrowedLeaves))
+        {
+            return narrowedLeaves.All(candidate => originalLeaves.Any(parent => IsEntitySubtype(candidate, parent)))
+                ? ExpressRedeclarationClassification.Supported
+                : ExpressRedeclarationClassification.Invalid;
         }
 
         if (original is ExpressBoundScalarType originalScalar
@@ -264,45 +354,27 @@ internal sealed class ExpressGeneratedTypeResolver
             && narrowed is ExpressBoundAggregateType narrowedAggregate)
         {
             if (originalAggregate.Kind != narrowedAggregate.Kind
-                || !AggregateMetadataEquivalent(originalAggregate, narrowedAggregate)
+                || (!AggregateMetadataEquivalent(originalAggregate, narrowedAggregate)
+                    && !IsCardinalityNarrowing(originalAggregate, narrowedAggregate))
                 || originalAggregate.ElementType is ExpressBoundAggregateType
                 || narrowedAggregate.ElementType is ExpressBoundAggregateType)
             {
                 return ExpressRedeclarationClassification.Unsupported;
             }
 
-            if (TryGetDirectEntity(originalAggregate.ElementType, out var originalEntity)
-                && TryGetDirectEntity(narrowedAggregate.ElementType, out var narrowedEntity))
+            var elementClassification = ClassifySpecialization(
+                originalAggregate.ElementType,
+                narrowedAggregate.ElementType);
+            if (elementClassification == ExpressRedeclarationClassification.Invalid
+                && (!TryGetClosedEntityLeaves(originalAggregate.ElementType, out _)
+                    || !TryGetClosedEntityLeaves(narrowedAggregate.ElementType, out _)))
             {
-                return IsEntitySubtype(narrowedEntity, originalEntity)
-                    ? ExpressRedeclarationClassification.Supported
-                    : ExpressRedeclarationClassification.Invalid;
+                return ExpressRedeclarationClassification.Unsupported;
             }
 
-            if (TryGetClosedEntityLeaves(originalAggregate.ElementType, out var originalElementLeaves)
-                && TryGetClosedEntityLeaves(narrowedAggregate.ElementType, out var narrowedElementLeaves))
-            {
-                if (!narrowedElementLeaves.All(candidate =>
-                        originalElementLeaves.Any(parent => IsEntitySubtype(candidate, parent))))
-                {
-                    return ExpressRedeclarationClassification.Invalid;
-                }
-
-                if (!TryGetClosedSelect(narrowedAggregate.ElementType, out _))
-                {
-                    return ExpressRedeclarationClassification.Unsupported;
-                }
-
-                return TryGetClosedSelect(originalAggregate.ElementType, out var originalSelect)
-                    && narrowedElementLeaves.Any(candidate => !TrySelectProjectionAlternative(
-                        candidate,
-                        originalSelect,
-                        out _))
-                        ? ExpressRedeclarationClassification.Unsupported
-                        : ExpressRedeclarationClassification.Supported;
-            }
-
-            return ExpressRedeclarationClassification.Unsupported;
+            return elementClassification == ExpressRedeclarationClassification.Equivalent
+                ? ExpressRedeclarationClassification.Supported
+                : elementClassification;
         }
 
         var originalIsEntityDomain = TryGetClosedEntityLeaves(original, out _);
@@ -383,11 +455,68 @@ internal sealed class ExpressGeneratedTypeResolver
             return expression;
         }
 
+        if (target is ExpressBoundNamedType targetAlias
+            && TryGetTransparentAlias(target, out var underlyingTarget))
+        {
+            var projected = CreateSpecializationProjection(
+                currentSchema,
+                source,
+                underlyingTarget,
+                expression);
+            return $"new {GeneratedTypeName(currentSchema, targetAlias.Declaration)}({projected})";
+        }
+
+        if (source is ExpressBoundNamedType sourceAlternative
+            && target is ExpressBoundNamedType targetSelect
+            && FindNominalSelectProjection(target, sourceAlternative.Declaration, out var nominalPath) == 1)
+        {
+            for (var index = nominalPath.Count - 1; index >= 0; index--)
+            {
+                var owner = index == 0 ? targetSelect.Declaration : nominalPath[index - 1];
+                expression = $"{GeneratedTypeName(currentSchema, owner)}."
+                    + $"From{ExpressEntityProjection.ToPascalCase(nominalPath[index].Name)}({expression})";
+            }
+
+            return expression;
+        }
+
+        if (source is ExpressBoundNamedType sourceAggregateAlternative
+            && target is ExpressBoundNamedType targetAggregateSelect
+            && FindAggregateSelectProjection(
+                target,
+                sourceAggregateAlternative.Declaration,
+                out var aggregatePath) == 1)
+        {
+            var storedAggregate = GetDefinedType(sourceAggregateAlternative.Declaration).UnderlyingType;
+            var terminalAlternative = aggregatePath[aggregatePath.Count - 1];
+            var terminal = GetDefinedType(terminalAlternative).UnderlyingType;
+            var projected = CreateSpecializationProjection(
+                currentSchema,
+                storedAggregate,
+                terminal,
+                $"({expression}).ReadOnlyValue");
+            expression = $"new {GeneratedTypeName(currentSchema, terminalAlternative)}({projected})";
+            for (var index = aggregatePath.Count - 1; index >= 0; index--)
+            {
+                var owner = index == 0 ? targetAggregateSelect.Declaration : aggregatePath[index - 1];
+                expression = $"{GeneratedTypeName(currentSchema, owner)}."
+                    + $"From{ExpressEntityProjection.ToPascalCase(aggregatePath[index].Name)}({expression})";
+            }
+
+            return expression;
+        }
+
+        if (TryGetSpecializedAlias(target, source, out var underlying))
+        {
+            return CreateSpecializationProjection(currentSchema, underlying, target, $"({expression}).Value");
+        }
+
         if (source is ExpressBoundAggregateType sourceAggregate
             && target is ExpressBoundAggregateType targetAggregate)
         {
-            if (TryGetDirectEntity(sourceAggregate.ElementType, out _)
-                && TryGetDirectEntity(targetAggregate.ElementType, out _))
+            if (AreRedeclarationEquivalent(sourceAggregate.ElementType, targetAggregate.ElementType)
+                || (TryGetDirectEntity(sourceAggregate.ElementType, out _)
+                    && TryGetDirectEntity(targetAggregate.ElementType, out _)))
             {
                 return expression;
             }
@@ -444,6 +573,142 @@ internal sealed class ExpressGeneratedTypeResolver
             + $"to '{Resolve(currentSchema, target).DataType.Type}'.");
     }
 
+    /// <summary>
+    /// Finds an exact nominal SELECT route, counting at most two routes to distinguish ambiguity.
+    /// </summary>
+    /// <param name="type">The inherited SELECT domain.</param>
+    /// <param name="alternative">The stored nominal alternative.</param>
+    /// <param name="path">The outer-to-inner route when unique.</param>
+    /// <returns>Zero for no route, one for a unique route, or two for ambiguity.</returns>
+    private int FindNominalSelectProjection(
+        ExpressBoundType type,
+        ExpressBoundSymbol alternative,
+        out IReadOnlyList<ExpressBoundSymbol> path)
+    {
+        path = [];
+        if (!TryGetClosedSelect(type, out var select))
+        {
+            return 0;
+        }
+
+        var alternatives = GetSelectAlternatives(select);
+        if (alternatives.Contains(alternative))
+        {
+            path = [alternative,];
+            return 1;
+        }
+
+        if (alternative.Kind == ExpressDeclarationKind.Entity)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var candidate in alternatives)
+        {
+            var nestedCount = FindNominalSelectProjection(
+                new ExpressBoundNamedType(candidate, type.Span),
+                alternative,
+                out var nestedPath);
+            count += nestedCount;
+            if (count > 1)
+            {
+                path = [];
+                return 2;
+            }
+
+            if (nestedCount == 1)
+            {
+                path = new[] { candidate, }.Concat(nestedPath).ToArray();
+            }
+        }
+
+        return count;
+    }
+
+    private int FindAggregateSelectProjection(
+        ExpressBoundType type,
+        ExpressBoundSymbol alternative,
+        out IReadOnlyList<ExpressBoundSymbol> path)
+    {
+        path = [];
+        if (!TryGetClosedSelect(type, out var select)
+            || !_definedTypes.TryGetValue(alternative, out var narrowedDeclaration)
+            || narrowedDeclaration.UnderlyingType is not ExpressBoundAggregateType narrowedAggregate)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var candidate in GetSelectAlternatives(select))
+        {
+            if (_definedTypes.TryGetValue(candidate, out var candidateDeclaration)
+                && candidateDeclaration.UnderlyingType is ExpressBoundAggregateType candidateAggregate
+                && ClassifySpecialization(candidateAggregate, narrowedAggregate)
+                    == ExpressRedeclarationClassification.Supported)
+            {
+                count++;
+                path = [candidate,];
+            }
+            else
+            {
+                var nestedCount = FindAggregateSelectProjection(
+                    new ExpressBoundNamedType(candidate, type.Span),
+                    alternative,
+                    out var nestedPath);
+                count += nestedCount;
+                if (nestedCount == 1)
+                {
+                    path = new[] { candidate, }.Concat(nestedPath).ToArray();
+                }
+            }
+
+            if (count > 1)
+            {
+                path = [];
+                return 2;
+            }
+        }
+
+        return count;
+    }
+
+    private bool TryGetSpecializedAlias(
+        ExpressBoundType original,
+        ExpressBoundType narrowed,
+        out ExpressBoundNamedType underlying)
+    {
+        if (narrowed is ExpressBoundNamedType named
+            && _definedTypes.TryGetValue(named.Declaration, out var definition)
+            && definition.UnderlyingType is ExpressBoundNamedType alias
+            && ClassifySpecialization(original, alias)
+                is ExpressRedeclarationClassification.Equivalent or ExpressRedeclarationClassification.Supported)
+        {
+            underlying = alias;
+            return true;
+        }
+
+        underlying = null!;
+        return false;
+    }
+
+    private bool TryGetTransparentAlias(
+        ExpressBoundType type,
+        out ExpressBoundNamedType underlying)
+    {
+        if (type is ExpressBoundNamedType named
+            && named.Declaration.Kind != ExpressDeclarationKind.Entity
+            && _definedTypes.TryGetValue(named.Declaration, out var definition)
+            && definition.UnderlyingType is ExpressBoundNamedType alias)
+        {
+            underlying = alias;
+            return true;
+        }
+
+        underlying = null!;
+        return false;
+    }
+
     private string CreateEntityDomainProjection(
         ExpressBoundSchemaIdentity currentSchema,
         ExpressBoundSymbol sourceEntity,
@@ -498,6 +763,15 @@ internal sealed class ExpressGeneratedTypeResolver
         if (mostSpecific.Length == 1)
         {
             alternative = mostSpecific[0];
+            return true;
+        }
+
+        var directEntities = candidates
+            .Where(candidate => candidate.Kind == ExpressDeclarationKind.Entity)
+            .ToArray();
+        if (directEntities.Length == 1)
+        {
+            alternative = directEntities[0];
             return true;
         }
 
@@ -575,11 +849,19 @@ internal sealed class ExpressGeneratedTypeResolver
             return false;
         }
 
-        var matches = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>())
+        var attributes = EnumerateAttributes(entity, new HashSet<ExpressBoundSymbol>()).ToArray();
+        var matches = attributes
             .Where(candidate => string.Equals(
                 candidate.Name,
                 attribute.RedeclaredAttributeName,
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase)
+                && !attributes.Any(redeclaration =>
+                redeclaration.RedeclaredEntity is not null
+                && StringComparer.OrdinalIgnoreCase.Equals(redeclaration.RedeclaredAttributeName, candidate.Name)
+                && (ReferenceEquals(redeclaration.RedeclaredEntity, candidate.DeclaringEntity)
+                    || (ReferenceEquals(redeclaration.RedeclaredEntity, candidate.RedeclaredEntity)
+                        && !ReferenceEquals(redeclaration.DeclaringEntity, candidate.DeclaringEntity)
+                        && IsEntitySubtype(redeclaration.DeclaringEntity, candidate.DeclaringEntity)))))
             .ToArray();
         if (matches.Length != 1)
         {
@@ -635,6 +917,40 @@ internal sealed class ExpressGeneratedTypeResolver
     private static string? EffectiveBound(string? resolved, string? source)
     {
         return resolved ?? source?.Replace(" ", "");
+    }
+
+    private static bool IsCardinalityNarrowing(ExpressBoundAggregateType original, ExpressBoundAggregateType narrowed)
+    {
+        if (original.Kind == ExpressAggregateKind.Array
+            || original.IsOptional != narrowed.IsOptional
+            || original.IsUnique != narrowed.IsUnique)
+        {
+            return false;
+        }
+
+        if (!BigInteger.TryParse(EffectiveBound(original.ResolvedLowerBoundText, original.LowerBoundText) ?? "0",
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out var originalLower)
+            || !BigInteger.TryParse(EffectiveBound(narrowed.ResolvedLowerBoundText, narrowed.LowerBoundText) ?? "0",
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out var narrowedLower)
+            || narrowedLower < originalLower)
+        {
+            return false;
+        }
+
+        var originalUpperText = EffectiveBound(original.ResolvedUpperBoundText, original.UpperBoundText) ?? "?";
+        var narrowedUpperText = EffectiveBound(narrowed.ResolvedUpperBoundText, narrowed.UpperBoundText) ?? "?";
+        if (narrowedUpperText == "?")
+        {
+            return originalUpperText == "?";
+        }
+
+        return BigInteger.TryParse(narrowedUpperText, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out var narrowedUpper)
+            && narrowedUpper >= narrowedLower
+            && (originalUpperText == "?"
+                || (BigInteger.TryParse(originalUpperText, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out var originalUpper)
+                    && narrowedUpper <= originalUpper));
     }
 
     private bool TryGetClosedEntityLeaves(ExpressBoundType type, out IReadOnlyList<ExpressBoundSymbol> leaves)
@@ -755,9 +1071,16 @@ internal sealed class ExpressGeneratedTypeResolver
             return true;
         }
 
-        if (!_definedTypes.TryGetValue(symbol, out var declaration) || !path.Add(symbol))
+        if (!_definedTypes.TryGetValue(symbol, out var declaration))
         {
             return false;
+        }
+
+        if (!path.Add(symbol))
+        {
+            // The binder already rejects uncontained type cycles. A recursive aggregate
+            // can use its nominal carrier; every non-recursive dependency is still checked.
+            return true;
         }
 
         var supported = IsSupported(declaration.UnderlyingType, path);

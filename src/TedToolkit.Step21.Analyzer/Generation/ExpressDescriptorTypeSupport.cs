@@ -73,7 +73,7 @@ internal static class ExpressDescriptorTypeSupport
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var parsedUpperBound))
             {
-                return false;
+                return aggregate.Kind != ExpressAggregateKind.Array;
             }
 
             upperBound = parsedUpperBound;

@@ -7,9 +7,9 @@
 
 ## Outcome
 
-仓库检入一份来源和生成参数固定的 OCCT AP214IS box fixture，并通过候选 AP214 package 完成
-原子读取、typed navigation、编辑、验证、写出和语义重读；descriptor 歧义、错误 schema、
-baseline 外结构和无效编辑均沿既有稳定边界原子失败。
+仓库检入一份来源和生成参数固定的 OCCT AP214IS box fixture，保留它相对 package 固定
+2007-DIS baseline 的两个真实规则差异，并通过确定性的测试侧迁移完成 typed navigation、编辑、验证、
+写出和语义重读；descriptor 歧义、错误 schema、baseline 外结构和无效编辑均沿既有稳定边界原子失败。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
@@ -22,7 +22,9 @@ baseline 外结构和无效编辑均沿既有稳定边界原子失败。
     `STEPControl_ManifoldSolidBrep`、`WriteMode_StepSchema_AP214IS` 与 millimetres 生成并检入 fixture。
   - 关闭 surface curves、color、name、layer、properties、metadata 与 material；只规范化 parent change
     明确允许的 header/exporter 字段，并记录 generator/fixture SHA-256 与 OCCT license/exception。
-  - 读取 `AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }` fixture，将 product name 改为
+  - 原样读取 `AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }` fixture，断言只因
+    `APPLICATION_PROTOCOL_DEFINITION_REQUIRED.WR1` 与 `PRODUCT_REQUIRES_ID_OWNER.WR1` 原子失败；随后在
+    测试侧确定性补齐 2007-DIS 要求的 AIM 名称、年份和唯一 `id owner` assignment，将 product name 改为
     `TedToolkit AP214 OCCT box 10x20x30 mm - edited`，验证、写出并重读。
   - 断言 1 product、6 faces、12 edges、8 vertices、10 × 20 × 30 mm extents、
     millimetre/radian/steradian units、实体类型/数量、实例身份和共享引用关系。
@@ -32,6 +34,7 @@ baseline 外结构和无效编辑均沿既有稳定边界原子失败。
   - 不提供 OCCT/CAD object converter，不声明完整 AP214 conformance，也不覆盖 colour/layer、PMI、
     tessellation、kinematics 或 fixture 外能力。
   - 不把 AP214IS fixture OID 当作 package baseline identity，不宣称 AP214IS 输出与固定 2007-DIS baseline 等同。
+  - 不把测试侧 edition migration 放入 runtime/package，也不隐藏、跳过或弱化任何 EXPRESS 规则。
   - 不改变 OCCT revision、export 参数、geometry、normalization allow-list 或 capability boundary。
 - Likely touchpoints (non-binding): AP214 fixture/provenance/license assets、
   `tests/TedToolkit.Step21.IntegrationTests/`、AP214 packed-consumer fixture mode 与 shared atomicity helpers。
@@ -71,7 +74,7 @@ baseline 外结构和无效编辑均沿既有稳定边界原子失败。
 <!-- primary-proof: AC-04 purpose=acceptance shape=integration -->
 | Contract or gate | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
-| AC-03 | Primary | 固定 OCCT fixture 完成 typed read/edit/validate/write/reread，并保持已批准的名称、extents、units、实体数量、身份和共享引用语义签名 | 运行 `TedToolkit.Step21.IntegrationTests` 中 focused AP214 semantic journey |
+| AC-03 | Primary | 固定 OCCT AP214IS fixture 原样产生恰好两个 edition 规则失败且不发布模型；确定性 2007-DIS migration 后完成 typed read/edit/validate/write/reread，并保持已批准的名称、extents、units、身份和共享引用语义签名 | 运行 `TedToolkit.Step21.IntegrationTests` 中 focused AP214 semantic journey |
 | AC-04 | Primary | descriptor 歧义在消费前抛出 `ArgumentException`；不同 schema、baseline 外结构和无效编辑产生稳定 schema/binding/aggregate-validation 证据，且没有部分模型或输出字节 | 运行 focused AP214 negative/atomicity matrix 并检查 diagnostic position（可得时）与零部分输出 |
 | Shared runtime regression gate | Conditional | AP214 fixture 覆盖未破坏现有 schema-bound read/write/validation 行为 | 运行受影响的 `TedToolkit.Step21.Tests` focused suites；若修改共享 runtime，再执行完整 Release suite |
 
@@ -80,6 +83,7 @@ baseline 外结构和无效编辑均沿既有稳定边界原子失败。
 
 - AC-03 与 AC-04 的 primary proof 通过，fixture、provenance、license 和 bounded capability 文档已检入。
 - 语义旅程与 negative matrix 均使用 AP214-002 的候选 package boundary，而非测试内替代 schema。
+- 测试迁移只补齐已记录的跨 edition 不变量，原始 fixture byte/hash 不变，且没有 suppress/skip validation。
 - 已向 AP214-004 提供可原样用于 Native AOT 的 fixture journey 和已验证失败边界。
 
 <!-- work-item: completion-evidence -->

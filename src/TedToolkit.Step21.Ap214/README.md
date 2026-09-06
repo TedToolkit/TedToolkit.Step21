@@ -7,7 +7,7 @@ do not use AP214 continue to reference only `TedToolkit.Step21`.
 ## Install and use AP214
 
 ```shell
-dotnet add package TedToolkit.Step21.Ap214 --version 1.0.0-rc.1
+dotnet add package TedToolkit.Step21.Ap214 --version 1.0.0
 ```
 
 Pass the generated descriptor explicitly to the schema-neutral Step21 runtime:
@@ -33,15 +33,16 @@ Distinct custom EXPRESS schemas remain supported through the Analyzer workflow.
 
 ## Schema identity and provenance
 
-- Candidate package version: `1.0.0-rc.1` (prerelease; not the stable `1.0.0` release).
+- Package version: `1.0.0`.
 - EXPRESS nominal name: `AUTOMOTIVE_DESIGN`.
 - Generated descriptor: `TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor.Instance`.
 - Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,
   `data/ap214e3/AP214E3_2010.exp`, identified as ISO/DIS 10303-214:2007 Edition 3.
 - Canonical-LF SHA-256:
   `9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7`.
-- Redistribution evidence: the pinned STEPcode material is BSD-3-Clause; hashes and copied evidence
-  are recorded in `schemas/ap214/PROVENANCE.md` in the source repository.
+- Redistribution evidence: the pinned STEPcode material is BSD-3-Clause. The package carries its
+  `COPYING`, `AUTHORS`, `INTENT.md` and `PROVENANCE.md` under `third-party/stepcode/`; the source
+  repository retains the same evidence in `schemas/ap214/`.
 
 ## Package boundary
 

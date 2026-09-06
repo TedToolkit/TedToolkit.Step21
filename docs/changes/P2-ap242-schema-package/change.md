@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: approved -->
+<!-- change-status: completed -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P2
@@ -163,9 +163,10 @@ Scenario: 检查预编译 AP242 schema 的受支持 build inputs
   （`619EE3D3D9CE6DB690B4A20F36AB30616CB8F1FB8616FAEB85D9685AFDFD15FB`）、
   `INTENT.md`（`B10C7DCC9C269B383C944ACC139F787CCA050D497142CA03ED90C49EF41CE23F`）
   和逐文件 provenance。若后续审计不能证明该 schema 在此重分发授权内，则停止交付，不得静默换源。
-- Fixture contract: 固定到 OCCT commit `7d2efad9c8a9a57ea96c4c8587134b34dd503cd8`
-  (`8.1.0-dev1`) 和 `BRepPrimAPI_MakeBox(10.0, 20.0, 30.0)` 在原点创建的仓库自有 box；使用 `STEPControl_Writer`、
-  `STEPControl_ManifoldSolidBrep`、millimetres 与 `WriteMode_StepSchema_AP242DIS`，关闭
+- Fixture contract: 固定到 `cadquery-ocp` `7.9.3.1.1`（OCCT `7.9.3.1`）CPython 3.10 Windows wheel
+  `B52931A6786F9A1949BCAC7EF49C8A83426C4198D6847CD13A8CC40795207E09` 和
+  `BRepPrimAPI_MakeBox(10.0, 20.0, 30.0)` 在原点创建的仓库自有 box；使用 `STEPControl_Writer`、
+  `STEPControl_ManifoldSolidBrep`、millimetres 与 AP242DIS schema mode，关闭
   surface curves、color、name、layer、properties、metadata 和 material。输出必须声明
   `AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 1 1 4 }`；只允许规范化
   `FILE_NAME` 的 name、timestamp、author、organization、preprocessor、originating system、authorization，
@@ -175,7 +176,8 @@ Scenario: 检查预编译 AP242 schema 的受支持 build inputs
   `E237FA56668030E928551DDD60F05DF5FE957F75EAB874BBD017E085ED722E7C`，
   `OCCT_LGPL_EXCEPTION.txt` SHA-256 为
   `04580A884EA6CEA294402649FF7B5CBB167D47462D1340A4ED33E550DB10A81B`。改变 revision、参数、
-  fixture 能力边界或 edition/variant 必须重新批准。
+  fixture 能力边界或 edition/variant 必须重新批准。该固定稳定发行版替代原设计中的 OCCT
+  `8.1.0-dev1` source build；用户在获知构建成本与固定 wheel 方案后明确要求继续实施。
 - Package contract: 首版 TFM 为 `net10.0`；候选验证使用 `1.0.0-*` prerelease，只有本 change
   完成后才形成首个 stable `1.0.0`；`TedToolkit.Step21` runtime 依赖范围固定为
   `[1.0.0,2.0.0)`。
@@ -259,3 +261,23 @@ fixture/license provenance 与 generated API/version/conformance 文档持久保
 并由最终实现评审确认
 没有未批准 runtime 或跨包耦合后完成。临时 change/work-item 记录在 merge 与 reference release 后按
 共享 workflow lifecycle 清理，不建立 completed-change archive。
+
+## Completion evidence
+
+All AC-01 through AC-08 passed on stable `TedToolkit.Step21.Ap242` `1.0.0`:
+
+- AC-01/AC-02/AC-08: package-only consumption, fixed source/provenance/descriptor, complete public API snapshot
+  (`7402DBECCCF19940E0ADCDE0494DD6FAF488A875DBB9AE1E25C81C2C59B09B21`), mutual-exclusion guidance, and the
+  19/19 baseline contract suite passed.
+- AC-03/AC-04: the fixed 170-entity AP242DIS fixture completed typed edit/validate/write/reread; invalid edit returned
+  eight failures with zero output bytes and the unsupported entity returned positioned `P21-BIND-ENTITY` evidence.
+- AC-05: the isolated AP203/AP242 consumer passed with one runtime and no schema-package dependency edge.
+- AC-06: two clean non-incremental builds produced normalized package SHA-256
+  `81B8B858B86E81416BF43C514CBFA7C85C35B9708EEAA613779372A58F493907` and fixed-input SHA-256
+  `35833AEDFAFB765094E48B0F76F69357C1B2D347949EAD46A6BAAD3457ABDAF7`.
+- AC-07: `win-x64` Native AOT passed the same journey without attributable warnings; compiler package `10.0.11`,
+  executable 138,115,072 bytes.
+
+The final implementation review found no unapproved runtime/discovery surface or cross-package coupling. Shared
+SELECT payload storage and schema-level `TYPEOF` dispatch preserved every alternative and the approved public API
+while reducing AP242 generated source by 13.69% and the schema assembly by 26.8% from the pre-optimization candidate.

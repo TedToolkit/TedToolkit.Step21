@@ -515,8 +515,8 @@ public sealed class EntityHierarchyTests
         END_SCHEMA;
         """;
 
-    private const string UNSUPPORTED_AGGREGATE_REDECLARATION_SCHEMA = """
-        SCHEMA unsupported_aggregate_redeclaration;
+    private const string NARROWED_AGGREGATE_REDECLARATION_SCHEMA = """
+        SCHEMA narrowed_aggregate_redeclaration;
         ENTITY target;
         END_ENTITY;
         ENTITY specialized SUBTYPE OF (target);
@@ -525,7 +525,7 @@ public sealed class EntityHierarchyTests
           items : LIST [0:?] OF target;
         END_ENTITY;
         ENTITY child SUBTYPE OF (root);
-          SELF\root.items : LIST [1:?] OF specialized;
+          SELF\root.items : LIST [1:2] OF specialized;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -705,6 +705,26 @@ public sealed class EntityHierarchyTests
         END_ENTITY;
         ENTITY derived_leaf SUBTYPE OF (leaf);
           enabled : BOOLEAN;
+        END_ENTITY;
+        ENTITY surface;
+        END_ENTITY;
+        ENTITY plane SUBTYPE OF (surface);
+        END_ENTITY;
+        ENTITY curve_base;
+          basis : surface;
+        END_ENTITY;
+        ENTITY curve_on_plane SUBTYPE OF (curve_base);
+          SELF\curve_base.basis : plane;
+        END_ENTITY;
+        ENTITY point_base;
+          basis : surface;
+        END_ENTITY;
+        ENTITY point_on_plane SUBTYPE OF (point_base);
+          SELF\point_base.basis : plane;
+        END_ENTITY;
+        ENTITY line_and_point_on_plane SUBTYPE OF (curve_on_plane, point_on_plane);
+        DERIVE
+          SELF\curve_base.basis : plane := SELF\point_base.basis;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -1163,6 +1183,77 @@ public sealed class EntityHierarchyTests
             .IsTrue();
     }
 
+    /// <summary>
+    /// Verifies a named aggregate specialization can project through its unique inherited SELECT alternative.
+    /// </summary>
+    [Test]
+    public async Task Should_project_named_aggregate_specialization_through_select_alternative()
+    {
+        var result = GeneratorHostTests.Run(
+            """
+            using System.IO;
+            using System.Linq;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.NamedAggregateSelectRedeclaration;
+
+            internal static class NamedAggregateSelectConsumer
+            {
+                internal static bool Exercise()
+                {
+                    const string source = "ISO-10303-21;HEADER;FILE_DESCRIPTION(('test'),'3;1');"
+                        + "FILE_NAME('test.step','2026-09-02T00:00:00',(),(),'','','');"
+                        + "FILE_SCHEMA(('named_aggregate_select_redeclaration'));ENDSEC;DATA;"
+                        + "#1=SPECIALIZED();#2=CHILD((#1));ENDSEC;END-ISO-10303-21;";
+                    var structure = ExchangeStructure.Read(
+                        new StringReader(source),
+                        [TedToolkit.Step21.Generated.NamedAggregateSelectRedeclaration.SchemaDescriptor.Instance]);
+                    var child = structure.Entities.OfType<Child>().Single();
+                    IRoot root = child;
+                    var count = root.ItemElement.Match(
+                        list => list.ReadOnlyValue.Count,
+                        set => -1);
+                    var output = new StringWriter();
+                    structure.Write(output);
+                    return count == 1 && output.ToString().Contains("#2=CHILD((#1));");
+                }
+            }
+            """,
+            ("schemas/named-aggregate-select.exp", """
+                SCHEMA named_aggregate_select_redeclaration;
+                ENTITY representation_item;
+                END_ENTITY;
+                ENTITY specialized SUBTYPE OF (representation_item);
+                END_ENTITY;
+                TYPE list_representation_item = LIST [1:?] OF representation_item;
+                END_TYPE;
+                TYPE set_representation_item = SET [1:?] OF representation_item;
+                END_TYPE;
+                TYPE compound_item_definition = SELECT
+                  (list_representation_item, set_representation_item);
+                END_TYPE;
+                TYPE specialized_members = LIST [1:?] OF specialized;
+                END_TYPE;
+                ENTITY root ABSTRACT;
+                  item_element : compound_item_definition;
+                END_ENTITY;
+                ENTITY child SUBTYPE OF (root);
+                  SELF\root.item_element : specialized_members;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty();
+        var assembly = Emit(result.OutputCompilation);
+        var consumer = assembly.GetType("NamedAggregateSelectConsumer", throwOnError: true)!;
+        await Assert.That((bool)consumer.GetMethod(
+            "Exercise",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, null)!)
+            .IsTrue();
+    }
+
     /// <summary>Verifies an aggregate SELECT leaf outside the inherited domain is ISO-invalid.</summary>
     [Test]
     public async Task Should_reject_aggregate_select_leaf_widening_as_invalid()
@@ -1343,6 +1434,62 @@ public sealed class EntityHierarchyTests
             await Assert.That(ReadSelectedEntity(broadType, projectedEntity, "TryGetSpecialized"))
                 .IsSameReferenceAs(specialized);
             await Assert.That(directEntity).IsSameReferenceAs(specialized);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a multiply inherited entity uses the direct SELECT alternative when another route is nested.
+    /// </summary>
+    [Test]
+    public async Task Should_prefer_a_direct_entity_select_projection_over_a_nested_route()
+    {
+        const string schema = """
+            SCHEMA direct_select_projection;
+            ENTITY characterized_object;
+            END_ENTITY;
+            ENTITY product_definition;
+            END_ENTITY;
+            TYPE characterized_product_definition = SELECT (product_definition);
+            END_TYPE;
+            TYPE characterized_definition = SELECT (
+              characterized_object,
+              characterized_product_definition);
+            END_TYPE;
+            ENTITY risk_value SUBTYPE OF (characterized_object, product_definition);
+            END_ENTITY;
+            ENTITY property_definition ABSTRACT;
+              definition : characterized_definition;
+            END_ENTITY;
+            ENTITY risk_level SUBTYPE OF (property_definition);
+              SELF\property_definition.definition : risk_value;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(("schemas/direct-select-projection.exp", schema));
+
+        await Assert.That(result.Diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var assembly = Emit(result.OutputCompilation);
+        var riskValue = Activator.CreateInstance(assembly.GetType(
+            "TedToolkit.Step21.Generated.DirectSelectProjection.RiskValue",
+            throwOnError: true)!)!;
+        var riskLevel = Activator.CreateInstance(
+            assembly.GetType("TedToolkit.Step21.Generated.DirectSelectProjection.RiskLevel", throwOnError: true)!,
+            riskValue)!;
+        var root = assembly.GetType(
+            "TedToolkit.Step21.Generated.DirectSelectProjection.IPropertyDefinition",
+            throwOnError: true)!;
+        var projected = root.GetProperty("Definition")!.GetValue(riskLevel)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(projected.GetType().GetProperty("Kind")!.GetValue(projected)!.ToString())
+                .IsEqualTo("CharacterizedObject");
+            await Assert.That(ReadSelectedEntity(projected.GetType(), projected, "TryGetCharacterizedObject"))
+                .IsSameReferenceAs(riskValue);
         }
     }
 
@@ -1578,18 +1725,60 @@ public sealed class EntityHierarchyTests
     }
 
     /// <summary>
-    /// Verifies changed aggregate metadata remains a bounded unsupported specialization.
+    /// Verifies narrowed aggregate cardinality retains one covariant storage and enforces its tighter bounds.
     /// </summary>
     [Test]
-    public async Task Should_reject_changed_aggregate_metadata_as_unsupported()
+    [Arguments("LIST")]
+    [Arguments("BAG")]
+    [Arguments("SET")]
+    public async Task Should_project_narrowed_aggregate_cardinality(string kind)
     {
-        var result = GeneratorHostTests.Run(
-            ("schemas/unsupported-aggregate.exp", UNSUPPORTED_AGGREGATE_REDECLARATION_SCHEMA));
-
-        using (Assert.Multiple())
+        var result = GeneratorHostTests.Run("""
+            using System.IO;
+            using System.Linq;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration;
+            internal static class BoundsConsumer
+            {
+                internal static bool Check(int count)
+                {
+                    var parameters = string.Join(",", Enumerable.Range(1, count).Select(index => "#" + index));
+                    var input = "ISO-10303-21;HEADER;FILE_DESCRIPTION(('bounds'),'3;1');" +
+                        "FILE_NAME('bounds','2026-09-04T00:00:00',('A'),('O'),'P','S','');" +
+                        "FILE_SCHEMA(('narrowed_aggregate_redeclaration'));ENDSEC;DATA;" +
+                        "#1=SPECIALIZED();#2=SPECIALIZED();#3=SPECIALIZED();" +
+                        "#4=CHILD((" + parameters + "));ENDSEC;END-ISO-10303-21;";
+                    try
+                    {
+                        var structure = ExchangeStructure.Read(new StringReader(input),
+                            [TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
+                        var child = structure.Entities.OfType<Child>().Single();
+                        IRoot root = child;
+                        if (!object.ReferenceEquals(root.Items, child.Items)) return false;
+                        var output = new StringWriter();
+                        structure.Write(output);
+                        var reread = ExchangeStructure.Read(new StringReader(output.ToString()),
+                            [TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
+                        return count is 1 or 2 && reread.Validate().IsValid &&
+                            reread.Entities.OfType<Child>().Single().Items.Count == count;
+                    }
+                    catch (ExchangeStructureReadValidationException failure)
+                    {
+                        return count is 0 or 3 && failure.ValidationResult.Failures.Count > 0;
+                    }
+                }
+            }
+            """, ("schemas/narrowed-aggregate.exp", NARROWED_AGGREGATE_REDECLARATION_SCHEMA
+                .Replace("LIST", kind, StringComparison.Ordinal)));
+        await Assert.That(result.Diagnostics).IsEmpty();
+        await Assert.That(result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)).IsEmpty();
+        var assembly = Emit(result.OutputCompilation);
+        var check = assembly.GetType("BoundsConsumer", throwOnError: true)!
+            .GetMethod("Check", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        for (var count = 0; count < 4; count++)
         {
-            await Assert.That(result.Diagnostics.Select(item => item.Id)).IsEquivalentTo(["STEP21EXP005"]);
-            await Assert.That(result.GeneratedSources).IsEmpty();
+            await Assert.That((bool)check.Invoke(null, [count])!).IsTrue().Because($"count {count}");
         }
     }
 
@@ -1605,7 +1794,7 @@ public sealed class EntityHierarchyTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(diagnostics.Length).IsEqualTo(8);
+            await Assert.That(diagnostics.Length).IsEqualTo(7);
             await Assert.That(diagnostics.All(diagnostic => diagnostic.Id == "STEP21EXP005")).IsTrue();
             await Assert.That(diagnostics.All(diagnostic => diagnostic.GetMessage().Contains(
                 "outside the supported M-01 through M-06 mapping matrix",

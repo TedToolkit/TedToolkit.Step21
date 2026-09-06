@@ -1,0 +1,10 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('OCCT unsupported AP214 extension proof'),'2;1');
+FILE_NAME('occt-unsupported-extension-ap214.step','2000-01-01T00:00:00',('TedToolkit'),('TedToolkit'),'fixture','fixture','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));
+ENDSEC;
+DATA;
+#1 = OCCT_AP214_EXTENSION('unsupported');
+ENDSEC;
+END-ISO-10303-21;

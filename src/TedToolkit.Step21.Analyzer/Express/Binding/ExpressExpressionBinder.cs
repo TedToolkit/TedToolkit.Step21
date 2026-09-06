@@ -36,6 +36,8 @@ internal sealed class ExpressExpressionBinder
 
     private readonly IReadOnlyList<ExpressBoundNameReference> _references;
 
+    private readonly Dictionary<ExpressSourceSpan, ExpressBoundNameReference> _referencesBySpan;
+
     private readonly IReadOnlyDictionary<ExpressBoundSymbol, ExpressBoundDeclaration> _declarations;
 
     private readonly Func<ExpressBoundDeclaration, ExpressRuleSyntax> _syntaxOf;
@@ -60,6 +62,7 @@ internal sealed class ExpressExpressionBinder
         Func<ExpressBoundDeclaration, ExpressRuleSyntax> syntaxOf)
     {
         _references = references;
+        _referencesBySpan = references.ToDictionary(reference => reference.Span);
         _declarations = declarations;
         _syntaxOf = syntaxOf;
     }
@@ -135,13 +138,54 @@ internal sealed class ExpressExpressionBinder
             IReadOnlyList<ExpressBoundExpression> expressions)
     {
         var functions = new HashSet<ExpressBoundSymbol>(_indeterminateFunctions);
-        var locals = new HashSet<ExpressBoundName>();
+        var expressionsBySpan = expressions.ToDictionary(expression => expression.Span);
+        var locals = FindIndeterminateInitializers(declarations, expressionsBySpan);
+
+        foreach (var declaration in declarations)
+        {
+            var assignments = DescendantsInAlgorithm(_syntaxOf(declaration))
+                .Where(candidate => candidate.Production == "assignmentStmt"
+                    && !candidate.ChildRules("qualifier").Any())
+                .ToArray();
+            var changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var assignment in assignments)
+                {
+                    var target = FindReference(assignment.RequiredChild("generalRef").Span)?.Target;
+                    var valueSyntax = assignment.RequiredChild("expression");
+                    var value = expressionsBySpan[valueSyntax.Span];
+                    if (target?.Kind == ExpressBoundNameKind.Variable
+                        && (value.Type.CanBeIndeterminate
+                            || (target.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, }
+                                && value.Type.Kind == ExpressExpressionTypeKind.Logical)
+                            || value.DescendantsAndSelf().Any(candidate =>
+                                candidate.Reference is { } reference && locals.Contains(reference)))
+                        && locals.Add(target))
+                    {
+                        changed = true;
+                    }
+                }
+            }
+        }
+
         foreach (var declaration in declarations.Where(candidate => candidate.Kind == ExpressDeclarationKind.Function))
         {
             var functionResultIsBoolean = declaration is ExpressBoundOpaqueDeclaration
             {
                 DeclaredType: ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, },
             };
+            if (DescendantsInAlgorithm(_syntaxOf(declaration))
+                .Where(candidate => candidate.Production == "procedureCallStmt"
+                    && candidate.ChildRules("builtInProcedure").Any())
+                .SelectMany(candidate => candidate.ChildRules("actualParameterList"))
+                .SelectMany(parameters => parameters.ChildRules("parameter"))
+                .Any(parameter => expressionsBySpan[parameter.RequiredChild("expression").Span].Type.CanBeIndeterminate))
+            {
+                functions.Add(declaration.Symbol);
+            }
+
             var allAssignments = DescendantsInAlgorithm(_syntaxOf(declaration))
                 .Where(candidate => candidate.Production == "assignmentStmt")
                 .ToArray();
@@ -156,7 +200,7 @@ internal sealed class ExpressExpressionBinder
                 {
                     var target = FindReference(assignment.RequiredChild("generalRef").Span)?.Target;
                     var valueSyntax = assignment.RequiredChild("expression");
-                    var value = expressions.Single(candidate => SameStart(candidate.Span, valueSyntax.Span));
+                    var value = expressionsBySpan[valueSyntax.Span];
                     if (target?.Kind == ExpressBoundNameKind.Variable
                         && (value.Type.CanBeIndeterminate
                             || (target.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, }
@@ -193,7 +237,7 @@ internal sealed class ExpressExpressionBinder
                 }
 
                 var valueSyntax = assignment.RequiredChild("expression");
-                var value = expressions.Single(candidate => SameStart(candidate.Span, valueSyntax.Span));
+                var value = expressionsBySpan[valueSyntax.Span];
                 if (!targetIsOptional && value.Type.CanBeIndeterminate)
                 {
                     functions.Add(declaration.Symbol);
@@ -205,7 +249,7 @@ internal sealed class ExpressExpressionBinder
                          .Where(candidate => candidate.Production == "returnStmt"))
             {
                 var returnSyntax = returnStatement.RequiredChild("expression");
-                var value = expressions.Single(candidate => SameStart(candidate.Span, returnSyntax.Span));
+                var value = expressionsBySpan[returnSyntax.Span];
                 if (value.Type.CanBeIndeterminate
                     || (functionResultIsBoolean && value.Type.Kind == ExpressExpressionTypeKind.Logical)
                     || value.DescendantsAndSelf().Any(candidate =>
@@ -229,7 +273,7 @@ internal sealed class ExpressExpressionBinder
                         candidate.RequiredChild("attributeDecl").Span,
                         attribute.Span));
                 var initializer = syntax.RequiredChild("expression");
-                var expression = expressions.Single(candidate => SameStart(candidate.Span, initializer.Span));
+                var expression = expressionsBySpan[initializer.Span];
                 if (expression.Type.CanBeIndeterminate)
                 {
                     derivedAttributes.Add(attribute);
@@ -238,6 +282,39 @@ internal sealed class ExpressExpressionBinder
         }
 
         return (functions, locals, derivedAttributes);
+    }
+
+    private HashSet<ExpressBoundName> FindIndeterminateInitializers(
+        IReadOnlyList<ExpressBoundDeclaration> declarations,
+        Dictionary<ExpressSourceSpan, ExpressBoundExpression> expressions)
+    {
+        var result = new HashSet<ExpressBoundName>();
+        foreach (var declaration in declarations.SelectMany(item => _syntaxOf(item).DescendantsAndSelf())
+                     .Where(candidate => candidate.Production is "constantBody" or "localVariable"))
+        {
+            if (declaration.ChildRules("expression").SingleOrDefault() is not { } initializer)
+            {
+                continue;
+            }
+
+            var value = expressions[initializer.Span];
+            foreach (var name in declaration.Production == "constantBody"
+                         ? [declaration,]
+                         : declaration.ChildRules("variableId"))
+            {
+                var target = FindReference(name.Span)?.Target;
+                if (target is { SchemaDeclaration: null, }
+                    && target.Kind is ExpressBoundNameKind.Constant or ExpressBoundNameKind.Variable
+                    && (value.Type.CanBeIndeterminate
+                        || (target.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, }
+                            && value.Type.Kind == ExpressExpressionTypeKind.Logical)))
+                {
+                    result.Add(target);
+                }
+            }
+        }
+
+        return result;
     }
 
     private Dictionary<ExpressRuleSyntax, ExpressExpressionType> FindExpectedTypes(
@@ -250,7 +327,7 @@ internal sealed class ExpressExpressionBinder
                 && declaration.DeclaredType is not null
                 && _syntaxOf(declaration).ChildRules("expression").SingleOrDefault() is { } constantValue)
             {
-                result[constantValue] = TypeOf(declaration.DeclaredType);
+                result[constantValue] = ExpectedAssignmentType(declaration.DeclaredType);
             }
 
             if (declaration.Kind == ExpressDeclarationKind.Function && declaration.DeclaredType is not null)
@@ -260,7 +337,7 @@ internal sealed class ExpressExpressionBinder
                 {
                     if (returnStatement.ChildRules("expression").SingleOrDefault() is { } returnValue)
                     {
-                        result[returnValue] = TypeOf(declaration.DeclaredType);
+                        result[returnValue] = ExpectedAssignmentType(declaration.DeclaredType);
                     }
                 }
             }
@@ -287,26 +364,41 @@ internal sealed class ExpressExpressionBinder
 
                 if (targetType is not null)
                 {
-                    result[syntax.RequiredChild("expression")] = TypeOf(targetType);
+                    result[syntax.RequiredChild("expression")] = ExpectedAssignmentType(targetType);
                 }
             }
-            else if (syntax.Production == "localVariable"
+            else if (syntax.Production is "localVariable" or "constantBody"
                      && syntax.ChildRules("expression").SingleOrDefault() is { } initializer)
             {
-                var declarationSpan = syntax.RequiredChild("variableId").Span;
-                var target = _references.Select(reference => reference.Target)
-                    .Where(candidate => candidate.Kind == ExpressBoundNameKind.Variable
-                        && SameStart(candidate.Span, declarationSpan))
-                    .Distinct()
-                    .SingleOrDefault();
+                var declarationSpan = syntax.Production == "constantBody"
+                    ? syntax.Span
+                    : syntax.RequiredChild("variableId").Span;
+                var target = FindReference(declarationSpan)?.Target;
                 if (target?.Type is not null)
                 {
-                    result[initializer] = TypeOf(target.Type);
+                    result[initializer] = ExpectedAssignmentType(target.Type);
                 }
             }
         }
 
         return result;
+    }
+
+    private ExpressExpressionType ExpectedAssignmentType(ExpressBoundType type)
+    {
+        return TypeOf(GetAggregateType(type) ?? type);
+    }
+
+    private ExpressBoundAggregateType? GetAggregateType(ExpressBoundType? type)
+    {
+        while (type is ExpressBoundNamedType named
+            && _declarations.TryGetValue(named.Declaration, out var declaration)
+            && declaration is ExpressBoundDefinedType defined)
+        {
+            type = defined.UnderlyingType;
+        }
+
+        return type as ExpressBoundAggregateType;
     }
 
     private static IEnumerable<ExpressRuleSyntax> DescendantsInAlgorithm(ExpressRuleSyntax syntax)
@@ -343,6 +435,11 @@ internal sealed class ExpressExpressionBinder
 
         foreach (var child in syntax.ChildRules())
         {
+            if (child.Production is "functionDecl" or "procedureDecl")
+            {
+                continue;
+            }
+
             foreach (var expression in ExpressionRoots(child))
             {
                 yield return expression;
@@ -660,7 +757,7 @@ internal sealed class ExpressExpressionBinder
                 .SingleOrDefault()?.Type is ExpressBoundAggregateType parameterAggregate
             && expression.Children.Count > 0
             && expression.Children[0] is { } firstArgument
-            && firstArgument.Type.DeclaredType is ExpressBoundAggregateType actualAggregate
+            && GetAggregateType(firstArgument.Type.DeclaredType) is { } actualAggregate
             && TrySpecializeGenericType(
                 declaredResultAggregate,
                 expectedAggregate,
@@ -765,7 +862,7 @@ internal sealed class ExpressExpressionBinder
             expression.Span);
     }
 
-    private static bool TrySpecializeGenericType(
+    private bool TrySpecializeGenericType(
         ExpressBoundType template,
         ExpressBoundType actual,
         string? requiredLabel,
@@ -779,6 +876,7 @@ internal sealed class ExpressExpressionBinder
 
         if (template is ExpressBoundAggregateType templateAggregate)
         {
+            actual = GetAggregateType(actual) ?? actual;
             var templateLowerText = templateAggregate.ResolvedLowerBoundText
                 ?? templateAggregate.LowerBoundText;
             var templateUpperText = templateAggregate.ResolvedUpperBoundText
@@ -986,9 +1084,19 @@ internal sealed class ExpressExpressionBinder
                 string Path,
                 bool HadPrevious,
                 ExpressExpressionType? Previous)>();
-            if (string.Equals(operation, "AND", StringComparison.OrdinalIgnoreCase))
+            var guardedCondition = string.Equals(operation, "AND", StringComparison.OrdinalIgnoreCase)
+                ? result
+                : null;
+            if (string.Equals(operation, "OR", StringComparison.OrdinalIgnoreCase)
+                && result.Kind == ExpressExpressionKind.Unary && result.Operation == "NOT"
+                && result.Children.Count == 1)
             {
-                var narrowings = ResolveTypeOfGuards(result);
+                guardedCondition = result.Children[0];
+            }
+
+            if (guardedCondition is not null)
+            {
+                var narrowings = ResolveTypeOfGuards(guardedCondition);
                 foreach (var narrowing in narrowings.Values)
                 {
                     if (narrowing.Alternatives.Count > 0)
@@ -1012,7 +1120,9 @@ internal sealed class ExpressExpressionBinder
 
                 var directNarrowings = narrowings.Values
                     .Where(narrowing => narrowing.Reference is not null
-                        && (narrowing.Alternatives.Count == 1 || narrowing.ScalarType is not null))
+                        && (narrowing.ScalarType is not null
+                            || (narrowing.Alternatives.Count == 1
+                                && narrowing.Alternatives[0].Kind != ExpressDeclarationKind.Entity)))
                     .ToDictionary(
                         narrowing => narrowing.Reference!.Name,
                         narrowing => narrowing.ScalarType
@@ -1146,7 +1256,7 @@ internal sealed class ExpressExpressionBinder
         }
 
         var selected = _declarations.Keys.SingleOrDefault(candidate =>
-            candidate.Kind == ExpressDeclarationKind.Entity
+            candidate.Kind is ExpressDeclarationKind.Entity or ExpressDeclarationKind.Type
             && string.Equals(
                 candidate.DeclaringSchema.Name + "." + candidate.Name,
                 qualifiedName,
@@ -1371,7 +1481,12 @@ internal sealed class ExpressExpressionBinder
             _indeterminateDerivedAttributes.Contains) == true;
         var type = reference is not null
             && lexicalTypes.TryGetValue(reference.Target.Name, out var lexicalType)
-                ? lexicalType
+                ? lexicalType.WithIndeterminate(
+                    lexicalType.CanBeIndeterminate
+                    || reference.Target.IsOptional
+                    || referencedFunctionIsIndeterminate
+                    || referencedLocalIsIndeterminate
+                    || referencedDerivedIsIndeterminate)
                 : TypeOf(reference?.Target.Type)
                     .WithIndeterminate(reference?.Target.IsOptional == true
                         || referencedFunctionIsIndeterminate
@@ -1570,8 +1685,7 @@ internal sealed class ExpressExpressionBinder
             && opaque.Kind == ExpressDeclarationKind.Function
             && opaque.DeclaredType is ExpressBoundAggregateType resultAggregate
             && resultAggregate.ElementType is ExpressBoundGenericType { TypeLabel: { } resultLabel, }
-            && parameters.FirstOrDefault()?.Type.DeclaredType is ExpressBoundAggregateType
-                actualAggregate
+            && GetAggregateType(parameters.FirstOrDefault()?.Type.DeclaredType) is { } actualAggregate
             && _syntaxOf(opaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
@@ -1610,7 +1724,7 @@ internal sealed class ExpressExpressionBinder
             && nestedOpaque.Kind == ExpressDeclarationKind.Function
             && nestedOpaque.DeclaredType is ExpressBoundAggregateType nestedResultAggregate
             && nestedResultAggregate.ElementType is ExpressBoundAggregateType
-            && parameters.FirstOrDefault()?.Type.DeclaredType is ExpressBoundAggregateType nestedActualAggregate
+            && GetAggregateType(parameters.FirstOrDefault()?.Type.DeclaredType) is { } nestedActualAggregate
             && _syntaxOf(nestedOpaque).RequiredChild("functionHead")
                 .ChildRules("formalParameter")
                 .SelectMany(formal => formal.ChildRules("parameterId"))
@@ -1923,9 +2037,12 @@ internal sealed class ExpressExpressionBinder
         ExpressBoundExpression source,
         IReadOnlyDictionary<string, ExpressExpressionType> lexicalTypes)
     {
+        var staticSourceType = source.Type;
+        var sourceWasNarrowed = false;
         if (_guardedPathAlternatives.TryGetValue(source.SourceText, out var guardedAlternatives)
             && guardedAlternatives.Count == 1)
         {
+            sourceWasNarrowed = true;
             var guardedType = TypeOf(new ExpressBoundNamedType(guardedAlternatives[0], source.Span));
             source = new(
                 source.Kind,
@@ -1940,7 +2057,11 @@ internal sealed class ExpressExpressionBinder
         var qualifier = syntax.ChildRules().Single();
         if (qualifier.Production == "attributeQualifier")
         {
-            var target = FindReference(qualifier.Span)?.Target
+            var target = (sourceWasNarrowed ? ResolveAttribute(source.Type, qualifier) : null)
+                ?? FindReference(qualifier.Span)?.Target
+                ?? (sourceWasNarrowed
+                    ? ResolveAttribute(staticSourceType, qualifier)
+                    : null)
                 ?? ResolveAttribute(source.Type, qualifier)
                 ?? ResolveGuardedAttribute(source.SourceText, qualifier);
             var targetDerivedIsIndeterminate = target?.AttributeCandidates.Any(
@@ -1991,30 +2112,7 @@ internal sealed class ExpressExpressionBinder
                 qualifier.TokenText(),
                 target,
                 [source,]);
-            if (_guardedPathAlternatives.TryGetValue(result.SourceText, out var resultAlternatives)
-                && resultAlternatives.Count == 1)
-            {
-                return new(
-                    result.Kind,
-                    TypeOf(new ExpressBoundNamedType(resultAlternatives[0], result.Span))
-                        .WithIndeterminate(result.Type.CanBeIndeterminate),
-                    result.SourceText,
-                    result.Operation,
-                    result.Reference,
-                    result.Children,
-                    result.Span);
-            }
-
-            return _guardedPathScalarTypes.TryGetValue(result.SourceText, out var guardedScalarType)
-                ? new ExpressBoundExpression(
-                    result.Kind,
-                    guardedScalarType.WithIndeterminate(result.Type.CanBeIndeterminate),
-                    result.SourceText,
-                    result.Operation,
-                    result.Reference,
-                    result.Children,
-                    result.Span)
-                : result;
+            return ApplyGuardedPathType(result);
         }
 
         if (qualifier.Production == "groupQualifier")
@@ -2133,16 +2231,44 @@ internal sealed class ExpressExpressionBinder
             }
         }
 
-        var resultType = (isSlice ? source.Type : IndexedType(source.Type))
+        var resultType = (isSlice ? source.Type : IndexedType(source.Type, syntax.Span))
             .WithIndeterminate(!isStaticallyPresent);
-        return Create(
+        return ApplyGuardedPathType(Create(
             isSlice ? ExpressExpressionKind.SliceQualifier : ExpressExpressionKind.IndexQualifier,
             resultType,
             SliceSpan(source.Span, syntax.Span),
             string.Concat(source.SourceText, qualifier.TokenText()),
             qualifier.TokenText(),
             reference: null,
-            [source, .. indices,]);
+            [source, .. indices,]));
+    }
+
+    private ExpressBoundExpression ApplyGuardedPathType(ExpressBoundExpression expression)
+    {
+        if (_guardedPathAlternatives.TryGetValue(expression.SourceText, out var alternatives)
+            && alternatives.Count == 1)
+        {
+            return new(
+                expression.Kind,
+                TypeOf(new ExpressBoundNamedType(alternatives[0], expression.Span))
+                    .WithIndeterminate(expression.Type.CanBeIndeterminate),
+                expression.SourceText,
+                expression.Operation,
+                expression.Reference,
+                expression.Children,
+                expression.Span);
+        }
+
+        return _guardedPathScalarTypes.TryGetValue(expression.SourceText, out var scalarType)
+            ? new ExpressBoundExpression(
+                expression.Kind,
+                scalarType.WithIndeterminate(expression.Type.CanBeIndeterminate),
+                expression.SourceText,
+                expression.Operation,
+                expression.Reference,
+                expression.Children,
+                expression.Span)
+            : expression;
     }
 
     private ExpressBoundName? ResolveAttribute(
@@ -2354,16 +2480,49 @@ internal sealed class ExpressExpressionBinder
         foreach (var attribute in attributes)
         {
             var isRedeclaredSlot = attributes.Any(candidate =>
-                ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                candidate.RedeclaredEntity is not null
                 && string.Equals(
                     candidate.RedeclaredAttributeName,
                     attribute.Name,
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase)
+                && (ReferenceEquals(candidate.RedeclaredEntity, attribute.DeclaringEntity)
+                    || (ReferenceEquals(candidate.RedeclaredEntity, attribute.RedeclaredEntity)
+                        && IsStrictSubtypeOf(candidate.DeclaringEntity, attribute.DeclaringEntity))));
             if (!isRedeclaredSlot)
             {
                 yield return attribute;
             }
         }
+    }
+
+    private bool IsStrictSubtypeOf(ExpressBoundSymbol entity, ExpressBoundSymbol ancestor)
+    {
+        var pending = new Stack<ExpressBoundSymbol>();
+        var visited = new HashSet<ExpressBoundSymbol>() { entity, };
+        pending.Push(entity);
+        while (pending.Count > 0)
+        {
+            if (!_declarations.TryGetValue(pending.Pop(), out var declaration)
+                || declaration is not ExpressBoundEntity current)
+            {
+                continue;
+            }
+
+            foreach (var supertype in current.DirectSupertypes)
+            {
+                if (ReferenceEquals(supertype, ancestor))
+                {
+                    return true;
+                }
+
+                if (visited.Add(supertype))
+                {
+                    pending.Push(supertype);
+                }
+            }
+        }
+
+        return false;
     }
 
     private ExpressBoundExpression BindAggregateInitializer(
@@ -2455,19 +2614,37 @@ internal sealed class ExpressExpressionBinder
             syntax.RequiredChild("aggregateSource").RequiredChild("simpleExpression"),
             lexicalTypes);
         var variableName = syntax.RequiredChild("variableId").IdentifierToken().Text;
+        var sourceAggregate = GetAggregateType(source.Type.DeclaredType);
+        if (sourceAggregate is null
+            && CommonAggregateElementType(
+                source.Type.DeclaredType,
+                new HashSet<ExpressBoundSymbol>()) is { } commonElement)
+        {
+            sourceAggregate = new(
+                ExpressAggregateKind.Aggregate,
+                commonElement,
+                lowerBoundText: "0",
+                upperBoundText: null,
+                isOptional: false,
+                isUnique: false,
+                typeLabel: null,
+                source.Span);
+        }
+
         var queryTypes = new Dictionary<string, ExpressExpressionType>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in lexicalTypes)
         {
             queryTypes.Add(pair.Key, pair.Value);
         }
 
-        queryTypes[variableName] = AggregateElementType(source.Type);
+        queryTypes[variableName] = sourceAggregate is null
+            ? AggregateElementType(source.Type)
+            : FromBoundType(sourceAggregate.ElementType);
         var predicate = BindExpression(
             syntax.RequiredChild("logicalExpression").RequiredChild("expression"),
             queryTypes);
         ExpressBoundType? specializedElement = null;
         ExpressBoundName? queryVariable = null;
-        var sourceAggregate = source.Type.DeclaredType as ExpressBoundAggregateType;
         if (sourceAggregate is not null
             && predicate.Kind == ExpressExpressionKind.Binary
             && predicate.Operation == "IN"
@@ -2599,7 +2776,7 @@ internal sealed class ExpressExpressionBinder
             }
         }
 
-        var resultType = source.Type;
+        var resultType = sourceAggregate is null ? source.Type : TypeOf(sourceAggregate);
         if (specializedElement is not null && sourceAggregate is not null)
         {
             resultType = TypeOf(new ExpressBoundAggregateType(
@@ -2627,7 +2804,7 @@ internal sealed class ExpressExpressionBinder
 
     private ExpressBoundNameReference? FindReference(ExpressSourceSpan span)
     {
-        return _references.SingleOrDefault(reference => ReferenceEquals(reference.Span, span));
+        return _referencesBySpan.TryGetValue(span, out var reference) ? reference : null;
     }
 
     private ExpressExpressionType TypeOf(ExpressBoundType? type)
@@ -2912,21 +3089,163 @@ internal sealed class ExpressExpressionBinder
         return _integer;
     }
 
-    private ExpressExpressionType IndexedType(ExpressExpressionType source)
+    private ExpressExpressionType IndexedType(
+        ExpressExpressionType source,
+        ExpressSourceSpan span)
     {
         return source.Kind switch
         {
             ExpressExpressionTypeKind.Binary => _binary,
             ExpressExpressionTypeKind.String => _string,
+            ExpressExpressionTypeKind.Generic => new(
+                ExpressExpressionTypeKind.Generic,
+                new ExpressBoundGenericType(isEntity: false, typeLabel: null, span)),
             _ => AggregateElementType(source),
         };
     }
 
     private ExpressExpressionType AggregateElementType(ExpressExpressionType source)
     {
-        return source.DeclaredType is ExpressBoundAggregateType aggregate
-            ? FromBoundType(aggregate.ElementType)
-            : _unresolved;
+        if (CommonAggregateElementType(
+                source.DeclaredType,
+                new HashSet<ExpressBoundSymbol>()) is { } elementType)
+        {
+            return FromBoundType(elementType);
+        }
+
+        return ContainsAggregateAlternative(
+            source.DeclaredType,
+            new HashSet<ExpressBoundSymbol>())
+                ? new ExpressExpressionType(
+                    ExpressExpressionTypeKind.Generic,
+                    new ExpressBoundGenericType(
+                        isEntity: false,
+                        typeLabel: null,
+                        source.DeclaredType!.Span))
+                : _unresolved;
+    }
+
+    private bool ContainsAggregateAlternative(
+        ExpressBoundType? type,
+        ISet<ExpressBoundSymbol> activeNames)
+    {
+        if (type is ExpressBoundAggregateType)
+        {
+            return true;
+        }
+
+        if (type is ExpressBoundNamedType named)
+        {
+            if (!_declarations.TryGetValue(named.Declaration, out var declaration)
+                || declaration is not ExpressBoundDefinedType defined
+                || !activeNames.Add(named.Declaration))
+            {
+                return false;
+            }
+
+            try
+            {
+                return ContainsAggregateAlternative(defined.UnderlyingType, activeNames);
+            }
+            finally
+            {
+                activeNames.Remove(named.Declaration);
+            }
+        }
+
+        if (type is not ExpressBoundSelectType select)
+        {
+            return false;
+        }
+
+        return (select.BaseType is null
+                ? select.Alternatives
+                : select.Alternatives.Prepend(select.BaseType))
+            .Any(alternative => ContainsAggregateAlternative(
+                new ExpressBoundNamedType(alternative, select.Span),
+                activeNames));
+    }
+
+    private ExpressBoundType? CommonAggregateElementType(
+        ExpressBoundType? type,
+        ISet<ExpressBoundSymbol> activeNames)
+    {
+        if (type is ExpressBoundAggregateType aggregate)
+        {
+            return aggregate.ElementType;
+        }
+
+        if (type is ExpressBoundNamedType named)
+        {
+            if (!_declarations.TryGetValue(named.Declaration, out var declaration)
+                || declaration is not ExpressBoundDefinedType defined
+                || !activeNames.Add(named.Declaration))
+            {
+                return null;
+            }
+
+            try
+            {
+                return CommonAggregateElementType(defined.UnderlyingType, activeNames);
+            }
+            finally
+            {
+                activeNames.Remove(named.Declaration);
+            }
+        }
+
+        if (type is not ExpressBoundSelectType { IsExtensible: false, } select)
+        {
+            return null;
+        }
+
+        var alternatives = new List<ExpressBoundSymbol>();
+        if (select.BaseType is not null)
+        {
+            alternatives.Add(select.BaseType);
+        }
+
+        alternatives.AddRange(select.Alternatives);
+        ExpressBoundType? common = null;
+        foreach (var alternative in alternatives)
+        {
+            var candidate = CommonAggregateElementType(
+                new ExpressBoundNamedType(alternative, select.Span),
+                activeNames);
+            if (candidate is null)
+            {
+                continue;
+            }
+
+            if (common is not null && !AreEquivalentTypes(common, candidate))
+            {
+                return null;
+            }
+
+            common ??= candidate;
+        }
+
+        return common;
+    }
+
+    private static bool AreEquivalentTypes(ExpressBoundType first, ExpressBoundType second)
+    {
+        if (ReferenceEquals(first, second))
+        {
+            return true;
+        }
+
+        return (first, second) switch
+        {
+            (ExpressBoundScalarType left, ExpressBoundScalarType right) => left.Kind == right.Kind,
+            (ExpressBoundNamedType left, ExpressBoundNamedType right) =>
+                ReferenceEquals(left.Declaration, right.Declaration),
+            (ExpressBoundAggregateType left, ExpressBoundAggregateType right) =>
+                left.Kind == right.Kind && AreEquivalentTypes(left.ElementType, right.ElementType),
+            (ExpressBoundEnumerationType left, ExpressBoundEnumerationType right) =>
+                left.Values.SequenceEqual(right.Values, StringComparer.OrdinalIgnoreCase),
+            _ => false,
+        };
     }
 
     private ExpressExpressionType FromBoundType(ExpressBoundType type)

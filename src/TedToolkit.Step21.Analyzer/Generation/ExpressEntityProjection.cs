@@ -167,6 +167,7 @@ internal sealed class ExpressEntityProjection
                 var replacement = attribute.WithDisambiguatedStorageMember();
                 ReplaceReference(flattenedAttributes, attribute, replacement);
                 ReplaceReference(effectiveAttributes, attribute, replacement);
+                ReplaceReference(interfaceAdapters, attribute, replacement);
             }
         }
 
@@ -329,7 +330,7 @@ internal sealed class ExpressEntityProjection
                      valueResolver))
         {
             var attribute = candidate;
-            var effectiveIndex = FindRedeclaredStorage(effective, attribute);
+            var effectiveIndex = FindRedeclaredStorage(effective, attribute, valueResolver);
             if (effectiveIndex >= 0)
             {
                 var inherited = effective[effectiveIndex];
@@ -424,20 +425,26 @@ internal sealed class ExpressEntityProjection
 
     private static int FindRedeclaredStorage(
         List<ExpressEntityAttributeProjection> effective,
-        ExpressEntityAttributeProjection attribute)
+        ExpressEntityAttributeProjection attribute,
+        ExpressGeneratedTypeResolver valueResolver)
     {
         if (attribute.RedeclaredEntityName is null || attribute.RedeclaredAttributeName is null)
         {
             return -1;
         }
 
+        var original = attribute.Attribute;
+        var visited = new HashSet<ExpressBoundAttribute>();
+        while (visited.Add(original) && valueResolver.TryGetRedeclaredAttribute(original, out var inherited))
+        {
+            original = inherited;
+        }
+
         return effective.FindIndex(candidate =>
-            StringComparer.OrdinalIgnoreCase.Equals(
-                candidate.StorageEntity.Name,
-                attribute.RedeclaredEntityName)
+            ReferenceEquals(candidate.StorageEntity.Symbol, original.DeclaringEntity)
             && StringComparer.OrdinalIgnoreCase.Equals(
                 candidate.StorageAttributeName,
-                attribute.RedeclaredAttributeName));
+                original.Name));
     }
 
     private static void AddPublicProperty(
@@ -471,6 +478,28 @@ internal sealed class ExpressEntityProjection
             if (ReferenceEquals(attributes[index], current))
             {
                 attributes[index] = replacement;
+            }
+        }
+    }
+
+    private static void ReplaceReference(
+        List<ExpressEntityAttributeAdapter> adapters,
+        ExpressEntityAttributeProjection current,
+        ExpressEntityAttributeProjection replacement)
+    {
+        for (var index = 0; index < adapters.Count; index++)
+        {
+            var adapter = adapters[index];
+            var interfaceAttribute = ReferenceEquals(adapter.InterfaceAttribute, current)
+                ? replacement
+                : adapter.InterfaceAttribute;
+            var storageAttribute = ReferenceEquals(adapter.StorageAttribute, current)
+                ? replacement
+                : adapter.StorageAttribute;
+            if (!ReferenceEquals(interfaceAttribute, adapter.InterfaceAttribute)
+                || !ReferenceEquals(storageAttribute, adapter.StorageAttribute))
+            {
+                adapters[index] = new(interfaceAttribute, storageAttribute);
             }
         }
     }

@@ -231,6 +231,10 @@ public sealed class SchemaValueTests
                 .Contains("FromPositiveCount")
                 .And.Contains("TryGetPositiveCount")
                 .And.Contains("Match");
+            await Assert.That(choice.GetMembers().OfType<IFieldSymbol>()
+                .Where(field => field.Name == "_value")
+                .Select(field => (field.Name, field.Type.SpecialType)))
+                .IsEquivalentTo([("_value", SpecialType.System_Object)]);
             await Assert.That(invalidClosedEnumeration.OutputCompilation.GetDiagnostics()
                 .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
                 .Select(diagnostic => diagnostic.Id)).Contains("CS0122");

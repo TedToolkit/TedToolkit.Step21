@@ -432,6 +432,48 @@ public sealed class GeneratedSchemaDescriptorTests
     }
 
     /// <summary>
+    /// Verifies large hydration dispatch is grouped without changing late-entity mapping behavior.
+    /// </summary>
+    [Test]
+    public async Task Should_group_large_hydration_dispatch_and_preserve_mapping()
+    {
+        var declarations = string.Concat(Enumerable.Range(0, 33).Select(index => $"""
+            ENTITY item_{index};
+              name : STRING;
+            END_ENTITY;
+
+            """));
+        var schema = $"""
+            SCHEMA grouped_hydration;
+            {declarations}END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(("schemas/grouped.exp", schema));
+        var descriptorSource = result.GeneratedSources.Single(source =>
+            source.HintName == "ExpressSchema_GROUPED_HYDRATION.g.cs").SourceText.ToString();
+        var assembly = Emit(result.OutputCompilation);
+        var descriptor = (SchemaDescriptor)assembly.GetType(
+            "TedToolkit.Step21.Generated.GroupedHydration.SchemaDescriptor",
+            throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
+        var entity = descriptor.AllocateEntity(["ITEM_32"])
+            ?? throw new InvalidOperationException("The generated descriptor did not allocate ITEM_32.");
+        var diagnostics = descriptor.HydrateEntity(
+            new ExchangeStructure(TestHeader.Create(), [descriptor]),
+            entity,
+            [new("ITEM_32", [ParameterValue.FromString("late")])]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(descriptorSource).Contains("__ExpressTryHydrateGroup0");
+            await Assert.That(descriptorSource).Contains("__ExpressTryHydrateGroup1");
+            await Assert.That(descriptorSource).Contains("__ExpressTryValidateGroup1");
+            await Assert.That(descriptorSource).Contains("__ExpressTryValidateEntityPopulationGroup1");
+            await Assert.That(diagnostics).IsEmpty();
+            await Assert.That((string?)entity.GetType().GetProperty("Name")!.GetValue(entity))
+                .IsEqualTo("late");
+        }
+    }
+
+    /// <summary>
     /// Verifies the fixed descriptor class name participates in atomic generated-name collision checks.
     /// </summary>
     [Test]

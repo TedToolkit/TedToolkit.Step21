@@ -237,6 +237,34 @@ public sealed class GeneratedDirectReferencesTests
         }
     }
 
+    /// <summary>
+    /// Verifies an optional value wrapper around a SELECT is unwrapped after its nullable presence check.
+    /// </summary>
+    [Test]
+    public async Task Should_compile_optional_defined_select_alias_references()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/optional-defined-select-reference.exp", """
+                SCHEMA optional_defined_select_reference_model;
+                ENTITY target;
+                END_ENTITY;
+                TYPE target_choice = SELECT (target);
+                END_TYPE;
+                TYPE target_alias = target_choice;
+                END_TYPE;
+                ENTITY holder;
+                  link : OPTIONAL target_alias;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
     private static EntityInstanceName RequiredName(ExchangeStructure structure, Entity entity)
     {
         return structure.TryGetName(entity, out var name)

@@ -1,0 +1,20 @@
+{
+  "packageId": "TedToolkit.Step21.Ap242",
+  "targetFramework": "net10.0",
+  "intendedFirstStableVersion": "1.0.0",
+  "previousStableBaseline": null,
+  "upstreamRevision": "9baa5dadaa1dcfcdc623220d865d36d61ea351e9",
+  "upstreamPath": "data/ap242/242_mim_lf.exp",
+  "sourceFile": "242_mim_lf.exp",
+  "upstreamCanonicalLfSha256": "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB",
+  "sourceCanonicalLfSha256": "221222ED7F92873D8A1BBDDAE569ED72C87730E09F56226A92E3F108FC9EB7A0",
+  "edition": "ISO TC184/SC4/WG12 N11521; ISO/TS 10303-442 AP242 MIM long form",
+  "closedSchemas": ["AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"],
+  "descriptor": "TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
+  "runtimeRange": "[1.0.0,2.0.0)",
+  "publicApiSnapshot": "PublicApi.approved.sha256",
+  "sourceLicense": "BSD-3-Clause",
+  "fixtureSha256": "88DA6C164CC685A881A4A52AC7D0BA90E27D649EE9183810887F1A8930AEFD30",
+  "fixtureEdition": "OCCT 7.9.3.1 AP242DIS; deterministic application-name alignment to the pinned MIM LF baseline",
+  "conformanceScope": "Fixed manifold B-rep box: product, topology, geometry, units, values, instance identity and shared references; not complete AP242 conformance"
+}

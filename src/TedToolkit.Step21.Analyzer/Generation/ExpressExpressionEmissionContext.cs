@@ -33,6 +33,11 @@ internal sealed class ExpressExpressionEmissionContext
     /// <param name="resolveSelectToEntityValue">Projects a SELECT value to one compatible entity alternative.</param>
     /// <param name="resolveNarrowedEntityCarrier">Projects an explicitly typed SELECT carrier to a proven entity.</param>
     /// <param name="resolveAggregateElement">Adapts one present aggregate element to its declared element type.</param>
+    /// <param name="resolveAggregateType">Resolves the aggregate value beneath a nominal type.</param>
+    /// <param name="resolveSelectedAggregateIndex">Indexes a schema-defined SELECT of aggregate values.</param>
+    /// <param name="resolveAggregateSource">Projects a nominal or selected aggregate to a shared read-only carrier.</param>
+    /// <param name="resolveDefinedValueType">Resolves the generated semantic carrier beneath defined-value wrappers.</param>
+    /// <param name="isSelectValueType">Identifies nominal SELECT carriers even when expression inference is unresolved.</param>
     internal ExpressExpressionEmissionContext(
         Func<ExpressBoundName, ExpressBoundType?, string?, ExpressBoundSymbol?, string> resolveReference,
         string? selfExpression = null,
@@ -53,8 +58,15 @@ internal sealed class ExpressExpressionEmissionContext
             resolveSelectToEntityValue = null,
         Func<ExpressBoundType, string, ExpressBoundNamedType, string>?
             resolveNarrowedEntityCarrier = null,
-        Func<ExpressBoundExpression, string, ExpressBoundType, string>?
-            resolveAggregateElement = null)
+        Func<ExpressBoundExpression, string, ExpressBoundType, bool, string>?
+            resolveAggregateElement = null,
+        Func<ExpressBoundType, ExpressBoundAggregateType?>? resolveAggregateType = null,
+        Func<ExpressBoundExpression, IReadOnlyList<string>, string, string?>?
+            resolveSelectedAggregateIndex = null,
+        Func<ExpressBoundType, string, ExpressBoundAggregateType, string?>?
+            resolveAggregateSource = null,
+        Func<ExpressBoundType, ExpressBoundType>? resolveDefinedValueType = null,
+        Func<ExpressBoundType, bool>? isSelectValueType = null)
     {
         ResolveReference = resolveReference;
         SelfExpression = selfExpression;
@@ -71,6 +83,11 @@ internal sealed class ExpressExpressionEmissionContext
         ResolveSelectToEntityValue = resolveSelectToEntityValue;
         ResolveNarrowedEntityCarrier = resolveNarrowedEntityCarrier;
         ResolveAggregateElement = resolveAggregateElement;
+        ResolveAggregateType = resolveAggregateType;
+        ResolveSelectedAggregateIndex = resolveSelectedAggregateIndex;
+        ResolveAggregateSource = resolveAggregateSource;
+        ResolveDefinedValueType = resolveDefinedValueType;
+        IsSelectValueType = isSelectValueType;
         if (allocateTemporaryName is null)
         {
             var temporaryOrdinal = 0;
@@ -167,9 +184,36 @@ internal sealed class ExpressExpressionEmissionContext
     /// <summary>
     /// Gets the resolver that adapts a present aggregate element to its declared element type.
     /// </summary>
-    internal Func<ExpressBoundExpression, string, ExpressBoundType, string>?
+    internal Func<ExpressBoundExpression, string, ExpressBoundType, bool, string>?
         ResolveAggregateElement
     { get; }
+
+    /// <summary>
+    /// Gets the resolver for an aggregate value beneath its nominal wrappers.
+    /// </summary>
+    internal Func<ExpressBoundType, ExpressBoundAggregateType?>? ResolveAggregateType { get; }
+
+    /// <summary>
+    /// Gets the schema-aware lowering for an index over a SELECT of aggregate values.
+    /// </summary>
+    internal Func<ExpressBoundExpression, IReadOnlyList<string>, string, string?>?
+        ResolveSelectedAggregateIndex
+    { get; }
+
+    /// <summary>
+    /// Gets the schema-aware projection of a nominal or selected aggregate to a shared read-only carrier.
+    /// </summary>
+    internal Func<ExpressBoundType, string, ExpressBoundAggregateType, string?>? ResolveAggregateSource { get; }
+
+    /// <summary>
+    /// Gets the resolver for the generated semantic carrier beneath defined-value wrappers.
+    /// </summary>
+    internal Func<ExpressBoundType, ExpressBoundType>? ResolveDefinedValueType { get; }
+
+    /// <summary>
+    /// Gets the classifier for nominal SELECT value carriers.
+    /// </summary>
+    internal Func<ExpressBoundType, bool>? IsSelectValueType { get; }
 
     /// <summary>
     /// Creates an equivalent context with a scoped declaration-reference resolver.
@@ -195,6 +239,11 @@ internal sealed class ExpressExpressionEmissionContext
             ResolveNarrowedScalarReference,
             ResolveSelectToEntityValue,
             ResolveNarrowedEntityCarrier,
-            ResolveAggregateElement);
+            ResolveAggregateElement,
+            ResolveAggregateType,
+            ResolveSelectedAggregateIndex,
+            ResolveAggregateSource,
+            ResolveDefinedValueType,
+            IsSelectValueType);
     }
 }

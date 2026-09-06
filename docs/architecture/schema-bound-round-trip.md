@@ -233,7 +233,7 @@ The `TedToolkit.Step21` NuGet package contains the .NET 10 runtime assembly and 
 
 The packed-consumer boundary verifies the actual package rather than relying only on project references. It compares emitted generated-source paths and bytes across isolated builds, audits the resolved runtime graph, and publishes and executes a representative `win-x64` Native AOT consumer. The executable runtime identifier is proof scope, not an exclusive supported-platform list.
 
-A family of maintained precompiled schema packages is an accepted extension direction, though it is not yet part of the delivered package topology. [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md) requires one independently versioned optional package per maintained schema baseline, explicit descriptors, pinned provenance, SemVer classification of generated/schema-semantic compatibility, and a bounded dependency on the schema-neutral runtime. Acceptance governs delivery but does not claim that any schema package has been implemented or released.
+`TedToolkit.Step21.Ap203`, `TedToolkit.Step21.Ap214`, and `TedToolkit.Step21.Ap242` are maintained independent precompiled schema packages. Each compiles its fixed EXPRESS baseline with the same shared generator and uses the same schema-neutral runtime; none introduces another reader/writer or depends on a sibling schema package. [`ADR-0006`](../adr/ADR-0006-precompiled-schema-package-distribution.md) requires independent versioning, explicit descriptors, pinned provenance, SemVer classification of generated/schema-semantic compatibility, and a bounded runtime dependency. A project or stable version in the repository does not itself imply publication to a remote feed.
 
 ### Resource ownership and concurrency
 

@@ -169,13 +169,34 @@ public sealed class ReachableRuleTests
         ENTITY unused_sample;
         END_ENTITY;
         RULE population_rule FOR (sample, unused_sample);
+        LOCAL
+          non_positive : SET OF sample := [];
+        END_LOCAL;
+          non_positive := QUERY(candidate <* sample | candidate.amount <= 0);
         WHERE
           nonempty : SIZEOF(sample) > 0;
-          all_positive : SIZEOF(QUERY(candidate <* sample | candidate.amount <= 0)) = 0;
+          all_positive : SIZEOF(non_positive) = 0;
         END_RULE;
         RULE bounded_population_rule FOR (sample);
+        LOCAL
+          pass : BOOLEAN := TRUE;
+          index : INTEGER := 0;
+        END_LOCAL;
+          REPEAT index := LOINDEX(sample) TO HIINDEX(sample) WHILE pass;
+            IF sample[index].amount > 10 THEN
+              pass := FALSE;
+            END_IF;
+          END_REPEAT;
         WHERE
-          below_limit : SIZEOF(QUERY(candidate <* sample | candidate.amount > 10)) = 0;
+          below_limit : pass;
+        END_RULE;
+        RULE indeterminate_local_rule FOR (sample);
+        LOCAL
+          pass : BOOLEAN := TRUE;
+        END_LOCAL;
+          pass := sample[1].amount > 0;
+        WHERE
+          stable : EXISTS(pass) OR NOT EXISTS(pass);
         END_RULE;
         END_SCHEMA;
         """;
@@ -402,8 +423,8 @@ public sealed class ReachableRuleTests
         WHERE
           dynamic_leaf : 'SELECT_TYPEOF_MODEL.LEAF_ENTITY' IN TYPEOF(value_component);
           entity_supertype : 'SELECT_TYPEOF_MODEL.BASE_ENTITY' IN TYPEOF(value_component);
-          no_outer_select : NOT ('SELECT_TYPEOF_MODEL.OUTER_CHOICE' IN TYPEOF(value_component));
-          no_inner_select : NOT ('SELECT_TYPEOF_MODEL.INNER_CHOICE' IN TYPEOF(value_component));
+          outer_select : 'SELECT_TYPEOF_MODEL.OUTER_CHOICE' IN TYPEOF(value_component);
+          inner_select : 'SELECT_TYPEOF_MODEL.INNER_CHOICE' IN TYPEOF(value_component);
         END_ENTITY;
         ENTITY scalar_sample;
           value_component : outer_choice;
@@ -412,8 +433,8 @@ public sealed class ReachableRuleTests
           scalar_base_type : 'SELECT_TYPEOF_MODEL.SCALAR_BASE' IN TYPEOF(value_component);
           real_type : 'REAL' IN TYPEOF(value_component);
           number_type : 'NUMBER' IN TYPEOF(value_component);
-          no_outer_select : NOT ('SELECT_TYPEOF_MODEL.OUTER_CHOICE' IN TYPEOF(value_component));
-          no_inner_select : NOT ('SELECT_TYPEOF_MODEL.INNER_CHOICE' IN TYPEOF(value_component));
+          outer_select : 'SELECT_TYPEOF_MODEL.OUTER_CHOICE' IN TYPEOF(value_component);
+          inner_select : 'SELECT_TYPEOF_MODEL.INNER_CHOICE' IN TYPEOF(value_component);
         END_ENTITY;
         ENTITY integer_sample;
           value_component : outer_choice;
@@ -1101,7 +1122,7 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         ENTITY geometric_representation_item SUBTYPE OF (representation_item);
         END_ENTITY;
-        ENTITY direction;
+        ENTITY direction SUBTYPE OF (geometric_representation_item);
           ratios : LIST [1:?] OF REAL;
         END_ENTITY;
         ENTITY vector SUBTYPE OF (geometric_representation_item);
@@ -1110,7 +1131,7 @@ public sealed class ReachableRuleTests
         END_ENTITY;
         TYPE vector_or_direction = SELECT (vector, direction);
         END_TYPE;
-        FUNCTION normalise_direction(item : direction) : vector_or_direction;
+        FUNCTION normalise_direction(item : vector_or_direction) : vector_or_direction;
           RETURN(item);
         END_FUNCTION;
         FUNCTION build_vector(item : direction) : vector;
@@ -1181,6 +1202,10 @@ public sealed class ReachableRuleTests
         END_TYPE;
         TYPE nested_choice = SELECT (accepted_choice);
         END_TYPE;
+        TYPE accepted_only_choice = SELECT (accepted_child);
+        END_TYPE;
+        TYPE all_accepted_nested = SELECT (accepted_only_choice);
+        END_TYPE;
         FUNCTION accepts_entity(item : accepted) : BOOLEAN;
           RETURN(item.code > 0);
         END_FUNCTION;
@@ -1211,6 +1236,7 @@ public sealed class ReachableRuleTests
           child_value : carrier;
           alternate_value : carrier;
           rejected_value : carrier;
+          nested_accepted_value : all_accepted_nested;
           selected_value : carrier_choice;
         WHERE
           exact_entity : accepts_entity(accepted_value);
@@ -1219,6 +1245,7 @@ public sealed class ReachableRuleTests
           caller_propagates_unknown : NOT EXISTS(forwards_entity(rejected_value));
           nested_select_first : accepts_choice(accepted_value);
           nested_select_second : accepts_choice(alternate_value);
+          nested_entity_argument : accepts_entity(nested_accepted_value);
           wrong_select_is_unknown : NOT EXISTS(accepts_choice(rejected_value));
           absent_actual_is_unknown : NOT EXISTS(accepts_entity(
             maybe_carrier(FALSE,accepted_value)));
@@ -1253,8 +1280,16 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, child);
                 _ = structure.Add(section, alternate);
                 _ = structure.Add(section, rejected);
+                var acceptedOnly = AcceptedOnlyChoice.FromAcceptedChild(child);
+                var nestedAccepted = AllAcceptedNested.FromAcceptedOnlyChoice(acceptedOnly);
                 var selected = CarrierChoice.FromAccepted(accepted);
-                _ = structure.Add(section, new Sample(accepted, child, alternate, rejected, selected));
+                _ = structure.Add(section, new Sample(
+                    accepted,
+                    child,
+                    alternate,
+                    rejected,
+                    nestedAccepted,
+                    selected));
                 return structure.Validate();
             }
         }
@@ -1849,6 +1884,9 @@ public sealed class ReachableRuleTests
         FUNCTION accept_set(values : SET [3:3] OF STRING) : BOOLEAN;
           RETURN(('first' IN values) AND ('second' IN values) AND ('third' IN values));
         END_FUNCTION;
+        FUNCTION accept_string_bag(values : BAG OF STRING) : BOOLEAN;
+          RETURN(SIZEOF(values) >= 0);
+        END_FUNCTION;
         FUNCTION guarded_list(present : BOOLEAN) : BOOLEAN;
           RETURN(accept_list([
             maybe_real(1.0, TRUE),
@@ -1899,6 +1937,8 @@ public sealed class ReachableRuleTests
           set_initializer : set_control(TRUE);
           bag_initializer : bag_control(TRUE);
           contextual_set_initializer : accept_set(['first', 'second', 'third']);
+          bag_argument_from_list_literal : accept_string_bag(['first']);
+          empty_bag_argument : accept_string_bag([]);
           present_repeat : guarded_repeat(TRUE) = 2;
           absent_repeat : guarded_repeat(FALSE) = 0;
         END_ENTITY;
@@ -2495,6 +2535,33 @@ public sealed class ReachableRuleTests
         END_SCHEMA;
         """;
 
+    private const string REDECLARED_AGGREGATE_ELEMENT_ALIAS_SCHEMA = """
+        SCHEMA redeclared_aggregate_element_alias_model;
+        ENTITY shape_value;
+        END_ENTITY;
+        ENTITY annotation_value;
+        END_ENTITY;
+        TYPE inspected_element = SELECT (shape_value, annotation_value);
+        END_TYPE;
+        TYPE inspected_shape_element = inspected_element;
+        WHERE
+          excludes_annotations : NOT ('REDECLARED_AGGREGATE_ELEMENT_ALIAS_MODEL.ANNOTATION_VALUE' IN TYPEOF(SELF));
+        END_TYPE;
+        ENTITY report_item;
+          inspected_elements : SET [1:?] OF inspected_element;
+        END_ENTITY;
+        ENTITY shape_report_item SUBTYPE OF (report_item);
+          SELF\report_item.inspected_elements : SET [1:?] OF inspected_shape_element;
+        END_ENTITY;
+        ENTITY sample;
+          report : shape_report_item;
+        WHERE
+          indexes_redeclared_alias :
+            'REDECLARED_AGGREGATE_ELEMENT_ALIAS_MODEL.SHAPE_VALUE' IN TYPEOF(report.inspected_elements[1]);
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string QUALIFIED_PATH_NARROWING_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
@@ -2741,7 +2808,9 @@ public sealed class ReachableRuleTests
         END_TYPE;
         TYPE integer_value = NUMBER;
         END_TYPE;
-        TYPE measure_choice = SELECT (first_real, second_real, integer_value);
+        TYPE exact_integer = INTEGER;
+        END_TYPE;
+        TYPE measure_choice = SELECT (first_real, second_real, integer_value, exact_integer);
         END_TYPE;
         FUNCTION positive_real(item : measure_choice) : BOOLEAN;
           IF 'REAL' IN TYPEOF(item) THEN
@@ -2754,6 +2823,18 @@ public sealed class ReachableRuleTests
             RETURN(item > 0);
           END_IF;
           RETURN(TRUE);
+        END_FUNCTION;
+        FUNCTION positive_square_root(item : measure_choice) : BOOLEAN;
+          IF 'REAL' IN TYPEOF(item) THEN
+            RETURN(SQRT(item) > 0.0);
+          END_IF;
+          RETURN(TRUE);
+        END_FUNCTION;
+        FUNCTION add_integers(first_item, second_item : measure_choice) : INTEGER;
+          IF ('INTEGER' IN TYPEOF(first_item)) AND ('INTEGER' IN TYPEOF(second_item)) THEN
+            RETURN(first_item + second_item);
+          END_IF;
+          RETURN(?);
         END_FUNCTION;
         FUNCTION positive_closed_else(item : measure_choice) : BOOLEAN;
           IF 'REAL' IN TYPEOF(item) THEN
@@ -2785,20 +2866,54 @@ public sealed class ReachableRuleTests
           END_IF;
           RETURN(TRUE);
         END_FUNCTION;
+        FUNCTION wrap_first(item : first_real) : measure_choice;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION wrap_primitive_integer(item : INTEGER) : measure_choice;
+          RETURN(item);
+        END_FUNCTION;
+        FUNCTION assign_primitive_integer(item : INTEGER) : measure_choice;
+          LOCAL result : measure_choice; END_LOCAL;
+          result := item;
+          RETURN(result);
+        END_FUNCTION;
+        FUNCTION accepts_choice(item : measure_choice) : BOOLEAN;
+          RETURN(EXISTS(item));
+        END_FUNCTION;
+        FUNCTION accepts_choices(items : LIST [1:?] OF measure_choice) : BOOLEAN;
+          RETURN(EXISTS(items[1]));
+        END_FUNCTION;
+        FUNCTION first_numeric_value(items : LIST [1:?] OF measure_choice) : REAL;
+          LOCAL
+            result : REAL;
+          END_LOCAL;
+          result := items[1];
+          RETURN(result);
+        END_FUNCTION;
         ENTITY sample;
           first : measure_choice;
           second : measure_choice;
           number_real : measure_choice;
           integer_item : measure_choice;
+          raw_first : first_real;
         WHERE
           first_real_branch : positive_real(first);
           second_real_branch : positive_real(second);
           number_real_branch : positive_real(number_real);
           integer_branch : positive_integer(integer_item);
+          math_branch : positive_square_root(first);
+          arithmetic_branch : add_integers(integer_item, integer_item) = 8;
           closed_else_branch : positive_closed_else(integer_item);
           scalar_assignment_storage : scalar_assignment(first, integer_item);
           scalar_no_else_storage : scalar_use_after_no_else(first);
           scalar_assignment_use : scalar_assignment_then_use(first, integer_item);
+          wraps_named_scalar : EXISTS(wrap_first(raw_first));
+          wraps_primitive_scalar : EXISTS(wrap_primitive_integer(1));
+          assigns_primitive_scalar : EXISTS(assign_primitive_integer(1));
+          passes_primitive_scalar : accepts_choice(1);
+          passes_named_scalar : accepts_choice(raw_first);
+          wraps_aggregate_element : accepts_choices([raw_first]);
+          projects_indexed_select : first_numeric_value([first]) > 0.0;
           integer_control : 2 > 1;
           real_control : 2.0 > 1.0;
         END_ENTITY;
@@ -2827,7 +2942,8 @@ public sealed class ReachableRuleTests
                     MeasureChoice.FromSecondReal(new SecondReal(new RealValue(3, BigInteger.Zero))),
                     MeasureChoice.FromIntegerValue(new IntegerValue(NumberValue.FromReal(
                         new RealValue(35, new BigInteger(-1))))),
-                    MeasureChoice.FromIntegerValue(new IntegerValue(NumberValue.FromInteger(new BigInteger(4))))));
+                    MeasureChoice.FromIntegerValue(new IntegerValue(NumberValue.FromInteger(new BigInteger(4)))),
+                    new FirstReal(new RealValue(2, BigInteger.Zero))));
                 return structure.Validate();
             }
         }
@@ -2906,6 +3022,9 @@ public sealed class ReachableRuleTests
           closed_right_rule : closed_choice(right_choice) = 4;
           inherited_left_rule : inherited_root(left_choice) = 1;
           inherited_right_rule : inherited_root(right_choice) = 3;
+          guarded_attribute_root :
+            ('SELECT_GROUP_QUALIFIER_MODEL.DEEP_LEFT' IN TYPEOF(left_choice))
+            AND (left_choice\root.code = 1);
           wrong_alternative_is_unknown : NOT EXISTS(unguarded_left(right_choice));
           direct_group_rule : direct_group(direct_item) = 3;
         END_ENTITY;
@@ -2968,6 +3087,12 @@ public sealed class ReachableRuleTests
         FUNCTION determinate_logical(input_value : LOGICAL) : LOGICAL;
           RETURN(input_value);
         END_FUNCTION;
+        ENTITY boolean_holder;
+          flag : BOOLEAN;
+        END_ENTITY;
+        FUNCTION inverted_holder(input_value : boolean_holder) : boolean_holder;
+          RETURN(boolean_holder(NOT input_value.flag));
+        END_FUNCTION;
         FUNCTION recursive_logical(
           values : LIST [1:?] OF LOGICAL; index : INTEGER) : LOGICAL;
           IF index = SIZEOF(values) THEN
@@ -2993,6 +3118,7 @@ public sealed class ReachableRuleTests
           true_logical : LOGICAL;
           false_logical : LOGICAL;
           unknown_logical : LOGICAL;
+          optional_name : OPTIONAL STRING;
         WHERE
           boolean_true_promotes : logical_from_boolean(TRUE);
           boolean_false_promotes : NOT logical_from_boolean(FALSE);
@@ -3013,6 +3139,7 @@ public sealed class ReachableRuleTests
           if_unknown_skips : if_score(unknown_logical) = 0;
           query_keeps_only_true : query_true_count(
             true_logical,false_logical,unknown_logical) = 1;
+          target_typed_membership : TRUE AND (optional_name IN ['expected']);
         END_ENTITY;
         ENTITY predicate_sample;
           candidate : LOGICAL;
@@ -3025,6 +3152,11 @@ public sealed class ReachableRuleTests
           guarded_value : NOT determinate_logical(local_roundtrip(candidate));
           nullable_value : NOT local_roundtrip(candidate);
           recursive_not : recursive_logical([candidate],0);
+        END_ENTITY;
+        ENTITY boolean_constructor_sample;
+          source : boolean_holder;
+        WHERE
+          valid : EXISTS(inverted_holder(source));
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -3048,7 +3180,10 @@ public sealed class ReachableRuleTests
                 _ = structure.Add(section, new Sample(
                     LogicalValue.True,
                     LogicalValue.False,
-                    LogicalValue.Unknown));
+                    LogicalValue.Unknown)
+                {
+                    OptionalName = "expected",
+                });
                 return structure.Validate();
             }
 
@@ -4983,6 +5118,15 @@ public sealed class ReachableRuleTests
           END_FUNCTION;
           RETURN(all_positive(values));
         END_FUNCTION;
+        FUNCTION outer_optional(flag : BOOLEAN) : BOOLEAN;
+          FUNCTION nested_optional(inner_flag : BOOLEAN) : INTEGER;
+            IF inner_flag THEN
+              RETURN(1);
+            END_IF;
+            RETURN(?);
+          END_FUNCTION;
+          RETURN((nested_optional(TRUE) = 1) AND (NOT EXISTS(nested_optional(flag))));
+        END_FUNCTION;
         FUNCTION repeat_shadow(values : LIST [1:?] OF INTEGER) : INTEGER;
           LOCAL
             i : INTEGER := 99;
@@ -5000,6 +5144,7 @@ public sealed class ReachableRuleTests
           while_control : sum_while(3) = 6;
           guarded_case : classify(1);
           nested_function : outer_check(values);
+          nested_indeterminate_function : outer_optional(FALSE);
           repeat_scope : repeat_shadow(values) = 99;
         END_ENTITY;
         END_SCHEMA;
@@ -5705,7 +5850,7 @@ public sealed class ReachableRuleTests
         SCHEMA complex_constructor_model;
         CONSTANT
           marker_value : marker := base_part('marker') || marker();
-          deep_value : deepest := base_part('deep') || middle(2) || deepest(TRUE);
+          deep_value : deepest := base_part('deep') || middle(2) || deepest(NOT FALSE);
         END_CONSTANT;
         TYPE label_value = STRING;
         END_TYPE;
@@ -5725,11 +5870,20 @@ public sealed class ReachableRuleTests
         ENTITY deepest SUBTYPE OF (middle);
           enabled : BOOLEAN;
         END_ENTITY;
+        ENTITY numeric_base ABSTRACT;
+          numeric_value : NUMBER;
+        END_ENTITY;
+        ENTITY integer_leaf SUBTYPE OF (numeric_base);
+          SELF\numeric_base.numeric_value : INTEGER;
+        END_ENTITY;
         FUNCTION attach(existing : base_part; amount : INTEGER) : leaf;
           RETURN(existing || leaf(amount));
         END_FUNCTION;
         FUNCTION attach_sqrt(existing : base_part; magnitude : REAL) : leaf;
           RETURN(existing || leaf(SQRT(magnitude)));
+        END_FUNCTION;
+        FUNCTION make_integer(lit_value : INTEGER) : integer_leaf;
+          RETURN(numeric_base(lit_value) || integer_leaf());
         END_FUNCTION;
         ENTITY sample;
           source : base_part;
@@ -5739,6 +5893,8 @@ public sealed class ReachableRuleTests
           sqrt_present : attach_sqrt(source, 9).amount = 3;
           sqrt_unknown : NOT EXISTS(attach_sqrt(source, -1));
           deep_path : (deep_value.label = 'deep') AND (deep_value.code = 2) AND deep_value.enabled;
+          inferred_path : TYPEOF(base_part('probe') || marker()) = TYPEOF(marker_value);
+          redeclared_slot : make_integer(3).numeric_value = 3;
         END_ENTITY;
         END_SCHEMA;
         """;
@@ -7032,7 +7188,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
     }
@@ -7048,7 +7203,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
     }
@@ -7064,7 +7218,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
     }
@@ -7400,6 +7553,9 @@ public sealed class ReachableRuleTests
         }
 
         var assembly = Emit(result.OutputCompilation);
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
         var validate = assembly.GetType("DependencyConsumer", throwOnError: true)!.GetMethod(
             "Validate",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
@@ -7421,6 +7577,8 @@ public sealed class ReachableRuleTests
                 "DEPENDENCY_MODEL.SAMPLE.WHERE.CONTAINS_AMOUNT",
             });
             await Assert.That(valid.IsValid).IsTrue();
+            await Assert.That(generated).Contains("__ExpressFunction_Scaled(");
+            await Assert.That(generated).DoesNotContain("=> __ExpressFunction_Scaled(");
         }
     }
 
@@ -7683,7 +7841,7 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
-    /// Verifies TYPEOF unwraps the selected value without reporting SELECT carrier names.
+    /// Verifies TYPEOF reports the selected value and every named SELECT on its carrier path.
     /// </summary>
     [Test]
     public async Task Should_report_the_actual_selected_type_from_typeof()
@@ -7707,6 +7865,12 @@ public sealed class ReachableRuleTests
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
+            var generatedText = string.Join(
+                Environment.NewLine,
+                result.GeneratedSources.Select(source => source.SourceText.ToString()));
+            await Assert.That(generatedText).Contains("__ExpressTypeOfSelectTypeofModelOuterChoice");
+            await Assert.That(generatedText)
+                .DoesNotContain(".Match<global::TedToolkit.Step21.ExpressSet<global::System.String>>");
         }
 
         var assembly = Emit(result.OutputCompilation);
@@ -7961,7 +8125,6 @@ public sealed class ReachableRuleTests
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
-
         await Assert.That(diagnostics).IsEmpty()
             .Because(string.Join(Environment.NewLine, diagnostics));
     }
@@ -7976,8 +8139,20 @@ public sealed class ReachableRuleTests
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
 
-        await Assert.That(diagnostics).IsEmpty()
-            .Because(string.Join(Environment.NewLine, diagnostics));
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+        var buildVectorStart = generated.IndexOf("__ExpressFunction_BuildVector", StringComparison.Ordinal);
+        var buildVectorEnd = generated.IndexOf("private static", buildVectorStart + 1, StringComparison.Ordinal);
+        var buildVector = generated.Substring(buildVectorStart, buildVectorEnd - buildVectorStart);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(buildVector).Contains("VectorOrDirection.FromDirection(");
+            await Assert.That(buildVector).DoesNotContain(" is IVector ");
+        }
     }
 
     /// <summary>
@@ -8544,6 +8719,1710 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies an index over a closed SELECT of aggregate categories uses their common element domain.
+    /// </summary>
+    [Test]
+    public async Task Should_index_a_selected_aggregate_through_its_common_element_domain()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-aggregate-index.exp", """
+                SCHEMA select_aggregate_index_model;
+                ENTITY representation_item;
+                END_ENTITY;
+                TYPE length_measure = REAL;
+                END_TYPE;
+                ENTITY value_representation_item SUBTYPE OF (representation_item);
+                  value_component : length_measure;
+                END_ENTITY;
+                TYPE list_representation_item = LIST [1:?] OF representation_item;
+                END_TYPE;
+                TYPE set_representation_item = SET [1:?] OF representation_item;
+                END_TYPE;
+                TYPE compound_item_definition = SELECT
+                  (list_representation_item, set_representation_item);
+                END_TYPE;
+                TYPE mixed_item_definition = SELECT
+                  (representation_item, set_representation_item);
+                END_TYPE;
+                ENTITY compound_representation_item;
+                  item_element : compound_item_definition;
+                WHERE
+                  first_item :
+                    ('SELECT_AGGREGATE_INDEX_MODEL.VALUE_REPRESENTATION_ITEM' IN TYPEOF(item_element[1])) AND
+                    (SIZEOF(QUERY(vri <* [item_element[1]] |
+                      'SELECT_AGGREGATE_INDEX_MODEL.LENGTH_MEASURE' IN TYPEOF(vri.value_component))) = 1);
+                  selected_query : SIZEOF(QUERY(item <* item_element | TRUE)) > 0;
+                END_ENTITY;
+                ENTITY guarded_query_holder;
+                  item : mixed_item_definition;
+                WHERE
+                  valid_item :
+                    ('SELECT_AGGREGATE_INDEX_MODEL.REPRESENTATION_ITEM' IN TYPEOF(item)) OR
+                    (('SELECT_AGGREGATE_INDEX_MODEL.SET_REPRESENTATION_ITEM' IN TYPEOF(item)) AND
+                     (SIZEOF(QUERY(member <* item | TRUE)) > 0));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies compatible scalar values are reconstructed at defined function-parameter boundaries.
+    /// </summary>
+    [Test]
+    public async Task Should_reconstruct_defined_scalars_at_application_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/defined-application-boundary.exp", """
+                SCHEMA defined_application_boundary_model;
+                TYPE positive_integer = INTEGER;
+                WHERE
+                  positive : SELF > 0;
+                END_TYPE;
+                FUNCTION consume_positive(input_value : positive_integer) : INTEGER;
+                  RETURN(input_value);
+                END_FUNCTION;
+                FUNCTION bridge_integer(input_value : INTEGER) : INTEGER;
+                  RETURN(consume_positive(input_value));
+                END_FUNCTION;
+                FUNCTION bridge_number(input_value : NUMBER) : INTEGER;
+                  RETURN(consume_positive(input_value));
+                END_FUNCTION;
+                ENTITY sample;
+                  amount : INTEGER;
+                  numeric : NUMBER;
+                WHERE
+                  valid : bridge_integer(amount) > 0;
+                  valid_number : bridge_number(numeric) > 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("new global::TedToolkit.Step21.Generated."
+                + "DefinedApplicationBoundaryModel.PositiveInteger(");
+            await Assert.That(generated).Contains(".ToIntegerTruncated()");
+        }
+    }
+
+    /// <summary>
+    /// Verifies indeterminate guards use the semantic carrier beneath a defined enumeration alias.
+    /// </summary>
+    [Test]
+    public async Task Should_type_indeterminate_defined_alias_results_as_their_semantic_carrier()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/defined-alias-indeterminate.exp", """
+                SCHEMA defined_alias_indeterminate_model;
+                TYPE base_status = ENUMERATION OF (expected, other);
+                END_TYPE;
+                TYPE status_alias = base_status;
+                END_TYPE;
+                FUNCTION default_status(unused : INTEGER) : status_alias;
+                  RETURN(base_status.expected);
+                END_FUNCTION;
+                ENTITY sample;
+                  status : OPTIONAL status_alias;
+                WHERE
+                  valid : status = base_status.expected;
+                  returned_alias : default_status(1) = base_status.expected;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies indeterminacy from a nested index is preserved at a BOOLEAN local assignment boundary.
+    /// </summary>
+    [Test]
+    public async Task Should_guard_boolean_assignments_whose_nested_expression_can_be_indeterminate()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/nested-indeterminate-assignment.exp", """
+                SCHEMA nested_indeterminate_assignment_model;
+                FUNCTION indexed_membership(values : LIST OF STRING; index : INTEGER) : BOOLEAN;
+                  LOCAL
+                    result_value : BOOLEAN;
+                  END_LOCAL;
+                  result_value := values[index] IN ['expected'];
+                  RETURN(result_value);
+                END_FUNCTION;
+                ENTITY sample;
+                WHERE
+                  valid : indexed_membership(['expected'],1);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a group-qualified inverse UNIQUE key uses the generated inverse resolver.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_group_qualified_inverse_unique_keys()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/inverse-unique-key.exp", """
+                SCHEMA inverse_unique_key_model;
+                ENTITY root;
+                INVERSE
+                  single_owner : owner FOR target;
+                END_ENTITY;
+                ENTITY child
+                  SUBTYPE OF (root);
+                UNIQUE
+                  owner_key : SELF\root.single_owner;
+                END_ENTITY;
+                ENTITY owner;
+                  target : root;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies UNIQUE uses the generated type of a same-name narrowed redeclaration.
+    /// </summary>
+    [Test]
+    public async Task Should_use_narrowed_redeclared_member_type_for_unique_keys()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/narrowed-unique-key.exp", """
+                SCHEMA narrowed_unique_key_model;
+                ENTITY target;
+                END_ENTITY;
+                ENTITY alternate;
+                END_ENTITY;
+                TYPE broad_choice = SELECT (target, alternate);
+                END_TYPE;
+                ENTITY root;
+                  definition : broad_choice;
+                END_ENTITY;
+                ENTITY specialized
+                  SUBTYPE OF (root);
+                  SELF\root.definition : target;
+                UNIQUE
+                  definition_key : SELF\root.definition;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a qualified UNIQUE key disambiguates same-name members inherited from separate branches.
+    /// </summary>
+    [Test]
+    public async Task Should_disambiguate_multi_inheritance_unique_key_members()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/multi-inheritance-unique-key.exp", """
+                SCHEMA multi_inheritance_unique_key_model;
+                ENTITY first_root;
+                  name : STRING;
+                END_ENTITY;
+                ENTITY second_root;
+                  name : STRING;
+                END_ENTITY;
+                ENTITY combined
+                  SUBTYPE OF (first_root, second_root);
+                UNIQUE
+                  second_name : SELF\second_root.name;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a derived entity redeclaration is projected back to its inherited SELECT carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_project_polymorphic_derived_attributes_to_the_declared_select_carrier()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/polymorphic-derived-select.exp", """
+                SCHEMA polymorphic_derived_select_model;
+                ENTITY product;
+                END_ENTITY;
+                ENTITY alternate;
+                END_ENTITY;
+                TYPE product_choice = SELECT (product, alternate);
+                END_TYPE;
+                ENTITY relationship;
+                  relating : product_choice;
+                END_ENTITY;
+                ENTITY special_relationship
+                  SUBTYPE OF (relationship);
+                  product_value : product;
+                DERIVE
+                  SELF\relationship.relating : product := product_value;
+                END_ENTITY;
+                RULE relationship_rule FOR (relationship);
+                WHERE
+                  valid : SIZEOF(QUERY(item <* relationship | EXISTS(item.relating))) >= 0;
+                END_RULE;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("ProductChoice.FromProduct(");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a validation-reachable function retains the nested procedure that it calls.
+    /// </summary>
+    [Test]
+    public async Task Should_emit_validation_reachable_nested_procedures()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/nested-procedure.exp", """
+                SCHEMA nested_procedure_model;
+                FUNCTION outer(input_value : REAL) : REAL;
+                  PROCEDURE copy_value(source : REAL; VAR target : REAL);
+                    target := source;
+                  END_PROCEDURE;
+                  LOCAL
+                    result_value : REAL := ?;
+                  END_LOCAL;
+                  IF input_value >= 0.0 THEN
+                    result_value := input_value;
+                  END_IF;
+                  IF input_value >= 0.0 THEN
+                    copy_value(input_value, result_value);
+                  END_IF;
+                  RETURN(result_value);
+                END_FUNCTION;
+                ENTITY sample;
+                  amount : REAL;
+                WHERE
+                  valid : outer(amount) = amount;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("private static void __ExpressProcedure_CopyValue_");
+        }
+    }
+
+    /// <summary>
+    /// Verifies procedure inputs use the same SELECT-to-entity adaptation as function inputs.
+    /// </summary>
+    [Test]
+    public async Task Should_adapt_selected_entity_procedure_arguments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/selected-procedure-argument.exp", """
+                SCHEMA selected_procedure_argument_model;
+                ENTITY product;
+                END_ENTITY;
+                ENTITY product_child
+                  SUBTYPE OF (product);
+                END_ENTITY;
+                ENTITY alternate;
+                END_ENTITY;
+                TYPE product_choice = SELECT (product, alternate);
+                END_TYPE;
+                FUNCTION accepts_product(input_value : product_choice) : BOOLEAN;
+                  PROCEDURE inspect(source : product; VAR accepted : BOOLEAN);
+                    accepted := EXISTS(source);
+                  END_PROCEDURE;
+                  LOCAL
+                    result_value : BOOLEAN := FALSE;
+                  END_LOCAL;
+                  IF 'SELECTED_PROCEDURE_ARGUMENT_MODEL.PRODUCT' IN TYPEOF(input_value) THEN
+                    inspect(input_value, result_value);
+                  END_IF;
+                  RETURN(result_value);
+                END_FUNCTION;
+                FUNCTION accepts_child(input_value : product_child) : BOOLEAN;
+                  RETURN(EXISTS(input_value));
+                END_FUNCTION;
+                FUNCTION accepts_selected_child(input_value : product_choice) : BOOLEAN;
+                  IF 'SELECTED_PROCEDURE_ARGUMENT_MODEL.PRODUCT_CHILD' IN TYPEOF(input_value) THEN
+                    RETURN(accepts_child(input_value));
+                  END_IF;
+                  RETURN(FALSE);
+                END_FUNCTION;
+                ENTITY sample;
+                  item : product_choice;
+                WHERE
+                  valid : accepts_product(item) OR NOT accepts_product(item);
+                  selected_subtype : accepts_selected_child(item) OR NOT accepts_selected_child(item);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies indeterminate local storage remains visible at procedure-call boundaries.
+    /// </summary>
+    [Test]
+    public async Task Should_guard_indeterminate_procedure_arguments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/indeterminate-procedure-argument.exp", """
+                SCHEMA indeterminate_procedure_argument_model;
+                FUNCTION maybe_flag(input_value : LOGICAL) : BOOLEAN;
+                  PROCEDURE copy_flag(source : BOOLEAN; VAR target : BOOLEAN);
+                    target := target OR source;
+                  END_PROCEDURE;
+                  LOCAL
+                    stored : BOOLEAN;
+                  END_LOCAL;
+                  stored := input_value;
+                  copy_flag(input_value, stored);
+                  RETURN(stored);
+                END_FUNCTION;
+                FUNCTION accept_flag(input_value : BOOLEAN) : BOOLEAN;
+                  RETURN(input_value);
+                END_FUNCTION;
+                ENTITY gated;
+                  enabled : BOOLEAN;
+                END_ENTITY;
+                ENTITY sample;
+                  flag : LOGICAL;
+                WHERE
+                  valid : EXISTS(maybe_flag(flag)) OR NOT EXISTS(maybe_flag(flag));
+                  accepted : EXISTS(accept_flag(flag)) OR NOT EXISTS(accept_flag(flag));
+                  constructed : EXISTS(gated(flag)) OR NOT EXISTS(gated(flag));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("is { } __expressProcedureArgument");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a complementary TYPEOF branch projects the declared SELECT carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_project_complementary_select_entity_assignments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/complementary-select-entity.exp", """
+                SCHEMA complementary_select_entity_model;
+                ENTITY surface;
+                END_ENTITY;
+                ENTITY curve;
+                  basis : surface;
+                END_ENTITY;
+                TYPE curve_or_surface = SELECT (curve, surface);
+                END_TYPE;
+                FUNCTION associated_surface(input_value : curve_or_surface) : surface;
+                  LOCAL result_value : surface; END_LOCAL;
+                  IF 'COMPLEMENTARY_SELECT_ENTITY_MODEL.CURVE' IN TYPEOF(input_value) THEN
+                    result_value := input_value.basis;
+                  ELSE
+                    result_value := input_value;
+                  END_IF;
+                  RETURN(result_value);
+                END_FUNCTION;
+                ENTITY sample;
+                  item : curve_or_surface;
+                WHERE
+                  valid : EXISTS(associated_surface(item));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies polymorphic attribute assignment honors each redeclared entity carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_narrow_polymorphic_assignment_values_to_redeclared_entity_types()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/polymorphic-assignment.exp", """
+                SCHEMA polymorphic_assignment_model;
+                ENTITY generic_expression;
+                END_ENTITY;
+                ENTITY numeric_expression
+                  SUBTYPE OF (generic_expression);
+                END_ENTITY;
+                ENTITY unary_generic_expression
+                  SUBTYPE OF (generic_expression);
+                  operand : generic_expression;
+                END_ENTITY;
+                ENTITY unary_numeric_expression
+                  SUBTYPE OF (numeric_expression, unary_generic_expression);
+                  SELF\unary_generic_expression.operand : numeric_expression;
+                END_ENTITY;
+                ENTITY numeric_node
+                  SUBTYPE OF (unary_numeric_expression);
+                END_ENTITY;
+                ENTITY multiple_generic_expression
+                  SUBTYPE OF (generic_expression);
+                  operands : LIST OF generic_expression;
+                END_ENTITY;
+                ENTITY multiple_numeric_expression
+                  SUBTYPE OF (numeric_expression, multiple_generic_expression);
+                  SELF\multiple_generic_expression.operands : LIST OF numeric_expression;
+                END_ENTITY;
+                FUNCTION replace_operand(
+                  expression_value : unary_generic_expression;
+                  replacement : generic_expression) : unary_generic_expression;
+                  expression_value.operand := replacement;
+                  RETURN(expression_value);
+                END_FUNCTION;
+                FUNCTION replace_operands(
+                  expression_value : multiple_generic_expression;
+                  replacements : LIST OF generic_expression) : multiple_generic_expression;
+                  expression_value.operands := replacements;
+                  RETURN(expression_value);
+                END_FUNCTION;
+                FUNCTION replace_first_operand(
+                  expression_value : multiple_generic_expression;
+                  replacement : generic_expression) : multiple_generic_expression;
+                  expression_value.operands[1] := replacement;
+                  RETURN(expression_value);
+                END_FUNCTION;
+                ENTITY sample;
+                  expression_value : numeric_node;
+                  replacement : numeric_expression;
+                  multiple_value : multiple_numeric_expression;
+                  replacements : LIST OF numeric_expression;
+                WHERE
+                  valid : EXISTS(replace_operand(expression_value, replacement));
+                  valid_multiple : EXISTS(replace_operands(multiple_value, replacements));
+                  valid_indexed : EXISTS(replace_first_operand(multiple_value, replacement));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies an empty aggregate literal adopts the formal aggregate element type.
+    /// </summary>
+    [Test]
+    public async Task Should_contextually_type_empty_aggregate_arguments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/contextual-empty-aggregate.exp", """
+                SCHEMA contextual_empty_aggregate_model;
+                ENTITY item;
+                END_ENTITY;
+                ENTITY first_item
+                  SUBTYPE OF (item);
+                END_ENTITY;
+                ENTITY second_item
+                  SUBTYPE OF (item);
+                END_ENTITY;
+                FUNCTION is_empty(values : LIST OF item) : BOOLEAN;
+                  RETURN(SIZEOF(values) = 0);
+                END_FUNCTION;
+                FUNCTION has_values(values : LIST OF item) : BOOLEAN;
+                  RETURN(SIZEOF(values) = 2);
+                END_FUNCTION;
+                ENTITY sample;
+                  first_value : first_item;
+                  second_value : second_item;
+                WHERE
+                  valid : is_empty([]);
+                  contextual_elements : has_values([first_value, second_value]);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies aggregate arguments project each compatible source SELECT value to the formal SELECT carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_project_aggregate_elements_between_compatible_selects()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-aggregate-argument.exp", """
+                SCHEMA select_aggregate_argument_model;
+                ENTITY marker;
+                END_ENTITY;
+                ENTITY alternate;
+                END_ENTITY;
+                TYPE source_choice = SELECT (marker);
+                END_TYPE;
+                TYPE target_choice = SELECT (marker, alternate);
+                END_TYPE;
+                FUNCTION accepts(values : SET OF target_choice) : BOOLEAN;
+                  RETURN(SIZEOF(values) >= 0);
+                END_FUNCTION;
+                FUNCTION accepts_markers(values : SET OF marker) : BOOLEAN;
+                  RETURN(SIZEOF(values) >= 0);
+                END_FUNCTION;
+                ENTITY sample;
+                  values : SET OF source_choice;
+                  markers : SET OF marker;
+                WHERE
+                  valid : accepts(values);
+                  wrapped_entities : accepts(markers);
+                  projected_entities : accepts_markers(values);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies BOOLEAN literals are promoted in LOGICAL aggregate initializers.
+    /// </summary>
+    [Test]
+    public async Task Should_promote_boolean_aggregate_elements_to_logical_values()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/logical-aggregate-literal.exp", """
+                SCHEMA logical_aggregate_literal_model;
+                ENTITY sample;
+                  flags : LIST [2:2] OF LOGICAL;
+                WHERE
+                  valid : flags = [FALSE, FALSE];
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a direct SELECT of aggregates remains a nominal carrier when used as a query source.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_direct_selected_aggregate_carriers()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/direct-selected-aggregate.exp", """
+                SCHEMA direct_selected_aggregate_model;
+                ENTITY item;
+                END_ENTITY;
+                ENTITY special_item SUBTYPE OF (item);
+                END_ENTITY;
+                TYPE item_list = LIST OF item;
+                END_TYPE;
+                TYPE item_set = SET OF item;
+                END_TYPE;
+                TYPE item_group = SELECT (item_list, item_set);
+                END_TYPE;
+                FUNCTION accepts_items(values : AGGREGATE OF item) : BOOLEAN;
+                  RETURN(SIZEOF(values) >= 0);
+                END_FUNCTION;
+                ENTITY sample;
+                  items : item_group;
+                WHERE
+                  valid : SIZEOF(QUERY(candidate <* items | EXISTS(candidate))) >= 0;
+                  narrowed : SIZEOF(QUERY(candidate <* items |
+                    'DIRECT_SELECTED_AGGREGATE_MODEL.SPECIAL_ITEM' IN TYPEOF(candidate))) >= 0;
+                  accepted : accepts_items(items);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a derived attribute wraps an enumeration literal in its constrained defined carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_wrap_derived_enumerations_in_their_defined_carrier()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/derived-defined-enumeration.exp", """
+                SCHEMA derived_defined_enumeration_model;
+                TYPE base_kind = ENUMERATION OF (first, second);
+                END_TYPE;
+                TYPE restricted_kind = base_kind;
+                WHERE
+                  valid : SELF <> base_kind.second;
+                END_TYPE;
+                ENTITY sample;
+                DERIVE
+                  kind : restricted_kind := base_kind.first;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies value equality recursively unfolds a nested SELECT when its peer is an entity.
+    /// </summary>
+    [Test]
+    public async Task Should_compare_nested_selected_entities_with_entity_values()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/nested-select-entity-equality.exp", """
+                SCHEMA nested_select_entity_equality_model;
+                ENTITY base_item;
+                END_ENTITY;
+                ENTITY selected_item SUBTYPE OF (base_item);
+                END_ENTITY;
+                ENTITY other_item;
+                END_ENTITY;
+                TYPE inner_choice = SELECT (selected_item, other_item);
+                END_TYPE;
+                TYPE outer_choice = SELECT (inner_choice);
+                END_TYPE;
+                ENTITY sample;
+                  selected : outer_choice;
+                  peer : base_item;
+                WHERE
+                  equal_value : selected = peer;
+                  equal_instance : selected :=: peer;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a guarded aggregate index projects a base entity element to its proven subtype.
+    /// </summary>
+    [Test]
+    public async Task Should_project_guarded_entity_indices_to_their_proven_subtype()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/guarded-index-subtype.exp", """
+                SCHEMA guarded_index_subtype_model;
+                ENTITY base_item;
+                END_ENTITY;
+                ENTITY special_item
+                  SUBTYPE OF (base_item);
+                END_ENTITY;
+                ENTITY other_item
+                  SUBTYPE OF (base_item);
+                END_ENTITY;
+                TYPE derived_choice = SELECT (special_item, other_item);
+                END_TYPE;
+                FUNCTION first_special(values : LIST OF base_item) : special_item;
+                  IF 'GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(values[1]) THEN
+                    RETURN(values[1]);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                FUNCTION as_base(item : base_item) : base_item;
+                  RETURN(item);
+                END_FUNCTION;
+                FUNCTION assigned_special(item : special_item) : special_item;
+                  LOCAL
+                    result : special_item;
+                  END_LOCAL;
+                  IF 'GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(as_base(item)) THEN
+                    result := as_base(item);
+                    RETURN(result);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                FUNCTION assigned_choice(item : special_item) : derived_choice;
+                  LOCAL result : derived_choice; END_LOCAL;
+                  IF 'GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(as_base(item)) THEN
+                    result := as_base(item);
+                    RETURN(result);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                FUNCTION returned_choice(item : special_item) : derived_choice;
+                  IF 'GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(as_base(item)) THEN
+                    RETURN(as_base(item));
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                ENTITY sample;
+                  values : LIST OF base_item;
+                WHERE
+                  valid : EXISTS(first_special(values));
+                  assigned : NOT ('GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(values[1])) OR
+                    EXISTS(assigned_special(values[1]));
+                  assigned_select : NOT ('GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(values[1])) OR
+                    EXISTS(assigned_choice(values[1]));
+                  returned_select : NOT ('GUARDED_INDEX_SUBTYPE_MODEL.SPECIAL_ITEM' IN TYPEOF(values[1])) OR
+                    EXISTS(returned_choice(values[1]));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies an already narrowed SELECT scalar is not projected through its carrier twice.
+    /// </summary>
+    [Test]
+    public async Task Should_not_reproject_guarded_select_scalars_at_assignment_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/guarded-select-scalar-assignment.exp", """
+                SCHEMA guarded_select_scalar_assignment_model;
+                TYPE integer_value = INTEGER;
+                END_TYPE;
+                TYPE real_value = REAL;
+                END_TYPE;
+                TYPE numeric_choice = SELECT (integer_value, real_value);
+                END_TYPE;
+                FUNCTION read_real(input_value : numeric_choice) : REAL;
+                  LOCAL
+                    result_value : REAL;
+                  END_LOCAL;
+                  IF 'GUARDED_SELECT_SCALAR_ASSIGNMENT_MODEL.REAL_VALUE' IN TYPEOF(input_value) THEN
+                    result_value := input_value;
+                    RETURN(result_value);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                ENTITY sample;
+                  amount : numeric_choice;
+                WHERE
+                  valid : EXISTS(read_real(amount));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies SELECT scalar arguments are projected for every primitive scalar kind.
+    /// </summary>
+    [Test]
+    public async Task Should_project_select_scalars_at_function_call_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-scalar-application.exp", """
+                SCHEMA select_scalar_application_model;
+                TYPE integer_atom = INTEGER;
+                END_TYPE;
+                TYPE boolean_atom = BOOLEAN;
+                END_TYPE;
+                TYPE string_atom = STRING;
+                END_TYPE;
+                TYPE primitive_value = SELECT (integer_atom, boolean_atom, string_atom);
+                END_TYPE;
+                FUNCTION accept_integer(input_value : INTEGER) : BOOLEAN;
+                  RETURN(input_value > 0);
+                END_FUNCTION;
+                FUNCTION accept_boolean(input_value : BOOLEAN) : BOOLEAN;
+                  RETURN(input_value);
+                END_FUNCTION;
+                FUNCTION accept_string(input_value : STRING) : BOOLEAN;
+                  RETURN(input_value = 'ok');
+                END_FUNCTION;
+                FUNCTION inspect(input_value : primitive_value) : BOOLEAN;
+                  LOCAL
+                    kinds : SET OF STRING;
+                  END_LOCAL;
+                  kinds := TYPEOF(input_value);
+                  IF 'SELECT_SCALAR_APPLICATION_MODEL.INTEGER_ATOM' IN kinds THEN
+                    RETURN(accept_integer(input_value));
+                  ELSE
+                    IF 'SELECT_SCALAR_APPLICATION_MODEL.BOOLEAN_ATOM' IN kinds THEN
+                      RETURN(accept_boolean(input_value));
+                    ELSE
+                      RETURN(accept_string(input_value));
+                    END_IF;
+                  END_IF;
+                END_FUNCTION;
+                ENTITY sample;
+                  selected_value : primitive_value;
+                WHERE
+                  valid : inspect(selected_value);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("__expressDynamicScalarValue_");
+            await Assert.That(generated).Contains(".Match<");
+        }
+    }
+
+    /// <summary>
+    /// Verifies derived values reuse scalar and entity SELECT projection paths.
+    /// </summary>
+    [Test]
+    public async Task Should_project_select_values_at_derived_attribute_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/derived-select-projection.exp", """
+                SCHEMA derived_select_projection_model;
+                TYPE real_atom = REAL;
+                END_TYPE;
+                TYPE text_atom = STRING;
+                END_TYPE;
+                TYPE scalar_value = SELECT (real_atom, text_atom);
+                END_TYPE;
+                ENTITY base_item;
+                END_ENTITY;
+                ENTITY special_item SUBTYPE OF (base_item);
+                END_ENTITY;
+                TYPE item_value = SELECT (base_item, special_item);
+                END_TYPE;
+                FUNCTION select_special(input_value : item_value) : special_item;
+                  LOCAL
+                    kinds : SET OF STRING;
+                  END_LOCAL;
+                  kinds := TYPEOF(input_value);
+                  IF 'DERIVED_SELECT_PROJECTION_MODEL.SPECIAL_ITEM' IN kinds THEN
+                    RETURN(input_value);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                ENTITY sample;
+                  stored_scalar : scalar_value;
+                  stored_item : item_value;
+                DERIVE
+                  numeric_value : REAL := stored_scalar;
+                  selected_item : special_item := stored_item;
+                WHERE
+                  valid : EXISTS(numeric_value) AND EXISTS(selected_item) AND
+                    EXISTS(select_special(stored_item));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("__expressDerivedScalar");
+            await Assert.That(generated).Contains("__expressDerivedEntitySource");
+        }
+    }
+
+    /// <summary>
+    /// Verifies generic values are checked and adapted at typed assignment and return boundaries.
+    /// </summary>
+    [Test]
+    public async Task Should_adapt_generic_values_at_typed_boundaries()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/generic-value-boundary.exp", """
+                SCHEMA generic_value_boundary_model;
+                TYPE integer_value = INTEGER;
+                END_TYPE;
+                TYPE selected_value = SELECT (integer_value);
+                END_TYPE;
+                FUNCTION convert(input_value : GENERIC : G) : selected_value;
+                  LOCAL
+                    kinds : SET OF STRING;
+                    integer_result : integer_value;
+                  END_LOCAL;
+                  kinds := TYPEOF(input_value);
+                  IF 'GENERIC_VALUE_BOUNDARY_MODEL.SELECTED_VALUE' IN kinds THEN
+                    RETURN(input_value);
+                  END_IF;
+                  IF 'INTEGER' IN kinds THEN
+                    integer_result := input_value;
+                    RETURN(integer_result);
+                  END_IF;
+                  RETURN(?);
+                END_FUNCTION;
+                ENTITY sample;
+                  numeric_input : INTEGER;
+                WHERE
+                  valid : EXISTS(convert(numeric_input));
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("__expressAssignedGeneric");
+            await Assert.That(generated).Contains("__expressReturnedGeneric");
+        }
+    }
+
+    /// <summary>
+    /// Verifies aggregate projection observes a subtype attribute redeclaration's element type.
+    /// </summary>
+    [Test]
+    public async Task Should_project_redeclared_select_aggregate_arguments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/redeclared-select-aggregate.exp", """
+                SCHEMA redeclared_select_aggregate_model;
+                ENTITY first_item;
+                END_ENTITY;
+                ENTITY second_item;
+                END_ENTITY;
+                TYPE base_choice = SELECT (first_item, second_item);
+                END_TYPE;
+                TYPE specialized_choice = base_choice;
+                END_TYPE;
+                FUNCTION count_items(items : SET OF base_choice) : INTEGER;
+                  RETURN(SIZEOF(items));
+                END_FUNCTION;
+                FUNCTION accepts_choice(item : base_choice) : BOOLEAN;
+                  RETURN(EXISTS(item));
+                END_FUNCTION;
+                ENTITY base_holder;
+                  items : SET [1 : ?] OF base_choice;
+                END_ENTITY;
+                ENTITY marker_holder;
+                END_ENTITY;
+                ENTITY specialized_holder SUBTYPE OF (marker_holder, base_holder);
+                  SELF\base_holder.items : SET [1 : ?] OF specialized_choice;
+                WHERE
+                  valid : count_items(SELF.items) > 0;
+                END_ENTITY;
+                ENTITY choice_probe;
+                  item : first_item;
+                WHERE
+                  valid : accepts_choice(item);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("__expressApplicationAggregate_");
+            await Assert.That(generated).Contains(".Value");
+            await Assert.That(generated).Contains("BaseChoice.FromFirstItem");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a subtype's entity-element redeclaration is honored when its physical base member is passed to a function.
+    /// </summary>
+    [Test]
+    public async Task Should_project_redeclared_entity_aggregate_arguments()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/redeclared-entity-aggregate.exp", """
+                SCHEMA redeclared_entity_aggregate_model;
+                ENTITY generic_expression;
+                END_ENTITY;
+                ENTITY maths_function SUBTYPE OF (generic_expression);
+                END_ENTITY;
+                FUNCTION composable_sequence(operands : LIST [2 : ?] OF maths_function) : BOOLEAN;
+                  RETURN(TRUE);
+                END_FUNCTION;
+                ENTITY multiple_arity_generic_expression;
+                  operands : LIST [2 : ?] OF generic_expression;
+                END_ENTITY;
+                ENTITY series_composed_function SUBTYPE OF (multiple_arity_generic_expression);
+                  SELF\multiple_arity_generic_expression.operands : LIST [2 : ?] OF maths_function;
+                WHERE
+                  valid : composable_sequence(SELF\multiple_arity_generic_expression.operands);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("__expressApplicationAggregate_");
+            await Assert.That(generated).Contains("is IMathsFunction");
+        }
+    }
+
+    /// <summary>
+    /// Verifies defined aggregate validation queries reuse the already unwrapped value.
+    /// </summary>
+    [Test]
+    public async Task Should_query_defined_aggregate_values_without_double_unwrapping()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/defined-aggregate-query.exp", """
+                SCHEMA defined_aggregate_query_model;
+                ENTITY item;
+                END_ENTITY;
+                TYPE item_list = LIST [1 : ?] OF item;
+                WHERE
+                  valid : SIZEOF(QUERY(candidate <* SELF | EXISTS(candidate))) > 0;
+                END_TYPE;
+                ENTITY holder;
+                  items : item_list;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).DoesNotContain(".Value).ReadOnlyValue");
+        }
+    }
+
+    /// <summary>
+    /// Verifies selected aggregate projection wraps elements through one compatible SELECT path.
+    /// </summary>
+    [Test]
+    public async Task Should_project_selected_aggregate_elements_to_the_target_select()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/select-aggregate-element-projection.exp", """
+                SCHEMA select_aggregate_element_projection_model;
+                TYPE atom_integer = INTEGER;
+                END_TYPE;
+                TYPE atom_string = STRING;
+                END_TYPE;
+                TYPE atom_boolean = BOOLEAN;
+                END_TYPE;
+                TYPE atom_value = SELECT (atom_integer, atom_string);
+                END_TYPE;
+                TYPE atom_list = LIST OF atom_value;
+                END_TYPE;
+                TYPE maths_value = SELECT (atom_value, atom_boolean);
+                END_TYPE;
+                TYPE maths_list = LIST OF maths_value;
+                END_TYPE;
+                TYPE value_carrier = SELECT (atom_list, maths_list);
+                END_TYPE;
+                FUNCTION count_values(input_value : value_carrier) : INTEGER;
+                  LOCAL
+                    values : LIST OF maths_value;
+                  END_LOCAL;
+                  IF 'SELECT_AGGREGATE_ELEMENT_PROJECTION_MODEL.ATOM_LIST' IN TYPEOF(input_value) THEN
+                    values := input_value;
+                  ELSE
+                    RETURN(0);
+                  END_IF;
+                  RETURN(SIZEOF(values));
+                END_FUNCTION;
+                ENTITY sample;
+                  items : value_carrier;
+                WHERE
+                  counted : count_values(items) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("MathsValue.FromAtomValue(");
+            await Assert.That(generated).Contains("global::System.Linq.Enumerable.Select(");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a grouped aggregate attribute remains one SELECT element when used in an aggregate literal.
+    /// </summary>
+    [Test]
+    public async Task Should_wrap_a_grouped_aggregate_attribute_as_one_select_element()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/grouped-aggregate-select-element.exp", """
+                SCHEMA grouped_aggregate_select_element_model;
+                TYPE maths_real = REAL;
+                END_TYPE;
+                TYPE maths_tuple = LIST OF maths_value;
+                END_TYPE;
+                TYPE maths_value = SELECT(maths_real, maths_tuple);
+                END_TYPE;
+                ENTITY generic_expression;
+                END_ENTITY;
+                ENTITY real_tuple_literal
+                  SUBTYPE OF (generic_expression);
+                  lit_value : LIST [1 : ?] OF REAL;
+                END_ENTITY;
+                FUNCTION make_finite_space(members : SET OF maths_value) : INTEGER;
+                  RETURN(SIZEOF(members));
+                END_FUNCTION;
+                FUNCTION values_space_of(expr : generic_expression) : INTEGER;
+                  IF 'GROUPED_AGGREGATE_SELECT_ELEMENT_MODEL.REAL_TUPLE_LITERAL' IN TYPEOF(expr) THEN
+                    RETURN(make_finite_space([expr\real_tuple_literal.lit_value]));
+                  END_IF;
+                  RETURN(0);
+                END_FUNCTION;
+                ENTITY holder;
+                  item_value : real_tuple_literal;
+                WHERE
+                  reachable : values_space_of(item_value) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = GeneratedSnapshot(result);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("MathsValue.FromMathsTuple(");
+        }
+    }
+
+    /// <summary>
+    /// Verifies indexing a mixed SELECT dispatches aggregate alternatives and rejects scalar alternatives safely.
+    /// </summary>
+    [Test]
+    public async Task Should_index_the_aggregate_alternative_of_a_mixed_select()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/mixed-select-aggregate-index.exp", """
+                SCHEMA mixed_select_aggregate_index_model;
+                ENTITY item;
+                END_ENTITY;
+                TYPE item_list = LIST OF item;
+                END_TYPE;
+                TYPE text_list = LIST OF STRING;
+                END_TYPE;
+                TYPE item_or_list = SELECT(item, item_list, text_list);
+                END_TYPE;
+                FUNCTION inspect(value_to_check : item_or_list) : BOOLEAN;
+                  IF 'LIST' IN TYPEOF(value_to_check) THEN
+                    RETURN(EXISTS(value_to_check[1]));
+                  END_IF;
+                  RETURN(TRUE);
+                END_FUNCTION;
+                ENTITY holder;
+                  selected_value : item_or_list;
+                WHERE
+                  reachable : inspect(selected_value);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies shared SELECT projections compose across aliases, aggregates, group access, and nested returns.
+    /// </summary>
+    [Test]
+    public async Task Should_compose_shared_select_projections_without_duplicate_dispatch()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/shared-select-projections.exp", """
+                SCHEMA shared_select_projections_model;
+                ENTITY item;
+                  values : LIST [1:?] OF INTEGER;
+                END_ENTITY;
+                ENTITY other;
+                END_ENTITY;
+                TYPE item_choice = SELECT(item, other);
+                END_TYPE;
+                TYPE item_choice_alias = item_choice;
+                END_TYPE;
+                TYPE nested_choice = SELECT(item_choice);
+                END_TYPE;
+                TYPE integer_list = LIST OF INTEGER;
+                END_TYPE;
+                TYPE mixed_value = SELECT(item, integer_list);
+                END_TYPE;
+                FUNCTION wrap_item(source_item : item) : nested_choice;
+                  RETURN(source_item);
+                END_FUNCTION;
+                FUNCTION inspect(selected : item_choice_alias; mixed : mixed_value) : BOOLEAN;
+                LOCAL
+                  integers : LIST OF INTEGER := [];
+                END_LOCAL;
+                  IF 'SHARED_SELECT_PROJECTIONS_MODEL.ITEM' IN TYPEOF(selected) THEN
+                    IF selected\item.values[1] < 0 THEN
+                      RETURN(FALSE);
+                    END_IF;
+                  END_IF;
+                  IF 'LIST' IN TYPEOF(mixed) THEN
+                    integers := mixed;
+                  END_IF;
+                  RETURN(SIZEOF(integers) >= 0);
+                END_FUNCTION;
+                ENTITY holder;
+                  source_item : item;
+                  selected : item_choice_alias;
+                  mixed : mixed_value;
+                WHERE
+                  valid : inspect(selected, mixed) AND
+                    ('SHARED_SELECT_PROJECTIONS_MODEL.NESTED_CHOICE' IN TYPEOF(wrap_item(source_item)));
+                END_ENTITY;
+                ENTITY optional_holder;
+                  values : OPTIONAL SET OF INTEGER;
+                WHERE
+                  valid : NOT EXISTS(values) OR (SIZEOF(values + [1]) > 0);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies unqualified SELF access selects the most-specific redeclaration of one inherited slot.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_the_most_specific_redeclaration_for_unqualified_self_access()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/most-specific-self-redeclaration.exp", """
+                SCHEMA most_specific_self_redeclaration_model;
+                TYPE measured_code = ENUMERATION OF (first, second);
+                END_TYPE;
+                ENTITY root;
+                  measured : measured_code;
+                END_ENTITY;
+                ENTITY middle SUBTYPE OF (root);
+                  SELF\root.measured : measured_code;
+                END_ENTITY;
+                ENTITY leaf SUBTYPE OF (middle);
+                DERIVE
+                  SELF\root.measured : measured_code := measured_code.second;
+                WHERE
+                  current_value : SELF.measured = measured_code.second;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies TYPEOF narrowing preserves members supplied by an unrelated static complex-entity component.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_static_entity_members_across_typeof_narrowing()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/complex-entity-guard-intersection.exp", """
+                SCHEMA complex_entity_guard_intersection_model;
+                ENTITY representation_item;
+                  name : STRING;
+                END_ENTITY;
+                ENTITY measure_with_unit;
+                  value_component : REAL;
+                END_ENTITY;
+                ENTITY plane_angle_measure_with_unit SUBTYPE OF (measure_with_unit);
+                END_ENTITY;
+                ENTITY holder;
+                  items : SET [0:?] OF representation_item;
+                WHERE
+                  valid_items : SIZEOF(QUERY(it <* items |
+                    ('COMPLEX_ENTITY_GUARD_INTERSECTION_MODEL.PLANE_ANGLE_MEASURE_WITH_UNIT' IN TYPEOF(it)) AND
+                    (it.name = 'offset'))) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies aggregate union wraps a base enumeration value in a compatible defined-type alias.
+    /// </summary>
+    [Test]
+    public async Task Should_union_base_enumeration_values_into_a_defined_alias_set()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/aggregate-union-enumeration-alias.exp", """
+                SCHEMA aggregate_union_enumeration_alias_model;
+                TYPE base_status = ENUMERATION OF (first, second);
+                END_TYPE;
+                TYPE restricted_status = base_status;
+                WHERE
+                  allowed : SELF <> base_status.first;
+                END_TYPE;
+                FUNCTION append_status(values : SET OF restricted_status) : SET OF restricted_status;
+                  RETURN(values + [second]);
+                END_FUNCTION;
+                ENTITY holder;
+                  values : SET OF restricted_status;
+                WHERE
+                  valid_values : SIZEOF(append_status(values)) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies appending one SELECT value performs a runtime projection without weakening aggregate checks.
+    /// </summary>
+    [Test]
+    public async Task Should_runtime_narrow_a_scalar_select_appended_to_an_entity_set()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/aggregate-union-scalar-select.exp", """
+                SCHEMA aggregate_union_scalar_select_model;
+                ENTITY target_item;
+                END_ENTITY;
+                ENTITY other_item;
+                END_ENTITY;
+                TYPE candidate_choice = SELECT(target_item, other_item);
+                END_TYPE;
+                FUNCTION append_candidate(targets : SET OF target_item;
+                                          candidate : candidate_choice) : SET OF target_item;
+                  RETURN(targets + candidate);
+                END_FUNCTION;
+                ENTITY holder;
+                  targets : SET OF target_item;
+                  candidate : candidate_choice;
+                WHERE
+                  reachable : SIZEOF(append_candidate(targets, candidate)) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies USEDIN can locate a statically named attribute by a defined scalar value.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_usedin_for_a_defined_scalar_attribute_value()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/scalar-usedin.exp", """
+                SCHEMA scalar_usedin_model;
+                TYPE uuid = STRING(36) FIXED;
+                END_TYPE;
+                ENTITY relation;
+                  uuid_1 : uuid;
+                  uuid_2 : uuid;
+                WHERE
+                  has_users : SIZEOF(USEDIN(uuid_1,
+                    'SCALAR_USEDIN_MODEL.RELATION.UUID_2')) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated).Contains("Enumerable.OfType<");
+            await Assert.That(generated).DoesNotContain(".ToList(");
+            await Assert.That(generated).DoesNotContain(".ToArray(");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a LIST-proven generic value can be indexed and recursively passed as a generic argument.
+    /// </summary>
+    [Test]
+    public async Task Should_index_a_generic_value_guarded_as_a_list()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/generic-list-index.exp", """
+                SCHEMA generic_list_index_model;
+                FUNCTION inspect_value(val : GENERIC : G) : BOOLEAN;
+                  IF 'LIST' IN TYPEOF(val) THEN
+                    REPEAT i := 1 TO SIZEOF(val);
+                      IF NOT inspect_value(val[i]) THEN
+                        RETURN(FALSE);
+                      END_IF;
+                    END_REPEAT;
+                  END_IF;
+                  RETURN(TRUE);
+                END_FUNCTION;
+                ENTITY holder;
+                  values : LIST OF INTEGER;
+                WHERE
+                  values_are_valid : inspect_value(values);
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies scalar aggregate union selects the most-specific nested SELECT alternative.
+    /// </summary>
+    [Test]
+    public async Task Should_wrap_a_scalar_in_the_most_specific_nested_select_union_path()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/scalar-nested-select-union.exp", """
+                SCHEMA scalar_nested_select_union_model;
+                TYPE integer_value = INTEGER;
+                END_TYPE;
+                TYPE number_value = NUMBER;
+                END_TYPE;
+                TYPE scalar_choice = SELECT(integer_value, number_value);
+                END_TYPE;
+                TYPE outer_choice = SELECT(scalar_choice);
+                END_TYPE;
+                FUNCTION append_integer(values : SET OF outer_choice) : SET OF outer_choice;
+                LOCAL
+                  item : INTEGER := 1;
+                END_LOCAL;
+                  RETURN(values + [item]);
+                END_FUNCTION;
+                ENTITY holder;
+                  values : SET OF outer_choice;
+                WHERE
+                  reachable : SIZEOF(append_integer(values)) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies aggregate operators resolve the carrier beneath a named aggregate result type.
+    /// </summary>
+    [Test]
+    public async Task Should_resolve_a_named_aggregate_binary_result_domain()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/named-aggregate-binary-result.exp", """
+                SCHEMA named_aggregate_binary_result_model;
+                TYPE integer_list = LIST OF INTEGER;
+                END_TYPE;
+                FUNCTION merge_values(left : integer_list; right : integer_list) : integer_list;
+                  RETURN(left + right);
+                END_FUNCTION;
+                ENTITY holder;
+                  left : integer_list;
+                  right : integer_list;
+                WHERE
+                  reachable : SIZEOF(merge_values(left, right)) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
+    /// Verifies a named aggregate operand remains an aggregate when prepending a mixed SELECT result.
+    /// </summary>
+    [Test]
+    public async Task Should_prepend_a_mixed_select_result_to_a_named_list()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/mixed-select-named-list-prepend.exp", """
+                SCHEMA mixed_select_named_list_prepend_model;
+                ENTITY item;
+                END_ENTITY;
+                TYPE item_choice = SELECT(item);
+                END_TYPE;
+                TYPE item_list = LIST OF item_choice;
+                END_TYPE;
+                TYPE item_set = SET OF item_choice;
+                END_TYPE;
+                TYPE reversible = SELECT(item_list, item_choice, item_set);
+                END_TYPE;
+                FUNCTION identity(item_value : reversible) : reversible;
+                  RETURN(item_value);
+                END_FUNCTION;
+                FUNCTION reverse_items(values : item_list) : item_list;
+                LOCAL
+                  reversed : item_list := [];
+                END_LOCAL;
+                  REPEAT i := 1 TO SIZEOF(values);
+                    reversed := identity(values[i]) + reversed;
+                  END_REPEAT;
+                  RETURN(reversed);
+                END_FUNCTION;
+                ENTITY holder;
+                  values : item_list;
+                WHERE
+                  reachable : SIZEOF(reverse_items(values)) >= 0;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+    }
+
+    /// <summary>
     /// Verifies ordered numeric SELECT values are projected only for compatible runtime alternatives.
     /// </summary>
     [Test]
@@ -8688,7 +10567,7 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
-    /// Verifies lexical SELECT references unwrap only inside TYPEOF-proven branches.
+    /// Verifies lexical SELECT references use static narrowing when proven and safe runtime projection otherwise.
     /// </summary>
     [Test]
     public async Task Should_narrow_lexical_select_references_in_typeof_branches()
@@ -8725,7 +10604,8 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(unguarded.Diagnostics.Concat(unguarded.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
+            await Assert.That(GeneratedSnapshot(unguarded)).Contains("__expressReturnedEntity");
         }
     }
 
@@ -8804,6 +10684,31 @@ public sealed class ReachableRuleTests
                     invalid.GeneratedSources.Select(source => source.SourceText.ToString()))
                 .Contains(" switch {", StringComparison.Ordinal)))
                 .IsTrue();
+        }
+    }
+
+    /// <summary>
+    /// Verifies an indexed aggregate member redeclared with a defined alias projects the stored element carrier.
+    /// </summary>
+    [Test]
+    public async Task Should_use_semantic_redeclared_aggregate_element_type_when_indexing()
+    {
+        var result = GeneratorHostTests.Run((
+            "schemas/redeclared-aggregate-element-alias.exp",
+            REDECLARED_AGGREGATE_ELEMENT_ALIAS_SCHEMA));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(diagnostics).IsEmpty()
+                .Because(string.Join(Environment.NewLine, diagnostics));
+            await Assert.That(generated)
+                .Contains("InspectedElement?)null");
         }
     }
 
@@ -8912,13 +10817,22 @@ public sealed class ReachableRuleTests
         var diagnostics = result.OutputCompilation.GetDiagnostics()
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+        var mathStart = generated.IndexOf("global::System.Math.Sqrt", StringComparison.Ordinal);
+        var mathEvidence = mathStart < 0
+            ? "No generated SQRT call."
+            : generated.Substring(mathStart, Math.Min(300, generated.Length - mathStart));
         var unguarded = GeneratorHostTests.Run(
             ("schemas/unguarded-select-scalar.exp", UNGUARDED_SELECT_SCALAR_SCHEMA));
 
         using (Assert.Multiple())
         {
             await Assert.That(diagnostics).IsEmpty()
-                .Because(string.Join(Environment.NewLine, diagnostics));
+                .Because(string.Join(
+                    Environment.NewLine,
+                    diagnostics.Select(diagnostic => diagnostic.ToString()).Append(mathEvidence)));
             await Assert.That(unguarded.Diagnostics.Concat(unguarded.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
@@ -9236,6 +11150,40 @@ public sealed class ReachableRuleTests
             await Assert.That(differentEntity.Failures.Select(failure => failure.Code))
                 .Contains("ENTITY_SELECT_VALUE_EQUALITY_MODEL.SAMPLE.WHERE.SAME_VALUE");
         }
+    }
+
+    /// <summary>
+    /// Verifies value equality traverses compatible entities through differently nested SELECT carriers.
+    /// </summary>
+    [Test]
+    public async Task Should_compare_values_across_differently_nested_selects()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/nested-select-value-equality.exp", """
+                SCHEMA nested_select_value_equality_model;
+                ENTITY marker;
+                  code : STRING;
+                END_ENTITY;
+                TYPE marker_choice = SELECT (marker);
+                END_TYPE;
+                TYPE nested_marker_choice = SELECT (marker_choice);
+                END_TYPE;
+                TYPE direct_marker_choice = SELECT (marker);
+                END_TYPE;
+                ENTITY sample;
+                  left_value : nested_marker_choice;
+                  right_value : direct_marker_choice;
+                WHERE
+                  same_value : left_value = right_value;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
     }
 
     /// <summary>
@@ -9671,6 +11619,33 @@ public sealed class ReachableRuleTests
             await Assert.That(duplicateKey.Failures.Select(failure => failure.Code)).Contains(
                 "INDETERMINATE_FUNCTION_MODEL.SAMPLE.UNIQUE.DERIVED_KEY");
         }
+    }
+
+    /// <summary>
+    /// Verifies a determinate aggregate literal remains valid as a mandatory reachable constant.
+    /// </summary>
+    [Test]
+    public async Task Should_emit_a_determinate_aggregate_literal_constant()
+    {
+        const string schema = """
+            SCHEMA aggregate_constant_model;
+            CONSTANT
+              supported_names : SET [0:?] OF STRING := ['JPEG','PNG','TIFF','BMP','GIF'];
+            END_CONSTANT;
+            ENTITY sample;
+              name : STRING;
+            WHERE
+              supported : name IN supported_names;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(("schemas/aggregate-constant.exp", schema));
+
+        await Assert.That(result.Diagnostics
+            .Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
     }
 
     /// <summary>
@@ -10157,6 +12132,61 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies a derived redeclaration may read the inherited slot of a separately supplied base instance.
+    /// </summary>
+    [Test]
+    public async Task Should_avoid_recursive_dispatch_when_a_derived_redeclaration_reads_a_base_instance()
+    {
+        const string schema = """
+            SCHEMA oriented_shell_model;
+            ENTITY face;
+            END_ENTITY;
+            ENTITY connected_face_set ABSTRACT;
+              cfs_faces : SET [1:?] OF face;
+            END_ENTITY;
+            ENTITY closed_shell SUBTYPE OF (connected_face_set);
+            END_ENTITY;
+            ENTITY open_shell SUBTYPE OF (connected_face_set);
+            END_ENTITY;
+            FUNCTION conditional_reverse(
+              orientation : BOOLEAN;
+              faces : SET [1:?] OF face) : SET [1:?] OF face;
+              RETURN(faces);
+            END_FUNCTION;
+            ENTITY oriented_closed_shell SUBTYPE OF (closed_shell);
+              closed_shell_element : closed_shell;
+              orientation : BOOLEAN;
+            DERIVE
+              SELF\connected_face_set.cfs_faces : SET [1:?] OF face :=
+                conditional_reverse(orientation, closed_shell_element.cfs_faces);
+            WHERE
+              not_nested : NOT ('ORIENTED_SHELL_MODEL.ORIENTED_CLOSED_SHELL' IN
+                TYPEOF(closed_shell_element));
+              has_faces : SIZEOF(cfs_faces) > 0;
+            END_ENTITY;
+            ENTITY oriented_open_shell SUBTYPE OF (open_shell);
+              open_shell_element : open_shell;
+              orientation : BOOLEAN;
+            DERIVE
+              SELF\connected_face_set.cfs_faces : SET [1:?] OF face :=
+                conditional_reverse(orientation, open_shell_element.cfs_faces);
+            WHERE
+              not_nested : NOT ('ORIENTED_SHELL_MODEL.ORIENTED_OPEN_SHELL' IN
+                TYPEOF(open_shell_element));
+              has_faces : SIZEOF(cfs_faces) > 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(("schemas/oriented-shell.exp", schema));
+
+        await Assert.That(result.Diagnostics
+            .Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+    }
+
+    /// <summary>
     /// Verifies ISO conditional REPEAT control, guarded fallthrough, and closure-free nested functions emit statically.
     /// </summary>
     [Test]
@@ -10532,6 +12562,64 @@ public sealed class ReachableRuleTests
                 "EXPRESSION_BOUND_MODEL.SAMPLE.VALUES.AGGREGATE_0.SHAPE",
                 "EXPRESSION_BOUND_MODEL.SAMPLE.VALUES.AGGREGATE_0.LOWER_BOUND",
             });
+        }
+    }
+
+    /// <summary>
+    /// Verifies an entity attribute can provide a runtime upper bound without changing aggregate storage metadata.
+    /// </summary>
+    [Test]
+    public async Task Should_validate_an_aggregate_upper_bound_from_a_sibling_attribute()
+    {
+        var result = GeneratorHostTests.Run(
+            """
+            using System.Numerics;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.AttributeBoundModel;
+
+            internal static class AttributeBoundConsumer
+            {
+                internal static ValidationResult Validate(int count)
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["bounds"], "3;1"),
+                            new FileName("bounds.step", "2026-09-02T00:00:00+08:00", [], [], "tests", "tests", ""),
+                            new FileSchema(["attribute_bound_model"])),
+                        [TedToolkit.Step21.Generated.AttributeBoundModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("attribute_bound_model"));
+                    structure.DataSections.Add(section);
+                    var values = new ExpressList<BigInteger>(1);
+                    for (var index = 0; index < count; index++) values.Add(index);
+                    _ = structure.Add(section, new Sample(2, values));
+                    return structure.Validate();
+                }
+            }
+            """,
+            ("schemas/attribute-bound.exp", """
+                SCHEMA attribute_bound_model;
+                ENTITY sample;
+                  segments : INTEGER;
+                  values : LIST [1:segments] OF INTEGER;
+                END_ENTITY;
+                END_SCHEMA;
+                """));
+
+        await Assert.That(result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty();
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("AttributeBoundConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var valid = (ValidationResult)validate.Invoke(null, [2])!;
+        var invalid = (ValidationResult)validate.Invoke(null, [3])!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(valid.IsValid).IsTrue();
+            await Assert.That(invalid.Failures.Select(failure => failure.Code))
+                .Contains("ATTRIBUTE_BOUND_MODEL.SAMPLE.VALUES.AGGREGATE_0.UPPER_BOUND");
         }
     }
 

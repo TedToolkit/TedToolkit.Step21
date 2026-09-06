@@ -12,7 +12,39 @@ Run the proof on Windows:
 ./build/verify-native-aot.ps1
 ```
 
+For a precompiled schema package, select its dedicated fixture journey:
+
+```powershell
+./build/verify-native-aot.ps1 -Ap203
+./build/verify-native-aot.ps1 -Ap214
+./build/verify-native-aot.ps1 -Ap242
+```
+
+These modes pack the selected schema and shared runtime, restore a package-only consumer from an
+isolated local feed, and execute the same typed read/edit/validate/write/reread and negative checks
+used by its package integration tests. AP214 additionally proves the raw AP214IS fixture's two
+edition-rule failures before applying the documented test-only 2007-DIS migration. No validation
+rule is disabled. AP242 executes the checked-in AP242DIS package-only journey and its invalid-edit
+and unsupported-entity cases. The scripts do not publish packages to a remote feed.
+
+Package byte reproducibility is a separate proof:
+
+```powershell
+./build/verify-schema-package-reproducibility.ps1 -Schema Ap214
+./build/verify-schema-package-reproducibility.ps1 -Schema Ap242
+```
+
+It requires restored build dependencies, performs two clean non-incremental builds without restore,
+and compares normalized package entries (including assembly, symbols and documentation) plus fixed
+source, provenance, public-API and fixture inputs. It excludes only NuGet archive bookkeeping;
+packing one existing assembly twice is not a substitute for this proof. Native AOT additionally
+requires the locally cached compiler packages and native build toolchain.
+
 The command builds and packs the product, restores the consumer from that local package, publishes it for `win-x64` with Native AOT and warnings-as-errors, executes the native artifact, and rejects AOT/trimming warnings or forbidden runtime artifacts.
+
+Successful runs remove their temporary proof directory. Failed runs retain it and print its exact
+path, preserving the native object, linker response file and local packages for diagnosis. Remove
+that directory only after the failure evidence is no longer needed.
 
 `win-x64` is the executable conformance proof target, not an exclusive platform-support list. Other compatible runtime identifiers are neither rejected nor promised by this evidence.
 

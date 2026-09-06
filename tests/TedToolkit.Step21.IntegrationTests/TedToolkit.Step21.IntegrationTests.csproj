@@ -17,6 +17,8 @@
     <ProjectReference Include="..\..\src\TedToolkit.Step21.Analyzer\TedToolkit.Step21.Analyzer.csproj" />
     <ProjectReference Include="..\..\src\TedToolkit.Step21.Ap203\TedToolkit.Step21.Ap203.csproj"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\TedToolkit.Step21.Ap242\TedToolkit.Step21.Ap242.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

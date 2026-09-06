@@ -17,6 +17,8 @@ TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and wri
 | --- | --- |
 | `src/TedToolkit.Step21` | Public runtime, generated ISO 10303-21 parser, and packaged analyzer. |
 | `src/TedToolkit.Step21.Ap203` | Optional precompiled AP203 Amendment 1 `CONFIG_CONTROL_DESIGN` package. |
+| `src/TedToolkit.Step21.Ap214` | Optional precompiled AP214 `AUTOMOTIVE_DESIGN` package; [consumer guide](src/TedToolkit.Step21.Ap214/README.md). |
+| `src/TedToolkit.Step21.Ap242` | AP242 N11521 MIM long-form stable package; [consumer guide](src/TedToolkit.Step21.Ap242/README.md). |
 | `src/TedToolkit.Step21.Analyzer` | EXPRESS parser, closed-set binder, and incremental generator. |
 | `src/grammar` | Normative grammar sources. Part 21 uses separate lexer/parser grammars because lexer modes are lexer-grammar-only ANTLR features. |
 | `tests/TedToolkit.Step21.Tests` | Fast, repository-owned TUnit conformance tests. |

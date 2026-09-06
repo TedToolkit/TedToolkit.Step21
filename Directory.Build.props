@@ -8,4 +8,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageProjectUrl>https://github.com/TedToolkit/TedToolkit.Step21</PackageProjectUrl>
   </PropertyGroup>
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').StartsWith('TedToolkit.Step21.Ap'))">
+    <!-- Generated AP sources carry explicit annotations; flow warnings add multi-gigabyte compiler cost. -->
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
 </Project>
