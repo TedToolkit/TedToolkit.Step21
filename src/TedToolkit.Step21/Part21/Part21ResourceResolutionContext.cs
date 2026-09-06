@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
@@ -8,7 +9,9 @@ namespace TedToolkit.Step21;
 // Owns all resource bytes, caches, recursion state, and quotas for exactly one public Read call.
 internal sealed class Part21ResourceResolutionContext
 {
+    private const string ArchiveRootName = "ISO-10303.p21";
     private static readonly AsyncLocal<IPart21ResourceProvider?> ActiveProvider = new();
+    private static readonly uint[] Crc32Table = CreateCrc32Table();
     private readonly IReadOnlyCollection<SchemaDescriptor> _descriptors;
     private readonly ExchangeStructureReadOptions _options;
     private readonly Dictionary<string, LoadedDocument?> _documents = new(StringComparer.Ordinal);
@@ -280,9 +283,9 @@ internal sealed class Part21ResourceResolutionContext
             ? ReadZip(content.Bytes, archiveDepth + 1)
             : SnapshotDirectory(content.Entries);
         var container = new ResourceContainer(content.Identity, entries, archiveDepth + 1);
-        if (!entries.TryGetValue("ISO-10303.p21", out var root))
-            ThrowCapability("P21-RESOURCE-ARCHIVE-ROOT", $"Resource '{content.Identity}' has no ISO-10303.p21 root.");
-        return ReadClearText(content.Identity, root, container, "ISO-10303.p21", depth);
+        if (!entries.TryGetValue(ArchiveRootName, out var root))
+            ThrowCapability("P21-RESOURCE-ARCHIVE-ROOT", $"Resource '{content.Identity}' has no {ArchiveRootName} root.");
+        return ReadClearText(content.Identity, root, container, ArchiveRootName, depth);
     }
 
     private LoadedDocument ReadClearText(
@@ -362,9 +365,10 @@ internal sealed class Part21ResourceResolutionContext
                     ThrowCapability("P21-RESOURCE-ARCHIVE-ENTRY", "PKZip 2.04g entry names must use ASCII characters.");
                 CountArchiveEntry(entry.FullName, entry.CompressedLength, entry.Length);
                 var name = NormalizeEntryPath(entry.FullName);
+                RejectNormalizedRootAlias(entry.FullName, name);
                 using var input = entry.Open();
                 using var output = new MemoryStream(entry.Length > int.MaxValue ? 0 : (int)entry.Length);
-                input.CopyTo(output);
+                CopyAndValidateArchiveEntry(entry, input, output);
                 if (!result.TryAdd(name, output.ToArray()))
                     ThrowCapability("P21-RESOURCE-ARCHIVE-ENTRY", $"Archive entry '{name}' occurs more than once.");
             }
@@ -385,6 +389,8 @@ internal sealed class Part21ResourceResolutionContext
         {
             CountArchiveEntry(entry.Key, compressedLength: entry.Value.Length, uncompressedLength: entry.Value.Length);
             var name = NormalizeEntryPath(entry.Key);
+            RejectNormalizedRootAlias(entry.Key, name);
+            CountArchiveBytes(entry.Value.Length);
             CountBytes(entry.Value.Length);
             if (!result.TryAdd(name, entry.Value))
                 ThrowCapability("P21-RESOURCE-ARCHIVE-ENTRY", $"Directory entry '{name}' occurs more than once.");
@@ -451,11 +457,78 @@ internal sealed class Part21ResourceResolutionContext
             || uncompressedLength > int.MaxValue
             || uncompressedLength > _options.ResourceLimits.MaximumArchiveUncompressedBytes - _archiveBytes)
             ThrowLimit("archive uncompressed bytes");
-        _archiveBytes += uncompressedLength;
         if (compressedLength == 0 ? uncompressedLength > 0 : uncompressedLength / (double)compressedLength
             > _options.ResourceLimits.MaximumCompressionRatio)
         {
             ThrowCapability("P21-RESOURCE-LIMIT-COMPRESSION-RATIO", $"Archive entry '{name}' exceeds the compression-ratio limit.");
+        }
+    }
+
+    private void CountArchiveBytes(long length)
+    {
+        if (length < 0 || length > _options.ResourceLimits.MaximumArchiveUncompressedBytes - _archiveBytes)
+            ThrowLimit("archive uncompressed bytes");
+        _archiveBytes += length;
+    }
+
+    private void CopyAndValidateArchiveEntry(ZipArchiveEntry entry, Stream input, Stream output)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+        var crc = uint.MaxValue;
+        long actualLength = 0;
+        try
+        {
+            while (true)
+            {
+                var read = input.Read(buffer, 0, buffer.Length);
+                if (read == 0)
+                    break;
+                if (read > entry.Length - actualLength)
+                    ThrowArchiveFormat($"ZIP entry '{entry.FullName}' expands beyond its declared length.");
+                CountArchiveBytes(read);
+                actualLength += read;
+                crc = UpdateCrc32(crc, buffer.AsSpan(0, read));
+                output.Write(buffer, 0, read);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        if (actualLength != entry.Length)
+            ThrowArchiveFormat($"ZIP entry '{entry.FullName}' does not match its declared length.");
+        if (~crc != entry.Crc32)
+            ThrowArchiveFormat($"ZIP entry '{entry.FullName}' does not match its declared CRC-32.");
+    }
+
+    private static uint UpdateCrc32(uint crc, ReadOnlySpan<byte> bytes)
+    {
+        foreach (var value in bytes)
+            crc = Crc32Table[(crc ^ value) & 0xff] ^ crc >> 8;
+        return crc;
+    }
+
+    private static uint[] CreateCrc32Table()
+    {
+        var table = new uint[256];
+        for (uint index = 0; index < table.Length; index++)
+        {
+            var value = index;
+            for (var bit = 0; bit < 8; bit++)
+                value = (value & 1) == 0 ? value >> 1 : 0xedb88320U ^ value >> 1;
+            table[index] = value;
+        }
+        return table;
+    }
+
+    private static void RejectNormalizedRootAlias(string originalName, string normalizedName)
+    {
+        if (normalizedName == ArchiveRootName && originalName != ArchiveRootName)
+        {
+            ThrowCapability(
+                "P21-RESOURCE-ARCHIVE-ROOT",
+                $"Archive root '{originalName}' must have the exact name {ArchiveRootName}.");
         }
     }
 
@@ -520,7 +593,7 @@ internal sealed class Part21ResourceResolutionContext
         if ((ulong)centralOffset + centralSize != (ulong)end)
             ThrowArchiveFormat("The ZIP central-directory bounds are invalid.");
 
-        var position = checked((int)centralOffset);
+        var position = (int)centralOffset;
         for (var index = 0; index < entryCount; index++)
         {
             if (ReadUInt32(bytes, position) != 0x02014b50 || position + 46 > end)
@@ -528,6 +601,9 @@ internal sealed class Part21ResourceResolutionContext
             var versionNeeded = ReadUInt16(bytes, position + 6);
             var flags = ReadUInt16(bytes, position + 8);
             var method = ReadUInt16(bytes, position + 10);
+            var centralCrc = ReadUInt32(bytes, position + 16);
+            var compressedSize = ReadUInt32(bytes, position + 20);
+            var uncompressedSize = ReadUInt32(bytes, position + 24);
             var nameLength = ReadUInt16(bytes, position + 28);
             var extraLength = ReadUInt16(bytes, position + 30);
             var commentLength = ReadUInt16(bytes, position + 32);
@@ -536,11 +612,20 @@ internal sealed class Part21ResourceResolutionContext
             var entryEnd = (long)position + 46 + nameLength + extraLength + commentLength;
             if (entryEnd > end)
                 ThrowArchiveFormat("A ZIP central-directory entry exceeds its declared bounds.");
-            ValidatePkZipEntry(versionNeeded, flags, method, diskStart, localOffset);
+            ValidatePkZipEntry(
+                versionNeeded,
+                flags,
+                method,
+                compressedSize,
+                uncompressedSize,
+                diskStart,
+                localOffset);
             ValidateExtraFields(bytes.Slice(position + 46 + nameLength, extraLength));
 
-            var local = checked((int)localOffset);
-            if (ReadUInt32(bytes, local) != 0x04034b50 || local + 30 > bytes.Length)
+            if (localOffset > bytes.Length - 30)
+                ThrowArchiveFormat("A ZIP local-file offset is outside the archive.");
+            var local = (int)localOffset;
+            if (ReadUInt32(bytes, local) != 0x04034b50)
                 ThrowArchiveFormat("A ZIP local-file header is missing or invalid.");
             var localNameLength = ReadUInt16(bytes, local + 26);
             var localExtraLength = ReadUInt16(bytes, local + 28);
@@ -553,6 +638,13 @@ internal sealed class Part21ResourceResolutionContext
             {
                 ThrowArchiveFormat("ZIP local and central entry metadata do not agree.");
             }
+            if ((flags & 0x0008) == 0
+                && (ReadUInt32(bytes, local + 14) != centralCrc
+                    || ReadUInt32(bytes, local + 18) != compressedSize
+                    || ReadUInt32(bytes, local + 22) != uncompressedSize))
+            {
+                ThrowArchiveFormat("ZIP local and central entry integrity metadata do not agree.");
+            }
             ValidateExtraFields(bytes.Slice(local + 30 + localNameLength, localExtraLength));
             position = checked((int)entryEnd);
         }
@@ -564,6 +656,8 @@ internal sealed class Part21ResourceResolutionContext
         ushort versionNeeded,
         ushort flags,
         ushort method,
+        uint compressedSize,
+        uint uncompressedSize,
         ushort diskStart,
         uint localOffset)
     {
@@ -575,7 +669,10 @@ internal sealed class Part21ResourceResolutionContext
             ThrowArchiveFormat("Unicode ZIP entry-name flags are outside PKZip 2.04g transport.");
         if (method is not (0 or 8))
             ThrowArchiveFormat("Only stored or deflated PKZip 2.04g entries are supported.");
-        if (diskStart != 0 || localOffset == uint.MaxValue)
+        if (compressedSize == uint.MaxValue
+            || uncompressedSize == uint.MaxValue
+            || diskStart != 0
+            || localOffset == uint.MaxValue)
             ThrowArchiveFormat("Multi-disk or ZIP64 entries are outside PKZip 2.04g transport.");
     }
 
@@ -601,14 +698,14 @@ internal sealed class Part21ResourceResolutionContext
 
     private static ushort ReadUInt16(ReadOnlySpan<byte> bytes, int offset)
     {
-        if ((uint)offset > (uint)(bytes.Length - 2))
+        if (offset < 0 || offset > bytes.Length - 2)
             ThrowArchiveFormat("The ZIP structure is truncated.");
         return BinaryPrimitives.ReadUInt16LittleEndian(bytes[offset..]);
     }
 
     private static uint ReadUInt32(ReadOnlySpan<byte> bytes, int offset)
     {
-        if ((uint)offset > (uint)(bytes.Length - 4))
+        if (offset < 0 || offset > bytes.Length - 4)
             ThrowArchiveFormat("The ZIP structure is truncated.");
         return BinaryPrimitives.ReadUInt32LittleEndian(bytes[offset..]);
     }

@@ -84,6 +84,7 @@ public sealed class ResolutionTests
             await Assert.That(integer).IsEqualTo(42);
             await Assert.That(provider.Requests).IsEquivalentTo(["https://example.test/models/child.p21"]);
             await Assert.That(output.ToString()).Contains("VALUE_HOLDER(42,(42,42),MEASURE(42));");
+            await Assert.That(output.ToString()).Contains("'4;3'");
             await Assert.That(structure.Validate().IsValid).IsTrue();
         }
     }
@@ -143,11 +144,13 @@ public sealed class ResolutionTests
                 ["ISO-10303.p21"] = Utf8(Exchange(
                     "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
                     string.Empty,
-                    "#1=NODE('root',$);")),
+                    "#1=NODE('root',$);",
+                    "4;2")),
                 ["parts/child.p21"] = Utf8(Exchange(
                     "ANCHOR;<target>=#1;ENDSEC;",
                     string.Empty,
-                    "#1=NODE('directory child',$);")),
+                    "#1=NODE('directory child',$);",
+                    "4;2")),
             });
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -171,11 +174,13 @@ public sealed class ResolutionTests
             ["ISO-10303.p21"] = Exchange(
                 "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
                 string.Empty,
-                "#1=NODE('root',$);"),
+                "#1=NODE('root',$);",
+                "4;2"),
             ["parts/child.p21"] = Exchange(
                 "ANCHOR;<target>=#1;ENDSEC;",
                 string.Empty,
-                "#1=NODE('zip child',$);"),
+                "#1=NODE('zip child',$);",
+                "4;2"),
         });
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -211,6 +216,10 @@ public sealed class ResolutionTests
                 resourceProvider: quotaProvider,
                 resourceLimits: new Part21ResourceLimits(maximumResourceCount: 1))));
 
+        var relative = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<child.p21#x>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: quotaProvider)));
+
         var pathProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
             ["https://example.test/package/"] = new(
@@ -231,6 +240,7 @@ public sealed class ResolutionTests
         {
             await Assert.That(missingProvider.Diagnostics.Single().Code).IsEqualTo("P21-CAP-RESOURCE-PROVIDER");
             await Assert.That(quota.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(relative.Diagnostics.Single().Code).IsEqualTo("P21-CAP-RESOURCE-BASE-URI");
             await Assert.That(path.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-ARCHIVE-PATH");
         }
     }
@@ -354,10 +364,16 @@ public sealed class ResolutionTests
         });
         var invalidArchives = new[]
         {
-            MutateZip(valid, versionNeeded: 45),
+            MutateZip(
+                valid,
+                versionNeeded: 45,
+                compressedSize: uint.MaxValue,
+                uncompressedSize: uint.MaxValue),
             MutateZip(valid, flags: 0x0001),
             MutateZip(valid, flags: 0x0800),
             MutateZip(valid, method: 9),
+            InjectExtraField(valid, 0x0001),
+            InjectExtraField(valid, 0x7075),
         };
         var codes = invalidArchives.Select((archive, index) =>
         {
@@ -371,7 +387,56 @@ public sealed class ResolutionTests
                 new ExchangeStructureReadOptions(resourceProvider: provider))).Diagnostics.Single().Code;
         }).ToArray();
 
-        await Assert.That(codes).IsEquivalentTo(Enumerable.Repeat("P21-RESOURCE-ARCHIVE-FORMAT", 4));
+        await Assert.That(codes).IsEquivalentTo(Enumerable.Repeat("P21-RESOURCE-ARCHIVE-FORMAT", 6));
+    }
+
+    /// <summary>Rejects normalized root aliases, corrupt payloads, size lies, and offsets outside the archive.</summary>
+    [Test]
+    public async Task Should_reject_deceptive_roots_and_invalid_archive_integrity()
+    {
+        var source = Exchange(string.Empty, string.Empty, "#1=NODE('root',$);");
+        var valid = CreateZip(new Dictionary<string, string> { ["ISO-10303.p21"] = source });
+        var resources = new Dictionary<string, Part21ResourceContent>
+        {
+            ["https://example.test/deceptive.zip"] = new(
+                new Uri("https://example.test/deceptive.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                CreateZip(new Dictionary<string, string> { ["./ISO-10303.p21"] = source })),
+            ["https://example.test/deceptive/"] = new(
+                new Uri("https://example.test/deceptive/"),
+                new Dictionary<string, ReadOnlyMemory<byte>> { ["folder/../ISO-10303.p21"] = Utf8(source) }),
+            ["https://example.test/crc.zip"] = new(
+                new Uri("https://example.test/crc.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                MutateZip(valid, crc: 0)),
+            ["https://example.test/length.zip"] = new(
+                new Uri("https://example.test/length.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                MutateZip(valid, uncompressedSize: 1)),
+            ["https://example.test/offset.zip"] = new(
+                new Uri("https://example.test/offset.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                MutateZip(valid, localOffset: 0x80000000)),
+        };
+
+        var codes = resources.Select(resource =>
+        {
+            var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+            {
+                [resource.Key] = resource.Value,
+            });
+            return Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+                Exchange(string.Empty, $"REFERENCE;#90=<{resource.Key}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+                new ExchangeStructureReadOptions(resourceProvider: provider))).Diagnostics.Single().Code;
+        }).ToArray();
+
+        await Assert.That(codes).IsEquivalentTo([
+            "P21-RESOURCE-ARCHIVE-ROOT",
+            "P21-RESOURCE-ARCHIVE-ROOT",
+            "P21-RESOURCE-ARCHIVE-FORMAT",
+            "P21-RESOURCE-ARCHIVE-FORMAT",
+            "P21-RESOURCE-ARCHIVE-FORMAT",
+        ]);
     }
 
     /// <summary>Uses a UUID registry and preserves type mismatch evidence.</summary>
@@ -388,6 +453,10 @@ public sealed class ResolutionTests
             ["https://example.test/wrong.p21"] = ClearText(
                 "https://example.test/wrong.p21",
                 Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=OTHER('wrong type');")),
+            ["https://example.test/wrong-schema.p21"] = ClearText(
+                "https://example.test/wrong-schema.p21",
+                Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('wrong schema',$);")
+                    .Replace("distributed_resource", "unknown_schema", StringComparison.Ordinal)),
         });
         var resolved = Read(
             Exchange(
@@ -397,6 +466,9 @@ public sealed class ResolutionTests
             new ExchangeStructureReadOptions(resourceProvider: provider));
         var mismatch = Assert.Throws<ExchangeStructureReadValidationException>(() => Read(
             Exchange(string.Empty, "REFERENCE;#90=<https://example.test/wrong.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider)));
+        var schemaMismatch = Assert.Throws<ExchangeStructureBindingException>(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/wrong-schema.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
             new ExchangeStructureReadOptions(resourceProvider: provider)));
 
         using (Assert.Multiple())
@@ -411,6 +483,8 @@ public sealed class ResolutionTests
                 .IsSameReferenceAs(resolved.Registrations.Single(item => item.Name.CanonicalDigits == "1").Entity);
             await Assert.That(mismatch.ValidationResult.Failures.Single().Code)
                 .IsEqualTo("P21.READ.REFERENCE.TYPE");
+            await Assert.That(schemaMismatch.Diagnostics.Select(diagnostic => diagnostic.Code))
+                .Contains("P21-BIND-SCHEMA");
         }
     }
 
@@ -461,10 +535,19 @@ public sealed class ResolutionTests
     private static ExchangeStructure Read(string source, ExchangeStructureReadOptions options) =>
         ExchangeStructure.Read(new StringReader(source), [Descriptor.Value], options);
 
-    private static string Exchange(string anchors, string references, string records) => $$"""
+    private static string Exchange(
+        string anchors,
+        string references,
+        string records,
+        string? implementationLevel = null)
+    {
+        implementationLevel ??= references.Contains('@') ? "4;3"
+            : references.Length > 0 ? "4;2"
+            : "4;1";
+        return $$"""
         ISO-10303-21;
         HEADER;
-        FILE_DESCRIPTION(('distributed resource test'),'4;2');
+        FILE_DESCRIPTION(('distributed resource test'),'{{implementationLevel}}');
         FILE_NAME('resource.p21','2026-09-07T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('distributed_resource'));
         ENDSEC;
@@ -475,6 +558,7 @@ public sealed class ResolutionTests
         ENDSEC;
         END-ISO-10303-21;
         """;
+    }
 
     private static Part21ResourceContent ClearText(string identity, string source) => new(
         new Uri(identity),
@@ -504,7 +588,11 @@ public sealed class ResolutionTests
         ReadOnlyMemory<byte> archive,
         ushort? versionNeeded = null,
         ushort? flags = null,
-        ushort? method = null)
+        ushort? method = null,
+        uint? crc = null,
+        uint? compressedSize = null,
+        uint? uncompressedSize = null,
+        uint? localOffset = null)
     {
         var bytes = archive.ToArray();
         var local = FindSignature(bytes, [0x50, 0x4b, 0x03, 0x04]);
@@ -524,7 +612,57 @@ public sealed class ResolutionTests
             WriteUInt16(bytes, local + 8, compressionMethod);
             WriteUInt16(bytes, central + 10, compressionMethod);
         }
+        if (crc is { } expectedCrc)
+        {
+            WriteUInt32(bytes, local + 14, expectedCrc);
+            WriteUInt32(bytes, central + 16, expectedCrc);
+        }
+        if (compressedSize is { } declaredCompressedSize)
+        {
+            WriteUInt32(bytes, local + 18, declaredCompressedSize);
+            WriteUInt32(bytes, central + 20, declaredCompressedSize);
+        }
+        if (uncompressedSize is { } declaredUncompressedSize)
+        {
+            WriteUInt32(bytes, local + 22, declaredUncompressedSize);
+            WriteUInt32(bytes, central + 24, declaredUncompressedSize);
+        }
+        if (localOffset is { } declaredLocalOffset)
+            WriteUInt32(bytes, central + 42, declaredLocalOffset);
         return bytes;
+    }
+
+    private static ReadOnlyMemory<byte> InjectExtraField(ReadOnlyMemory<byte> archive, ushort identifier)
+    {
+        var bytes = archive.ToArray();
+        var field = new byte[4];
+        WriteUInt16(field, 0, identifier);
+
+        var local = FindSignature(bytes, [0x50, 0x4b, 0x03, 0x04]);
+        var localNameLength = ReadUInt16(bytes, local + 26);
+        var localExtraLength = ReadUInt16(bytes, local + 28);
+        WriteUInt16(bytes, local + 28, checked((ushort)(localExtraLength + field.Length)));
+        bytes = InsertBytes(bytes, local + 30 + localNameLength + localExtraLength, field);
+
+        var central = FindSignature(bytes, [0x50, 0x4b, 0x01, 0x02]);
+        var centralNameLength = ReadUInt16(bytes, central + 28);
+        var centralExtraLength = ReadUInt16(bytes, central + 30);
+        WriteUInt16(bytes, central + 30, checked((ushort)(centralExtraLength + field.Length)));
+        bytes = InsertBytes(bytes, central + 46 + centralNameLength + centralExtraLength, field);
+
+        var end = FindSignature(bytes, [0x50, 0x4b, 0x05, 0x06]);
+        WriteUInt32(bytes, end + 12, ReadUInt32(bytes, end + 12) + (uint)field.Length);
+        WriteUInt32(bytes, end + 16, ReadUInt32(bytes, end + 16) + (uint)field.Length);
+        return bytes;
+    }
+
+    private static byte[] InsertBytes(byte[] source, int offset, byte[] inserted)
+    {
+        var result = new byte[source.Length + inserted.Length];
+        Buffer.BlockCopy(source, 0, result, 0, offset);
+        Buffer.BlockCopy(inserted, 0, result, offset, inserted.Length);
+        Buffer.BlockCopy(source, offset, result, offset + inserted.Length, source.Length - offset);
+        return result;
     }
 
     private static int FindSignature(byte[] bytes, ReadOnlySpan<byte> signature)
@@ -542,6 +680,23 @@ public sealed class ResolutionTests
         bytes[offset] = (byte)value;
         bytes[offset + 1] = (byte)(value >> 8);
     }
+
+    private static void WriteUInt32(byte[] bytes, int offset, uint value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
+        bytes[offset + 2] = (byte)(value >> 16);
+        bytes[offset + 3] = (byte)(value >> 24);
+    }
+
+    private static ushort ReadUInt16(byte[] bytes, int offset) =>
+        (ushort)(bytes[offset] | bytes[offset + 1] << 8);
+
+    private static uint ReadUInt32(byte[] bytes, int offset) =>
+        (uint)(bytes[offset]
+            | bytes[offset + 1] << 8
+            | bytes[offset + 2] << 16
+            | bytes[offset + 3] << 24);
 
     private static SchemaDescriptor CreateDescriptor()
     {

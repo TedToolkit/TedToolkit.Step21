@@ -106,7 +106,7 @@ public sealed class Part21ResourceLimits
         MaximumCompressionRatio = maximumCompressionRatio;
     }
 
-    /// <summary>Gets the maximum distinct resources acquired during one read.</summary>
+    /// <summary>Gets the maximum provider acquisitions during one read.</summary>
     public int MaximumResourceCount { get; }
 
     /// <summary>Gets the maximum reference or nested-archive depth.</summary>
