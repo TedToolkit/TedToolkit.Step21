@@ -172,6 +172,62 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Keeps ZIP compression and nesting limits independent from directory transport.</summary>
+    [Test]
+    public async Task Should_not_apply_zip_ratio_or_depth_to_directory_content()
+    {
+        const string plainIdentity = "https://example.test/plain-directory/";
+        const string nestedIdentity = "https://example.test/nested-directory/";
+        var nestedZip = CreateZip(new Dictionary<string, string>
+        {
+            ["ISO-10303.p21"] = Exchange(
+                "ANCHOR;<target>=#1;ENDSEC;",
+                string.Empty,
+                "#1=NODE('nested zip',$);"),
+        });
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [plainIdentity] = new(
+                new Uri(plainIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(Exchange(
+                        "ANCHOR;<target>=#1;ENDSEC;",
+                        string.Empty,
+                        "#1=NODE('plain directory',$);")),
+                }),
+            [nestedIdentity] = new(
+                new Uri(nestedIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(Exchange(
+                        "ANCHOR;<target>=<nested.zip#target>;ENDSEC;",
+                        string.Empty,
+                        "#1=NODE('directory root',$);")),
+                    ["nested.zip"] = nestedZip,
+                }),
+        });
+
+        var plain = Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{plainIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceLimits: new Part21ResourceLimits(maximumCompressionRatio: 0.1)));
+        var nested = Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{nestedIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveDepth: 1)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(plain.References.Single().ResolutionStatus)
+                .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+            await Assert.That(nested.References.Single().ResolutionStatus)
+                .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+        }
+    }
+
     /// <summary>Reads a ZIP root and subsidiary entirely from supplied memory.</summary>
     [Test]
     public async Task Should_resolve_zip_root_and_subsidiary_in_memory()
@@ -326,6 +382,47 @@ public sealed class ResolutionTests
             await Assert.That(reentry.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-PROVIDER-REENTRY");
             await Assert.That(crossProviderReentry.Diagnostics.Single().Code)
                 .IsEqualTo("P21-RESOURCE-PROVIDER-REENTRY");
+        }
+    }
+
+    /// <summary>Rejects direct and transitive converter callback re-entry across nested reads.</summary>
+    [Test]
+    public async Task Should_reject_direct_and_cross_converter_reentry()
+    {
+        const string firstIdentity = "https://example.test/first.jt";
+        const string secondIdentity = "https://example.test/second.jt";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [firstIdentity] = new(new Uri(firstIdentity), Part21ResourceContentKind.Other, Utf8("first")),
+            [secondIdentity] = new(new Uri(secondIdentity), Part21ResourceContentKind.Other, Utf8("second")),
+        });
+
+        ReenteringConverter? direct = null;
+        direct = new ReenteringConverter(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{firstIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: direct)));
+        var directFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{firstIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: direct)));
+
+        ReenteringConverter? first = null;
+        ReenteringConverter? second = null;
+        first = new ReenteringConverter(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{secondIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: second)));
+        second = new ReenteringConverter(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{firstIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: first)));
+        var crossFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{firstIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: first)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(directFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-CONVERTER-REENTRY");
+            await Assert.That(crossFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-CONVERTER-REENTRY");
         }
     }
 
@@ -628,9 +725,70 @@ public sealed class ResolutionTests
         ]);
     }
 
-    /// <summary>Uses a UUID registry and preserves type mismatch evidence.</summary>
+    /// <summary>Accepts valid ZIP data descriptors and rejects descriptor or local-range corruption.</summary>
     [Test]
-    public async Task Should_use_uuid_registry_and_report_external_schema_or_type_mismatch_atomically()
+    public async Task Should_validate_zip_data_descriptors_and_non_overlapping_local_ranges()
+    {
+        var source = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('root',$);");
+        var valid = CreateZip(new Dictionary<string, string> { ["ISO-10303.p21"] = source });
+        var signedIdentity = "https://example.test/signed-descriptor.zip";
+        var unsignedIdentity = "https://example.test/unsigned-descriptor.zip";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [signedIdentity] = new(
+                new Uri(signedIdentity),
+                Part21ResourceContentKind.ZipArchive,
+                AddDataDescriptor(valid, includeSignature: true)),
+            [unsignedIdentity] = new(
+                new Uri(unsignedIdentity),
+                Part21ResourceContentKind.ZipArchive,
+                AddDataDescriptor(valid, includeSignature: false)),
+        });
+        var resolved = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{signedIdentity}#target>;#91=<{unsignedIdentity}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+
+        var overlap = CreateZip(new Dictionary<string, string>
+        {
+            ["ISO-10303.p21"] = source,
+            ["OTHER-103.p21"] = source,
+        });
+        var invalidArchives = new[]
+        {
+            AddDataDescriptor(valid, includeSignature: true, corruptValues: true),
+            AddDataDescriptor(valid, includeSignature: false, descriptorValueLength: 8),
+            OverlapSecondLocalEntry(overlap),
+        };
+        var failures = invalidArchives.Select((archive, index) =>
+        {
+            var identity = $"https://example.test/descriptor-invalid-{index}.zip";
+            var invalidProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+            {
+                [identity] = new(new Uri(identity), Part21ResourceContentKind.ZipArchive, archive),
+            });
+            return Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+                Exchange(string.Empty, $"REFERENCE;#90=<{identity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+                new ExchangeStructureReadOptions(resourceProvider: invalidProvider)));
+        }).ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(resolved.References.All(reference =>
+                    reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved))
+                .IsTrue();
+            await Assert.That(failures.Select(failure => failure.Diagnostics.Single().Code))
+                .IsEquivalentTo(Enumerable.Repeat("P21-RESOURCE-ARCHIVE-FORMAT", 3));
+            await Assert.That(failures[2].Diagnostics.Single().Message)
+                .Contains("ranges overlap");
+        }
+    }
+
+    /// <summary>Uses a UUID registry, nulls an invalid external schema, and preserves type mismatch evidence.</summary>
+    [Test]
+    public async Task Should_use_uuid_registry_null_invalid_external_schema_and_report_type_mismatch()
     {
         const string uuid = "97c6e1f0-3544-11e5-a2cb-0800200c9a66";
         const string nonUuidNeighbor = "97c6e1f0354411e5a2cb0800200c9a66";
@@ -656,9 +814,9 @@ public sealed class ResolutionTests
         var mismatch = Assert.Throws<ExchangeStructureReadValidationException>(() => Read(
             Exchange(string.Empty, "REFERENCE;#90=<https://example.test/wrong.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
             new ExchangeStructureReadOptions(resourceProvider: provider)));
-        var schemaMismatch = Assert.Throws<ExchangeStructureBindingException>(() => Read(
+        var schemaMismatch = Read(
             Exchange(string.Empty, "REFERENCE;#90=<https://example.test/wrong-schema.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
-            new ExchangeStructureReadOptions(resourceProvider: provider)));
+            new ExchangeStructureReadOptions(resourceProvider: provider));
 
         using (Assert.Multiple())
         {
@@ -672,8 +830,11 @@ public sealed class ResolutionTests
                 .IsSameReferenceAs(resolved.Registrations.Single(item => item.Name.CanonicalDigits == "1").Entity);
             await Assert.That(mismatch.ValidationResult.Failures.Single().Code)
                 .IsEqualTo("P21.READ.REFERENCE.TYPE");
-            await Assert.That(schemaMismatch.Diagnostics.Select(diagnostic => diagnostic.Code))
-                .Contains("P21-BIND-SCHEMA");
+            await Assert.That(schemaMismatch.References.Single().ResolutionStatus)
+                .IsEqualTo(Part21ReferenceResolutionStatus.Null);
+            await Assert.That(schemaMismatch.Registrations.Single().Entity
+                    .GetType().GetProperty("Target")!.GetValue(schemaMismatch.Registrations.Single().Entity))
+                .IsNull();
         }
     }
 
@@ -773,6 +934,57 @@ public sealed class ResolutionTests
         return stream.ToArray();
     }
 
+    private static ReadOnlyMemory<byte> AddDataDescriptor(
+        ReadOnlyMemory<byte> archive,
+        bool includeSignature,
+        int descriptorValueLength = 12,
+        bool corruptValues = false)
+    {
+        var bytes = archive.ToArray();
+        var local = FindSignature(bytes, [0x50, 0x4b, 0x03, 0x04]);
+        var central = FindSignature(bytes, [0x50, 0x4b, 0x01, 0x02]);
+        var descriptorValues = new byte[12];
+        WriteUInt32(descriptorValues, 0, ReadUInt32(bytes, central + 16));
+        WriteUInt32(descriptorValues, 4, ReadUInt32(bytes, central + 20));
+        WriteUInt32(descriptorValues, 8, ReadUInt32(bytes, central + 24));
+        if (corruptValues)
+            descriptorValues[0] ^= 0xff;
+
+        var descriptor = new byte[(includeSignature ? 4 : 0) + descriptorValueLength];
+        var valueOffset = 0;
+        if (includeSignature)
+        {
+            WriteUInt32(descriptor, 0, 0x08074b50);
+            valueOffset = 4;
+        }
+        Buffer.BlockCopy(descriptorValues, 0, descriptor, valueOffset, descriptorValueLength);
+
+        WriteUInt16(bytes, local + 6, (ushort)(ReadUInt16(bytes, local + 6) | 0x0008));
+        WriteUInt16(bytes, central + 8, (ushort)(ReadUInt16(bytes, central + 8) | 0x0008));
+        WriteUInt32(bytes, local + 14, 0);
+        WriteUInt32(bytes, local + 18, 0);
+        WriteUInt32(bytes, local + 22, 0);
+        bytes = InsertBytes(bytes, central, descriptor);
+
+        var end = FindSignature(bytes, [0x50, 0x4b, 0x05, 0x06]);
+        WriteUInt32(bytes, end + 16, ReadUInt32(bytes, end + 16) + (uint)descriptor.Length);
+        return bytes;
+    }
+
+    private static ReadOnlyMemory<byte> OverlapSecondLocalEntry(ReadOnlyMemory<byte> archive)
+    {
+        var bytes = archive.ToArray();
+        var firstCentral = FindSignature(bytes, [0x50, 0x4b, 0x01, 0x02]);
+        var secondCentral = FindSignature(bytes, [0x50, 0x4b, 0x01, 0x02], firstCentral + 4);
+        var firstNameLength = ReadUInt16(bytes, firstCentral + 28);
+        var secondNameLength = ReadUInt16(bytes, secondCentral + 28);
+        if (firstNameLength != secondNameLength)
+            throw new InvalidOperationException("The overlap fixture requires equal-length entry names.");
+        Buffer.BlockCopy(bytes, firstCentral + 46, bytes, secondCentral + 46, firstNameLength);
+        WriteUInt32(bytes, secondCentral + 42, ReadUInt32(bytes, firstCentral + 42));
+        return bytes;
+    }
+
     private static ReadOnlyMemory<byte> MutateZip(
         ReadOnlyMemory<byte> archive,
         ushort? versionNeeded = null,
@@ -854,9 +1066,9 @@ public sealed class ResolutionTests
         return result;
     }
 
-    private static int FindSignature(byte[] bytes, ReadOnlySpan<byte> signature)
+    private static int FindSignature(byte[] bytes, ReadOnlySpan<byte> signature, int start = 0)
     {
-        for (var index = 0; index <= bytes.Length - signature.Length; index++)
+        for (var index = start; index <= bytes.Length - signature.Length; index++)
         {
             if (bytes.AsSpan(index, signature.Length).SequenceEqual(signature))
                 return index;
@@ -928,6 +1140,15 @@ public sealed class ResolutionTests
         {
             CallCount++;
             return converted;
+        }
+    }
+
+    private sealed class ReenteringConverter(Func<ExchangeStructure> reenter) : IPart21ResourceConverter
+    {
+        public Part21ResourceContent Convert(Part21ResourceContent content)
+        {
+            _ = reenter();
+            return content;
         }
     }
 

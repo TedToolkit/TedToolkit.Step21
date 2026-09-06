@@ -10,6 +10,7 @@ namespace TedToolkit.Step21;
 internal sealed class Part21ResourceResolutionContext
 {
     private const string ArchiveRootName = "ISO-10303.p21";
+    private static readonly AsyncLocal<HashSet<IPart21ResourceConverter>?> ActiveConverters = new();
     private static readonly AsyncLocal<HashSet<IPart21ResourceProvider>?> ActiveProviders = new();
     private static readonly uint[] Crc32Table = CreateCrc32Table();
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -272,7 +273,17 @@ internal sealed class Part21ResourceResolutionContext
         }
         ReserveAlias(convertedKey, aliases);
 
-        var loaded = LoadContent(content, depth, archiveDepth: 0, aliases);
+        LoadedDocument? loaded;
+        try
+        {
+            loaded = LoadContent(content, depth, archiveDepth: 0, aliases);
+        }
+        catch (Exception exception) when (exception is ExchangeStructureSyntaxException
+            or ExchangeStructureBindingException
+            or ExchangeStructureReadValidationException)
+        {
+            loaded = null;
+        }
         foreach (var alias in aliases)
             _documents[alias] = loaded;
         if (loaded is not null)
@@ -298,11 +309,30 @@ internal sealed class Part21ResourceResolutionContext
         var converter = _options.ResourceConverter;
         if (converter is null)
             ThrowCapability("P21-CAP-RESOURCE-CONVERTER", $"Resource '{content.Identity}' requires an explicit converter.");
-        var converted = converter!.Convert(content)
+        var activeConverters = ActiveConverters.Value;
+        if (activeConverters?.Contains(converter!) == true)
+            ThrowCapability("P21-RESOURCE-CONVERTER-REENTRY", "The resource converter re-entered the same read operation.");
+
+        activeConverters ??= new HashSet<IPart21ResourceConverter>(ReferenceEqualityComparer.Instance);
+        ActiveConverters.Value = activeConverters;
+        _ = activeConverters.Add(converter!);
+        Part21ResourceContent? converted;
+        try
+        {
+            converted = converter!.Convert(content);
+        }
+        finally
+        {
+            _ = activeConverters.Remove(converter!);
+            if (activeConverters.Count == 0)
+                ActiveConverters.Value = null;
+        }
+
+        var convertedContent = converted
             ?? throw Capability("P21-RESOURCE-CONVERSION", $"Resource '{content.Identity}' could not be converted.");
-        if (converted.Kind == Part21ResourceContentKind.Other)
+        if (convertedContent.Kind == Part21ResourceContentKind.Other)
             ThrowCapability("P21-RESOURCE-CONVERSION", "A converter must return clear text, ZIP, or directory content.");
-        return converted;
+        return convertedContent;
     }
 
     private LoadedDocument? LoadContent(
@@ -318,10 +348,18 @@ internal sealed class Part21ResourceResolutionContext
             return ReadRoot(content.Identity, content.Bytes, container: null, entryPath: null, depth, aliases);
         }
 
-        var entries = content.Kind == Part21ResourceContentKind.ZipArchive
-            ? ReadZip(content.Bytes, archiveDepth + 1)
-            : SnapshotDirectory(content.Entries);
-        var container = new ResourceContainer(content.Identity, entries, archiveDepth + 1);
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> entries;
+        var containerArchiveDepth = archiveDepth;
+        if (content.Kind == Part21ResourceContentKind.ZipArchive)
+        {
+            containerArchiveDepth++;
+            entries = ReadZip(content.Bytes, containerArchiveDepth);
+        }
+        else
+        {
+            entries = SnapshotDirectory(content.Entries);
+        }
+        var container = new ResourceContainer(content.Identity, entries, containerArchiveDepth);
         if (!entries.TryGetValue(ArchiveRootName, out var root))
             ThrowCapability("P21-RESOURCE-ARCHIVE-ROOT", $"Resource '{content.Identity}' has no {ArchiveRootName} root.");
         return ReadRoot(content.Identity, root, container, ArchiveRootName, depth, aliases);
@@ -450,7 +488,7 @@ internal sealed class Part21ResourceResolutionContext
         var result = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
         foreach (var entry in entries)
         {
-            CountArchiveEntry(entry.Key, compressedLength: entry.Value.Length, uncompressedLength: entry.Value.Length);
+            CountContainerEntry(entry.Value.Length);
             var name = NormalizeEntryPath(entry.Key);
             RejectNormalizedRootAlias(entry.Key, name);
             CountArchiveBytes(entry.Value.Length);
@@ -513,6 +551,16 @@ internal sealed class Part21ResourceResolutionContext
 
     private void CountArchiveEntry(string name, long compressedLength, long uncompressedLength)
     {
+        CountContainerEntry(uncompressedLength);
+        if (compressedLength == 0 ? uncompressedLength > 0 : uncompressedLength / (double)compressedLength
+            > _options.ResourceLimits.MaximumCompressionRatio)
+        {
+            ThrowCapability("P21-RESOURCE-LIMIT-COMPRESSION-RATIO", $"Archive entry '{name}' exceeds the compression-ratio limit.");
+        }
+    }
+
+    private void CountContainerEntry(long uncompressedLength)
+    {
         if (_archiveEntryCount >= _options.ResourceLimits.MaximumArchiveEntryCount)
             ThrowLimit("archive entry count");
         _archiveEntryCount++;
@@ -520,11 +568,6 @@ internal sealed class Part21ResourceResolutionContext
             || uncompressedLength > int.MaxValue
             || uncompressedLength > _options.ResourceLimits.MaximumArchiveUncompressedBytes - _archiveBytes)
             ThrowLimit("archive uncompressed bytes");
-        if (compressedLength == 0 ? uncompressedLength > 0 : uncompressedLength / (double)compressedLength
-            > _options.ResourceLimits.MaximumCompressionRatio)
-        {
-            ThrowCapability("P21-RESOURCE-LIMIT-COMPRESSION-RATIO", $"Archive entry '{name}' exceeds the compression-ratio limit.");
-        }
     }
 
     private void CountArchiveBytes(long length)

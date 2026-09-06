@@ -25,14 +25,14 @@ only the local occurrence alias used to write the `REFERENCE` association; no re
 stored in a generated entity.
 
 No provider is invoked for local non-UUID fragments or fragmentless references. Relative external paths require an
-explicit absolute base URI. A missing delivered resource, absent anchor, category mismatch, or standard reference
-cycle produces the null result. Missing provider/converter capability, provider re-entry, quota exhaustion, archive
-recursion, invalid archive/root, compression-ratio violation, and archive path escape are atomic capability failures
-with distinct `P21-CAP-RESOURCE-*` or `P21-RESOURCE-*` diagnostic codes.
+explicit absolute base URI. A missing or nonconforming delivered exchange structure, absent anchor, category mismatch,
+or standard reference cycle produces the null result. Missing provider/converter capability, provider/converter
+re-entry, quota exhaustion, archive recursion, invalid archive/root, compression-ratio violation, and archive path
+escape are atomic capability failures with distinct `P21-CAP-RESOURCE-*` or `P21-RESOURCE-*` diagnostic codes.
 
 `Part21ResourceLimits` bounds distinct provider resources, reference depth, nested archives, total supplied bytes,
-archive/directory entries, uncompressed archive bytes, and per-entry compression ratio. ZIP and directory content is
-processed in memory and is never extracted to disk. Directory bytes are shared as `ReadOnlyMemory<byte>` during the
+archive/directory entries, uncompressed archive bytes, and per-ZIP-entry compression ratio. ZIP and directory content
+is processed in memory and is never extracted to disk. Directory bytes are shared as `ReadOnlyMemory<byte>` during the
 read; ZIP entries allocate only their verified uncompressed in-memory representation. Extraction is bounded by the
 actual output byte count and validates the declared length and CRC-32. Other-format input and its converted
 output both count toward the total-byte limit, and over-limit opaque input is rejected before conversion.
