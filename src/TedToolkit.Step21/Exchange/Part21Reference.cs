@@ -10,11 +10,25 @@ public enum Part21ReferenceKind
     ValueInstance = 1,
 }
 
+/// <summary>Reports whether a reference has been processed by an explicit per-read resource graph.</summary>
+public enum Part21ReferenceResolutionStatus
+{
+    /// <summary>No resource-resolution capability was applied.</summary>
+    Unresolved = 0,
+
+    /// <summary>The reference resolved to an entity or value.</summary>
+    Resolved = 1,
+
+    /// <summary>The standard resolution rules produced the null value.</summary>
+    Null = 2,
+}
+
 /// <summary>Associates one local occurrence name with a caller-resolvable resource URI.</summary>
 public sealed class Part21Reference : IEquatable<Part21Reference>
 {
     private readonly EntityInstanceName _entityName;
     private readonly ValueInstanceName _valueName;
+    private ParameterValue? _resolvedValue;
 
     /// <summary>Creates an external entity instance reference.</summary>
     public Part21Reference(EntityInstanceName name, Part21Resource resource)
@@ -41,6 +55,16 @@ public sealed class Part21Reference : IEquatable<Part21Reference>
 
     /// <summary>Gets the exact resource URI reference.</summary>
     public Part21Resource Resource { get; }
+
+    /// <summary>Gets the outcome retained from explicit per-read resolution.</summary>
+    public Part21ReferenceResolutionStatus ResolutionStatus { get; private set; }
+
+    /// <summary>Attempts to obtain the resolved entity or value.</summary>
+    public bool TryGetResolvedValue(out ParameterValue? value)
+    {
+        value = _resolvedValue;
+        return ResolutionStatus == Part21ReferenceResolutionStatus.Resolved;
+    }
 
     /// <summary>Attempts to obtain the entity instance name.</summary>
     public bool TryGetEntityInstance(out EntityInstanceName name)
@@ -79,4 +103,12 @@ public sealed class Part21Reference : IEquatable<Part21Reference>
     internal string FormatName() => Kind == Part21ReferenceKind.EntityInstance
         ? _entityName.ToString()
         : _valueName.ToString();
+
+    internal void SetResolution(ParameterValue? value)
+    {
+        _resolvedValue = value;
+        ResolutionStatus = value is null || value.Kind == ParameterValueKind.Omitted
+            ? Part21ReferenceResolutionStatus.Null
+            : Part21ReferenceResolutionStatus.Resolved;
+    }
 }

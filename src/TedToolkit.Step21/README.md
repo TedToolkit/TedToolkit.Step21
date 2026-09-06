@@ -54,6 +54,12 @@ structure.Write(output);
 
 `ExchangeStructure.Read` accepts the complete explicitly supplied descriptor set, performs parse/bind/hydrate/validation atomically, and returns no partial model. `structure.Entities` is a live read-only population enumeration. Generated entity-valued properties expose the actual generated entity interfaces, including forward, shared, cyclic, aggregate-contained, same-schema, and supported multi-schema references.
 
+Distributed references use the additive overload with `ExchangeStructureReadOptions`. Supply an absolute base URI and
+an `IPart21ResourceProvider` that returns only caller-authorized bytes or in-memory directory entries. The runtime
+resolves URI/anchor chains, ZIP or directory roots, shared entity identity, and `$` outcomes; it never opens a path or
+network connection implicitly. `Part21ResourceLimits` bounds the complete per-read graph, and
+`IPart21ResourceConverter` is the explicit hook for another source format.
+
 Use `structure.WriteEntity(writer, entity)` when only one registered entity-instance record is required. Both write operations validate the final graph before producing output.
 
 ## Construct a structure
@@ -109,7 +115,7 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 ## Explicit limits
 
 - Physical anchor items, tags, all four occurrence-name categories, UUID anchor identity, and schema-neutral `REFERENCE` declarations can be read, edited, validated, canonically written, and reread; see the [conformance record](https://github.com/TedToolkit/TedToolkit.Step21/blob/main/docs/conformance/anchor-occurrence-uuid.md).
-- External resource acquisition/resolution and signature verification remain unsupported. A declared external entity occurrence used by a typed model is reported specifically as `P21.READ.REFERENCE.EXTERNAL`; no network or file access occurs implicitly.
+- External resource acquisition is opt-in through per-read capabilities; local fragments, external clear text, in-memory directories, ZIP roots/subsidiaries, UUID registry responses, and other-format conversion are supported. The legacy overload keeps unresolved-reference diagnostics, and no overload performs implicit I/O. Signature verification remains unsupported.
 - Complex mappings outside the documented flat `ANDOR` form and SDAI domain-equivalence metadata are unsupported.
 - This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.

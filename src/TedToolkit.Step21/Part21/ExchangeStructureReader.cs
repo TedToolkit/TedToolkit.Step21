@@ -36,9 +36,33 @@ internal static class ExchangeStructureReader
         return Array.AsReadOnly(snapshot);
     }
 
-    internal static ExchangeStructure Read(string source, IReadOnlyCollection<SchemaDescriptor> descriptors)
+    internal static ExchangeStructure Read(string source, IReadOnlyCollection<SchemaDescriptor> descriptors) =>
+        ReadCore(source, descriptors, resolutionContext: null, address: null, depth: 0);
+
+    internal static ExchangeStructure Read(
+        string source,
+        IReadOnlyCollection<SchemaDescriptor> descriptors,
+        ExchangeStructureReadOptions options)
     {
-        var syntax = ExchangeStructureSyntaxParser.Parse(source, SOURCE_NAME);
+        var context = new Part21ResourceResolutionContext(descriptors, options);
+        return ReadCore(source, descriptors, context, context.RootAddress, depth: 0);
+    }
+
+    internal static ExchangeStructure Read(
+        string source,
+        IReadOnlyCollection<SchemaDescriptor> descriptors,
+        Part21ResourceResolutionContext resolutionContext,
+        Part21ResourceResolutionContext.DocumentAddress address,
+        int depth) => ReadCore(source, descriptors, resolutionContext, address, depth);
+
+    private static ExchangeStructure ReadCore(
+        string source,
+        IReadOnlyCollection<SchemaDescriptor> descriptors,
+        Part21ResourceResolutionContext? resolutionContext,
+        Part21ResourceResolutionContext.DocumentAddress? address,
+        int depth)
+    {
+        var syntax = ExchangeStructureSyntaxParser.Parse(source, address?.Key ?? SOURCE_NAME);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
         ThrowIfReadCapabilityIsExceeded(syntax);
 
@@ -115,6 +139,9 @@ internal static class ExchangeStructureReader
             externalNames,
             firstSchemaDescriptor,
             bindingDiagnostics);
+        if (resolutionContext is not null)
+            resolutionContext.RegisterDocument(structure, address!);
+        resolutionContext?.ResolveReferences(structure, address!, depth);
 
         foreach (var allocation in allocations)
         {
@@ -136,6 +163,7 @@ internal static class ExchangeStructureReader
                     var convertedSuccessfully = TryConvertParameter(
                         parameter,
                         parameterPath,
+                        structure,
                         entitiesByName,
                         externalNames.Entities,
                         referenceFailures,
@@ -1019,6 +1047,7 @@ internal static class ExchangeStructureReader
     private static bool TryConvertParameter(
         ValueSyntax value,
         string path,
+        ExchangeStructure structure,
         IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
         IReadOnlyDictionary<EntityInstanceName, SourceLocation> externalNames,
         ICollection<ValidationFailure> referenceFailures,
@@ -1028,13 +1057,24 @@ internal static class ExchangeStructureReader
         if (value.Kind == Part21ValueKind.EntityInstanceName)
         {
             var parsed = TryParseEntityInstanceName(value, out var name);
-            if (parsed && entitiesByName.TryGetValue(name, out var entity))
+            if (parsed && (entitiesByName.TryGetValue(name, out var entity)
+                           || structure.TryGetEntity(name, out entity)))
             {
-                converted = ParameterValue.FromEntity(entity);
+                converted = ParameterValue.FromEntity(entity!);
                 return true;
             }
 
             var isExternal = parsed && externalNames.ContainsKey(name);
+            if (isExternal)
+            {
+                var reference = structure.ReferenceEntries.Single(candidate =>
+                    candidate.TryGetEntityInstance(out var candidateName) && candidateName.Equals(name));
+                if (reference.ResolutionStatus == Part21ReferenceResolutionStatus.Null)
+                {
+                    converted = ParameterValue.Omitted;
+                    return true;
+                }
+            }
             referenceFailures.Add(new ValidationFailure(
                 isExternal ? "P21.READ.REFERENCE.EXTERNAL" : "P21.READ.REFERENCE.MISSING",
                 path,
@@ -1058,6 +1098,7 @@ internal static class ExchangeStructureReader
                 if (TryConvertParameter(
                         value.Values[index],
                         childPath,
+                        structure,
                         entitiesByName,
                         externalNames,
                         referenceFailures,

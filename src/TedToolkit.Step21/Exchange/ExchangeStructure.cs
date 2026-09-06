@@ -17,6 +17,9 @@ public sealed class ExchangeStructure
 
     private readonly Dictionary<EntityInstanceName, EntityRegistration> _registrationsByName = [];
     private readonly Dictionary<Entity, EntityRegistration> _registrationsByEntity = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<EntityInstanceName, Entity> _resolvedExternalEntitiesByName = [];
+    private readonly Dictionary<Entity, EntityInstanceName> _resolvedExternalNamesByEntity =
+        new(ReferenceEqualityComparer.Instance);
     private readonly List<EntityRegistration> _registrations = [];
     private readonly ReadOnlyCollection<EntityRegistration> _registrationView;
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
@@ -125,6 +128,28 @@ public sealed class ExchangeStructure
         ArgumentNullException.ThrowIfNull(source);
         var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
         return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors);
+    }
+
+    /// <summary>
+    /// Reads and atomically resolves a distributed ISO 10303-21 structure using only explicitly supplied resources.
+    /// </summary>
+    /// <param name="source">The root character source.</param>
+    /// <param name="schemaDescriptors">The generated schema descriptors shared by the resource graph.</param>
+    /// <param name="options">The per-read base identity, resource capabilities, and limits.</param>
+    /// <returns>A complete validated mutable exchange structure.</returns>
+    /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
+    /// <exception cref="ExchangeStructureCapabilityException">
+    /// A required provider or converter is absent, re-enters reading, or exceeds a resource limit.
+    /// </exception>
+    public static ExchangeStructure Read(
+        TextReader source,
+        IReadOnlyCollection<SchemaDescriptor> schemaDescriptors,
+        ExchangeStructureReadOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(options);
+        var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
+        return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors, options);
     }
 
     /// <summary>Writes this complete structure as deterministic ISO 10303-21 clear text.</summary>
@@ -331,7 +356,7 @@ public sealed class ExchangeStructure
                         referencePath,
                         "A direct entity-reference occurrence is null."));
                 }
-                else if (!_registrationsByEntity.ContainsKey(reference))
+                else if (!TryGetName(reference, out _))
                 {
                     relationshipFailures.Add(new ValidationFailure(
                         "P21.STRUCTURE.REFERENCE.REGISTRATION",
@@ -608,6 +633,10 @@ public sealed class ExchangeStructure
             return true;
         }
 
+        if (_resolvedExternalEntitiesByName.TryGetValue(name, out entity)
+            && IsCurrentResolvedReference(name, entity))
+            return true;
+
         entity = null;
         return false;
     }
@@ -620,9 +649,38 @@ public sealed class ExchangeStructure
             return true;
         }
 
+        if (_resolvedExternalNamesByEntity.TryGetValue(entity, out name)
+            && IsCurrentResolvedReference(name, entity))
+            return true;
+
         name = default;
         return false;
     }
+
+    internal void SetResolvedReference(Part21Reference reference, ParameterValue? value)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        reference.SetResolution(value);
+        if (reference.Kind != Part21ReferenceKind.EntityInstance
+            || value is null
+            || !value.TryGetEntity(out var entity)
+            || !reference.TryGetEntityInstance(out var name))
+        {
+            return;
+        }
+
+        _resolvedExternalEntitiesByName[name] = entity;
+        _resolvedExternalNamesByEntity.TryAdd(entity, name);
+    }
+
+    private bool IsCurrentResolvedReference(EntityInstanceName name, Entity entity) =>
+        _references?.Any(reference => reference is not null
+            && reference.TryGetEntityInstance(out var candidateName)
+            && candidateName.Equals(name)
+            && reference.TryGetResolvedValue(out var value)
+            && value is not null
+            && value.TryGetEntity(out var candidateEntity)
+            && ReferenceEquals(candidateEntity, entity)) == true;
 
     internal bool TryGetSection(Entity entity, out DataSection? dataSection)
     {

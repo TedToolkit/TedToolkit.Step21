@@ -41,13 +41,16 @@ originating record location when the generated diagnostic has no EXPRESS source 
   diagnostics;
 - an invalid hydrated population throws `ExchangeStructureReadValidationException` with the complete
   `ValidationResult`; and
-- anchor/signature operations, external value occurrences, and operational external-resource resolution throw
-  `ExchangeStructureCapabilityException`. Supported flat-`ANDOR` complex instances and multiple governing schemas
-  are handled by their dedicated mapping/population contracts.
+- signature operations and typed DATA value/constant occurrences throw `ExchangeStructureCapabilityException`.
+  External-resource resolution is available only through explicit per-read options and reports missing capability,
+  provider re-entry, archive, and quota failures through the same atomic exception boundary. Supported flat-`ANDOR`
+  complex instances and multiple governing schemas are handled by their dedicated mapping/population contracts.
 
-Local entity references are allocated and hydrated atomically; missing, declared external, and incompatible targets
-instead produce the dedicated aggregate read-validation evidence documented by the
-[reference-hydration boundary](reference-hydration.md).
+Local entity references are allocated and hydrated atomically. The legacy overload retains dedicated unresolved
+external evidence; the opt-in resource overload applies clause-10 null behavior and binds successfully resolved
+external targets by object identity. Incompatible resolved entity types retain aggregate read-validation evidence.
+See the [reference-hydration boundary](reference-hydration.md) and
+[distributed resource resolution](distributed-resource-resolution.md).
 
 No exception exposes syntax nodes, a binding/hydration context, or a partially hydrated entity. There is no public
 reader facade, result wrapper, raw model, registry, or nested public processing type.
