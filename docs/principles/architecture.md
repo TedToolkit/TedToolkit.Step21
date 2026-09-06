@@ -83,3 +83,31 @@ Standard fidelity is the library's interoperability contract. An invented domain
 ### Exception route
 
 A public domain concept without a normative or schema source is prohibited. An unavoidable public infrastructure abstraction must document its operational role and demonstrate that it contributes no new exchange-structure semantics; a difficult-to-reverse exception requires an accepted ADR.
+
+## AP-004: Complete the selected ISO processor contract without domain expansion
+
+- Status: Active
+- Strength: Required
+- Scope: declared ISO 10303-21 processor conformance, the ISO 10303-11 semantics required by that conformance, core runtime APIs, Analyzer mappings, conformance evidence, and capability diagnostics
+- Owner: repository maintainer
+- Review trigger: an applicable normative processor capability would remain unsupported or syntax-only, a conformance claim relies only on sampled AP files, or ISO conformance work proposes AP/B-rep/PMI behavior
+
+### Default
+
+Once the repository selects an ISO edition and processor-conformance target, implement every normative capability applicable to that processor and close each requirement with executable evidence or a justified not-applicable disposition. Do not reduce the target to the constructs exercised by current application-protocol corpora, and do not expand ISO conformance work into AP, B-rep, PMI, or other industry semantics that the governing Part 21/Part 11 contract does not require.
+
+### Rationale
+
+A parser that merely recognizes standard syntax or passes a few AP fixtures can still omit required resolution, mapping, validation, transport, trust, or language-binding behavior. Conversely, treating domain features as part of ISO processor conformance couples the schema-neutral runtime to sampled industries and creates unnecessary code, memory, and compatibility cost. The durable boundary is the selected normative processor contract: complete inside it and deliberately neutral outside it.
+
+### Practical implications
+
+- Annex D PICS and clause-level traceability, not repository file count or AP fixture success, define whether a selected Part 21 conformance claim is complete.
+- An applicable normative processor requirement cannot be closed as `unsupported`, `syntax-only`, or `unmapped`; staged delivery must keep the broader claim explicitly incomplete until executable proof exists.
+- ISO 10303-11 functions, procedures, rules, types, and constraints enter the implementation only when reachable from Part 21 mapping or schema-conformance behavior required by the selected target.
+- AP203/AP214/AP242 and other schema packages may remain consumers and interoperability evidence, but their B-rep, PMI, CAD/BIM, or business meaning does not enter the core runtime or define ISO conformance.
+- Shared schema-neutral mechanisms are preferred when they preserve the full standard behavior; efficiency may change representation or execution but may not remove a required capability.
+
+### Exception route
+
+Reducing or deferring an applicable requirement needs an accepted ADR that narrows the declared conformance target and updates every affected claim and PICS row before implementation or release. Adding domain semantics requires a separately scoped product decision and package boundary; it cannot be justified as completion of this ISO processor contract.

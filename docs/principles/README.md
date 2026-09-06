@@ -14,6 +14,7 @@
 | AP-001 | ISO 10303-21 defines the product boundary | Required | Active | repository maintainer | A public API or capability is proposed around one application protocol or non-ISO representation | [`architecture.md`](architecture.md) |
 | AP-002 | Keep the runtime schema-neutral | Required | Active | repository maintainer | The runtime would depend on a generated schema, generator implementation, or domain package | [`architecture.md`](architecture.md) |
 | AP-003 | Do not add domain concepts beyond ISO 10303-21 and EXPRESS | Required | Active | repository maintainer | A public domain type/member lacks a standard/schema source, or infrastructure is presented as standard/schema semantics | [`architecture.md`](architecture.md) |
+| AP-004 | Complete the selected ISO processor contract without domain expansion | Required | Active | repository maintainer | An applicable normative processor capability would remain unsupported, or ISO conformance work would add AP/B-rep/PMI semantics | [`architecture.md`](architecture.md) |
 | EP-001 | Change grammars only from standard evidence | Required | Active | repository maintainer | Any `.g4` production is added, removed, broadened, or narrowed | [`engineering.md`](engineering.md) |
 | EP-002 | Preserve ISO semantics before convenience | Required | Active | repository maintainer | An ergonomic API would lose model-owned identity, schema mapping, unsupported behavior, or write-time validity | [`engineering.md`](engineering.md) |
 | EP-003 | Prefer static contracts and keep runtime paths Native AOT-ready | Required | Active | repository maintainer | Runtime behavior would require unbounded reflection, assembly scanning, dynamic code generation, or an AOT-unverified dependency | [`engineering.md`](engineering.md) |
@@ -27,4 +28,4 @@ A deviation from a Required principle needs an accepted ADR before implementatio
 
 - Principle-set owner: repository maintainer
 - Review triggers: an ISO baseline revision, a new serialization boundary, a runtime dependency-direction change, a domain-specific public abstraction, an unproven conformance claim, or a runtime dependency that cannot pass Native AOT analysis and execution evidence.
-- Last reviewed: 2026-08-26
+- Last reviewed: 2026-09-06

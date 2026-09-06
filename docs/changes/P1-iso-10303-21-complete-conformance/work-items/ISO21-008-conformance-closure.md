@@ -1,0 +1,70 @@
+# ISO21-008: 关闭 PICS、conformance classes 与 AOT 证据
+
+<!-- work-item-format: 2 -->
+<!-- work-item-id: ISO21-008 -->
+
+<!-- approval-source: user-explicit-approval-2026-09-06 -->
+
+## Outcome
+
+交付可机械验证的 Annex D PICS/逐条 normative traceability 与真实 processor 旅程，证明 classes
+`4;1`、`4;2`、`4;3` 及允许的 `2;1`/`3;1` 兼容在同一 candidate 上完整读写，并保持 class-1 性能、旧 API/AP packages 和 Native AOT。
+
+<!-- work-item: scope -->
+## Scope and non-goals
+
+- Target delivery area or exact public/persisted contract: machine-readable clause/PICS manifest、processor conformance report、implementation limits、all-class end-to-end fixtures、consumer docs/API/package/AOT/performance evidence.
+- In scope: clauses 4-14 and applicable normative Annexes A-G、read/write PICS、entity/value/constant and short-name encodings、all string encodings、reference/archive/signature/population/Annex-F rows and justified processor not-applicable rows.
+- Non-goals: physical tape/diskette/multi-volume media operations、informative annex implementation、AP/B-rep/PMI semantics、other STEP parts、remote package publication or a broader platform promise than tested.
+- Likely touchpoints (non-binding): conformance manifest/verifier、public report/limits、contract/integration fixtures、docs/conformance、packed consumer、allocation harness and AOT scripts.
+
+<!-- work-item: start-conditions -->
+## Start conditions
+
+| Prerequisite or blocker | Concrete input or guarantee | Evidence |
+| --- | --- | --- |
+| ISO21-001 through ISO21-007 Verified | Every owned capability, mapping, binding and security boundary has exact candidate-bound proof and supplied manifests | Work-item completion evidence on the authoritative integration revision |
+
+<!-- work-item: contract-coverage -->
+## Contract responsibility
+
+| Parent contract | Responsibility | Contribution or supplied input |
+| --- | --- | --- |
+| AC-01 | Owns | Zero applicable unsupported/unmapped/unproven PICS or normative row |
+| AC-02 | Owns | End-to-end syntactical classes 1/2/3 and edition compatibility read/write behavior |
+
+<!-- work-item: delivery-constraints -->
+## Constraints
+
+- Every manifest row names normative source, applicability, implementation location and exactly one executable primary proof or justified not-applicable rationale.
+- A green AP corpus or syntax parser is never sufficient for a normative row; full claims remain absent until the verifier closes all applicable rows.
+- Measure the approved fixed class-1 scenario against `63b2757` on the same Release runtime: median 20-iteration allocation regression is at most `max(5%, 16 KiB)` and unused feature factories create zero objects.
+- Preserve cumulative runtime/generated API snapshots, diagnostics, deterministic outputs, AP203/AP214/AP242 package proofs and core Native AOT execution.
+
+<!-- work-item: proof-plan -->
+## Proof
+
+<!-- primary-proof: AC-01 purpose=acceptance shape=contract -->
+<!-- primary-proof: AC-02 purpose=acceptance shape=contract -->
+| Contract or gate | Role | Observable assertion | Command or bounded procedure |
+| --- | --- | --- | --- |
+| AC-01 | Primary | Conformance verifier reports zero applicable syntax-only, unsupported, unmapped or unproven clause/PICS row | Run the repository ISO conformance verifier and manifest contract tests in Release |
+| AC-02 | Primary | Positive and neighboring-invalid matrices for every declared implementation level read, write and reread with exact class semantics | Run the all-class processor contract suite in Release |
+| Full compatibility/AOT | Conditional | Full solution, public/generated baselines, AP package/fixture/reproducibility proofs and core packed Native AOT journey pass | Run `dotnet test TedToolkit.Step21.slnx -c Release --no-restore`, package scripts and `pwsh -File build/verify-native-aot.ps1` |
+| Class-1 feature isolation | Conditional | Fixed scenario stays within the approved allocation bound and creates zero unused feature-service objects | Run baseline/candidate Release allocation harness and tracking-factory tests |
+
+<!-- work-item: definition-of-done -->
+## Done
+
+- AC-01 and AC-02 pass on the same candidate as every prerequisite proof; no applicable row remains unsupported or unproven.
+- Durable conformance/architecture/consumer docs replace stale capability claims; API/SemVer, full regression, package, performance and Native AOT evidence pass.
+
+<!-- work-item: completion-evidence -->
+## Verification result requirements
+
+Record authoritative candidate revision; clause/PICS total, implemented and N/A counts; class/compatibility fixture counts;
+all commands/results; API/SemVer/docs state; baseline/candidate allocation values; package graphs; AP regressions; and Native AOT publish/run identity.
+
+## Risks and implementation notes
+
+Normative completeness is a positive proof obligation. Search-based absence of `unsupported` or a passing aggregate test command cannot replace row-by-row manifest coverage.
