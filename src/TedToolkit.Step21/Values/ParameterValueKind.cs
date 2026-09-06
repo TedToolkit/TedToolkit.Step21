@@ -38,4 +38,19 @@ public enum ParameterValueKind
 
     /// <summary>A keyword-qualified typed parameter.</summary>
     Typed = 11,
+
+    /// <summary>An unresolved entity instance occurrence name.</summary>
+    EntityInstance = 12,
+
+    /// <summary>A value instance occurrence name.</summary>
+    ValueInstance = 13,
+
+    /// <summary>An EXPRESS constant whose value is an entity instance.</summary>
+    ConstantEntity = 14,
+
+    /// <summary>An EXPRESS constant whose value is not an entity instance.</summary>
+    ConstantValue = 15,
+
+    /// <summary>A URI-addressed Part 21 resource.</summary>
+    Resource = 16,
 }

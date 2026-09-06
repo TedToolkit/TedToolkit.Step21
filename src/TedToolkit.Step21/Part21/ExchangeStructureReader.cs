@@ -82,18 +82,39 @@ internal static class ExchangeStructureReader
                 bindingDiagnostics))
             .ToArray();
         var entitiesByName = allocations.ToDictionary(allocation => allocation.Name, allocation => allocation.Entity);
-        var externalNames = BindExternalReferenceNames(syntax.Reference, bindingDiagnostics);
-        foreach (var externalName in externalNames.Keys.Where(entitiesByName.ContainsKey))
+        var externalNames = BindExternalReferenceNames(syntax.Reference, structure, bindingDiagnostics);
+        foreach (var externalName in externalNames.Entities.Keys.Where(entitiesByName.ContainsKey))
         {
             bindingDiagnostics.Add(new Step21Diagnostic(
                 "P21-BIND-OCCURRENCE",
                 Step21DiagnosticSeverity.Error,
                 $"Entity occurrence '{externalName}' is defined both externally and in the data section.",
-                externalNames[externalName]));
+                externalNames.Entities[externalName]));
+        }
+
+        foreach (var externalName in externalNames.Values.Keys.Where(name =>
+                     entitiesByName.ContainsKey(new EntityInstanceName(name.CanonicalDigits))))
+        {
+            bindingDiagnostics.Add(new Step21Diagnostic(
+                "P21-BIND-OCCURRENCE",
+                Step21DiagnosticSeverity.Error,
+                $"Value occurrence '{externalName}' overlaps an entity occurrence with the same integer.",
+                externalNames.Values[externalName]));
         }
 
         foreach (var allocation in allocations)
             structure.Add(allocation.DataSection, allocation.Name, allocation.Entity);
+
+        _ = structure.TryGetSchemaDescriptor(
+            new SchemaName(header.FileSchema.SchemaIdentifiers[0]),
+            out var firstSchemaDescriptor);
+        BindAnchors(
+            syntax.Anchor,
+            structure,
+            entitiesByName,
+            externalNames,
+            firstSchemaDescriptor,
+            bindingDiagnostics);
 
         foreach (var allocation in allocations)
         {
@@ -116,7 +137,7 @@ internal static class ExchangeStructureReader
                         parameter,
                         parameterPath,
                         entitiesByName,
-                        externalNames,
+                        externalNames.Entities,
                         referenceFailures,
                         bindingDiagnostics,
                         out var converted);
@@ -228,28 +249,6 @@ internal static class ExchangeStructureReader
                  }.SelectMany(entity => entity.Parameters))
         {
             CollectUnsupportedValueDiagnostics(headerValue, diagnostics);
-        }
-
-        if (syntax.Reference is not null)
-        {
-            foreach (var reference in syntax.Reference.References.Where(reference =>
-                         reference.Name.Kind != Part21ValueKind.EntityInstanceName))
-            {
-                diagnostics.Add(new Step21Diagnostic(
-                    "P21-CAP-VALUE-REFERENCE",
-                    Step21DiagnosticSeverity.Error,
-                    "External value-occurrence resolution is not implemented.",
-                    reference.Name.Span.Start));
-            }
-        }
-
-        if (syntax.DataSections.Count == 0)
-        {
-            diagnostics.Add(new Step21Diagnostic(
-                "P21-CAP-DATA-SECTION",
-                Step21DiagnosticSeverity.Error,
-                "Typed reading requires at least one data section.",
-                syntax.Span.Start));
         }
 
         foreach (var section in syntax.DataSections)
@@ -808,45 +807,213 @@ internal static class ExchangeStructureReader
         return allocations;
     }
 
-    private static IReadOnlyDictionary<EntityInstanceName, SourceLocation> BindExternalReferenceNames(
+    private static ExternalOccurrenceNames BindExternalReferenceNames(
         ReferenceSectionSyntax? referenceSection,
+        ExchangeStructure structure,
         ICollection<Step21Diagnostic> diagnostics)
     {
-        var names = new Dictionary<EntityInstanceName, SourceLocation>();
+        var entityNames = new Dictionary<EntityInstanceName, SourceLocation>();
+        var valueNames = new Dictionary<ValueInstanceName, SourceLocation>();
         if (referenceSection is null)
-            return names;
+            return new ExternalOccurrenceNames(entityNames, valueNames);
 
         foreach (var reference in referenceSection.References)
         {
-            if (reference.Name.Kind != Part21ValueKind.EntityInstanceName)
-                continue;
-
-            EntityInstanceName name;
             try
             {
-                name = new EntityInstanceName(reference.Name.Text[1..]);
+                if (reference.Name.Kind == Part21ValueKind.EntityInstanceName)
+                {
+                    var name = new EntityInstanceName(reference.Name.Text[1..]);
+                    if (!entityNames.TryAdd(name, reference.Name.Span.Start))
+                    {
+                        diagnostics.Add(new Step21Diagnostic(
+                            "P21-BIND-OCCURRENCE",
+                            Step21DiagnosticSeverity.Error,
+                            $"External entity occurrence '{name}' is declared more than once.",
+                            reference.Name.Span.Start));
+                    }
+                    else
+                    {
+                        structure.References.Add(new Part21Reference(
+                            name,
+                            new Part21Resource(reference.Resource.Text[1..^1])));
+                    }
+                }
+                else
+                {
+                    var name = new ValueInstanceName(reference.Name.Text[1..]);
+                    if (!valueNames.TryAdd(name, reference.Name.Span.Start))
+                    {
+                        diagnostics.Add(new Step21Diagnostic(
+                            "P21-BIND-OCCURRENCE",
+                            Step21DiagnosticSeverity.Error,
+                            $"External value occurrence '{name}' is declared more than once.",
+                            reference.Name.Span.Start));
+                    }
+                    else
+                    {
+                        structure.References.Add(new Part21Reference(
+                            name,
+                            new Part21Resource(reference.Resource.Text[1..^1])));
+                    }
+                }
             }
             catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
             {
                 diagnostics.Add(new Step21Diagnostic(
                     "P21-BIND-OCCURRENCE",
                     Step21DiagnosticSeverity.Error,
-                    $"External entity occurrence '{reference.Name.Text}' is not a positive occurrence name.",
-                    reference.Name.Span.Start));
-                continue;
-            }
-
-            if (!names.TryAdd(name, reference.Name.Span.Start))
-            {
-                diagnostics.Add(new Step21Diagnostic(
-                    "P21-BIND-OCCURRENCE",
-                    Step21DiagnosticSeverity.Error,
-                    $"External entity occurrence '{name}' is declared more than once.",
+                    $"External occurrence '{reference.Name.Text}' is not a positive occurrence name.",
                     reference.Name.Span.Start));
             }
         }
 
-        return names;
+        var valueDigits = valueNames.Keys.Select(name => name.CanonicalDigits).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in entityNames.Keys.Where(name => valueDigits.Contains(name.CanonicalDigits)))
+        {
+            diagnostics.Add(new Step21Diagnostic(
+                "P21-BIND-OCCURRENCE",
+                Step21DiagnosticSeverity.Error,
+                $"Entity occurrence '{name}' overlaps a value occurrence with the same integer.",
+                entityNames[name]));
+        }
+
+        return new ExternalOccurrenceNames(entityNames, valueNames);
+    }
+
+    private static void BindAnchors(
+        AnchorSectionSyntax? section,
+        ExchangeStructure structure,
+        IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
+        ExternalOccurrenceNames externalNames,
+        SchemaDescriptor? firstSchemaDescriptor,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (section is null)
+            return;
+
+        var names = new HashSet<AnchorName>();
+        foreach (var syntax in section.Anchors)
+        {
+            try
+            {
+                var name = new AnchorName(syntax.Name.Text[1..^1]);
+                if (!names.Add(name))
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-BIND-ANCHOR-DUPLICATE",
+                        Step21DiagnosticSeverity.Error,
+                        $"Anchor name '{name}' occurs more than once.",
+                        syntax.Name.Span.Start));
+                    continue;
+                }
+
+                var item = BindAnchorItem(
+                    syntax.Item,
+                    entitiesByName,
+                    externalNames,
+                    firstSchemaDescriptor,
+                    diagnostics);
+                var tags = syntax.Tags.Select(tag => new Part21AnchorTag(
+                    tag.Name,
+                    BindAnchorItem(
+                        tag.Item,
+                        entitiesByName,
+                        externalNames,
+                        firstSchemaDescriptor,
+                        diagnostics)));
+                structure.Anchors.Add(new Part21Anchor(name, item, tags));
+            }
+            catch (Exception exception) when (exception is FormatException
+                or ArgumentException
+                or OverflowException)
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-ANCHOR",
+                    Step21DiagnosticSeverity.Error,
+                    $"The anchor does not denote a valid Part 21 value: {exception.Message}",
+                    syntax.Span.Start));
+            }
+        }
+    }
+
+    private static ParameterValue BindAnchorItem(
+        ValueSyntax value,
+        IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
+        ExternalOccurrenceNames externalNames,
+        SchemaDescriptor? firstSchemaDescriptor,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (value.Kind == Part21ValueKind.List)
+        {
+            return ParameterValue.FromAggregate(value.Values.Select(child =>
+                BindAnchorItem(child, entitiesByName, externalNames, firstSchemaDescriptor, diagnostics)));
+        }
+
+        if (value.Kind == Part21ValueKind.Resource)
+            return ParameterValue.FromResource(new Part21Resource(value.Text[1..^1]));
+
+        if (value.Kind == Part21ValueKind.EntityInstanceName)
+        {
+            var name = new EntityInstanceName(value.Text[1..]);
+            if (entitiesByName.TryGetValue(name, out var entity))
+                return ParameterValue.FromEntity(entity);
+            if (externalNames.Entities.ContainsKey(name))
+                return ParameterValue.FromEntityInstance(name);
+
+            diagnostics.Add(new Step21Diagnostic(
+                "P21-BIND-ANCHOR-OCCURRENCE",
+                Step21DiagnosticSeverity.Error,
+                $"Anchor entity occurrence '{name}' is not defined in this exchange structure.",
+                value.Span.Start));
+            return ParameterValue.FromEntityInstance(name);
+        }
+
+        if (value.Kind == Part21ValueKind.ValueInstanceName)
+        {
+            var name = new ValueInstanceName(value.Text[1..]);
+            if (!externalNames.Values.ContainsKey(name))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-ANCHOR-OCCURRENCE",
+                    Step21DiagnosticSeverity.Error,
+                    $"Anchor value occurrence '{name}' is not defined in the reference section.",
+                    value.Span.Start));
+            }
+
+            return ParameterValue.FromValueInstance(name);
+        }
+
+        if (value.Kind == Part21ValueKind.ConstantEntityName)
+        {
+            var name = new ConstantEntityName(value.Text[1..]);
+            if (firstSchemaDescriptor is null || !firstSchemaDescriptor.ContainsConstantEntity(name.Value))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-ANCHOR-CONSTANT",
+                    Step21DiagnosticSeverity.Error,
+                    $"Entity constant '{name}' is not defined by the first FILE_SCHEMA schema.",
+                    value.Span.Start));
+            }
+
+            return ParameterValue.FromConstantEntity(name);
+        }
+        if (value.Kind == Part21ValueKind.ConstantValueName)
+        {
+            var name = new ConstantValueName(value.Text[1..]);
+            if (firstSchemaDescriptor is null || !firstSchemaDescriptor.ContainsConstantValue(name.Value))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-ANCHOR-CONSTANT",
+                    Step21DiagnosticSeverity.Error,
+                    $"Value constant '{name}' is not defined by the first FILE_SCHEMA schema.",
+                    value.Span.Start));
+            }
+
+            return ParameterValue.FromConstantValue(name);
+        }
+
+        return ConvertNonReferenceParameter(value);
     }
 
     private static bool TryConvertParameter(
@@ -1081,6 +1248,10 @@ internal static class ExchangeStructureReader
 
         internal SchemaDescriptor? Descriptor { get; } = descriptor;
     }
+
+    private sealed record ExternalOccurrenceNames(
+        IReadOnlyDictionary<EntityInstanceName, SourceLocation> Entities,
+        IReadOnlyDictionary<ValueInstanceName, SourceLocation> Values);
 }
 
 internal static class Part21LexicalValueDecoder

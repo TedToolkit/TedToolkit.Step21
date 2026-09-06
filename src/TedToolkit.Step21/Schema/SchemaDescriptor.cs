@@ -44,6 +44,10 @@ public abstract class SchemaDescriptor
 
     internal bool IsEntityReferenceCompatible(Entity value) => IsEntityReferenceCompatibleCore(value);
 
+    internal bool ContainsConstantEntity(string name) => ContainsConstantEntityCore(name);
+
+    internal bool ContainsConstantValue(string name) => ContainsConstantValueCore(name);
+
     /// <summary>Allocates a generated entity for one ordered physical entity-name group.</summary>
     /// <param name="entityNames">The physical entity names in component order.</param>
     /// <returns>The allocated generated entity, or <see langword="null"/> when the names are not supported.</returns>
@@ -92,4 +96,12 @@ public abstract class SchemaDescriptor
     /// <param name="value">The candidate generated entity.</param>
     /// <returns><see langword="true"/> when the entity type is reference-compatible with this schema.</returns>
     protected virtual bool IsEntityReferenceCompatibleCore(Entity value) => false;
+
+    /// <summary>Determines whether this schema defines the named entity-valued EXPRESS constant.</summary>
+    /// <param name="name">The canonical upper-case constant name without a Part 21 prefix.</param>
+    protected virtual bool ContainsConstantEntityCore(string name) => false;
+
+    /// <summary>Determines whether this schema defines the named non-entity EXPRESS constant.</summary>
+    /// <param name="name">The canonical upper-case constant name without a Part 21 prefix.</param>
+    protected virtual bool ContainsConstantValueCore(string name) => false;
 }

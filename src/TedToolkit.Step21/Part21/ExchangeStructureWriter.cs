@@ -12,6 +12,8 @@ internal static class ExchangeStructureWriter
         ThrowIfProjectedValuesAreInvalid(structure, projected);
         var builder = new StringBuilder();
         AppendHeader(builder, structure);
+        AppendAnchors(builder, structure);
+        AppendReferences(builder, structure);
         AppendDataSections(builder, structure, projected);
         _ = builder.Append("END-ISO-10303-21;");
         destination.Write(builder.ToString());
@@ -295,6 +297,49 @@ internal static class ExchangeStructureWriter
 
             _ = builder.Append("ENDSEC;\n");
         }
+    }
+
+    private static void AppendAnchors(StringBuilder builder, ExchangeStructure structure)
+    {
+        if (structure.AnchorEntries.Count == 0)
+            return;
+
+        _ = builder.Append("ANCHOR;\n");
+        foreach (var anchor in structure.AnchorEntries)
+        {
+            _ = builder.Append(anchor.Name)
+                .Append('=')
+                .Append(ParameterValueFormatter.Format(anchor.Item, entity => ResolveName(structure, entity)));
+            foreach (var tag in anchor.Tags)
+            {
+                _ = builder.Append('{')
+                    .Append(tag.Name)
+                    .Append(':')
+                    .Append(ParameterValueFormatter.Format(tag.Item, entity => ResolveName(structure, entity)))
+                    .Append('}');
+            }
+
+            _ = builder.Append(";\n");
+        }
+
+        _ = builder.Append("ENDSEC;\n");
+    }
+
+    private static void AppendReferences(StringBuilder builder, ExchangeStructure structure)
+    {
+        if (structure.ReferenceEntries.Count == 0)
+            return;
+
+        _ = builder.Append("REFERENCE;\n");
+        foreach (var reference in structure.ReferenceEntries)
+        {
+            _ = builder.Append(reference.FormatName())
+                .Append('=')
+                .Append(reference.Resource)
+                .Append(";\n");
+        }
+
+        _ = builder.Append("ENDSEC;\n");
     }
 
     private static string FormatEntity(

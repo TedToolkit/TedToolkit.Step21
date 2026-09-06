@@ -25,6 +25,11 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     private readonly Entity? _entity;
     private readonly ReadOnlyCollection<ParameterValue>? _aggregate;
     private readonly ParameterValue? _inner;
+    private readonly EntityInstanceName _entityInstanceName;
+    private readonly ValueInstanceName _valueInstanceName;
+    private readonly ConstantEntityName _constantEntityName;
+    private readonly ConstantValueName _constantValueName;
+    private readonly Part21Resource _resource;
 
     private ParameterValue(
         ParameterValueKind kind,
@@ -36,7 +41,12 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
         LogicalValue logical = default,
         Entity? entity = null,
         ReadOnlyCollection<ParameterValue>? aggregate = null,
-        ParameterValue? inner = null)
+        ParameterValue? inner = null,
+        EntityInstanceName entityInstanceName = default,
+        ValueInstanceName valueInstanceName = default,
+        ConstantEntityName constantEntityName = default,
+        ConstantValueName constantValueName = default,
+        Part21Resource resource = default)
     {
         Kind = kind;
         _integer = integer;
@@ -48,6 +58,11 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
         _entity = entity;
         _aggregate = aggregate;
         _inner = inner;
+        _entityInstanceName = entityInstanceName;
+        _valueInstanceName = valueInstanceName;
+        _constantEntityName = constantEntityName;
+        _constantValueName = constantValueName;
+        _resource = resource;
     }
 
     /// <summary>Gets the explicit OPTIONAL absence marker.</summary>
@@ -127,6 +142,41 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
         return new(ParameterValueKind.Entity, entity: value);
     }
 
+    /// <summary>Creates an unresolved entity instance occurrence.</summary>
+    public static ParameterValue FromEntityInstance(EntityInstanceName name)
+    {
+        _ = name.CanonicalDigits;
+        return new(ParameterValueKind.EntityInstance, entityInstanceName: name);
+    }
+
+    /// <summary>Creates a value instance occurrence.</summary>
+    public static ParameterValue FromValueInstance(ValueInstanceName name)
+    {
+        _ = name.CanonicalDigits;
+        return new(ParameterValueKind.ValueInstance, valueInstanceName: name);
+    }
+
+    /// <summary>Creates an EXPRESS constant entity occurrence.</summary>
+    public static ParameterValue FromConstantEntity(ConstantEntityName name)
+    {
+        _ = name.Value;
+        return new(ParameterValueKind.ConstantEntity, constantEntityName: name);
+    }
+
+    /// <summary>Creates an EXPRESS constant value occurrence.</summary>
+    public static ParameterValue FromConstantValue(ConstantValueName name)
+    {
+        _ = name.Value;
+        return new(ParameterValueKind.ConstantValue, constantValueName: name);
+    }
+
+    /// <summary>Creates a URI-addressed Part 21 resource value.</summary>
+    public static ParameterValue FromResource(Part21Resource resource)
+    {
+        _ = resource.Value;
+        return new(ParameterValueKind.Resource, resource: resource);
+    }
+
     /// <summary>Creates a recursive aggregate parameter from a stable snapshot.</summary>
     /// <param name="values">The parameter elements in physical order.</param>
     /// <returns>An aggregate parameter owning a snapshot of the supplied sequence.</returns>
@@ -199,6 +249,26 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     public bool TryGetEntity([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Entity? value) =>
         TryGetReference(ParameterValueKind.Entity, _entity, out value);
 
+    /// <summary>Attempts to obtain an unresolved entity instance occurrence.</summary>
+    public bool TryGetEntityInstance(out EntityInstanceName name) =>
+        TryGet(ParameterValueKind.EntityInstance, _entityInstanceName, out name);
+
+    /// <summary>Attempts to obtain a value instance occurrence.</summary>
+    public bool TryGetValueInstance(out ValueInstanceName name) =>
+        TryGet(ParameterValueKind.ValueInstance, _valueInstanceName, out name);
+
+    /// <summary>Attempts to obtain an EXPRESS constant entity occurrence.</summary>
+    public bool TryGetConstantEntity(out ConstantEntityName name) =>
+        TryGet(ParameterValueKind.ConstantEntity, _constantEntityName, out name);
+
+    /// <summary>Attempts to obtain an EXPRESS constant value occurrence.</summary>
+    public bool TryGetConstantValue(out ConstantValueName name) =>
+        TryGet(ParameterValueKind.ConstantValue, _constantValueName, out name);
+
+    /// <summary>Attempts to obtain a resource URI reference.</summary>
+    public bool TryGetResource(out Part21Resource resource) =>
+        TryGet(ParameterValueKind.Resource, _resource, out resource);
+
     /// <summary>Attempts to obtain the recursive aggregate alternative.</summary>
     /// <param name="values">Receives the stable element snapshot, or <see langword="null"/> for another alternative.</param>
     /// <returns><see langword="true"/> when this is an aggregate parameter.</returns>
@@ -240,6 +310,11 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
             ParameterValueKind.Boolean => _boolean == other._boolean,
             ParameterValueKind.Logical => _logical == other._logical,
             ParameterValueKind.Entity => ReferenceEquals(_entity, other._entity),
+            ParameterValueKind.EntityInstance => _entityInstanceName.Equals(other._entityInstanceName),
+            ParameterValueKind.ValueInstance => _valueInstanceName.Equals(other._valueInstanceName),
+            ParameterValueKind.ConstantEntity => _constantEntityName.Equals(other._constantEntityName),
+            ParameterValueKind.ConstantValue => _constantValueName.Equals(other._constantValueName),
+            ParameterValueKind.Resource => _resource.Equals(other._resource),
             ParameterValueKind.Aggregate => _aggregate!.SequenceEqual(other._aggregate!),
             ParameterValueKind.Typed => string.Equals(_text, other._text, StringComparison.Ordinal)
                 && Equals(_inner, other._inner),
@@ -281,6 +356,21 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
                 break;
             case ParameterValueKind.Entity:
                 hash.Add(_entity is null ? 0 : RuntimeHelpers.GetHashCode(_entity));
+                break;
+            case ParameterValueKind.EntityInstance:
+                hash.Add(_entityInstanceName);
+                break;
+            case ParameterValueKind.ValueInstance:
+                hash.Add(_valueInstanceName);
+                break;
+            case ParameterValueKind.ConstantEntity:
+                hash.Add(_constantEntityName);
+                break;
+            case ParameterValueKind.ConstantValue:
+                hash.Add(_constantValueName);
+                break;
+            case ParameterValueKind.Resource:
+                hash.Add(_resource);
                 break;
             case ParameterValueKind.Aggregate:
                 foreach (var value in _aggregate!)

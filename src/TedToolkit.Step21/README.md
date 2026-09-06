@@ -108,7 +108,8 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 
 ## Explicit limits
 
-- Anchors, external resource acquisition/resolution, and signature verification are syntactically recognized but return explicit unsupported evidence when their operation is required. A declared external entity occurrence used by a model is reported specifically as `P21.READ.REFERENCE.EXTERNAL`.
+- Anchors, tags, all four occurrence-name categories, UUID anchor identity, and schema-neutral `REFERENCE` declarations can be read, edited, validated, canonically written, and reread; see the [conformance record](https://github.com/TedToolkit/TedToolkit.Step21/blob/main/docs/conformance/anchor-occurrence-uuid.md).
+- External resource acquisition/resolution and signature verification remain unsupported. A declared external entity occurrence used by a typed model is reported specifically as `P21.READ.REFERENCE.EXTERNAL`; no network or file access occurs implicitly.
 - Complex mappings outside the documented flat `ANDOR` form and SDAI domain-equivalence metadata are unsupported.
 - This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.

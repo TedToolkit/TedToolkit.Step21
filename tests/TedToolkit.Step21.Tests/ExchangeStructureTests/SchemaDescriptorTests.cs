@@ -32,6 +32,8 @@ internal sealed class SchemaDescriptorTests
             await Assert.That(publicMembers).IsEquivalentTo(["get_Name", "Name"]);
             await Assert.That(protectedMethods).IsEquivalentTo([
                 "AllocateEntityCore(IReadOnlyList<String>) -> Entity",
+                "ContainsConstantEntityCore(String) -> Boolean",
+                "ContainsConstantValueCore(String) -> Boolean",
                 "GetCapabilityDiagnosticsCore(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntityCore(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
                 "IsEntityReferenceCompatibleCore(Entity) -> Boolean",
@@ -41,6 +43,8 @@ internal sealed class SchemaDescriptorTests
             ]);
             await Assert.That(internalMethods).IsEquivalentTo([
                 "AllocateEntity(IReadOnlyList<String>) -> Entity",
+                "ContainsConstantEntity(String) -> Boolean",
+                "ContainsConstantValue(String) -> Boolean",
                 "GetCapabilityDiagnostics(ExchangeStructure) -> IReadOnlyList<Step21Diagnostic>",
                 "HydrateEntity(ExchangeStructure, Entity, IReadOnlyList<KeyValuePair<String, IReadOnlyList<ParameterValue>>>) -> IReadOnlyList<Step21Diagnostic>",
                 "IsEntityReferenceCompatible(Entity) -> Boolean",
@@ -78,6 +82,8 @@ internal sealed class SchemaDescriptorTests
                 .IsEqualTo("TEST-CAPABILITY");
             await Assert.That(descriptor.ProjectEntity(entity)).IsSameReferenceAs(projected);
             await Assert.That(descriptor.IsEntityReferenceCompatible(entity)).IsFalse();
+            await Assert.That(descriptor.ContainsConstantEntity("ENTITY_CONSTANT")).IsTrue();
+            await Assert.That(descriptor.ContainsConstantValue("VALUE_CONSTANT")).IsTrue();
             await Assert.That(descriptor.ValidateEntityPopulation(structure, entities).Failures.Single().Code)
                 .IsEqualTo("TEST-VALIDATE");
         }
@@ -125,5 +131,9 @@ internal sealed class SchemaDescriptorTests
 
         protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
             Entity value) => projected;
+
+        protected override bool ContainsConstantEntityCore(string name) => name == "ENTITY_CONSTANT";
+
+        protected override bool ContainsConstantValueCore(string name) => name == "VALUE_CONSTANT";
     }
 }

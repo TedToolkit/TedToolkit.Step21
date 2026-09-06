@@ -65,16 +65,6 @@ internal sealed class ExchangeStructureSyntax : Part21SyntaxNode
     internal void ThrowIfUnsupportedOperationsRequired(bool retainExternalReferenceEvidence = false)
     {
         var diagnostics = new List<Step21Diagnostic>();
-        if (Anchor is not null)
-        {
-            diagnostics.Add(
-                new Step21Diagnostic(
-                    "P21-CAP-ANCHOR",
-                    Step21DiagnosticSeverity.Error,
-                    "Operational anchor resolution is not implemented.",
-                    Anchor.Span.Start));
-        }
-
         if (Reference is not null && !retainExternalReferenceEvidence)
         {
             diagnostics.Add(

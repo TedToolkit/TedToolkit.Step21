@@ -111,6 +111,17 @@ internal static class ExpressSchemaDescriptorEmitter
         descriptor.AddMember(CreateCapabilityMethod());
         descriptor.AddMember(CreateProjectMethod(entities, complexEntities, resolver));
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
+        var entityConstantNames = GetConstantNames(schema, entityConstants: true);
+        if (entityConstantNames.Length > 0)
+        {
+            descriptor.AddMember(CreateConstantLookupMethod(entityConstantNames, entityConstants: true));
+        }
+
+        var valueConstantNames = GetConstantNames(schema, entityConstants: false);
+        if (valueConstantNames.Length > 0)
+        {
+            descriptor.AddMember(CreateConstantLookupMethod(valueConstantNames, entityConstants: false));
+        }
 
         var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
         shards.Emit(context, generatedNamespace, schema.Name.ToUpperInvariant());
@@ -193,6 +204,43 @@ internal static class ExpressSchemaDescriptorEmitter
     {
         var entityName = entity.Entity.Name.ToUpperInvariant();
         return $"(entityNames.Count == 1 && entityNames[0] == \"{entityName}\")";
+    }
+
+    private static string[] GetConstantNames(ExpressBoundSchema schema, bool entityConstants)
+    {
+        return schema.Declarations
+            .OfType<ExpressBoundOpaqueDeclaration>()
+            .Where(declaration => declaration.Kind == ExpressDeclarationKind.Constant
+                && IsDirectEntityConstant(declaration) == entityConstants)
+            .Select(declaration => declaration.Name.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static Method CreateConstantLookupMethod(
+        string[] names,
+        bool entityConstants)
+    {
+        var method = CreateOverrideMethod(
+            entityConstants ? "ContainsConstantEntityCore" : "ContainsConstantValueCore",
+            new DataType("global::System.Boolean"));
+        method.AddParameter(SourceComposer.Parameter(new DataType("global::System.String"), "name"));
+        var expression = $"name is {string.Join(" or ", names.Select(name =>
+            Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(name, quote: true)))}";
+        method.AddStatement(new CustomExpression(expression).Return);
+        AddSummary(method, entityConstants
+            ? "Recognizes direct entity-valued EXPRESS constant occurrence names."
+            : "Recognizes non-entity EXPRESS constant occurrence names.");
+        return method;
+    }
+
+    private static bool IsDirectEntityConstant(ExpressBoundOpaqueDeclaration declaration)
+    {
+        return declaration.DeclaredType is ExpressBoundNamedType
+        {
+            Declaration.Kind: ExpressDeclarationKind.Entity,
+        };
     }
 
     private static string CreateComplexMappingCondition(

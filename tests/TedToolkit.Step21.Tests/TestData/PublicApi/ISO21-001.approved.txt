@@ -1,0 +1,156 @@
+readonly struct TedToolkit.Step21.AnchorName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.AnchorName>
+  constructor (System.String value)
+  property System.Boolean IsUuid { get; }
+  property System.String Value { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.AnchorName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Boolean TryGetUuid(out System.Guid value)
+readonly struct TedToolkit.Step21.ConstantEntityName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.ConstantEntityName>
+  constructor (System.String value)
+  property System.String Value { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.ConstantEntityName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+readonly struct TedToolkit.Step21.ConstantValueName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.ConstantValueName>
+  constructor (System.String value)
+  property System.String Value { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.ConstantValueName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Anchor> Anchors { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Reference> References { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+  method TedToolkit.Step21.ValidationResult Validate()
+  method System.Void Write(System.IO.TextWriter destination)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity)
+sealed class TedToolkit.Step21.ParameterValue : System.Object
+  interface System.IEquatable<TedToolkit.Step21.ParameterValue>
+  property static TedToolkit.Step21.ParameterValue Derived { get; }
+  property TedToolkit.Step21.ParameterValueKind Kind { get; }
+  property static TedToolkit.Step21.ParameterValue Omitted { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.ParameterValue? other)
+  static method TedToolkit.Step21.ParameterValue FromAggregate(System.Collections.Generic.IEnumerable<TedToolkit.Step21.ParameterValue> values)
+  static method TedToolkit.Step21.ParameterValue FromBinary(TedToolkit.Step21.BinaryValue value)
+  static method TedToolkit.Step21.ParameterValue FromBoolean(System.Boolean value)
+  static method TedToolkit.Step21.ParameterValue FromConstantEntity(TedToolkit.Step21.ConstantEntityName name)
+  static method TedToolkit.Step21.ParameterValue FromConstantValue(TedToolkit.Step21.ConstantValueName name)
+  static method TedToolkit.Step21.ParameterValue FromEntity(TedToolkit.Step21.Entity value)
+  static method TedToolkit.Step21.ParameterValue FromEntityInstance(TedToolkit.Step21.EntityInstanceName name)
+  static method TedToolkit.Step21.ParameterValue FromEnumeration(System.String symbol)
+  static method TedToolkit.Step21.ParameterValue FromInteger(System.Numerics.BigInteger value)
+  static method TedToolkit.Step21.ParameterValue FromLogical(TedToolkit.Step21.LogicalValue value)
+  static method TedToolkit.Step21.ParameterValue FromReal(TedToolkit.Step21.RealValue value)
+  static method TedToolkit.Step21.ParameterValue FromResource(TedToolkit.Step21.Part21Resource resource)
+  static method TedToolkit.Step21.ParameterValue FromString(System.String value)
+  static method TedToolkit.Step21.ParameterValue FromTyped(System.String typeName, TedToolkit.Step21.ParameterValue value)
+  static method TedToolkit.Step21.ParameterValue FromValueInstance(TedToolkit.Step21.ValueInstanceName name)
+  method System.Int32 GetHashCode()
+  method System.Boolean TryGetAggregate(out System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>? values)
+  method System.Boolean TryGetBinary(out TedToolkit.Step21.BinaryValue? value)
+  method System.Boolean TryGetBoolean(out System.Boolean value)
+  method System.Boolean TryGetConstantEntity(out TedToolkit.Step21.ConstantEntityName name)
+  method System.Boolean TryGetConstantValue(out TedToolkit.Step21.ConstantValueName name)
+  method System.Boolean TryGetEntity(out TedToolkit.Step21.Entity? value)
+  method System.Boolean TryGetEntityInstance(out TedToolkit.Step21.EntityInstanceName name)
+  method System.Boolean TryGetEnumeration(out System.String? symbol)
+  method System.Boolean TryGetInteger(out System.Numerics.BigInteger value)
+  method System.Boolean TryGetLogical(out TedToolkit.Step21.LogicalValue value)
+  method System.Boolean TryGetReal(out TedToolkit.Step21.RealValue value)
+  method System.Boolean TryGetResource(out TedToolkit.Step21.Part21Resource resource)
+  method System.Boolean TryGetString(out System.String? value)
+  method System.Boolean TryGetTyped(out System.String? typeName, out TedToolkit.Step21.ParameterValue? value)
+  method System.Boolean TryGetValueInstance(out TedToolkit.Step21.ValueInstanceName name)
+enum TedToolkit.Step21.ParameterValueKind
+  value Omitted = 0
+  value Derived = 1
+  value Integer = 2
+  value Real = 3
+  value String = 4
+  value Binary = 5
+  value Boolean = 6
+  value Logical = 7
+  value Enumeration = 8
+  value Entity = 9
+  value Aggregate = 10
+  value Typed = 11
+  value EntityInstance = 12
+  value ValueInstance = 13
+  value ConstantEntity = 14
+  value ConstantValue = 15
+  value Resource = 16
+sealed class TedToolkit.Step21.Part21Anchor : System.Object
+  interface System.IEquatable<TedToolkit.Step21.Part21Anchor>
+  constructor (TedToolkit.Step21.AnchorName name, TedToolkit.Step21.ParameterValue item, System.Collections.Generic.IEnumerable<TedToolkit.Step21.Part21AnchorTag>? tags = null)
+  property TedToolkit.Step21.ParameterValue Item { get; }
+  property TedToolkit.Step21.AnchorName Name { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21AnchorTag> Tags { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.Part21Anchor? other)
+  method System.Int32 GetHashCode()
+sealed class TedToolkit.Step21.Part21AnchorTag : System.Object
+  interface System.IEquatable<TedToolkit.Step21.Part21AnchorTag>
+  constructor (System.String name, TedToolkit.Step21.ParameterValue item)
+  property TedToolkit.Step21.ParameterValue Item { get; }
+  property System.String Name { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.Part21AnchorTag? other)
+  method System.Int32 GetHashCode()
+sealed class TedToolkit.Step21.Part21Reference : System.Object
+  interface System.IEquatable<TedToolkit.Step21.Part21Reference>
+  constructor (TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Part21Resource resource)
+  constructor (TedToolkit.Step21.ValueInstanceName name, TedToolkit.Step21.Part21Resource resource)
+  property TedToolkit.Step21.Part21ReferenceKind Kind { get; }
+  property TedToolkit.Step21.Part21Resource Resource { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.Part21Reference? other)
+  method System.Int32 GetHashCode()
+  method System.Boolean TryGetEntityInstance(out TedToolkit.Step21.EntityInstanceName name)
+  method System.Boolean TryGetValueInstance(out TedToolkit.Step21.ValueInstanceName name)
+enum TedToolkit.Step21.Part21ReferenceKind
+  value EntityInstance = 0
+  value ValueInstance = 1
+readonly struct TedToolkit.Step21.Part21Resource : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.Part21Resource>
+  constructor (System.String value)
+  property System.String Value { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.Part21Resource other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+abstract class TedToolkit.Step21.SchemaDescriptor : System.Object
+  protected constructor ()
+  property abstract TedToolkit.Step21.SchemaName Name { get; }
+  protected abstract method TedToolkit.Step21.Entity? AllocateEntityCore(System.Collections.Generic.IReadOnlyList<System.String> entityNames)
+  protected method System.Boolean ContainsConstantEntityCore(System.String name)
+  protected method System.Boolean ContainsConstantValueCore(System.String name)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> GetCapabilityDiagnosticsCore(TedToolkit.Step21.ExchangeStructure structure)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> HydrateEntityCore(TedToolkit.Step21.ExchangeStructure structure, TedToolkit.Step21.Entity value, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> components)
+  protected method System.Boolean IsEntityReferenceCompatibleCore(TedToolkit.Step21.Entity value)
+  protected abstract method System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> ProjectEntityCore(TedToolkit.Step21.Entity value)
+  protected abstract method TedToolkit.Step21.ValidationResult ValidateCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)
+  protected method TedToolkit.Step21.ValidationResult ValidateEntityPopulationCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)
+readonly struct TedToolkit.Step21.ValueInstanceName : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.ValueInstanceName>
+  constructor (System.String digits)
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.ValueInstanceName other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()

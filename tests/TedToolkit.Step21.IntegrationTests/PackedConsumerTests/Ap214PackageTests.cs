@@ -409,7 +409,7 @@ internal sealed class Ap214PackageTests
                     "schemas",
                     "ap214",
                     "PublicApi.approved.sha256")).Trim()).IsEqualTo(
-                    "C22580E04FC9CD30724980B2F3B748ACC2FF224D39A8B8432BDFCC04848A5352");
+                    "B1ADD873603E9B5D3DB9349FE3F0F20464EEE644C8B3A5E487F5575BA6591D2C");
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21.Ap214/1.0.0",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);

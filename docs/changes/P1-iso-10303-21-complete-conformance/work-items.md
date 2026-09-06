@@ -7,7 +7,7 @@ This file is the only mutable ISO21 work-item status source.
 
 | ID | Outcome | Contract ownership | Real prerequisites and supplied input | Status | Document |
 | --- | --- | --- | --- | --- | --- |
-| ISO21-001 | 交付 anchor、value/constant occurrence 与 UUID 的 schema-neutral 双向语义 | Owns AC-03 / Supports AC-02 / Supports AC-07 / Supports AC-08 | None | Approved | `work-items/ISO21-001-anchor-occurrence-uuid.md` |
+| ISO21-001 | 交付 anchor、value/constant occurrence 与 UUID 的 schema-neutral 双向语义 | Owns AC-03 / Supports AC-02 / Supports AC-07 / Supports AC-08 | None | In progress | `work-items/ISO21-001-anchor-occurrence-uuid.md` |
 | ISO21-002 | 交付显式资源边界下的 external、directory 和 ZIP reference 解析 | Owns AC-04 / Supports AC-02 / Supports AC-06 / Supports AC-09 | ISO21-001: 已验证的 anchor/occurrence identity 与 URI 映射 | Approved | `work-items/ISO21-002-distributed-resource-resolution.md` |
 | ISO21-003 | 交付 CMS 签名、验证、信任结果与原子写出 | Owns AC-05 / Supports AC-02 / Supports AC-09 | None | Approved | `work-items/ISO21-003-cms-signatures.md` |
 | ISO21-004 | 交付 Annex E 全部 schema-population 确定方法与显式 domain equivalence | Owns AC-06 / Supports AC-02 / Supports AC-08 / Supports AC-09 | ISO21-001: 已验证的 occurrence 模型；ISO21-002: 已验证的外部结构与身份解析 | Approved | `work-items/ISO21-004-schema-populations.md` |

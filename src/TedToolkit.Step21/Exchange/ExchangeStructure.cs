@@ -12,6 +12,9 @@ namespace TedToolkit.Step21;
 /// </remarks>
 public sealed class ExchangeStructure
 {
+    private static readonly IReadOnlySet<string> EmptyOccurrenceNames =
+        new HashSet<string>(StringComparer.Ordinal);
+
     private readonly Dictionary<EntityInstanceName, EntityRegistration> _registrationsByName = [];
     private readonly Dictionary<Entity, EntityRegistration> _registrationsByEntity = new(ReferenceEqualityComparer.Instance);
     private readonly List<EntityRegistration> _registrations = [];
@@ -19,6 +22,8 @@ public sealed class ExchangeStructure
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
     private readonly ReadOnlyDictionary<SchemaName, SchemaDescriptor> _schemaDescriptorsByName;
     private IReadOnlyList<SchemaPopulationDefinition> _schemaPopulations = Array.Empty<SchemaPopulationDefinition>();
+    private List<Part21Anchor>? _anchors;
+    private List<Part21Reference>? _references;
 
     /// <summary>Initializes a temporarily unbound exchange structure.</summary>
     /// <param name="header">The required ISO header.</param>
@@ -66,6 +71,12 @@ public sealed class ExchangeStructure
 
     /// <summary>Gets the required ISO header retained by identity.</summary>
     public HeaderSection Header { get; }
+
+    /// <summary>Gets the mutable anchor collection in physical order.</summary>
+    public IList<Part21Anchor> Anchors => _anchors ??= [];
+
+    /// <summary>Gets the mutable external-reference association collection in physical order.</summary>
+    public IList<Part21Reference> References => _references ??= [];
 
     /// <summary>
     /// Gets the mutable ISO data-section collection. Editing this list performs no validation or registration repair.
@@ -230,6 +241,22 @@ public sealed class ExchangeStructure
     public ValidationResult Validate()
     {
         var failures = new List<ValidationFailure>();
+        IReadOnlySet<string> externalEntityNames = EmptyOccurrenceNames;
+        IReadOnlySet<string> externalValueNames = EmptyOccurrenceNames;
+        List<ValidationFailure>? referenceFailures = null;
+        if (_references is { Count: > 0, })
+        {
+            var entityNames = new HashSet<string>(StringComparer.Ordinal);
+            var valueNames = new HashSet<string>(StringComparer.Ordinal);
+            referenceFailures = [];
+            ValidateReferences(referenceFailures, entityNames, valueNames);
+            externalEntityNames = entityNames;
+            externalValueNames = valueNames;
+        }
+
+        ValidateAnchors(failures, externalEntityNames, externalValueNames);
+        if (referenceFailures is not null)
+            failures.AddRange(referenceFailures);
         var relationshipFailures = new List<ValidationFailure>();
         var dataSections = DataSections.ToArray();
         var sectionFailures = new ValidationFailure?[dataSections.Length];
@@ -332,7 +359,202 @@ public sealed class ExchangeStructure
         return new ValidationResult(failures);
     }
 
+    private void ValidateAnchors(
+        ICollection<ValidationFailure> failures,
+        IReadOnlySet<string> externalEntityNames,
+        IReadOnlySet<string> externalValueNames)
+    {
+        if (_anchors is null)
+            return;
+
+        var names = new HashSet<AnchorName>();
+        for (var index = 0; index < _anchors.Count; index++)
+        {
+            var anchor = _anchors[index];
+            var path = $"Anchors[{index.ToString(CultureInfo.InvariantCulture)}]";
+            if (anchor is null)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.REQUIRED",
+                    path,
+                    "The anchor entry is null."));
+                continue;
+            }
+
+            if (!names.Add(anchor.Name))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.DUPLICATE",
+                    $"{path}.Name",
+                    $"Anchor name '{anchor.Name}' occurs more than once."));
+            }
+
+            ValidateAnchorItem(
+                anchor.Item,
+                $"{path}.Item",
+                failures,
+                externalEntityNames,
+                externalValueNames);
+            for (var tagIndex = 0; tagIndex < anchor.Tags.Count; tagIndex++)
+            {
+                ValidateAnchorItem(
+                    anchor.Tags[tagIndex].Item,
+                    $"{path}.Tags[{tagIndex.ToString(CultureInfo.InvariantCulture)}].Item",
+                    failures,
+                    externalEntityNames,
+                    externalValueNames);
+            }
+        }
+    }
+
+    private void ValidateAnchorItem(
+        ParameterValue item,
+        string path,
+        ICollection<ValidationFailure> failures,
+        IReadOnlySet<string> externalEntityNames,
+        IReadOnlySet<string> externalValueNames)
+    {
+        if (item.TryGetEntity(out var entity))
+        {
+            if (!TryGetName(entity, out _))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.ENTITY_REGISTRATION",
+                    path,
+                    "The anchored entity is not registered in this exchange structure."));
+            }
+            return;
+        }
+
+        if (item.TryGetEntityInstance(out var entityName))
+        {
+            var isDefined = _registrationsByName.ContainsKey(entityName)
+                || externalEntityNames.Contains(entityName.CanonicalDigits);
+            if (!isDefined)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.ENTITY_OCCURRENCE",
+                    path,
+                    $"Entity occurrence '{entityName}' is not defined."));
+            }
+            return;
+        }
+
+        if (item.TryGetValueInstance(out var valueName))
+        {
+            if (!externalValueNames.Contains(valueName.CanonicalDigits))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.VALUE_OCCURRENCE",
+                    path,
+                    $"Value occurrence '{valueName}' is not defined in the reference section."));
+            }
+            return;
+        }
+
+        var firstDescriptor = Header.FileSchema.SchemaIdentifiers.Count == 0
+            ? null
+            : _schemaDescriptorsByName.GetValueOrDefault(new SchemaName(Header.FileSchema.SchemaIdentifiers[0]));
+        if (item.TryGetConstantEntity(out var entityConstant)
+            && (firstDescriptor is null || !firstDescriptor.ContainsConstantEntity(entityConstant.Value)))
+        {
+            failures.Add(new ValidationFailure(
+                "P21.STRUCTURE.ANCHOR.ENTITY_CONSTANT",
+                path,
+                $"Entity constant '{entityConstant}' is not defined by the first FILE_SCHEMA schema."));
+            return;
+        }
+
+        if (item.TryGetConstantValue(out var valueConstant)
+            && (firstDescriptor is null || !firstDescriptor.ContainsConstantValue(valueConstant.Value)))
+        {
+            failures.Add(new ValidationFailure(
+                "P21.STRUCTURE.ANCHOR.VALUE_CONSTANT",
+                path,
+                $"Value constant '{valueConstant}' is not defined by the first FILE_SCHEMA schema."));
+            return;
+        }
+
+        if (item.TryGetAggregate(out var values))
+        {
+            for (var index = 0; index < values.Count; index++)
+            {
+                ValidateAnchorItem(
+                    values[index],
+                    $"{path}[{index.ToString(CultureInfo.InvariantCulture)}]",
+                    failures,
+                    externalEntityNames,
+                    externalValueNames);
+            }
+        }
+    }
+
+    private void ValidateReferences(
+        ICollection<ValidationFailure> failures,
+        ISet<string> externalEntityNames,
+        ISet<string> externalValueNames)
+    {
+        if (_references is null)
+            return;
+
+        var names = new HashSet<(Part21ReferenceKind Kind, string Digits)>();
+        var numericNames = new Dictionary<string, Part21ReferenceKind>(StringComparer.Ordinal);
+        for (var index = 0; index < _references.Count; index++)
+        {
+            var reference = _references[index];
+            var path = $"References[{index.ToString(CultureInfo.InvariantCulture)}]";
+            if (reference is null)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.EXTERNAL_REFERENCE.REQUIRED",
+                    path,
+                    "The external-reference entry is null."));
+                continue;
+            }
+
+            var key = (reference.Kind, reference.CanonicalDigits);
+            _ = (reference.Kind == Part21ReferenceKind.EntityInstance
+                ? externalEntityNames
+                : externalValueNames).Add(reference.CanonicalDigits);
+            if (!names.Add(key))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.EXTERNAL_REFERENCE.DUPLICATE",
+                    path,
+                    $"Occurrence '{reference.FormatName()}' has more than one resource association."));
+            }
+
+            if (numericNames.TryGetValue(reference.CanonicalDigits, out var otherKind)
+                && otherKind != reference.Kind)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.OCCURRENCE.OVERLAP",
+                    path,
+                    "Entity and value instance names shall not use the same integer."));
+            }
+            else
+            {
+                numericNames[reference.CanonicalDigits] = reference.Kind;
+            }
+
+            if (reference.Kind == Part21ReferenceKind.EntityInstance
+                && _registrationsByName.ContainsKey(new EntityInstanceName(reference.CanonicalDigits)))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.EXTERNAL_REFERENCE.DATA_DUPLICATE",
+                    path,
+                    $"Entity occurrence '{reference.FormatName()}' is also defined in a data section."));
+            }
+        }
+    }
+
     internal IReadOnlyList<SchemaDescriptor> SchemaDescriptors => _schemaDescriptors;
+
+    internal IReadOnlyList<Part21Anchor> AnchorEntries =>
+        _anchors is null ? Array.Empty<Part21Anchor>() : _anchors;
+
+    internal IReadOnlyList<Part21Reference> ReferenceEntries =>
+        _references is null ? Array.Empty<Part21Reference>() : _references;
 
     internal static IEqualityComparer<SchemaName> DescriptorNameComparer { get; } = new SchemaIdentifierComparer();
 

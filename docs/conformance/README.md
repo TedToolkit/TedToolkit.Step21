@@ -11,6 +11,7 @@ This index states what the current package delivers, what the grammars recognize
 | Generated mutable entity classes, values, aggregates, and sealed class descriptors | [entity hierarchy](generated-entity-hierarchy.md), [values](generated-schema-values.md), [aggregates](generated-schema-aggregates.md), [descriptors](generated-schema-descriptors.md) |
 | Documented statically generated validation-reachable EXPRESS rule closure and structural validation | [reachable rules](reachable-express-rules.md), [structural validation](structural-validation.md) |
 | Atomic simple read, same-schema sections, local references, and multi-schema populations | [simple read](atomic-simple-read.md), [same-schema sections](same-schema-data-sections.md), [reference hydration](reference-hydration.md), [multi-schema populations](multi-schema-populations.md) |
+| Edition 3 anchors, occurrence identities, UUID mapping, and schema-neutral reference declarations | [anchor/occurrence/UUID semantics](anchor-occurrence-uuid.md) |
 | Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
 
@@ -20,8 +21,7 @@ Repository-owned semantic round-trip fixtures compare entity identity, generated
 
 | Facility | Observable boundary |
 | --- | --- |
-| `ANCHOR` sections | Parsing succeeds; requesting anchor resolution reports `P21-CAP-ANCHOR`. |
-| `REFERENCE` sections and external value occurrences | Syntax is retained. A model use of a declared unresolved external entity reports `P21.READ.REFERENCE.EXTERNAL`; other unsupported external-reference/value operations report `P21-CAP-REFERENCE`. No public external resource acquisition or resolver is exposed. |
+| External resource acquisition and resolution | `ANCHOR` and `REFERENCE` declarations are retained and round-trip, but external resource acquisition is not performed. A typed model use of a declared unresolved external entity reports `P21.READ.REFERENCE.EXTERNAL`; unresolved typed value/constant operations remain capability failures. |
 | `SIGNATURE` sections | Parsing succeeds; signature verification reports `P21-CAP-SIGNATURE`. |
 
 These are operational capability failures, not syntax errors. The public `ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.

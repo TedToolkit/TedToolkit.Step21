@@ -8,7 +8,6 @@ internal sealed class CapabilityTests
     /// Verifies that each advanced section remains parsed and reports its exact unavailable operation.
     /// </summary>
     [Test]
-    [Arguments("Part21/Valid/advanced-anchor.p21", "P21-CAP-ANCHOR")]
     [Arguments("Part21/Valid/advanced-reference.p21", "P21-CAP-REFERENCE")]
     [Arguments("Part21/Valid/advanced-signature.p21", "P21-CAP-SIGNATURE")]
     public async Task Should_throw_exact_capability_when_advanced_operation_is_requested(
@@ -41,7 +40,6 @@ internal sealed class CapabilityTests
     /// Verifies that the public read boundary preserves valid advanced syntax and returns its exact capability code.
     /// </summary>
     [Test]
-    [Arguments("Part21/Valid/advanced-anchor.p21", "P21-CAP-ANCHOR")]
     [Arguments("Part21/Valid/advanced-signature.p21", "P21-CAP-SIGNATURE")]
     public async Task Should_report_exact_capability_through_public_read(
         string relativePath,
@@ -81,8 +79,8 @@ internal sealed class CapabilityTests
         {
             await Assert.That(exception is not null).IsTrue();
             await Assert.That(string.Join('|', exception!.Diagnostics.Select(value => value.Code)))
-                .IsEqualTo("P21-CAP-ANCHOR|P21-CAP-REFERENCE|P21-CAP-SIGNATURE");
-            await Assert.That(exception.Diagnostics.Select(value => value.SourceLocation!.Line).SequenceEqual([12, 16, 29]))
+                .IsEqualTo("P21-CAP-REFERENCE|P21-CAP-SIGNATURE");
+            await Assert.That(exception.Diagnostics.Select(value => value.SourceLocation!.Line).SequenceEqual([16, 29]))
                 .IsTrue();
         }
     }

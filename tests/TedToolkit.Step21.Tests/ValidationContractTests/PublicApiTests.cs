@@ -30,6 +30,7 @@ internal sealed class PublicApiTests
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-022.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "SBRT-025.approved.txt")),
             await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "EXPRESS-specialization.approved.txt")),
+            await File.ReadAllTextAsync(Path.Combine(approvedDirectory, "ISO21-001.approved.txt")),
         };
         var expected = MergeApprovedSnapshots(approvedSnapshots);
         var actual = NormalizeLineEndings(RenderPublicApi(assembly));

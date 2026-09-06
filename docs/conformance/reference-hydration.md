@@ -40,9 +40,11 @@ distinct even when both occur in one recursive parameter.
 
 No failed attempt exposes its private structure, generated entities, syntax graph, resolver, or hydration state.
 External resource acquisition remains unsupported: the `REFERENCE` section is consumed only to distinguish declared
-external occurrences from missing local names. External value occurrences (`@n`), anchors, and signatures remain
-explicit capability failures. Multiple governing schemas and supported flat-`ANDOR` complex entity mappings use the
-same structure-local identity space across all data sections.
+external occurrences from missing local names. Using external value occurrences (`@n`) in typed parameters and
+verifying signatures remain explicit capability failures. Anchor and reference declarations themselves retain the
+schema-neutral round-trip semantics described in the
+[anchor/occurrence/UUID record](anchor-occurrence-uuid.md). Multiple governing schemas and supported flat-`ANDOR`
+complex entity mappings use the same structure-local identity space across all data sections.
 
 ## Verification
 

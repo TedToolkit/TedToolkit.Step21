@@ -32,6 +32,10 @@ internal sealed class CanonicalFormatTests
             ParameterValue.FromLogical(LogicalValue.True),
             ParameterValue.FromEnumeration("CUSTOM1"),
             ParameterValue.FromEntity(entity),
+            ParameterValue.FromEntityInstance(new EntityInstanceName("00043")),
+            ParameterValue.FromValueInstance(new ValueInstanceName("00044")),
+            ParameterValue.FromConstantEntity(new ConstantEntityName("ENTITY1")),
+            ParameterValue.FromConstantValue(new ConstantValueName("VALUE1")),
             ParameterValue.FromAggregate([ParameterValue.Omitted, ParameterValue.Derived]),
             ParameterValue.FromTyped(
                 "LENGTH_MEASURE",
@@ -76,6 +80,10 @@ internal sealed class CanonicalFormatTests
                 ".T.",
                 ".CUSTOM1.",
                 "#42",
+                "#43",
+                "@44",
+                "#ENTITY1",
+                "@VALUE1",
                 "($,*)",
                 "LENGTH_MEASURE(125.E-2)",
             ]);

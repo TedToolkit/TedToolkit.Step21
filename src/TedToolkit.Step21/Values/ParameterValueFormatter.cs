@@ -28,6 +28,11 @@ internal static class ParameterValueFormatter
             ParameterValueKind.Logical => FormatLogical(value),
             ParameterValueKind.Enumeration => FormatEnumeration(value),
             ParameterValueKind.Entity => FormatEntity(value, getEntityName),
+            ParameterValueKind.EntityInstance => FormatEntityInstance(value),
+            ParameterValueKind.ValueInstance => FormatValueInstance(value),
+            ParameterValueKind.ConstantEntity => FormatConstantEntity(value),
+            ParameterValueKind.ConstantValue => FormatConstantValue(value),
+            ParameterValueKind.Resource => FormatResource(value),
             ParameterValueKind.Aggregate => FormatAggregate(value, getEntityName),
             ParameterValueKind.Typed => FormatTyped(value, getEntityName),
             _ => throw new InvalidOperationException($"Unsupported parameter value kind '{value.Kind}'."),
@@ -149,6 +154,21 @@ internal static class ParameterValueFormatter
 
         return string.Concat("(", string.Join(',', elements.Select(element => Format(element, getEntityName))), ")");
     }
+
+    private static string FormatEntityInstance(ParameterValue value) =>
+        value.TryGetEntityInstance(out var name) ? name.ToString() : throw InconsistentValue(value);
+
+    private static string FormatValueInstance(ParameterValue value) =>
+        value.TryGetValueInstance(out var name) ? name.ToString() : throw InconsistentValue(value);
+
+    private static string FormatConstantEntity(ParameterValue value) =>
+        value.TryGetConstantEntity(out var name) ? name.ToString() : throw InconsistentValue(value);
+
+    private static string FormatConstantValue(ParameterValue value) =>
+        value.TryGetConstantValue(out var name) ? name.ToString() : throw InconsistentValue(value);
+
+    private static string FormatResource(ParameterValue value) =>
+        value.TryGetResource(out var resource) ? resource.ToString() : throw InconsistentValue(value);
 
     private static string FormatTyped(
         ParameterValue value,
