@@ -53,7 +53,7 @@ internal sealed class FileTests
     [Arguments("Part21/Invalid/resource-escape.p21")]
     [Arguments("Part21/Invalid/resource-structure.p21")]
     [Arguments("Part21/Invalid/value-instance-data-lhs.p21")]
-    [Arguments("Part21/Invalid/tag-name-low-line.p21")]
+    [Arguments("Part21/Invalid/tag-name-leading-digit.p21")]
     [Arguments("Part21/Invalid/signature-base64.p21")]
     [Arguments("Part21/Invalid/signature-semicolon.p21")]
     public async Task Should_report_error_when_exchange_structure_order_or_boundary_is_invalid(string relativePath)

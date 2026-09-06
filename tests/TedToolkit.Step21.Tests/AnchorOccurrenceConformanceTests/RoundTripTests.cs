@@ -22,7 +22,7 @@ internal sealed class RoundTripTests
             FILE_SCHEMA(('TEST_SCHEMA'));
             ENDSEC;
             ANCHOR;
-            <{{uuid}}>=(1,-2.5,'text',.STATE.,"30",$,<image.png>){label:'primary'}{rank:1};
+            <{{uuid}}>=(1,-2.5,'text',._STATE.,"30",$,<foo:?bar>){_label:'primary'}{rank_name:1};
             ENDSEC;
             END-ISO-10303-21;
             """;
@@ -45,12 +45,12 @@ internal sealed class RoundTripTests
             await Assert.That(anchor.Name.TryGetUuid(out var parsedUuid)).IsTrue();
             await Assert.That(parsedUuid).IsEqualTo(Guid.Parse(uuid));
             await Assert.That(anchor.Item.Kind).IsEqualTo(ParameterValueKind.Aggregate);
-            await Assert.That(anchor.Tags.Select(tag => tag.Name).SequenceEqual(["label", "rank"])).IsTrue();
+            await Assert.That(anchor.Tags.Select(tag => tag.Name).SequenceEqual(["_label", "rank_name"])).IsTrue();
             await Assert.That(reread.Anchors).HasSingleItem();
             await Assert.That(reread.Anchors[0]).IsEqualTo(anchor);
             await Assert.That(destination.ToString()).Contains(
-                $"ANCHOR;\n<{uuid}>=(1,-25.E-1,'text',.STATE.,\"30\",$,<image.png>)"
-                + "{label:'primary'}{rank:1};\nENDSEC;\n");
+                $"ANCHOR;\n<{uuid}>=(1,-25.E-1,'text',._STATE.,\"30\",$,<foo:?bar>)"
+                + "{_label:'primary'}{rank_name:1};\nENDSEC;\n");
         }
     }
 
@@ -231,6 +231,38 @@ internal sealed class RoundTripTests
             await Assert.That(reread.Anchors[0].Item.TryGetEntity(out var rereadEntity)).IsTrue();
             await Assert.That(rereadEntity).IsSameReferenceAs(reread.Entities.Single());
             await Assert.That(destination.ToString()).Contains("ANCHOR;\n<root>=#1;\nENDSEC;\nDATA;\n#1=POINT(1.E0);");
+        }
+    }
+
+    /// <summary>Clause 9 enumeration tokens remain enumeration values when supplied through the public edit model.</summary>
+    [Test]
+    public async Task Should_round_trip_boolean_and_logical_spellings_as_untyped_anchor_enumerations()
+    {
+        var descriptor = new ExchangeStructureTests.TestSchemaDescriptor("TEST_SCHEMA");
+        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create(), [descriptor]);
+        structure.Anchors.Add(new Part21Anchor(
+            new AnchorName("states"),
+            ParameterValue.FromAggregate([
+                ParameterValue.FromEnumeration("T"),
+                ParameterValue.FromEnumeration("F"),
+                ParameterValue.FromEnumeration("U"),
+            ])));
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+        var reread = ExchangeStructure.Read(new StringReader(destination.ToString()), [descriptor]);
+        _ = reread.Anchors[0].Item.TryGetAggregate(out var values);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(destination.ToString()).Contains("<states>=(.T.,.F.,.U.);");
+            await Assert.That(values!.Select(value => value.Kind))
+                .IsEquivalentTo([
+                    ParameterValueKind.Enumeration,
+                    ParameterValueKind.Enumeration,
+                    ParameterValueKind.Enumeration,
+                ]);
+            await Assert.That(reread.Anchors[0]).IsEqualTo(structure.Anchors[0]);
         }
     }
 

@@ -51,8 +51,15 @@ public sealed class Part21Anchor : IEquatable<Part21Anchor>
 
     internal static void ValidateItem(ParameterValue item, string parameterName)
     {
-        if (item.Kind is ParameterValueKind.Derived or ParameterValueKind.Typed)
-            throw new ArgumentException("Derived and typed parameters are not valid anchor items.", parameterName);
+        if (item.Kind is ParameterValueKind.Derived
+            or ParameterValueKind.Typed
+            or ParameterValueKind.Boolean
+            or ParameterValueKind.Logical)
+        {
+            throw new ArgumentException(
+                "Derived, typed, Boolean, and Logical parameters are not stable physical anchor items; use an enumeration for .T., .F., or .U. spellings.",
+                parameterName);
+        }
         if (item.TryGetAggregate(out var values))
         {
             foreach (var value in values)
@@ -67,15 +74,7 @@ public sealed class Part21AnchorTag : IEquatable<Part21AnchorTag>
     /// <summary>Creates an anchor tag.</summary>
     public Part21AnchorTag(string name, ParameterValue item)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        if (name.Length == 0
-            || name[0] is not (>= 'A' and <= 'Z') and not (>= 'a' and <= 'z')
-            || name.Skip(1).Any(character => character is not (>= 'A' and <= 'Z')
-                && character is not (>= 'a' and <= 'z')
-                && character is not (>= '0' and <= '9')))
-        {
-            throw new FormatException("A tag name must start with a Latin letter and contain only Latin letters or digits.");
-        }
+        Part21NameValidation.ValidateTag(name, nameof(name));
 
         ArgumentNullException.ThrowIfNull(item);
         Part21Anchor.ValidateItem(item, nameof(item));

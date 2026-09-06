@@ -128,7 +128,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="FormatException"><paramref name="symbol"/> is not a legal canonical symbol.</exception>
     public static ParameterValue FromEnumeration(string symbol)
     {
-        ValidateName(symbol, nameof(symbol));
+        Part21NameValidation.ValidateEnumeration(symbol, nameof(symbol));
         return new(ParameterValueKind.Enumeration, text: symbol);
     }
 

@@ -428,9 +428,14 @@ public sealed class ExchangeStructure
 
         if (item.TryGetEntityInstance(out var entityName))
         {
-            var isDefined = _registrationsByName.ContainsKey(entityName)
-                || externalEntityNames.Contains(entityName.CanonicalDigits);
-            if (!isDefined)
+            if (_registrationsByName.ContainsKey(entityName))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.ANCHOR.ENTITY_IDENTITY",
+                    path,
+                    $"Local entity occurrence '{entityName}' must be retained by object identity."));
+            }
+            else if (!externalEntityNames.Contains(entityName.CanonicalDigits))
             {
                 failures.Add(new ValidationFailure(
                     "P21.STRUCTURE.ANCHOR.ENTITY_OCCURRENCE",
@@ -544,6 +549,14 @@ public sealed class ExchangeStructure
                     "P21.STRUCTURE.EXTERNAL_REFERENCE.DATA_DUPLICATE",
                     path,
                     $"Entity occurrence '{reference.FormatName()}' is also defined in a data section."));
+            }
+            else if (reference.Kind == Part21ReferenceKind.ValueInstance
+                && _registrationsByName.ContainsKey(new EntityInstanceName(reference.CanonicalDigits)))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.OCCURRENCE.OVERLAP",
+                    path,
+                    "A local entity and external value instance name shall not use the same integer."));
             }
         }
     }

@@ -15,7 +15,7 @@ Normative clause navigation uses the publicly accessible [Edition 3 final text](
 | `EXCHANGE_FILE` | Table 3; 5.3, 5.5 | `exchangeFile` including `EOF` | `edition3-all-sections.p21`, `edition3-no-data-signatures.p21`, `trailing-input.p21`, `section-order.p21` |
 | `HEADER_SECTION`, `HEADER_ENTITY_LIST`, `HEADER_ENTITY` | Table 3; 8.1–8.3 | `headerSection`, the three named header rules, `headerEntity` repetition | all valid files, `header-entity-order.p21` |
 | `PARAMETER_LIST`, `PARAMETER`, `TYPED_PARAMETER`, `UNTYPED_PARAMETER`, `OMITTED_PARAMETER`, `LIST` | Table 3; 7.1 | `parameterList`, `parameter`, `typedParameter`, `untypedParameter`, `list` | `edition3-all-sections.p21` |
-| `ANCHOR_SECTION`, `ANCHOR_LIST`, `ANCHOR`, `ANCHOR_ITEM`, `ANCHOR_ITEM_LIST`, `ANCHOR_TAG` | Table 3; clause 9 | `anchorSection`, `anchor`, `anchorItem`, `anchorItemList`, `anchorTag` | `edition3-all-sections.p21`, `numeric-anchor.p21`, `tag-name-low-line.p21` |
+| `ANCHOR_SECTION`, `ANCHOR_LIST`, `ANCHOR`, `ANCHOR_ITEM`, `ANCHOR_ITEM_LIST`, `ANCHOR_TAG` | Table 3; clause 9 | `anchorSection`, `anchor`, `anchorItem`, `anchorItemList`, `anchorTag` | `edition3-all-sections.p21`, `numeric-anchor.p21`, `tag-name-leading-digit.p21` |
 | `REFERENCE_SECTION`, `REFERENCE_LIST`, `REFERENCE` | Table 3; clause 10 | `referenceSection`, `reference` | `edition3-all-sections.p21`, `resource-escape.p21` |
 | `DATA_SECTION`, `ENTITY_INSTANCE_LIST`, `ENTITY_INSTANCE`, `SIMPLE_ENTITY_INSTANCE`, `COMPLEX_ENTITY_INSTANCE`, `SIMPLE_RECORD`, `SUBSUPER_RECORD`, `SIMPLE_RECORD_LIST` | Table 3; clauses 11–12 | `dataSection`, `entityInstance`, `simpleEntityInstance`, `complexEntityInstance`, `simpleRecord`, `subSuperRecord` | classic fixtures, `edition3-all-sections.p21`, `value-instance-data-lhs.p21` |
 | `SIGNATURE_SECTION` | Table 3; clause 14 | `signatureSection`; lexer `SignatureMode` makes Base64 one contextual token | both Edition 3 valid files, `signature-base64.p21`, `signature-semicolon.p21` |
@@ -28,7 +28,7 @@ The parser uses direct repetitions where the WSN names a list production; this c
 | --- | --- | --- | --- |
 | Basic alphabet and ignored controls | Table 1; 5.2, 5.6 | lexer character fragments and `IgnoredControl`; U+0000–U+001F and U+007F are ignored inside or between tokens | `ignored-controls-inside-tokens.p21`, `Should_ignore_non_graphic_control_octets` |
 | Token separators | 5.6; clause 13 | `Space`, `Comment`, `PrintControl`; print controls also occur inside `String` and `Binary` | `edition3-all-sections.p21` |
-| Keyword | Table 2; 6.3 | `UserDefinedKeyword`, `StandardKeyword`, `UpperKeyword`; the split keeps low-line keywords distinct from tag names without changing the WSN language | `edition3-all-sections.p21`, `tag-name-low-line.p21` |
+| Keyword | Table 2; 6.3 | `UserDefinedKeyword`, `StandardKeyword`, `UpperKeyword`; tag names use the full `UPPER`/`LOWER` alphabet, including low-line, while remaining distinct from keywords | `edition3-all-sections.p21`, `tag-name-leading-digit.p21` |
 | Integer and real | Table 2; 6.4.1–6.4.2 | `Integer`, `Real` | `edition3-all-sections.p21`, `lowercase-exponent.p21` |
 | String and control directives | Tables 2 and 4; 6.4.3 | `String` plus PAGE, ALPHABET, EXTENDED2, EXTENDED4, ARBITRARY fragments | `edition3-all-sections.p21` |
 | Occurrence names | Table 2; 6.4.4 | entity, value, constant entity, and constant value tokens; parser distinguishes LHS/RHS use | `edition3-all-sections.p21`, `value-instance-data-lhs.p21` |

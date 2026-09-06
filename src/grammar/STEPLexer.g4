@@ -132,7 +132,7 @@ UpperKeyword
     ;
 
 TagName
-    : [A-Za-z] (IgnoredControls [A-Za-z0-9])*
+    : [A-Za-z_] (IgnoredControls [A-Za-z0-9_])*
     ;
 
 PrintControl

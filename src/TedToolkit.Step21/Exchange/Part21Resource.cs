@@ -49,12 +49,33 @@ internal static class Part21NameValidation
     {
         ArgumentNullException.ThrowIfNull(value, parameterName);
         if (value.Length == 0
-            || value[0] is not (>= 'A' and <= 'Z') and not '_'
-            || value.Skip(1).Any(character => character is not (>= 'A' and <= 'Z')
-                && character is not (>= '0' and <= '9')
-                && character is not '_'))
+            || !IsUpper(value[0])
+            || !ContainsOnlyUpperOrDigit(value, 1))
         {
             throw new FormatException($"A {displayName} must contain only Part 21 UPPER or DIGIT characters.");
+        }
+    }
+
+    internal static void ValidateEnumeration(string value, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(value, parameterName);
+        if (value.Length == 0
+            || !IsUpper(value[0])
+            || !ContainsOnlyUpperOrDigit(value, 1))
+        {
+            throw new FormatException("An enumeration must contain only Part 21 UPPER or DIGIT characters.");
+        }
+    }
+
+    internal static void ValidateTag(string value, string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(value, parameterName);
+        if (value.Length == 0
+            || !IsUpper(value[0]) && !IsLower(value[0])
+            || !ContainsOnlyTagCharacters(value, 1))
+        {
+            throw new FormatException(
+                "A tag name must contain only Part 21 UPPER, LOWER, or DIGIT characters and cannot start with a digit.");
         }
     }
 
@@ -84,21 +105,25 @@ internal static class Part21NameValidation
         }
 
         var resourceLength = fragment >= 0 ? fragment : value.Length;
+        var colon = value.IndexOf(':', 0, resourceLength);
+        var slash = value.IndexOf('/', 0, resourceLength);
+        if (colon > 0 && (slash < 0 || colon < slash) && IsScheme(value.AsSpan(0, colon)))
+        {
+            if (colon + 1 == resourceLength)
+                throw new FormatException("An absolute Part 21 resource must contain a hierarchical or opaque URI part.");
+
+            // RFC 2396 classifies the scheme-specific part before applying hierarchical query parsing. An opaque
+            // part may therefore begin with '?', as in "foo:?bar".
+            return;
+        }
+
         var query = value.IndexOf('?', 0, resourceLength);
         var pathLength = query >= 0 ? query : resourceLength;
         if (pathLength == 0)
             throw new FormatException("A Part 21 resource must contain a URI or a fragment identifier.");
 
-        var colon = value.IndexOf(':', 0, pathLength);
-        var slash = value.IndexOf('/', 0, pathLength);
-        if (colon > 0 && (slash < 0 || colon < slash) && IsScheme(value.AsSpan(0, colon)))
-        {
-            if (colon + 1 == pathLength)
-                throw new FormatException("An absolute Part 21 resource must contain a hierarchical or opaque URI part.");
-            return;
-        }
-
-        var firstSegmentLength = slash >= 0 ? slash : pathLength;
+        var pathSlash = value.IndexOf('/', 0, pathLength);
+        var firstSegmentLength = pathSlash >= 0 ? pathSlash : pathLength;
         if (firstSegmentLength == 0 && value[0] != '/')
             throw new FormatException("The resource is not a valid relative URI reference.");
         if (value.AsSpan(0, firstSegmentLength).Contains(':'))
@@ -150,6 +175,32 @@ internal static class Part21NameValidation
         or ';' or '/' or '?' or ':' or '@' or '&' or '=' or '+' or '$' or ',' or '#' or '%';
 
     private static bool IsAlpha(char value) => value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
+
+    private static bool IsUpper(char value) => value is >= 'A' and <= 'Z' or '_';
+
+    private static bool IsLower(char value) => value is >= 'a' and <= 'z';
+
+    private static bool IsDigit(char value) => value is >= '0' and <= '9';
+
+    private static bool ContainsOnlyUpperOrDigit(string value, int start)
+    {
+        for (var index = start; index < value.Length; index++)
+        {
+            if (!IsUpper(value[index]) && !IsDigit(value[index]))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool ContainsOnlyTagCharacters(string value, int start)
+    {
+        for (var index = start; index < value.Length; index++)
+        {
+            if (!IsUpper(value[index]) && !IsLower(value[index]) && !IsDigit(value[index]))
+                return false;
+        }
+        return true;
+    }
 
     private static bool IsHex(char value) => value is >= '0' and <= '9'
         or >= 'A' and <= 'F'
