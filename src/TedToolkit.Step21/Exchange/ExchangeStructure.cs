@@ -141,6 +141,13 @@ public sealed class ExchangeStructure
     /// <exception cref="ExchangeStructureCapabilityException">
     /// A required provider or converter is absent, re-enters reading, or exceeds a resource limit.
     /// </exception>
+    /// <exception cref="ExchangeStructureSyntaxException">A supplied structure is not valid ISO 10303-21 syntax.</exception>
+    /// <exception cref="ExchangeStructureBindingException">
+    /// A supplied structure cannot be bound completely to the closed descriptor set.
+    /// </exception>
+    /// <exception cref="ExchangeStructureReadValidationException">
+    /// A bound local or external structure fails structural or reachable EXPRESS validation.
+    /// </exception>
     public static ExchangeStructure Read(
         TextReader source,
         IReadOnlyCollection<SchemaDescriptor> schemaDescriptors,
@@ -653,6 +660,24 @@ public sealed class ExchangeStructure
             && IsCurrentResolvedReference(name, entity))
             return true;
 
+        if (_references is not null)
+        {
+            foreach (var reference in _references)
+            {
+                if (reference is not null
+                    && reference.TryGetEntityInstance(out name)
+                    && reference.TryGetResolvedValue(out var value)
+                    && value is not null
+                    && value.TryGetEntity(out var candidate)
+                    && ReferenceEquals(candidate, entity))
+                {
+                    _resolvedExternalNamesByEntity[entity] = name;
+                    return true;
+                }
+            }
+        }
+
+        _ = _resolvedExternalNamesByEntity.Remove(entity);
         name = default;
         return false;
     }

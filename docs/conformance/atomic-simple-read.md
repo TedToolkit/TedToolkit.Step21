@@ -1,10 +1,8 @@
 # Atomic simple typed reading
 
-`ExchangeStructure.Read(TextReader, IReadOnlyCollection<SchemaDescriptor>)` is the only public Part 21 read entry
-point. It consumes a closed descriptor set, parses into private immutable syntax, binds one named or unnamed `DATA`
-section or multiple named sections governed by explicitly supplied schemas, hydrates generated entities through direct
-descriptor dispatch, runs
-`ExchangeStructure.Validate()`, and returns only the complete validated mutable structure.
+The public `ExchangeStructure.Read` overloads consume a closed descriptor set, parse into private immutable syntax,
+and bind one named or unnamed `DATA` section or multiple named sections governed by explicitly supplied schemas. They hydrate generated entities through direct
+descriptor dispatch, run `ExchangeStructure.Validate()`, and return only the complete validated mutable structure.
 
 ```csharp
 using var source = File.OpenText("sample.p21");

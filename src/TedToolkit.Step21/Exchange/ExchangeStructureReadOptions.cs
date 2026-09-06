@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace TedToolkit.Step21;
 
 /// <summary>Identifies the representation supplied for one explicitly requested Part 21 resource.</summary>
@@ -19,6 +21,10 @@ public enum Part21ResourceContentKind
 /// <summary>Supplies schema-neutral bytes or directory entries for one resolved resource identity.</summary>
 public sealed class Part21ResourceContent
 {
+    private static readonly IReadOnlyDictionary<string, ReadOnlyMemory<byte>> EmptyEntries =
+        new ReadOnlyDictionary<string, ReadOnlyMemory<byte>>(
+            new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal));
+
     /// <summary>Creates byte-oriented clear text, archive, or other-format content.</summary>
     public Part21ResourceContent(Uri identity, Part21ResourceContentKind kind, ReadOnlyMemory<byte> bytes)
     {
@@ -31,7 +37,7 @@ public sealed class Part21ResourceContent
         Identity = identity;
         Kind = kind;
         Bytes = bytes;
-        Entries = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
+        Entries = EmptyEntries;
     }
 
     /// <summary>Creates an in-memory directory from a stable entry snapshot.</summary>

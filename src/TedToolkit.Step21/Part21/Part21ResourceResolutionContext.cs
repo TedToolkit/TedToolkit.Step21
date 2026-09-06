@@ -10,12 +10,16 @@ namespace TedToolkit.Step21;
 internal sealed class Part21ResourceResolutionContext
 {
     private const string ArchiveRootName = "ISO-10303.p21";
-    private static readonly AsyncLocal<IPart21ResourceProvider?> ActiveProvider = new();
+    private static readonly AsyncLocal<HashSet<IPart21ResourceProvider>?> ActiveProviders = new();
     private static readonly uint[] Crc32Table = CreateCrc32Table();
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
     private readonly IReadOnlyCollection<SchemaDescriptor> _descriptors;
     private readonly ExchangeStructureReadOptions _options;
     private readonly Dictionary<string, LoadedDocument?> _documents = new(StringComparer.Ordinal);
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
+    private readonly Stack<LoadingDocumentAliases> _loadingAliases = new();
     private int _resourceCount;
     private int _archiveEntryCount;
     private long _totalBytes;
@@ -76,7 +80,14 @@ internal sealed class Part21ResourceResolutionContext
 
     internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address)
     {
-        _documents[address.Key] = new LoadedDocument(structure, address);
+        var document = new LoadedDocument(structure, address);
+        _documents[address.Key] = document;
+        if (_loadingAliases.TryPeek(out var loading)
+            && loading.AddressKey == address.Key)
+        {
+            foreach (var alias in loading.Aliases)
+                _documents[alias] = document;
+        }
     }
 
     private ParameterValue? ResolveResource(
@@ -219,64 +230,92 @@ internal sealed class Part21ResourceResolutionContext
         if (_resourceCount >= _options.ResourceLimits.MaximumResourceCount)
             ThrowLimit("resource count");
 
-        if (ReferenceEquals(ActiveProvider.Value, provider))
+        var activeProviders = ActiveProviders.Value;
+        if (activeProviders?.Contains(provider!) == true)
             ThrowCapability("P21-RESOURCE-PROVIDER-REENTRY", "The resource provider re-entered the same read operation.");
 
         _documents.Add(key, null);
         _resourceCount++;
         Part21ResourceContent? content;
-        var previous = ActiveProvider.Value;
+        activeProviders ??= new HashSet<IPart21ResourceProvider>(ReferenceEqualityComparer.Instance);
+        ActiveProviders.Value = activeProviders;
+        _ = activeProviders.Add(provider!);
         try
         {
-            ActiveProvider.Value = provider;
             content = provider!.GetResource(identity);
         }
         finally
         {
-            ActiveProvider.Value = previous;
+            _ = activeProviders.Remove(provider!);
+            if (activeProviders.Count == 0)
+                ActiveProviders.Value = null;
         }
 
         if (content is null)
             return null;
-        var canonicalKey = content.Identity.IsAbsoluteUri
-            ? content.Identity.AbsoluteUri
-            : content.Identity.OriginalString;
-        if (!string.Equals(canonicalKey, key, StringComparison.Ordinal)
-            && _documents.TryGetValue(canonicalKey, out var canonical))
+        var aliases = new HashSet<string>(StringComparer.Ordinal) { key };
+        var providerKey = GetIdentityKey(content.Identity);
+        if (!aliases.Contains(providerKey) && _documents.TryGetValue(providerKey, out var providerCached))
         {
-            _documents[key] = canonical;
-            return canonical;
+            _documents[key] = providerCached;
+            return providerCached;
         }
+        ReserveAlias(providerKey, aliases);
 
-        if (!string.Equals(canonicalKey, key, StringComparison.Ordinal))
-            _documents[canonicalKey] = null;
-        var loaded = LoadContent(content, depth, archiveDepth: 0);
-        _documents[key] = loaded;
-        _documents[canonicalKey] = loaded;
+        content = ConvertContent(content);
+        var convertedKey = GetIdentityKey(content.Identity);
+        if (!aliases.Contains(convertedKey) && _documents.TryGetValue(convertedKey, out var convertedCached))
+        {
+            foreach (var alias in aliases)
+                _documents[alias] = convertedCached;
+            return convertedCached;
+        }
+        ReserveAlias(convertedKey, aliases);
+
+        var loaded = LoadContent(content, depth, archiveDepth: 0, aliases);
+        foreach (var alias in aliases)
+            _documents[alias] = loaded;
         if (loaded is not null)
             _documents[loaded.Address.Key] = loaded;
         return loaded;
     }
 
-    private LoadedDocument? LoadContent(Part21ResourceContent content, int depth, int archiveDepth)
+    private static string GetIdentityKey(Uri identity) =>
+        identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
+
+    private void ReserveAlias(string alias, ISet<string> aliases)
+    {
+        if (aliases.Add(alias))
+            _documents[alias] = null;
+    }
+
+    private Part21ResourceContent ConvertContent(Part21ResourceContent content)
+    {
+        if (content.Kind != Part21ResourceContentKind.Other)
+            return content;
+
+        CountBytes(content.Bytes.Length);
+        var converter = _options.ResourceConverter;
+        if (converter is null)
+            ThrowCapability("P21-CAP-RESOURCE-CONVERTER", $"Resource '{content.Identity}' requires an explicit converter.");
+        var converted = converter!.Convert(content)
+            ?? throw Capability("P21-RESOURCE-CONVERSION", $"Resource '{content.Identity}' could not be converted.");
+        if (converted.Kind == Part21ResourceContentKind.Other)
+            ThrowCapability("P21-RESOURCE-CONVERSION", "A converter must return clear text, ZIP, or directory content.");
+        return converted;
+    }
+
+    private LoadedDocument? LoadContent(
+        Part21ResourceContent content,
+        int depth,
+        int archiveDepth,
+        IReadOnlyCollection<string> aliases)
     {
         EnsureDepth(depth);
-        if (content.Kind == Part21ResourceContentKind.Other)
-        {
-            CountBytes(content.Bytes.Length);
-            var converter = _options.ResourceConverter;
-            if (converter is null)
-                ThrowCapability("P21-CAP-RESOURCE-CONVERTER", $"Resource '{content.Identity}' requires an explicit converter.");
-            content = converter!.Convert(content)
-                ?? throw Capability("P21-RESOURCE-CONVERSION", $"Resource '{content.Identity}' could not be converted.");
-            if (content.Kind == Part21ResourceContentKind.Other)
-                ThrowCapability("P21-RESOURCE-CONVERSION", "A converter must return clear text, ZIP, or directory content.");
-        }
-
         if (content.Kind == Part21ResourceContentKind.ClearText)
         {
             CountBytes(content.Bytes.Length);
-            return ReadClearText(content.Identity, content.Bytes, container: null, entryPath: null, depth);
+            return ReadRoot(content.Identity, content.Bytes, container: null, entryPath: null, depth, aliases);
         }
 
         var entries = content.Kind == Part21ResourceContentKind.ZipArchive
@@ -285,7 +324,28 @@ internal sealed class Part21ResourceResolutionContext
         var container = new ResourceContainer(content.Identity, entries, archiveDepth + 1);
         if (!entries.TryGetValue(ArchiveRootName, out var root))
             ThrowCapability("P21-RESOURCE-ARCHIVE-ROOT", $"Resource '{content.Identity}' has no {ArchiveRootName} root.");
-        return ReadClearText(content.Identity, root, container, ArchiveRootName, depth);
+        return ReadRoot(content.Identity, root, container, ArchiveRootName, depth, aliases);
+    }
+
+    private LoadedDocument ReadRoot(
+        Uri identity,
+        ReadOnlyMemory<byte> bytes,
+        ResourceContainer? container,
+        string? entryPath,
+        int depth,
+        IReadOnlyCollection<string> aliases)
+    {
+        _loadingAliases.Push(new LoadingDocumentAliases(
+            GetDocumentKey(identity, container, entryPath),
+            aliases));
+        try
+        {
+            return ReadClearText(identity, bytes, container, entryPath, depth);
+        }
+        finally
+        {
+            _ = _loadingAliases.Pop();
+        }
     }
 
     private LoadedDocument ReadClearText(
@@ -299,20 +359,22 @@ internal sealed class Part21ResourceResolutionContext
         string source;
         try
         {
-            source = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
-                .GetString(bytes.Span);
+            source = StrictUtf8.GetString(bytes.Span);
         }
         catch (DecoderFallbackException)
         {
             throw Capability("P21-RESOURCE-ENCODING", $"Resource '{identity}' is not valid UTF-8 clear text.");
         }
 
-        var key = container is null ? identity.ToString() : identity + "!/" + entryPath;
+        var key = GetDocumentKey(identity, container, entryPath);
         var baseUri = identity.IsAbsoluteUri ? identity : null;
         var address = new DocumentAddress(key, baseUri, container, entryPath);
         var structure = ExchangeStructureReader.Read(source, _descriptors, this, address, depth);
         return new LoadedDocument(structure, address);
     }
+
+    private static string GetDocumentKey(Uri identity, ResourceContainer? container, string? entryPath) =>
+        container is null ? GetIdentityKey(identity) : identity + "!/" + entryPath;
 
     private LoadedDocument? LoadContainerEntry(DocumentAddress address, string relativePath, int depth)
     {
@@ -335,7 +397,8 @@ internal sealed class Part21ResourceResolutionContext
             loaded = LoadContent(
                 new Part21ResourceContent(nestedIdentity, Part21ResourceContentKind.ZipArchive, bytes),
                 depth,
-                container.ArchiveDepth)!;
+                container.ArchiveDepth,
+                [key])!;
         }
         else
         {
@@ -359,13 +422,13 @@ internal sealed class Part21ResourceResolutionContext
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             foreach (var entry in archive.Entries)
             {
-                if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
-                    continue;
                 if (entry.FullName.Any(static character => character > 0x7f))
                     ThrowCapability("P21-RESOURCE-ARCHIVE-ENTRY", "PKZip 2.04g entry names must use ASCII characters.");
                 CountArchiveEntry(entry.FullName, entry.CompressedLength, entry.Length);
                 var name = NormalizeEntryPath(entry.FullName);
                 RejectNormalizedRootAlias(entry.FullName, name);
+                if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                    continue;
                 using var input = entry.Open();
                 using var output = new MemoryStream(entry.Length > int.MaxValue ? 0 : (int)entry.Length);
                 CopyAndValidateArchiveEntry(entry, input, output);
@@ -594,6 +657,7 @@ internal sealed class Part21ResourceResolutionContext
             ThrowArchiveFormat("The ZIP central-directory bounds are invalid.");
 
         var position = (int)centralOffset;
+        var localRanges = new List<(long Start, long End)>();
         for (var index = 0; index < entryCount; index++)
         {
             if (ReadUInt32(bytes, position) != 0x02014b50 || position + 46 > end)
@@ -629,6 +693,8 @@ internal sealed class Part21ResourceResolutionContext
                 ThrowArchiveFormat("A ZIP local-file header is missing or invalid.");
             var localNameLength = ReadUInt16(bytes, local + 26);
             var localExtraLength = ReadUInt16(bytes, local + 28);
+            var dataStart = (long)local + 30 + localNameLength + localExtraLength;
+            var dataEnd = dataStart + compressedSize;
             if (ReadUInt16(bytes, local + 4) != versionNeeded
                 || ReadUInt16(bytes, local + 6) != flags
                 || ReadUInt16(bytes, local + 8) != method
@@ -638,6 +704,25 @@ internal sealed class Part21ResourceResolutionContext
             {
                 ThrowArchiveFormat("ZIP local and central entry metadata do not agree.");
             }
+            if (dataEnd > centralOffset)
+                ThrowArchiveFormat("A ZIP entry payload overlaps the central directory.");
+            var localRangeEnd = dataEnd;
+            if ((flags & 0x0008) != 0)
+            {
+                var descriptor = (int)dataEnd;
+                var hasSignature = dataEnd + 4 <= centralOffset
+                    && ReadUInt32(bytes, descriptor) == 0x08074b50;
+                var descriptorValues = descriptor + (hasSignature ? 4 : 0);
+                if ((long)descriptorValues + 12 > centralOffset
+                    || ReadUInt32(bytes, descriptorValues) != centralCrc
+                    || ReadUInt32(bytes, descriptorValues + 4) != compressedSize
+                    || ReadUInt32(bytes, descriptorValues + 8) != uncompressedSize)
+                {
+                    ThrowArchiveFormat("A ZIP data descriptor is missing or inconsistent.");
+                }
+                localRangeEnd = descriptorValues + 12L;
+            }
+            localRanges.Add((local, localRangeEnd));
             if ((flags & 0x0008) == 0
                 && (ReadUInt32(bytes, local + 14) != centralCrc
                     || ReadUInt32(bytes, local + 18) != compressedSize
@@ -650,6 +735,12 @@ internal sealed class Part21ResourceResolutionContext
         }
         if (position != end)
             ThrowArchiveFormat("The ZIP central-directory entry count is inconsistent.");
+        localRanges.Sort(static (left, right) => left.Start.CompareTo(right.Start));
+        for (var index = 1; index < localRanges.Count; index++)
+        {
+            if (localRanges[index].Start < localRanges[index - 1].End)
+                ThrowArchiveFormat("ZIP local-file ranges overlap.");
+        }
     }
 
     private static void ValidatePkZipEntry(
@@ -731,6 +822,10 @@ internal sealed class Part21ResourceResolutionContext
         Uri Identity,
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Entries,
         int ArchiveDepth);
+
+    private sealed record LoadingDocumentAliases(
+        string AddressKey,
+        IReadOnlyCollection<string> Aliases);
 
     private sealed record LoadedDocument(ExchangeStructure Structure, DocumentAddress Address);
 }

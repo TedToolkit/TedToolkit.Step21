@@ -142,8 +142,8 @@ public sealed class ResolutionTests
             new Dictionary<string, ReadOnlyMemory<byte>>
             {
                 ["ISO-10303.p21"] = Utf8(Exchange(
-                    "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
-                    string.Empty,
+                    "ANCHOR;<published>=<parts/child.p21#target>;<local>=#1;<self>=#90;ENDSEC;",
+                    "REFERENCE;#90=<https://example.test/package/#local>;ENDSEC;",
                     "#1=NODE('root',$);",
                     "4;2")),
                 ["parts/child.p21"] = Utf8(Exchange(
@@ -157,12 +157,19 @@ public sealed class ResolutionTests
             ["https://example.test/package/"] = content,
         });
         var structure = Read(
-            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/package/#published>;ENDSEC;", "#1=HOLDER(#90);"),
+            Exchange(
+                string.Empty,
+                "REFERENCE;#90=<https://example.test/package/#published>;#91=<https://example.test/package/#self>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
             new ExchangeStructureReadOptions(resourceProvider: provider));
 
-        var reference = structure.References.Single();
-        await Assert.That(reference.ResolutionStatus).IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
-        await Assert.That(structure.Validate().IsValid).IsTrue();
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.All(reference =>
+                reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved)).IsTrue();
+            await Assert.That(provider.Requests).IsEquivalentTo(["https://example.test/package/"]);
+            await Assert.That(structure.Validate().IsValid).IsTrue();
+        }
     }
 
     /// <summary>Reads a ZIP root and subsidiary entirely from supplied memory.</summary>
@@ -172,8 +179,8 @@ public sealed class ResolutionTests
         var zip = CreateZip(new Dictionary<string, string>
         {
             ["ISO-10303.p21"] = Exchange(
-                "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
-                string.Empty,
+                "ANCHOR;<published>=<parts/child.p21#target>;<local>=#1;<self>=#90;ENDSEC;",
+                "REFERENCE;#90=<https://example.test/package.zip#local>;ENDSEC;",
                 "#1=NODE('root',$);",
                 "4;2"),
             ["parts/child.p21"] = Exchange(
@@ -190,11 +197,18 @@ public sealed class ResolutionTests
                 zip),
         });
         var structure = Read(
-            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/package.zip#published>;ENDSEC;", "#1=HOLDER(#90);"),
+            Exchange(
+                string.Empty,
+                "REFERENCE;#90=<https://example.test/package.zip#published>;#91=<https://example.test/package.zip#self>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
             new ExchangeStructureReadOptions(resourceProvider: provider));
 
-        await Assert.That(structure.References.Single().ResolutionStatus)
-            .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.All(reference =>
+                reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved)).IsTrue();
+            await Assert.That(provider.Requests).IsEquivalentTo(["https://example.test/package.zip"]);
+        }
     }
 
     /// <summary>Separates missing capability, quota, and scoped-path diagnostics.</summary>
@@ -215,6 +229,24 @@ public sealed class ResolutionTests
             new ExchangeStructureReadOptions(
                 resourceProvider: quotaProvider,
                 resourceLimits: new Part21ResourceLimits(maximumResourceCount: 1))));
+
+        var archiveEntries = CreateZip(new Dictionary<string, string>
+        {
+            ["folder/"] = string.Empty,
+            ["ISO-10303.p21"] = Exchange(string.Empty, string.Empty, "#1=NODE('root',$);"),
+        });
+        var archiveEntryProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            ["https://example.test/entries.zip"] = new(
+                new Uri("https://example.test/entries.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                archiveEntries),
+        });
+        var archiveEntryQuota = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/entries.zip#x>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveEntryProvider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveEntryCount: 1))));
 
         var relative = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
             Exchange(string.Empty, "REFERENCE;#90=<child.p21#x>;ENDSEC;", "#1=HOLDER(#90);"),
@@ -240,6 +272,7 @@ public sealed class ResolutionTests
         {
             await Assert.That(missingProvider.Diagnostics.Single().Code).IsEqualTo("P21-CAP-RESOURCE-PROVIDER");
             await Assert.That(quota.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(archiveEntryQuota.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
             await Assert.That(relative.Diagnostics.Single().Code).IsEqualTo("P21-CAP-RESOURCE-BASE-URI");
             await Assert.That(path.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-ARCHIVE-PATH");
         }
@@ -273,12 +306,60 @@ public sealed class ResolutionTests
             Exchange(string.Empty, "REFERENCE;#90=<https://example.test/outer.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
             options));
 
+        ReenteringProvider? first = null;
+        ReenteringProvider? second = null;
+        first = new ReenteringProvider(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/second.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: second)));
+        second = new ReenteringProvider(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/first.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: first)));
+        var crossProviderReentry = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, "REFERENCE;#90=<https://example.test/first.p21#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: first)));
+
         using (Assert.Multiple())
         {
             await Assert.That(converted.References.Single().ResolutionStatus)
                 .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
             await Assert.That(converter.CallCount).IsEqualTo(1);
             await Assert.That(reentry.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-PROVIDER-REENTRY");
+            await Assert.That(crossProviderReentry.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-PROVIDER-REENTRY");
+        }
+    }
+
+    /// <summary>Reconciles a converter's canonical output identity before parsing duplicate aliases.</summary>
+    [Test]
+    public async Task Should_share_canonical_converter_output_identity()
+    {
+        const string firstAlias = "https://example.test/alias-a.jt";
+        const string secondAlias = "https://example.test/alias-b.jt";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [firstAlias] = new(new Uri(firstAlias), Part21ResourceContentKind.Other, Utf8("first")),
+            [secondAlias] = new(new Uri(secondAlias), Part21ResourceContentKind.Other, Utf8("second")),
+        });
+        var converter = new StaticConverter(ClearText(
+            "https://example.test/canonical-converted.p21",
+            Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('converted',$);")));
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{firstAlias}#target>;#91=<{secondAlias}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: converter));
+
+        var targets = structure.Registrations.Select(registration =>
+        {
+            var entity = registration.Entity;
+            return entity.GetType().GetProperty("Target")!.GetValue(entity);
+        }).ToArray();
+        using (Assert.Multiple())
+        {
+            await Assert.That(targets[0]).IsNotNull();
+            await Assert.That(targets[1]).IsSameReferenceAs(targets[0]);
+            await Assert.That(converter.CallCount).IsEqualTo(2);
         }
     }
 
@@ -308,6 +389,100 @@ public sealed class ResolutionTests
         {
             await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
             await Assert.That(converter.CallCount).IsEqualTo(0);
+        }
+    }
+
+    /// <summary>Enforces every public resource-limit partition at its processing boundary.</summary>
+    [Test]
+    public async Task Should_enforce_reference_byte_archive_and_compression_limits()
+    {
+        var referenceDepth = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(
+                "ANCHOR;<first>=<#second>;<second>=#1;ENDSEC;",
+                "REFERENCE;#90=<#first>;ENDSEC;",
+                "#1=NODE('local',$);#2=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceLimits: new Part21ResourceLimits(maximumReferenceDepth: 1))));
+
+        var clearIdentity = "https://example.test/large.p21";
+        var clearProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [clearIdentity] = ClearText(
+                clearIdentity,
+                Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('large',$);")),
+        });
+        var clearBytes = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{clearIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: clearProvider,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: 5))));
+
+        var directoryIdentity = "https://example.test/large/";
+        var directoryProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [directoryIdentity] = new(
+                new Uri(directoryIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(Exchange(string.Empty, string.Empty, "#1=NODE('large',$);")),
+                }),
+        });
+        var directoryBytes = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{directoryIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: directoryProvider,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: 5))));
+
+        var convertedIdentity = "https://example.test/expanded.jt";
+        var convertedProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [convertedIdentity] = new(
+                new Uri(convertedIdentity),
+                Part21ResourceContentKind.Other,
+                Utf8("x")),
+        });
+        var converted = new StaticConverter(ClearText(
+            "https://example.test/expanded.p21",
+            Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('expanded',$);")));
+        var convertedBytes = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{convertedIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: convertedProvider,
+                resourceConverter: converted,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: 5))));
+
+        var archiveIdentity = "https://example.test/large.zip";
+        var archive = CreateZip(new Dictionary<string, string>
+        {
+            ["ISO-10303.p21"] = Exchange(
+                string.Empty,
+                string.Empty,
+                $"#1=NODE('{new string('A', 1000)}',$);"),
+        });
+        var archiveProvider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [archiveIdentity] = new(new Uri(archiveIdentity), Part21ResourceContentKind.ZipArchive, archive),
+        });
+        var uncompressedBytes = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{archiveIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveProvider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveUncompressedBytes: 100))));
+        var compressionRatio = Assert.Throws<ExchangeStructureCapabilityException>(() => Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{archiveIdentity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveProvider,
+                resourceLimits: new Part21ResourceLimits(maximumCompressionRatio: 1))));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(referenceDepth.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(clearBytes.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(directoryBytes.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(convertedBytes.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(uncompressedBytes.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(compressionRatio.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-LIMIT-COMPRESSION-RATIO");
         }
     }
 
@@ -351,6 +526,15 @@ public sealed class ResolutionTests
                 "https://example.test/alias-b.p21",
                 "https://example.test/alias-loop.p21",
             ]);
+        }
+        _ = structure.References.Remove(structure.References.Single(reference => reference.CanonicalDigits == "90"));
+        using var output = new StringWriter();
+        structure.Write(output);
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.Validate().IsValid).IsTrue();
+            await Assert.That(output.ToString()).Contains("#1=HOLDER(#91);");
+            await Assert.That(output.ToString()).DoesNotContain("#90=<");
         }
     }
 
@@ -417,6 +601,10 @@ public sealed class ResolutionTests
                 new Uri("https://example.test/offset.zip"),
                 Part21ResourceContentKind.ZipArchive,
                 MutateZip(valid, localOffset: 0x80000000)),
+            ["https://example.test/payload.zip"] = new(
+                new Uri("https://example.test/payload.zip"),
+                Part21ResourceContentKind.ZipArchive,
+                MutateZip(valid, compressedSize: (uint)valid.Length)),
         };
 
         var codes = resources.Select(resource =>
@@ -433,6 +621,7 @@ public sealed class ResolutionTests
         await Assert.That(codes).IsEquivalentTo([
             "P21-RESOURCE-ARCHIVE-ROOT",
             "P21-RESOURCE-ARCHIVE-ROOT",
+            "P21-RESOURCE-ARCHIVE-FORMAT",
             "P21-RESOURCE-ARCHIVE-FORMAT",
             "P21-RESOURCE-ARCHIVE-FORMAT",
             "P21-RESOURCE-ARCHIVE-FORMAT",

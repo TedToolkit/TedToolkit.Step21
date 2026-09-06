@@ -36,6 +36,7 @@ processed in memory and is never extracted to disk. Directory bytes are shared a
 read; ZIP entries allocate only their verified uncompressed in-memory representation. Extraction is bounded by the
 actual output byte count and validates the declared length and CRC-32. Other-format input and its converted
 output both count toward the total-byte limit, and over-limit opaque input is rejected before conversion.
+ZIP directory entries count toward the entry limit even though they do not produce extracted content.
 
 Focused proof is the `DistributedResourceResolutionTests` suite plus the cumulative public-API snapshot. Signature
 trust, SDAI domain equivalence, constant occurrences, and the integrated adversarial quota matrix belong to their
