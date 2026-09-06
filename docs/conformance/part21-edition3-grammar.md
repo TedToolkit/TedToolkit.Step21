@@ -28,7 +28,7 @@ The parser uses direct repetitions where the WSN names a list production; this c
 | --- | --- | --- | --- |
 | Basic alphabet and ignored controls | Table 1; 5.2, 5.6 | lexer character fragments and `IgnoredControl`; U+0000–U+001F and U+007F are ignored inside or between tokens | `ignored-controls-inside-tokens.p21`, `Should_ignore_non_graphic_control_octets` |
 | Token separators | 5.6; clause 13 | `Space`, `Comment`, `PrintControl`; print controls also occur inside `String` and `Binary` | `edition3-all-sections.p21` |
-| Keyword | Table 2; 6.3 | `UserDefinedKeyword`, `StandardKeyword`, `UpperKeyword`; tag names use the full `UPPER`/`LOWER` alphabet, including low-line, while remaining distinct from keywords | `edition3-all-sections.p21`, `tag-name-leading-digit.p21` |
+| Keyword | Table 2; 6.3 | `UserDefinedKeyword`, `StandardKeyword`, `UpperKeyword`; `tagName` accepts the overlapping keyword token only in tag context, so the full `UPPER`/`LOWER` alphabet includes `_`, `_TAG`, and `TAG_NAME` without widening other contexts | `edition3-all-sections.p21`, `tag-name-leading-digit.p21` |
 | Integer and real | Table 2; 6.4.1–6.4.2 | `Integer`, `Real` | `edition3-all-sections.p21`, `lowercase-exponent.p21` |
 | String and control directives | Tables 2 and 4; 6.4.3 | `String` plus PAGE, ALPHABET, EXTENDED2, EXTENDED4, ARBITRARY fragments | `edition3-all-sections.p21` |
 | Occurrence names | Table 2; 6.4.4 | entity, value, constant entity, and constant value tokens; parser distinguishes LHS/RHS use | `edition3-all-sections.p21`, `value-instance-data-lhs.p21` |

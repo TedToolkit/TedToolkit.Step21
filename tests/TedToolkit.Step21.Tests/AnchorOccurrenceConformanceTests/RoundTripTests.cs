@@ -22,7 +22,7 @@ internal sealed class RoundTripTests
             FILE_SCHEMA(('TEST_SCHEMA'));
             ENDSEC;
             ANCHOR;
-            <{{uuid}}>=(1,-2.5,'text',._STATE.,"30",$,<foo:?bar>){_label:'primary'}{rank_name:1};
+            <{{uuid}}>=(1,-2.5,'text',._STATE.,"30",$,<foo:?bar>,(),(1,())){_:'root'}{_TAG:2}{TAG_NAME:3}{_label:'primary'}{rank_name:1};
             ENDSEC;
             END-ISO-10303-21;
             """;
@@ -45,12 +45,18 @@ internal sealed class RoundTripTests
             await Assert.That(anchor.Name.TryGetUuid(out var parsedUuid)).IsTrue();
             await Assert.That(parsedUuid).IsEqualTo(Guid.Parse(uuid));
             await Assert.That(anchor.Item.Kind).IsEqualTo(ParameterValueKind.Aggregate);
-            await Assert.That(anchor.Tags.Select(tag => tag.Name).SequenceEqual(["_label", "rank_name"])).IsTrue();
+            await Assert.That(anchor.Tags.Select(tag => tag.Name).SequenceEqual([
+                "_",
+                "_TAG",
+                "TAG_NAME",
+                "_label",
+                "rank_name",
+            ])).IsTrue();
             await Assert.That(reread.Anchors).HasSingleItem();
             await Assert.That(reread.Anchors[0]).IsEqualTo(anchor);
             await Assert.That(destination.ToString()).Contains(
-                $"ANCHOR;\n<{uuid}>=(1,-25.E-1,'text',._STATE.,\"30\",$,<foo:?bar>)"
-                + "{_label:'primary'}{rank_name:1};\nENDSEC;\n");
+                $"ANCHOR;\n<{uuid}>=(1,-25.E-1,'text',._STATE.,\"30\",$,<foo:?bar>,(),(1,()))"
+                + "{_:'root'}{_TAG:2}{TAG_NAME:3}{_label:'primary'}{rank_name:1};\nENDSEC;\n");
         }
     }
 
@@ -262,6 +268,38 @@ internal sealed class RoundTripTests
                     ParameterValueKind.Enumeration,
                     ParameterValueKind.Enumeration,
                 ]);
+            await Assert.That(reread.Anchors[0]).IsEqualTo(structure.Anchors[0]);
+        }
+    }
+
+    /// <summary>Table 2 tag spellings that overlap keyword tokens remain tags in the clause 9 context.</summary>
+    [Test]
+    public async Task Should_round_trip_uppercase_and_low_line_tags_created_by_public_editing()
+    {
+        var descriptor = new ExchangeStructureTests.TestSchemaDescriptor("TEST_SCHEMA");
+        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create(), [descriptor]);
+        structure.Anchors.Add(new Part21Anchor(
+            new AnchorName("tags"),
+            ParameterValue.Omitted,
+            [
+                new Part21AnchorTag("_", ParameterValue.FromString("root")),
+                new Part21AnchorTag("_TAG", ParameterValue.FromInteger(2)),
+                new Part21AnchorTag("TAG_NAME", ParameterValue.FromInteger(3)),
+            ]));
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+        var reread = ExchangeStructure.Read(new StringReader(destination.ToString()), [descriptor]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(destination.ToString()).Contains(
+                "<tags>=${_:'root'}{_TAG:2}{TAG_NAME:3};");
+            await Assert.That(reread.Anchors[0].Tags.Select(tag => tag.Name).SequenceEqual([
+                "_",
+                "_TAG",
+                "TAG_NAME",
+            ])).IsTrue();
             await Assert.That(reread.Anchors[0]).IsEqualTo(structure.Anchors[0]);
         }
     }

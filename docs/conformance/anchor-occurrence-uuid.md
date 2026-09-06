@@ -35,7 +35,8 @@ declare constants in the relevant category. Schemas without constants receive no
 ## Evidence
 
 `AnchorOccurrenceConformanceTests` covers positive and neighboring-invalid/editing partitions: all physical anchor
-item families, nested lists, ordered and underscore-bearing tags/enumerations, hierarchical and opaque URI editing,
+item families, empty and nested lists, ordered tags including `_`, `_TAG`, and `TAG_NAME`, underscore-bearing
+enumerations, hierarchical and opaque URI editing,
 the four occurrence categories, local object identity and retargeting resistance, external association retention,
 UUID equality, arbitrary-precision names, constant category lookup, duplicate/overlap failures, and zero-output
 writer atomicity.

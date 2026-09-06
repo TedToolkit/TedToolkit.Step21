@@ -80,6 +80,11 @@ internal sealed class ValueContractTests
         static void Logical() => _ = new Part21AnchorTag(
             "logical",
             ParameterValue.FromLogical(LogicalValue.Unknown));
+        static void NestedBoolean() => _ = new Part21Anchor(
+            new AnchorName("nested-boolean"),
+            ParameterValue.FromAggregate([
+                ParameterValue.FromAggregate([ParameterValue.FromBoolean(false)]),
+            ]));
 
         using (Assert.Multiple())
         {
@@ -87,6 +92,7 @@ internal sealed class ValueContractTests
             await Assert.That((Action)Typed).Throws<ArgumentException>();
             await Assert.That((Action)Boolean).Throws<ArgumentException>();
             await Assert.That((Action)Logical).Throws<ArgumentException>();
+            await Assert.That((Action)NestedBoolean).Throws<ArgumentException>();
         }
     }
 

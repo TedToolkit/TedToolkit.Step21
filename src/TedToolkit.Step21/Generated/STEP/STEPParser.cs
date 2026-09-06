@@ -1326,6 +1326,7 @@ internal partial class STEPParser : Parser {
 
 	public partial class TagNameContext : ParserRuleContext {
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode UpperKeyword() { return GetToken(STEPParser.UpperKeyword, 0); }
+		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode StandardKeyword() { return GetToken(STEPParser.StandardKeyword, 0); }
 		[System.Diagnostics.DebuggerNonUserCode] public ITerminalNode TagName() { return GetToken(STEPParser.TagName, 0); }
 		public TagNameContext(ParserRuleContext parent, int invokingState)
 			: base(parent, invokingState)
@@ -1350,7 +1351,7 @@ internal partial class STEPParser : Parser {
 			{
 			State = 268;
 			_la = TokenStream.LA(1);
-			if ( !(_la==UpperKeyword || _la==TagName) ) {
+			if ( !((((_la) & ~0x3f) == 0 && ((1L << _la) & 60129542144L) != 0)) ) {
 			ErrorHandler.RecoverInline(this);
 			}
 			else {
@@ -4085,7 +4086,7 @@ internal partial class STEPParser : Parser {
 		1,50,1,50,1,51,1,51,1,51,1,51,1,52,1,52,1,53,1,53,1,54,1,54,1,54,0,0,55,
 		0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,
 		50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,
-		98,100,102,104,106,108,0,7,1,0,34,35,3,0,42,44,46,46,60,60,1,0,53,62,1,
+		98,100,102,104,106,108,0,7,1,0,33,35,3,0,42,44,46,46,60,60,1,0,53,62,1,
 		0,42,52,1,0,32,34,1,0,25,26,1,0,25,28,599,0,110,1,0,0,0,2,133,1,0,0,0,
 		4,145,1,0,0,0,6,153,1,0,0,0,8,161,1,0,0,0,10,169,1,0,0,0,12,177,1,0,0,
 		0,14,188,1,0,0,0,16,190,1,0,0,0,18,203,1,0,0,0,20,205,1,0,0,0,22,218,1,

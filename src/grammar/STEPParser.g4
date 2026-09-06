@@ -89,6 +89,7 @@ anchorTag
 
 tagName
     : UpperKeyword
+    | StandardKeyword
     | TagName
     ;
 
