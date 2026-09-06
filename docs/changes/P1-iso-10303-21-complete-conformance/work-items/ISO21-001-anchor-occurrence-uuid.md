@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-001 -->
 
-<!-- approval-source: user-explicit-approval-2026-09-06 -->
+<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
 
 ## Outcome
 
@@ -31,13 +31,14 @@ occurrence 及 Annex G UUID，使其可解析、编辑、验证、写出并重�
 | Parent contract | Responsibility | Contribution or supplied input |
 | --- | --- | --- |
 | AC-03 | Owns | Complete local anchor/occurrence/tag/UUID semantics and round trip |
-| AC-02, AC-08 | Supports | Supplies the class-3 and Annex-F value/identity model |
+| AC-02, AC-07, AC-08 | Supports | Supplies the class-3, clause-12 constant/value-name and Annex-F identity model |
 
 <!-- work-item: delivery-constraints -->
 ## Constraints
 
 - Preserve direct entity identity, model ownership, deterministic output, complete-result publication, existing class-1 APIs and Native AOT readiness.
 - Public types use Part 21 terminology and do not embed schema descriptors, resource providers, script engines or AP concepts.
+- Normative behavior is derived from ISO 10303-21:2016 clauses 6.4.4, 6.5 and 9 plus Annex G using the public final text as a read-only reference; repository evidence records clause identifiers and independently authored vectors, not copied standard prose.
 - Private representation, collection layout and parser-projection organization remain implementation choices.
 
 <!-- work-item: proof-plan -->

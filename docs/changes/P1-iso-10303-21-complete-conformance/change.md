@@ -18,7 +18,7 @@ Approved
 
 - Evidence: public protocol/API、外部资源、密码学信任、归档安全、跨 runtime/Analyzer/generated code 的映射以及难以回退的 conformance claim 均被改变，故最低安全 profile 为 Controlled。
 - Artifacts: 本 `change.md`；批准并继续后由 `plan-work-items` 产生单独审批的最小 work-item map。
-- Approval gate: 本文 contract、ADR-0009、work-item map 与 AP-004 原则均已获用户明确批准。后续实施仍需当前明确继续请求。
+- Approval gate: 本文 contract、ADR-0009、AP-004 原则与修订后的完整 work-item map 均已获用户明确批准，实施已获授权。
 - Escalation triggers: ISO edition/目标 conformance class 改变、隐式联网或机器信任、脚本引擎进入 core、AP/domain 语义、非 AOT runtime 依赖、弱化原子性或无法逐条关闭 PICS。
 
 <!-- section: goal-rationale -->
@@ -155,7 +155,7 @@ Scenario: 不受信任的 distributed exchange structure 被有界处理
 
 <!-- change-prerequisite: none -->
 
-None. Ready from committed baseline `63b2757`; approved work-item map and Active AP-004 are present.
+None. Ready from committed baseline `63b2757`; Active AP-004 and the approved corrected work-item map are present. The complete legally usable ISO 10303-11:2004 reference remains an external start condition only for ISO21-005.
 
 <!-- section: delivery-brief -->
 ## Delivery disposition

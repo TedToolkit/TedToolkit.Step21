@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-005 -->
 
-<!-- approval-source: user-explicit-approval-2026-09-06 -->
+<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
 
 ## Outcome
 
@@ -13,9 +13,9 @@
 <!-- work-item: scope -->
 ## Scope and non-goals
 
-- Target delivery area or exact public/persisted contract: clause-12 mapping descriptors/emission、complete complex mapping、short names、constant occurrences、reachable types/inheritance/redeclarations/functions/procedures/rules/statements and source-located unsupported diagnostics.
-- In scope: all simple/aggregate/defined/enumeration/select types、entity mapping、attributes/inverse/derived/local rules、schema/constant/rule mappings and every Part-11 semantic family reachable from validation.
-- Non-goals: general-purpose EXPRESS invocation/interpreter、unreachable program execution、EXPRESS-X、AP/B-rep/PMI semantics or runtime schema reflection.
+- Target delivery area or exact public/persisted contract: clause-12 generated mapping descriptors/emission、complete complex mapping、generated short-name and constant lookup metadata、reachable types/inheritance/redeclarations/functions/procedures/rules/statements and source-located unsupported diagnostics.
+- In scope: all simple/aggregate/defined/enumeration/select types、entity mapping、attributes/inverse/derived/local rules、schema/constant/rule mappings and every Part-11 semantic family reachable from validation, consuming ISO21-001's physical occurrence/name contract.
+- Non-goals: physical occurrence/anchor token semantics owned by ISO21-001、general-purpose EXPRESS invocation/interpreter、unreachable program execution、EXPRESS-X、AP/B-rep/PMI semantics or runtime schema reflection.
 - Likely touchpoints (non-binding): compiler bound IR、dependency closure、descriptor/emitter、complex mapping、conformance corpus and generated API baselines.
 
 <!-- work-item: start-conditions -->
@@ -23,7 +23,8 @@
 
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
-| None | Approved contract limits Part 11 execution to Part 21 mapping/schema-conformance reachability | Parent AC-07 and AP-004 Draft direction |
+| ISO21-001 Verified | Stable physical occurrence/constant-name contract and generated constant-lookup seam | ISO21-001 completion evidence |
+| Authorized ISO 10303-11:2004 reference | Complete legal implementation reference for every validation-reachable Part-11 semantic family, available without copying its prose into the repository | User-supplied licensed text/path or another repository-approved authorized source identity |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
@@ -39,6 +40,7 @@
 - Every supported semantic family has a clause-bound positive and neighboring-invalid corpus partition; reachable unsupported behavior rejects generation rather than being skipped.
 - Keep generated code direct, deterministic and AOT-ready; no runtime interpreter, reflection discovery, AP branch or generated dependency on compiler packages.
 - Full schema baselines supplement but do not replace focused ISO clause fixtures.
+- The mapping inventory uses the public Part 21 clause 12 text plus an authorized ISO 10303-11:2004 reference; repository manifests store clause/family identifiers and independently authored fixtures, not standard prose.
 
 <!-- work-item: proof-plan -->
 ## Proof

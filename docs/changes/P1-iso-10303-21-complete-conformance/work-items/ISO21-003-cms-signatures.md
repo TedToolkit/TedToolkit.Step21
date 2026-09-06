@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-003 -->
 
-<!-- approval-source: user-explicit-approval-2026-09-06 -->
+<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
 
 ## Outcome
 
@@ -39,6 +39,7 @@
 - Malformed syntax/CMS always fails atomically; `NotEvaluated` may publish only a complete model/report; evaluated states obey only the explicit per-call policy.
 - Signing without explicit capability fails before destination-visible bytes; no hidden machine/network trust inputs are permitted.
 - Use AOT-compatible BCL or bounded optional dependencies and preserve deterministic test time/certificates.
+- Clause 14 evidence uses the public final text as a read-only normative reference: every signature covers the preceding Part 21 alphabet characters, including prior signatures, and CMS is detached/external content encoded with Base64; repository fixtures are independently authored.
 
 <!-- work-item: proof-plan -->
 ## Proof

@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-008 -->
 
-<!-- approval-source: user-explicit-approval-2026-09-06 -->
+<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
 
 ## Outcome
 
