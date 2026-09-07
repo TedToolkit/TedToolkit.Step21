@@ -1307,8 +1307,11 @@ public sealed class ExchangeStructure
             {
                 foreach (var reference in entry.Entity.DirectReferences)
                 {
-                    if (reference is not null && available.Contains(reference))
-                        selected.Add(reference);
+                    if (reference is null)
+                        continue;
+                    var canonical = entry.Owner.GetCanonicalPopulationEntity(reference);
+                    if (available.Contains(canonical))
+                        selected.Add(canonical);
                 }
             }
         }
@@ -1326,6 +1329,14 @@ public sealed class ExchangeStructure
         }
 
         return allEntries.Where(entry => selected.Contains(entry.Entity)).ToArray();
+    }
+
+    private Entity GetCanonicalPopulationEntity(Entity entity)
+    {
+        var current = entity;
+        while (_domainProjectionSources.TryGetValue(current, out var source))
+            current = source;
+        return current;
     }
 
     private IReadOnlyList<ValidationFailure> ValidatePopulation(

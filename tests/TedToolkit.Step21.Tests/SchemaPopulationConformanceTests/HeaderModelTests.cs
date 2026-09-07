@@ -58,6 +58,10 @@ public sealed class HeaderModelTests
         WHERE
           none : SIZEOF(a) = 0;
         END_RULE;
+        RULE one_b FOR (b);
+        WHERE
+          exactly_one : SIZEOF(b) = 1;
+        END_RULE;
         END_SCHEMA;
         """;
 

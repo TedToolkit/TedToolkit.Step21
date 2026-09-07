@@ -64,9 +64,10 @@ prove the EXPRESS-interface method from the supplied closed `.exp` set: generate
 CLR assignability, preserving forward, shared, and cyclic references by object identity. A structurally similar entity
 from an unrelated schema is rejected as `P21.READ.REFERENCE.TYPE` with its originating section path.
 
-SDAI domain equivalence depends on ISO 10303-22 repository metadata that is not carried by the exchange structure or
-the supplied descriptors. It is therefore outside this explicit closed-set boundary; the runtime does not infer
-equivalence by entity name, shape, or CLR coincidence.
+SDAI domain equivalence is opt-in through a caller-supplied complete relation and parameter-projection capability.
+The runtime validates that relation, owns equivalent-view allocation and canonical occurrence identity, and never
+infers equivalence by entity name, shape, or CLR coincidence. This supplies the Annex E.1.2 boundary without adding
+ISO 10303-22 repository objects or a repository dependency.
 
 For manually constructed graphs, register a referenced entity in its governing `DataSection` before adding a root in
 another section. Graph traversal skips existing registrations, so the referenced entity retains its original section.
