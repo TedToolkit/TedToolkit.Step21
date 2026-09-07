@@ -60,6 +60,14 @@ resolves URI/anchor chains, ZIP or directory roots, shared entity identity, and 
 network connection implicitly. `Part21ResourceLimits` bounds the complete per-read graph, and
 `IPart21ResourceConverter` is the explicit hook for another source format.
 
+`SCHEMA_POPULATION` resources use the same shared resolver graph and expose transitive population entities through
+`structure.SchemaPopulationEntities`. `FILE_POPULATION` supports all three Annex E determination methods. For
+cross-schema domain equivalence, use `ExchangeStructureReadOptions.WithDomainEquivalenceProvider` with a caller-owned
+provider for the complete relation and physical-parameter projection; the runtime performs target-schema allocation,
+hydration, identity-alias control, and validation without
+requiring a Part 22 repository or inferring compatibility by name or shape. Population message digests require a
+signature and use the first signature section's digest algorithm.
+
 Use `structure.WriteEntity(writer, entity)` when only one registered entity-instance record is required. Both write operations validate the final graph before producing output.
 
 ## Construct a structure
@@ -117,7 +125,8 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 - Physical anchor items, tags, all four occurrence-name categories, UUID anchor identity, and schema-neutral `REFERENCE` declarations can be read, edited, validated, canonically written, and reread; see the [conformance record](https://github.com/TedToolkit/TedToolkit.Step21/blob/main/docs/conformance/anchor-occurrence-uuid.md).
 - External resource acquisition is opt-in through per-read capabilities; local fragments, external clear text, in-memory directories, ZIP roots/subsidiaries, UUID registry responses, and other-format conversion are supported. The legacy overload keeps unresolved-reference diagnostics, and no overload performs implicit I/O.
 - Signature sections are decoded as detached CMS. Optional per-read verification accepts trust only through explicit time, signer-certificate revocation input, roots, additional or embedded certificates; `SignatureReports` retains results for every signed resource. Signed writing validates callback output against an independent canonical content snapshot and remains zero-output atomic on failure.
-- Complex mappings outside the documented flat `ANDOR` form and SDAI domain-equivalence metadata are unsupported.
+- Complex mappings outside the documented flat `ANDOR` form are unsupported. Domain equivalence is explicit and
+  schema-qualified; ISO 10303-22 repositories and inferred compatibility are outside the package contract.
 - This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.
 - Writing is canonical and semantically equivalent; it is not byte-preserving and does not retain comments or original formatting.

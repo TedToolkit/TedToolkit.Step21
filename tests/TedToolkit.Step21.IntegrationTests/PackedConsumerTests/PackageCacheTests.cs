@@ -67,4 +67,57 @@ internal sealed class PackageCacheTests
             root.Delete(recursive: true);
         }
     }
+
+    /// <summary>Copies every direct project package dependency without copying transitive-only libraries.</summary>
+    [Test]
+    public async Task Should_copy_all_resolved_direct_project_dependencies()
+    {
+        var root = Directory.CreateTempSubdirectory("TedToolkit.Step21.CacheTest.");
+        try
+        {
+            var cache = Path.Combine(root.FullName, "cache");
+            var output = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            foreach (var package in new[] { (Id: "first.package", Version: "1.0.0"), (Id: "second", Version: "2.0.0"), })
+            {
+                var packagePath = Path.Combine(cache, package.Id, package.Version, $"{package.Id}.{package.Version}.nupkg");
+                Directory.CreateDirectory(Path.GetDirectoryName(packagePath)!);
+                File.WriteAllText(packagePath, package.Id);
+            }
+
+            var assets = Path.Combine(root.FullName, "project.assets.json");
+            File.WriteAllText(assets, JsonSerializer.Serialize(new
+            {
+                packageFolders = new Dictionary<string, object> { [cache] = new { }, },
+                libraries = new Dictionary<string, object>
+                {
+                    ["First.Package/1.0.0"] = new { type = "package", },
+                    ["Second/2.0.0"] = new { type = "package", },
+                    ["Transitive/3.0.0"] = new { type = "package", },
+                },
+                project = new
+                {
+                    frameworks = new Dictionary<string, object>
+                    {
+                        ["net10.0"] = new
+                        {
+                            dependencies = new Dictionary<string, object>
+                            {
+                                ["First.Package"] = new { target = "Package", },
+                                ["Second"] = new { target = "Package", },
+                            },
+                        },
+                    },
+                },
+            }));
+
+            PackageCache.CopyProjectDependencies(output, assets);
+
+            await Assert.That(Directory.GetFiles(output, "*.nupkg").Select(path => Path.GetFileName(path)!))
+                .IsEquivalentTo(["first.package.1.0.0.nupkg", "second.2.0.0.nupkg"]);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
 }

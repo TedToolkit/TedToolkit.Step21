@@ -13,7 +13,8 @@ This index states what the current package delivers, what the grammars recognize
 | Atomic simple read, same-schema sections, local references, and multi-schema populations | [simple read](atomic-simple-read.md), [same-schema sections](same-schema-data-sections.md), [reference hydration](reference-hydration.md), [multi-schema populations](multi-schema-populations.md) |
 | Edition 3 anchors, occurrence identities, UUID mapping, and schema-neutral reference declarations | [anchor/occurrence/UUID semantics](anchor-occurrence-uuid.md) |
 | Explicit distributed reference, directory, and ZIP resolution | [distributed resource resolution](distributed-resource-resolution.md) |
-| Detached CMS signature decoding, explicit trust verification, and atomic signing | [CMS signatures](cms-signatures.md) |
+| Detached CMS signature decoding, explicit signature verification and trust policy, and atomic signing | [CMS signatures](cms-signatures.md) |
+| Annex E schema populations, all determination methods, and explicit domain equivalence | [schema populations](schema-populations.md) |
 | Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
 
@@ -31,7 +32,7 @@ These are operational capability failures, not syntax errors. The public `Exchan
 
 - JSON or XML serialization, adapters, attributes, extension hooks, or dependencies.
 - Byte-preserving round trips, comment retention, or original formatting retention.
-- Complex mapping beyond the supported flat `ANDOR` hierarchy and SDAI domain-equivalence metadata.
+- Complex mapping beyond the supported flat `ANDOR` hierarchy; ISO 10303-22 repositories and inferred domain equivalence.
 - General EXPRESS interpretation, arbitrary algorithm execution, or a public function/procedure invocation API.
 - Public syntax nodes, ANTLR contexts, parser/reader/writer façades, or descriptor registries.
 

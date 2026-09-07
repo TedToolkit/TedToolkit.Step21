@@ -144,7 +144,13 @@ public sealed class ExchangeStructureReadOptions
         IPart21ResourceProvider? resourceProvider = null,
         IPart21ResourceConverter? resourceConverter = null,
         Part21ResourceLimits? resourceLimits = null)
-        : this(baseUri, resourceProvider, resourceConverter, resourceLimits, signatureVerification: null)
+        : this(
+            baseUri,
+            resourceProvider,
+            resourceConverter,
+            resourceLimits,
+            signatureVerification: null,
+            domainEquivalenceProvider: null)
     {
     }
 
@@ -159,14 +165,31 @@ public sealed class ExchangeStructureReadOptions
             resourceProvider,
             resourceConverter,
             resourceLimits,
-            signatureVerification ?? throw new ArgumentNullException(nameof(signatureVerification)));
+            signatureVerification ?? throw new ArgumentNullException(nameof(signatureVerification)),
+            domainEquivalenceProvider: null);
+
+    /// <summary>Creates an immutable per-read domain-equivalence and resource capability snapshot.</summary>
+    public static ExchangeStructureReadOptions WithDomainEquivalenceProvider(
+        ISchemaDomainEquivalenceProvider domainEquivalenceProvider,
+        Uri? baseUri = null,
+        IPart21ResourceProvider? resourceProvider = null,
+        IPart21ResourceConverter? resourceConverter = null,
+        Part21ResourceLimits? resourceLimits = null,
+        Part21SignatureVerificationOptions? signatureVerification = null) => new(
+            baseUri,
+            resourceProvider,
+            resourceConverter,
+            resourceLimits,
+            signatureVerification,
+            domainEquivalenceProvider ?? throw new ArgumentNullException(nameof(domainEquivalenceProvider)));
 
     private ExchangeStructureReadOptions(
         Uri? baseUri,
         IPart21ResourceProvider? resourceProvider,
         IPart21ResourceConverter? resourceConverter,
         Part21ResourceLimits? resourceLimits,
-        Part21SignatureVerificationOptions? signatureVerification)
+        Part21SignatureVerificationOptions? signatureVerification,
+        ISchemaDomainEquivalenceProvider? domainEquivalenceProvider)
     {
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
@@ -176,6 +199,8 @@ public sealed class ExchangeStructureReadOptions
         ResourceConverter = resourceConverter;
         ResourceLimits = resourceLimits ?? new Part21ResourceLimits();
         SignatureVerification = signatureVerification;
+        DomainEquivalenceProvider = domainEquivalenceProvider;
+        DomainEquivalences = SnapshotDomainEquivalences(domainEquivalenceProvider?.GetEquivalences());
     }
 
     /// <summary>Gets the optional absolute identity of the character source.</summary>
@@ -192,4 +217,69 @@ public sealed class ExchangeStructureReadOptions
 
     /// <summary>Gets the optional explicit CMS certificate, time, revocation, and acceptance inputs.</summary>
     public Part21SignatureVerificationOptions? SignatureVerification { get; }
+
+    /// <summary>Gets the optional caller-owned domain-equivalence and parameter-projection capability.</summary>
+    public ISchemaDomainEquivalenceProvider? DomainEquivalenceProvider { get; }
+
+    /// <summary>Gets the validated caller-supplied SDAI domain-equivalence relation.</summary>
+    public IReadOnlyList<SchemaDomainEquivalence> DomainEquivalences { get; }
+
+    private static IReadOnlyList<SchemaDomainEquivalence> SnapshotDomainEquivalences(
+        IReadOnlyCollection<SchemaDomainEquivalence>? equivalences)
+    {
+        if (equivalences is null)
+            return Array.Empty<SchemaDomainEquivalence>();
+        var snapshot = equivalences.ToArray();
+        if (snapshot.Any(equivalence => equivalence is null))
+            throw new ArgumentException("Domain-equivalence collections cannot contain null values.", nameof(equivalences));
+
+        var edges = new HashSet<(SchemaEntityType Source, SchemaEntityType Target)>();
+        foreach (var equivalence in snapshot)
+        {
+            if (!edges.Add((equivalence.Source, equivalence.Target)))
+                throw new ArgumentException("Domain-equivalence declarations cannot contain duplicate edges.", nameof(equivalences));
+        }
+
+        var nodes = edges.SelectMany(edge => new[] { edge.Source, edge.Target }).Distinct().ToArray();
+        foreach (var node in nodes)
+            edges.Add((node, node));
+        foreach (var edge in edges.Where(edge => !edge.Source.Equals(edge.Target)).ToArray())
+        {
+            if (!edges.Contains((edge.Target, edge.Source)))
+                throw new ArgumentException($"Domain equivalence is asymmetric at '{edge.Source}' and '{edge.Target}'.", nameof(equivalences));
+        }
+        foreach (var left in edges.ToArray())
+        {
+            foreach (var right in edges.Where(edge => edge.Source.Equals(left.Target)).ToArray())
+            {
+                if (!edges.Contains((left.Source, right.Target)))
+                {
+                    throw new ArgumentException(
+                        $"Domain equivalence is not transitively closed at '{left.Source}', '{left.Target}', and '{right.Target}'.",
+                        nameof(equivalences));
+                }
+            }
+        }
+        foreach (var node in nodes)
+        {
+            var contradictorySchema = edges
+                .Where(edge => edge.Source.Equals(node))
+                .Select(edge => edge.Target)
+                .GroupBy(target => target.SchemaName.Value, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group
+                    .Select(target => target.EntityName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Skip(1)
+                    .Any());
+            if (contradictorySchema is not null)
+            {
+                throw new ArgumentException(
+                    $"Domain equivalence is contradictory because '{node}' maps to more than one entity in "
+                        + $"schema '{contradictorySchema.Key}'.",
+                    nameof(equivalences));
+            }
+        }
+
+        return Array.AsReadOnly(snapshot);
+    }
 }

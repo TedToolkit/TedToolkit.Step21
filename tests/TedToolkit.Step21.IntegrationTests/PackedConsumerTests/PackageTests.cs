@@ -68,11 +68,9 @@ internal sealed class PackageTests
                 "--output",
                 packageDirectory);
             var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
-            PackageCache.Copy(
+            PackageCache.CopyProjectDependencies(
                 packageDirectory,
-                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
-                "antlr4.runtime.standard",
-                "4.13.1");
+                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"));
 
             var consumer = await BuildConsumer(
                 repositoryRoot,
@@ -304,11 +302,9 @@ internal sealed class PackageTests
                 "--output",
                 packageDirectory);
             var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.1.0.0.nupkg").Single();
-            PackageCache.Copy(
+            PackageCache.CopyProjectDependencies(
                 packageDirectory,
-                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
-                "antlr4.runtime.standard",
-                "4.13.1");
+                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"));
 
             var first = await BuildConsumer(
                 repositoryRoot,

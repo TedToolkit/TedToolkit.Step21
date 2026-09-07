@@ -56,7 +56,14 @@ internal sealed class PublicContractTests
         var factory = typeof(ExchangeStructureReadOptions).GetMethod(
             nameof(ExchangeStructureReadOptions.WithSignatureVerification),
             BindingFlags.Public | BindingFlags.Static);
-        await Assert.That(factory).IsNotNull();
+        var domainFactory = typeof(ExchangeStructureReadOptions).GetMethod(
+            nameof(ExchangeStructureReadOptions.WithDomainEquivalenceProvider),
+            BindingFlags.Public | BindingFlags.Static);
+        using (Assert.Multiple())
+        {
+            await Assert.That(factory).IsNotNull();
+            await Assert.That(domainFactory).IsNotNull();
+        }
     }
 
     /// <summary>

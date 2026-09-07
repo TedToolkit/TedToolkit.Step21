@@ -363,7 +363,7 @@ internal static class Part21SignatureEngine
         }
     }
 
-    private static byte[]? TryComputeDigest(string algorithm, ReadOnlySpan<byte> content)
+    internal static byte[]? TryComputeDigest(string algorithm, ReadOnlySpan<byte> content)
     {
         var name = algorithm switch
         {

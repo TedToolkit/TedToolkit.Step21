@@ -80,6 +80,10 @@ internal static class ExchangeStructureReader
 
         var structure = new ExchangeStructure(header, descriptors);
         structure.SetSignatures(signatures);
+        resolutionContext?.ConfigureStructure(structure);
+        structure.SetSchemaPopulationExternalFiles(BindSchemaPopulationExternalFiles(
+            syntax.Header.AdditionalEntities,
+            bindingDiagnostics));
         foreach (var identifier in header.FileSchema.SchemaIdentifiers)
         {
             var schemaName = new SchemaName(identifier);
@@ -147,9 +151,15 @@ internal static class ExchangeStructureReader
             firstSchemaDescriptor,
             bindingDiagnostics);
         if (resolutionContext is not null)
-            resolutionContext.RegisterDocument(structure, address!);
+            resolutionContext.RegisterDocument(structure, address!, source);
+        resolutionContext?.ResolveSchemaPopulation(structure, address!, depth);
         resolutionContext?.ResolveReferences(structure, address!, depth);
+        resolutionContext?.CompleteSchemaPopulation(structure);
 
+        var physicalComponents = new Dictionary<
+            Entity,
+            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(ReferenceEqualityComparer.Instance);
+        var domainProjections = new DomainProjectionContext(structure, physicalComponents);
         foreach (var allocation in allocations)
         {
             var components = new List<KeyValuePair<string, IReadOnlyList<ParameterValue>>>(
@@ -171,6 +181,8 @@ internal static class ExchangeStructureReader
                         parameter,
                         parameterPath,
                         structure,
+                        allocation.Descriptor,
+                        domainProjections,
                         entitiesByName,
                         externalNames.Entities,
                         referenceFailures,
@@ -183,6 +195,8 @@ internal static class ExchangeStructureReader
 
                 components.Add(new(record.Name, parameters.AsReadOnly()));
             }
+
+            physicalComponents.Add(allocation.Entity, components.AsReadOnly());
 
             foreach (var diagnostic in allocation.Descriptor.HydrateEntity(
                          structure,
@@ -228,6 +242,8 @@ internal static class ExchangeStructureReader
             }
         }
 
+        domainProjections.Hydrate(bindingDiagnostics);
+
         if (bindingDiagnostics.Count > 0)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
         if (referenceFailures.Count > 0)
@@ -239,12 +255,29 @@ internal static class ExchangeStructureReader
                     .ThenBy(failure => failure.Path, StringComparer.Ordinal)
                     .ThenBy(failure => failure.Code, StringComparer.Ordinal)));
         }
+        if (resolutionContext is null && structure.SchemaPopulationExternalFiles.Count > 0)
+        {
+            throw new ExchangeStructureCapabilityException([
+                new Step21Diagnostic(
+                    "P21-CAP-RESOURCE-PROVIDER",
+                    Step21DiagnosticSeverity.Error,
+                    "SCHEMA_POPULATION requires an explicit resource provider for schema-conformance reading."),
+            ]);
+        }
 
         var validationResult = structure.Validate();
         if (!validationResult.IsValid)
             throw new ExchangeStructureReadValidationException(validationResult);
         if (resolutionContext is not null && depth == 0)
             structure.SetSignatureReports(resolutionContext.CreateSignatureReports());
+
+        resolutionContext?.MarkDocumentCompleted(structure);
+        if (resolutionContext is not null && depth == 0)
+        {
+            var dependencyValidation = resolutionContext.ValidateCompletedDependencies(structure);
+            if (!dependencyValidation.IsValid)
+                throw new ExchangeStructureReadValidationException(dependencyValidation);
+        }
 
         return structure;
     }
@@ -272,6 +305,9 @@ internal static class ExchangeStructureReader
 
                 continue;
             }
+
+            if (string.Equals(additionalHeader.Name, "SCHEMA_POPULATION", StringComparison.OrdinalIgnoreCase))
+                continue;
 
             diagnostics.Add(new Step21Diagnostic(
                 "P21-CAP-HEADER-ENTITY",
@@ -628,6 +664,134 @@ internal static class ExchangeStructureReader
         }
 
         return definitions.AsReadOnly();
+    }
+
+    private static IReadOnlyList<SchemaPopulationExternalFile> BindSchemaPopulationExternalFiles(
+        IReadOnlyList<HeaderEntitySyntax> additionalEntities,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var declarations = additionalEntities.Where(entity => string.Equals(
+                entity.Name,
+                "SCHEMA_POPULATION",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (declarations.Length == 0)
+            return Array.Empty<SchemaPopulationExternalFile>();
+        if (declarations.Length > 1)
+        {
+            foreach (var duplicate in declarations.Skip(1))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-SCHEMA-POPULATION",
+                    Step21DiagnosticSeverity.Error,
+                    "The header contains more than one SCHEMA_POPULATION entity.",
+                    duplicate.Span.Start));
+            }
+        }
+
+        var syntax = declarations[0];
+        if (syntax.Parameters.Count != 1 || syntax.Parameters[0].Kind != Part21ValueKind.List)
+        {
+            diagnostics.Add(PopulationDiagnostic(
+                syntax,
+                "SCHEMA_POPULATION requires one non-empty list of external-file identification triples."));
+            return Array.Empty<SchemaPopulationExternalFile>();
+        }
+
+        var entries = syntax.Parameters[0];
+        if (entries.Values.Count == 0)
+        {
+            diagnostics.Add(PopulationDiagnostic(
+                entries,
+                "SCHEMA_POPULATION requires at least one external-file identification."));
+            return Array.Empty<SchemaPopulationExternalFile>();
+        }
+
+        var result = new List<SchemaPopulationExternalFile>(entries.Values.Count);
+        foreach (var entry in entries.Values)
+        {
+            if (entry.Kind != Part21ValueKind.List || entry.Values.Count != 3)
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    entry,
+                    "Each SCHEMA_POPULATION external-file identification must contain exactly three values."));
+                continue;
+            }
+
+            if (!TryBindRequiredPopulationString(entry.Values[0], "location", diagnostics, out var locationText)
+                || !TryBindOptionalPopulationString(entry.Values[1], "time stamp", diagnostics, out var timeStamp)
+                || !TryBindOptionalPopulationString(entry.Values[2], "message digest", diagnostics, out var digest))
+            {
+                continue;
+            }
+
+            if (!Uri.TryCreate(locationText, UriKind.RelativeOrAbsolute, out var location)
+                || location.OriginalString.Length == 0)
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    entry.Values[0],
+                    $"SCHEMA_POPULATION location '{locationText}' is not a valid URI."));
+                continue;
+            }
+            if (timeStamp is not null && !Part21LexicalForms.TryParseTimeStamp(timeStamp, out _))
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    entry.Values[1],
+                    $"SCHEMA_POPULATION time stamp '{timeStamp}' is not a valid ISO date and time."));
+                continue;
+            }
+            if (digest is not null && !Part21LexicalForms.IsCanonicalBase64(digest))
+            {
+                diagnostics.Add(PopulationDiagnostic(
+                    entry.Values[2],
+                    "SCHEMA_POPULATION message digest must be Base64 encoded."));
+                continue;
+            }
+
+            result.Add(new SchemaPopulationExternalFile(location, timeStamp, digest));
+        }
+
+        return result.AsReadOnly();
+    }
+
+    private static bool TryBindRequiredPopulationString(
+        ValueSyntax value,
+        string role,
+        ICollection<Step21Diagnostic> diagnostics,
+        out string decoded)
+    {
+        if (value.Kind == Part21ValueKind.String && TryDecodeString(value, out decoded))
+            return true;
+
+        diagnostics.Add(PopulationDiagnostic(
+            value,
+            $"SCHEMA_POPULATION {role} must be a valid STRING."));
+        decoded = string.Empty;
+        return false;
+    }
+
+    private static bool TryBindOptionalPopulationString(
+        ValueSyntax value,
+        string role,
+        ICollection<Step21Diagnostic> diagnostics,
+        out string? decoded)
+    {
+        if (value.Kind == Part21ValueKind.Omitted)
+        {
+            decoded = null;
+            return true;
+        }
+        if (value.Kind == Part21ValueKind.String && TryDecodeString(value, out var text))
+        {
+            decoded = text;
+            return true;
+        }
+
+        diagnostics.Add(PopulationDiagnostic(
+            value,
+            $"SCHEMA_POPULATION {role} must be $ or a valid STRING."));
+        decoded = null;
+        return false;
     }
 
     private static string? BindPopulationString(
@@ -1060,6 +1224,8 @@ internal static class ExchangeStructureReader
         ValueSyntax value,
         string path,
         ExchangeStructure structure,
+        SchemaDescriptor receivingDescriptor,
+        DomainProjectionContext domainProjections,
         IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
         IReadOnlyDictionary<EntityInstanceName, SourceLocation> externalNames,
         ICollection<ValidationFailure> referenceFailures,
@@ -1072,7 +1238,7 @@ internal static class ExchangeStructureReader
             if (parsed && (entitiesByName.TryGetValue(name, out var entity)
                            || structure.TryGetEntity(name, out entity)))
             {
-                converted = ParameterValue.FromEntity(entity!);
+                converted = ParameterValue.FromEntity(domainProjections.Project(receivingDescriptor, entity!));
                 return true;
             }
 
@@ -1161,6 +1327,8 @@ internal static class ExchangeStructureReader
                         value.Values[index],
                         childPath,
                         structure,
+                        receivingDescriptor,
+                        domainProjections,
                         entitiesByName,
                         externalNames,
                         referenceFailures,
@@ -1319,6 +1487,134 @@ internal static class ExchangeStructureReader
             throw new InvalidOperationException($"The parser published invalid REAL text '{text}'.");
         return isNegative ? -value : value;
     }
+
+    private sealed class DomainProjectionContext(
+        ExchangeStructure structure,
+        IReadOnlyDictionary<Entity, IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>> physicalComponents)
+    {
+        private readonly Dictionary<Entity, Dictionary<SchemaDescriptor, Entity>> _projections =
+            new(ReferenceEqualityComparer.Instance);
+        private readonly List<DomainProjectionBinding> _pending = [];
+
+        internal Entity Project(SchemaDescriptor receivingDescriptor, Entity source)
+        {
+            if (receivingDescriptor.IsEntityReferenceCompatible(source))
+                return source;
+            if (_projections.TryGetValue(source, out var byDescriptor)
+                && byDescriptor.TryGetValue(receivingDescriptor, out var existing))
+            {
+                return existing;
+            }
+            if (!structure.TryAllocateDomainProjection(
+                    receivingDescriptor,
+                    source,
+                    out var projection,
+                    out var sourceDescriptor,
+                    out var equivalence))
+            {
+                return source;
+            }
+
+            byDescriptor ??= new Dictionary<SchemaDescriptor, Entity>(ReferenceEqualityComparer.Instance);
+            _projections[source] = byDescriptor;
+            byDescriptor.Add(receivingDescriptor, projection);
+            _pending.Add(new DomainProjectionBinding(
+                source,
+                sourceDescriptor,
+                projection,
+                receivingDescriptor,
+                equivalence));
+            return projection;
+        }
+
+        internal void Hydrate(ICollection<Step21Diagnostic> diagnostics)
+        {
+            for (var index = 0; index < _pending.Count; index++)
+            {
+                var binding = _pending[index];
+                try
+                {
+                    var sourceComponents = physicalComponents.TryGetValue(binding.Source, out var captured)
+                        ? captured
+                        : binding.SourceDescriptor.ProjectEntity(binding.Source);
+                    var sourceComponent = sourceComponents.SingleOrDefault(component => string.Equals(
+                        component.Key,
+                        binding.Equivalence.Target.EntityName,
+                        StringComparison.OrdinalIgnoreCase));
+                    if (sourceComponent.Key is null)
+                    {
+                        diagnostics.Add(new Step21Diagnostic(
+                            "P21-BIND-DOMAIN-PROJECTION",
+                            Step21DiagnosticSeverity.Error,
+                            $"Domain-equivalence source '{binding.Equivalence.Target}' has no matching physical component."));
+                        continue;
+                    }
+
+                    if (!structure.TryProjectDomainParameters(
+                            binding.Equivalence,
+                            sourceComponent.Value,
+                            out var suppliedParameters,
+                            out var projectionError))
+                    {
+                        diagnostics.Add(new Step21Diagnostic(
+                            "P21-BIND-DOMAIN-PROJECTION",
+                            Step21DiagnosticSeverity.Error,
+                            $"Domain projection '{binding.Equivalence.Target}' to "
+                                + $"'{binding.Equivalence.Source}' failed: {projectionError}"));
+                        continue;
+                    }
+
+                    var targetParameters = suppliedParameters
+                        .Select(parameter => ProjectParameter(binding.ReceivingDescriptor, parameter))
+                        .ToArray();
+                    var targetComponents = new[]
+                    {
+                        new KeyValuePair<string, IReadOnlyList<ParameterValue>>(
+                            binding.Equivalence.Source.EntityName.ToUpperInvariant(),
+                            targetParameters),
+                    };
+                    foreach (var diagnostic in binding.ReceivingDescriptor.HydrateEntity(
+                                 structure,
+                                 binding.Projection,
+                                 targetComponents))
+                    {
+                        diagnostics.Add(new Step21Diagnostic(
+                            "P21-BIND-DOMAIN-PROJECTION",
+                            diagnostic.Severity,
+                            $"Domain projection '{binding.Equivalence.Target}' to "
+                                + $"'{binding.Equivalence.Source}' failed: {diagnostic.Message}",
+                            diagnostic.SourceLocation));
+                    }
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-BIND-DOMAIN-PROJECTION",
+                        Step21DiagnosticSeverity.Error,
+                        $"Domain projection '{binding.Equivalence.Target}' to '{binding.Equivalence.Source}' failed: "
+                            + exception.Message));
+                }
+            }
+        }
+
+        private ParameterValue ProjectParameter(SchemaDescriptor receivingDescriptor, ParameterValue parameter)
+        {
+            if (parameter.TryGetEntity(out var entity))
+                return ParameterValue.FromEntity(Project(receivingDescriptor, entity!));
+            if (parameter.TryGetAggregate(out var values))
+                return ParameterValue.FromAggregate(values.Select(value => ProjectParameter(receivingDescriptor, value)));
+            if (parameter.TryGetTyped(out var typeName, out var inner))
+                return ParameterValue.FromTyped(typeName, ProjectParameter(receivingDescriptor, inner));
+            return parameter;
+        }
+    }
+
+    private sealed record DomainProjectionBinding(
+        Entity Source,
+        SchemaDescriptor SourceDescriptor,
+        Entity Projection,
+        SchemaDescriptor ReceivingDescriptor,
+        SchemaDomainEquivalence Equivalence);
 
     private sealed class EntityAllocation(
         EntityInstanceName name,

@@ -196,11 +196,9 @@ internal sealed class Ap214PackageTests
                 "--no-restore",
                 "--output",
                 packageDirectory);
-            PackageCache.Copy(
+            PackageCache.CopyProjectDependencies(
                 packageDirectory,
-                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
-                "antlr4.runtime.standard",
-                "4.13.1");
+                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"));
             File.WriteAllText(
                 nugetConfigPath,
                 $"""
@@ -494,9 +492,8 @@ internal sealed class Ap214PackageTests
                 "-o", repeatPackageDirectory);
             _ = await RunDotNet(repositoryRoot, "pack", ap203PackageProject, "-c", "Release", "--no-build",
                 "--no-restore", "-o", packageDirectory);
-            PackageCache.Copy(packageDirectory,
-                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"),
-                "antlr4.runtime.standard", "4.13.1");
+            PackageCache.CopyProjectDependencies(packageDirectory,
+                Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"));
 
             async Task<(string Output, string Intermediate)> BuildAndRun(bool fixture)
             {

@@ -273,8 +273,8 @@ public sealed class SignatureTests
     {
         const string childIdentity = "https://example.test/signatures/child.p21";
         var root = Unsigned.Replace(
-            "ENDSEC;\nEND-ISO-10303-21;",
-            "ENDSEC;\nREFERENCE;\n#1=<child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
+            "END-ISO-10303-21;",
+            "REFERENCE;\n#1=<child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
             StringComparison.Ordinal);
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -300,8 +300,8 @@ public sealed class SignatureTests
     {
         const string childIdentity = "https://example.test/signatures/malformed-child.p21";
         var root = Unsigned.Replace(
-            "ENDSEC;\nEND-ISO-10303-21;",
-            "ENDSEC;\nREFERENCE;\n#1=<malformed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
+            "END-ISO-10303-21;",
+            "REFERENCE;\n#1=<malformed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
             StringComparison.Ordinal);
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -540,8 +540,8 @@ public sealed class SignatureTests
     {
         const string childIdentity = "https://example.test/signatures/signed-child.p21";
         var root = Unsigned.Replace(
-            "ENDSEC;\nEND-ISO-10303-21;",
-            "ENDSEC;\nREFERENCE;\n#1=<signed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
+            "END-ISO-10303-21;",
+            "REFERENCE;\n#1=<signed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
             StringComparison.Ordinal);
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {

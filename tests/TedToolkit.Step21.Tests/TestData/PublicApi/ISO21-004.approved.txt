@@ -1,0 +1,81 @@
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Anchor> Anchors { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.SchemaPopulationDefinition> FilePopulations { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Reference> References { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.SchemaPopulationExternalFile> SchemaPopulation { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> SchemaPopulationEntities { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21ResourceSignatureReport> SignatureReports { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors, TedToolkit.Step21.ExchangeStructureReadOptions options)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+  method TedToolkit.Step21.ValidationResult Validate()
+  method System.Void Write(System.IO.TextWriter destination)
+  method System.Void Write(System.IO.TextWriter destination, TedToolkit.Step21.ExchangeStructureWriteOptions options)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity)
+sealed class TedToolkit.Step21.ExchangeStructureReadOptions : System.Object
+  constructor (System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+  property System.Uri? BaseUri { get; }
+  property TedToolkit.Step21.ISchemaDomainEquivalenceProvider? DomainEquivalenceProvider { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.SchemaDomainEquivalence> DomainEquivalences { get; }
+  property TedToolkit.Step21.IPart21ResourceConverter? ResourceConverter { get; }
+  property TedToolkit.Step21.Part21ResourceLimits ResourceLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceProvider? ResourceProvider { get; }
+  property TedToolkit.Step21.Part21SignatureVerificationOptions? SignatureVerification { get; }
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithDomainEquivalenceProvider(TedToolkit.Step21.ISchemaDomainEquivalenceProvider domainEquivalenceProvider, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithSignatureVerification(TedToolkit.Step21.Part21SignatureVerificationOptions signatureVerification, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+sealed class TedToolkit.Step21.SchemaDomainEquivalence : System.Object
+  constructor (TedToolkit.Step21.SchemaEntityType source, TedToolkit.Step21.SchemaEntityType target)
+  property TedToolkit.Step21.SchemaEntityType Source { get; }
+  property TedToolkit.Step21.SchemaEntityType Target { get; }
+interface TedToolkit.Step21.ISchemaDomainEquivalenceProvider
+  abstract method System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDomainEquivalence> GetEquivalences()
+  abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue> ProjectParameters(TedToolkit.Step21.SchemaEntityType source, TedToolkit.Step21.SchemaEntityType target, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue> sourceParameters)
+readonly struct TedToolkit.Step21.SchemaEntityType : System.ValueType
+  interface System.IEquatable<TedToolkit.Step21.SchemaEntityType>
+  constructor (TedToolkit.Step21.SchemaName schemaName, System.String entityName)
+  property System.String EntityName { get; }
+  property TedToolkit.Step21.SchemaName SchemaName { get; }
+  method System.Boolean Equals(System.Object? obj)
+  method System.Boolean Equals(TedToolkit.Step21.SchemaEntityType other)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+sealed class TedToolkit.Step21.SchemaPopulationDefinition : System.Object
+  constructor (TedToolkit.Step21.SchemaName schemaName, TedToolkit.Step21.SchemaPopulationDetermination determination, System.Collections.Generic.IEnumerable<System.String>? governedSectionNames = null)
+  property TedToolkit.Step21.SchemaPopulationDetermination Determination { get; }
+  property System.Collections.Generic.IReadOnlyList<System.String>? GovernedSectionNames { get; }
+  property TedToolkit.Step21.SchemaName SchemaName { get; }
+enum TedToolkit.Step21.SchemaPopulationDetermination
+  value SectionBoundary = 0
+  value IncludeAllCompatible = 1
+  value IncludeReferenced = 2
+enum TedToolkit.Step21.SchemaPopulationDigestStatus
+  value NotProvided = 0
+  value NotVerified = 1
+  value Verified = 2
+  value Mismatch = 3
+sealed class TedToolkit.Step21.SchemaPopulationExternalFile : System.Object
+  constructor (System.Uri location, System.String? timeStamp = null, System.String? messageDigest = null)
+  property TedToolkit.Step21.SchemaPopulationDigestStatus DigestStatus { get; set; }
+  property System.Uri Location { get; }
+  property System.String? MessageDigest { get; }
+  property TedToolkit.Step21.SchemaPopulationResourceStatus ResourceStatus { get; set; }
+  property TedToolkit.Step21.ExchangeStructure? Structure { get; set; }
+  property System.String? TimeStamp { get; }
+  property TedToolkit.Step21.SchemaPopulationTimestampStatus TimestampStatus { get; set; }
+enum TedToolkit.Step21.SchemaPopulationResourceStatus
+  value Unresolved = 0
+  value Missing = 1
+  value Resolved = 2
+enum TedToolkit.Step21.SchemaPopulationTimestampStatus
+  value NotProvided = 0
+  value NotVerified = 1
+  value Verified = 2

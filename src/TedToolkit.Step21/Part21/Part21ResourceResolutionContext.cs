@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace TedToolkit.Step21;
@@ -21,6 +22,10 @@ internal sealed class Part21ResourceResolutionContext
     private readonly IReadOnlyCollection<SchemaDescriptor> _descriptors;
     private readonly ExchangeStructureReadOptions _options;
     private readonly Dictionary<string, LoadedDocument?> _documents = new(StringComparer.Ordinal);
+    private readonly Dictionary<ExchangeStructure, List<ExchangeStructure>> _populationDependencies =
+        new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ExchangeStructure> _completedStructures = new(ReferenceEqualityComparer.Instance);
+    private readonly List<ExchangeStructure> _completionOrder = [];
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
     private readonly Stack<DocumentCacheTransaction> _cacheTransactions = new();
     private readonly Stack<LoadingDocumentAliases> _loadingAliases = new();
@@ -55,11 +60,142 @@ internal sealed class Part21ResourceResolutionContext
             document.Structure.Signatures))
         .ToArray();
 
+    internal void ConfigureStructure(ExchangeStructure structure) =>
+        structure.SetDomainEquivalenceProvider(
+            _options.DomainEquivalenceProvider,
+            _options.DomainEquivalences);
+
     internal void ResolveReferences(ExchangeStructure structure, DocumentAddress address, int depth)
     {
         EnsureDepth(depth);
         foreach (var reference in structure.ReferenceEntries)
             ResolveReference(structure, address, reference, depth);
+    }
+
+    internal void ResolveSchemaPopulation(ExchangeStructure structure, DocumentAddress address, int depth)
+    {
+        EnsureDepth(depth);
+        foreach (var externalFile in structure.SchemaPopulationExternalFiles)
+        {
+            var identity = externalFile.Location.IsAbsoluteUri
+                ? externalFile.Location
+                : ResolveExternalIdentity(address.BaseUri, externalFile.Location.OriginalString);
+            var document = AcquireProviderDocument(identity, depth + 1);
+            if (document is null)
+            {
+                externalFile.ResourceStatus = SchemaPopulationResourceStatus.Missing;
+                continue;
+            }
+
+            VerifySchemaPopulationDigest(structure, externalFile, document);
+            externalFile.Structure = document.Structure;
+            externalFile.ResourceStatus = SchemaPopulationResourceStatus.Resolved;
+            AddPopulationDependency(structure, document.Structure);
+            if (externalFile.TimeStamp is not null
+                && Part21LexicalForms.TryParseTimeStamp(externalFile.TimeStamp, out var visited)
+                && Part21LexicalForms.TryParseTimeStamp(
+                    document.Structure.Header.FileName.TimeStamp,
+                    out var created)
+                && visited.IsAfter(created))
+            {
+                externalFile.TimestampStatus = SchemaPopulationTimestampStatus.Verified;
+            }
+        }
+    }
+
+    private static void VerifySchemaPopulationDigest(
+        ExchangeStructure owner,
+        SchemaPopulationExternalFile externalFile,
+        LoadedDocument document)
+    {
+        if (externalFile.MessageDigest is null || owner.Signatures.Count == 0)
+            return;
+
+        var digest = Part21SignatureEngine.TryComputeDigest(
+            owner.Signatures[0].DigestAlgorithm,
+            document.DigestContent.Span);
+        if (digest is null)
+        {
+            throw new ExchangeStructureCapabilityException([
+                new Step21Diagnostic(
+                    "P21-CAP-SCHEMA-POPULATION-DIGEST",
+                    Step21DiagnosticSeverity.Error,
+                    $"The first signature digest algorithm '{owner.Signatures[0].DigestAlgorithm}' is not supported."),
+            ]);
+        }
+
+        var declared = Convert.FromBase64String(externalFile.MessageDigest);
+        externalFile.DigestStatus = CryptographicOperations.FixedTimeEquals(digest, declared)
+            ? SchemaPopulationDigestStatus.Verified
+            : SchemaPopulationDigestStatus.Mismatch;
+    }
+
+    internal void CompleteSchemaPopulation(ExchangeStructure structure)
+    {
+        var result = new List<ExchangeStructure>();
+        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { structure };
+        var pending = new Stack<ExchangeStructure>();
+        if (_populationDependencies.TryGetValue(structure, out var direct))
+        {
+            for (var index = direct.Count - 1; index >= 0; index--)
+                pending.Push(direct[index]);
+        }
+
+        while (pending.TryPop(out var current))
+        {
+            if (!_completedStructures.Contains(current) || !visited.Add(current))
+                continue;
+            result.Add(current);
+            if (!_populationDependencies.TryGetValue(current, out var children))
+                continue;
+            for (var index = children.Count - 1; index >= 0; index--)
+                pending.Push(children[index]);
+        }
+
+        structure.SetIncludedPopulationStructures(result);
+    }
+
+    internal void MarkDocumentCompleted(ExchangeStructure structure)
+    {
+        if (_completedStructures.Add(structure))
+            _completionOrder.Add(structure);
+        foreach (var completed in _completionOrder)
+            CompleteSchemaPopulation(completed);
+    }
+
+    internal ValidationResult ValidateCompletedDependencies(ExchangeStructure root)
+    {
+        var failures = new List<ValidationFailure>();
+        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { root };
+        var pending = new Stack<ExchangeStructure>();
+        if (_populationDependencies.TryGetValue(root, out var direct))
+        {
+            for (var index = direct.Count - 1; index >= 0; index--)
+                pending.Push(direct[index]);
+        }
+
+        var dependencyIndex = 0;
+        while (pending.TryPop(out var current))
+        {
+            if (!visited.Add(current))
+                continue;
+            foreach (var failure in current.Validate().Failures)
+            {
+                failures.Add(new ValidationFailure(
+                    failure.Code,
+                    $"SchemaPopulation[{dependencyIndex}].{failure.Path}",
+                    failure.Message,
+                    failure.SourceLocation));
+            }
+
+            dependencyIndex++;
+            if (!_populationDependencies.TryGetValue(current, out var children))
+                continue;
+            for (var index = children.Count - 1; index >= 0; index--)
+                pending.Push(children[index]);
+        }
+
+        return new ValidationResult(failures);
     }
 
     private void ResolveReference(
@@ -94,9 +230,13 @@ internal sealed class Part21ResourceResolutionContext
         structure.SetResolvedReference(reference, value ?? ParameterValue.Omitted);
     }
 
-    internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address)
+    internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address, string source)
     {
-        var document = new LoadedDocument(structure, address);
+        _populationDependencies.TryAdd(structure, []);
+        var document = new LoadedDocument(
+            structure,
+            address,
+            Part21SignatureEngine.EncodeCoveredCharacters(source));
         SetDocument(address.Key, document);
         if (_loadingAliases.TryPeek(out var loading)
             && loading.AddressKey == address.Key)
@@ -114,8 +254,24 @@ internal sealed class Part21ResourceResolutionContext
     {
         EnsureDepth(depth);
         var hash = resource.IndexOf('#');
-        if (hash < 0 || hash == resource.Length - 1)
+        if (hash < 0)
+        {
+            var populationDocument = LoadResourceDocument(address, resource, depth);
+            if (populationDocument is not null)
+                AddPopulationDependency(owner, populationDocument.Structure);
             return ParameterValue.Omitted;
+        }
+        if (hash == resource.Length - 1)
+        {
+            var pathWithoutFragment = resource[..hash];
+            if (pathWithoutFragment.Length > 0)
+            {
+                var populationDocument = LoadResourceDocument(address, pathWithoutFragment, depth);
+                if (populationDocument is not null)
+                    AddPopulationDependency(owner, populationDocument.Structure);
+            }
+            return ParameterValue.Omitted;
+        }
 
         var path = resource[..hash];
         var fragment = resource[(hash + 1)..];
@@ -139,10 +295,33 @@ internal sealed class Part21ResourceResolutionContext
 
         if (document is null)
             return ParameterValue.Omitted;
+        AddPopulationDependency(owner, document.Structure);
         var target = ResolveFragment(document.Structure, document.Address, fragment, depth);
         return IsSchemaCompatible(owner, document.Structure, target)
             ? target
             : ParameterValue.Omitted;
+    }
+
+    private LoadedDocument? LoadResourceDocument(DocumentAddress address, string path, int depth)
+    {
+        if (address.Container is not null && !Uri.TryCreate(path, UriKind.Absolute, out _))
+            return LoadContainerEntry(address, path, depth);
+
+        var identity = ResolveExternalIdentity(address.BaseUri, path);
+        return AcquireProviderDocument(identity, depth);
+    }
+
+    private void AddPopulationDependency(ExchangeStructure owner, ExchangeStructure target)
+    {
+        if (ReferenceEquals(owner, target))
+            return;
+        if (!_populationDependencies.TryGetValue(owner, out var dependencies))
+        {
+            dependencies = [];
+            _populationDependencies.Add(owner, dependencies);
+        }
+        if (!dependencies.Any(candidate => ReferenceEquals(candidate, target)))
+            dependencies.Add(target);
     }
 
     private ParameterValue ResolveFragment(
@@ -435,8 +614,9 @@ internal sealed class Part21ResourceResolutionContext
         var key = GetDocumentKey(identity, container, entryPath);
         var baseUri = identity.IsAbsoluteUri ? identity : null;
         var address = new DocumentAddress(key, baseUri, container, entryPath);
-        var structure = ExchangeStructureReader.Read(source, _descriptors, this, address, depth);
-        return new LoadedDocument(structure, address);
+        _ = ExchangeStructureReader.Read(source, _descriptors, this, address, depth);
+        return _documents[key]
+            ?? throw new InvalidOperationException("A completed resource read must retain its registered document.");
     }
 
     private static string GetDocumentKey(Uri identity, ResourceContainer? container, string? entryPath) =>
@@ -457,7 +637,7 @@ internal sealed class Part21ResourceResolutionContext
                     return true;
                 }
             }
-            return false;
+            return owner.IsDomainEquivalentTo(targetStructure, entity!);
         }
 
         return owner.Header.FileSchema.SchemaIdentifiers.Any(ownerIdentifier =>
@@ -1152,5 +1332,8 @@ internal sealed class Part21ResourceResolutionContext
     private sealed record CallbackFrame<T>(T Callback, CallbackFrame<T>? Parent)
         where T : class;
 
-    private sealed record LoadedDocument(ExchangeStructure Structure, DocumentAddress Address);
+    private sealed record LoadedDocument(
+        ExchangeStructure Structure,
+        DocumentAddress Address,
+        ReadOnlyMemory<byte> DigestContent);
 }

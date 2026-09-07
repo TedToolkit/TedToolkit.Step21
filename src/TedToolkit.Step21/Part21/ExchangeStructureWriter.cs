@@ -24,7 +24,10 @@ internal static class ExchangeStructureWriter
         TextWriter destination,
         ExchangeStructureWriteOptions? options)
     {
-        PreflightValidation(structure, additionalFailures: null);
+        PreflightValidation(
+            structure,
+            additionalFailures: null,
+            willSign: options is not null && options.Signers.Count > 0);
         if (structure.Signatures.Count > 0 && (options is null || options.Signers.Count == 0))
         {
             throw new ExchangeStructureCapabilityException([
@@ -99,7 +102,7 @@ internal static class ExchangeStructureWriter
                     "The entity is not registered in this exchange structure."),
             }
             : null;
-        PreflightValidation(structure, additionalFailures);
+        PreflightValidation(structure, additionalFailures, willSign: false);
         if (registration is null)
         {
             throw new InvalidOperationException("Successful write preflight requires a registered entity.");
@@ -112,19 +115,23 @@ internal static class ExchangeStructureWriter
 
     private static void PreflightValidation(
         ExchangeStructure structure,
-        IEnumerable<ValidationFailure>? additionalFailures)
+        IEnumerable<ValidationFailure>? additionalFailures,
+        bool willSign)
     {
         var validation = structure.Validate();
-        if (validation.IsValid && additionalFailures is null)
+        var validationFailures = validation.Failures.Where(failure =>
+            !willSign
+            || !string.Equals(
+                failure.Code,
+                "P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.SIGNATURE_REQUIRED",
+                StringComparison.Ordinal));
+        var failures = validationFailures.Concat(additionalFailures ?? []).ToArray();
+        if (failures.Length == 0)
         {
             return;
         }
 
-        var failures = validation.Failures.Concat(additionalFailures ?? []).ToArray();
-        if (failures.Length > 0)
-        {
-            throw new ExchangeStructureWriteValidationException(new ValidationResult(failures));
-        }
+        throw new ExchangeStructureWriteValidationException(new ValidationResult(failures));
     }
 
     private static IReadOnlyDictionary<EntityRegistration, ProjectedEntity> Project(
@@ -321,6 +328,15 @@ internal static class ExchangeStructureWriter
             .Append(");\nFILE_SCHEMA(")
             .Append(FormatStringList(header.FileSchema.SchemaIdentifiers))
             .Append(");\n");
+        if (structure.SchemaPopulationExternalFiles.Count > 0)
+        {
+            _ = builder.Append("SCHEMA_POPULATION((")
+                .Append(string.Join(",", structure.SchemaPopulationExternalFiles.Select(externalFile =>
+                    $"({FormatString(externalFile.Location.OriginalString)},"
+                    + $"{FormatOptionalString(externalFile.TimeStamp)},"
+                    + $"{FormatOptionalString(externalFile.MessageDigest)})")))
+                .Append("));\n");
+        }
         foreach (var population in structure.SchemaPopulations)
         {
             _ = builder.Append("FILE_POPULATION(")
@@ -440,6 +456,8 @@ internal static class ExchangeStructureWriter
 
     private static string FormatString(string value) =>
         ParameterValueFormatter.Format(ParameterValue.FromString(value), _ => default);
+
+    private static string FormatOptionalString(string? value) => value is null ? "$" : FormatString(value);
 
     private static string FormatStringList(IEnumerable<string> values) =>
         $"({string.Join(',', values.Select(FormatString))})";
