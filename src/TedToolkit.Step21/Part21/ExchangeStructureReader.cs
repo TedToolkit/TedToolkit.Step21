@@ -243,6 +243,8 @@ internal static class ExchangeStructureReader
         var validationResult = structure.Validate();
         if (!validationResult.IsValid)
             throw new ExchangeStructureReadValidationException(validationResult);
+        if (resolutionContext is not null && depth == 0)
+            structure.SetSignatureReports(resolutionContext.CreateSignatureReports());
 
         return structure;
     }

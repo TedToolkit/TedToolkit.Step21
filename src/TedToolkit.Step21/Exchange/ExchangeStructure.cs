@@ -25,6 +25,8 @@ public sealed class ExchangeStructure
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
     private readonly ReadOnlyDictionary<SchemaName, SchemaDescriptor> _schemaDescriptorsByName;
     private IReadOnlyList<Part21Signature> _signatures = Array.Empty<Part21Signature>();
+    private IReadOnlyList<Part21ResourceSignatureReport> _signatureReports =
+        Array.Empty<Part21ResourceSignatureReport>();
     private IReadOnlyList<SchemaPopulationDefinition> _schemaPopulations = Array.Empty<SchemaPopulationDefinition>();
     private List<Part21Anchor>? _anchors;
     private List<Part21Reference>? _references;
@@ -89,6 +91,9 @@ public sealed class ExchangeStructure
 
     /// <summary>Gets signature sections and their CMS signer results in physical order.</summary>
     public IReadOnlyList<Part21Signature> Signatures => _signatures;
+
+    /// <summary>Gets complete signature results for every signed resource in resolution order.</summary>
+    public IReadOnlyList<Part21ResourceSignatureReport> SignatureReports => _signatureReports;
 
     /// <summary>
     /// Gets a live read-only enumeration of registered entities in deterministic registration order.
@@ -646,6 +651,16 @@ public sealed class ExchangeStructure
     {
         ArgumentNullException.ThrowIfNull(signatures);
         _signatures = Array.AsReadOnly(signatures.ToArray());
+        _signatureReports = _signatures.Count == 0
+            ? Array.Empty<Part21ResourceSignatureReport>()
+            : Array.AsReadOnly<Part21ResourceSignatureReport>(
+                [new Part21ResourceSignatureReport("<reader>", _signatures)]);
+    }
+
+    internal void SetSignatureReports(IReadOnlyList<Part21ResourceSignatureReport> reports)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
+        _signatureReports = Array.AsReadOnly(reports.ToArray());
     }
 
     internal IReadOnlyList<Step21Diagnostic> GetSchemaDescriptorDiagnostics(SchemaName name)

@@ -305,7 +305,23 @@ internal static class Part21SignatureEngine
         foreach (var additional in verification.Loaded.Skip(options.TrustedRoots.Count))
             chain.ChainPolicy.ExtraStore.Add(additional);
         chain.ChainPolicy.ExtraStore.AddRange(embeddedCertificates);
-        return chain.Build(certificate)
+        if (!chain.Build(certificate) || chain.ChainElements.Count == 0)
+            return Part21SignatureTrustStatus.Untrusted;
+
+        var explicitFingerprints = new HashSet<string>(
+            verification.Loaded.Select(GetFingerprint).OfType<string>(),
+            StringComparer.Ordinal);
+        explicitFingerprints.UnionWith(embeddedCertificates.Cast<X509Certificate2>()
+            .Select(GetFingerprint)
+            .OfType<string>());
+        if (chain.ChainElements.Cast<X509ChainElement>().Any(element =>
+                !explicitFingerprints.Contains(GetFingerprint(element.Certificate)!)))
+        {
+            return Part21SignatureTrustStatus.Untrusted;
+        }
+
+        var chainRoot = chain.ChainElements[^1].Certificate;
+        return verification.IsTrustedRoot(GetFingerprint(chainRoot)!)
             ? Part21SignatureTrustStatus.Trusted
             : Part21SignatureTrustStatus.Untrusted;
     }
@@ -392,6 +408,9 @@ internal static class Part21SignatureEngine
             Loaded = options.TrustedRoots.Concat(options.AdditionalCertificates)
                 .Select(value => value.Load())
                 .ToArray();
+            TrustedRootFingerprints = options.TrustedRoots
+                .Select(static value => value.Fingerprint)
+                .ToHashSet(StringComparer.Ordinal);
             ExtraStore = new X509Certificate2Collection(Loaded);
         }
 
@@ -399,7 +418,11 @@ internal static class Part21SignatureEngine
 
         internal X509Certificate2[] Loaded { get; }
 
+        internal IReadOnlySet<string> TrustedRootFingerprints { get; }
+
         internal X509Certificate2Collection ExtraStore { get; }
+
+        internal bool IsTrustedRoot(string fingerprint) => TrustedRootFingerprints.Contains(fingerprint);
 
         public void Dispose()
         {

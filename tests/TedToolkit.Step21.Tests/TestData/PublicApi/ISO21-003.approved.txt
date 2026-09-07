@@ -6,6 +6,7 @@ sealed class TedToolkit.Step21.ExchangeStructure : System.Object
   property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
   property TedToolkit.Step21.HeaderSection Header { get; }
   property System.Collections.Generic.IList<TedToolkit.Step21.Part21Reference> References { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21ResourceSignatureReport> SignatureReports { get; }
   property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
   method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
   method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
@@ -43,6 +44,9 @@ sealed class TedToolkit.Step21.Part21Signature : System.Object
   property System.String DigestAlgorithm { get; }
   property System.ReadOnlyMemory<System.Byte>? MessageDigest { get; }
   property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21SignatureSignerResult> Signers { get; }
+sealed class TedToolkit.Step21.Part21ResourceSignatureReport : System.Object
+  property System.String ResourceIdentity { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
 sealed class TedToolkit.Step21.Part21SignatureAcceptancePolicy : System.Object
   constructor (System.Boolean acceptCryptographicallyInvalid = False, System.Boolean acceptUnknownSigner = False, System.Boolean acceptExpired = False, System.Boolean acceptRevoked = False, System.Boolean acceptUntrusted = False)
   property System.Boolean AcceptCryptographicallyInvalid { get; }

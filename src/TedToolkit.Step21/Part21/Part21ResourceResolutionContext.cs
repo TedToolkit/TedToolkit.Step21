@@ -45,6 +45,16 @@ internal sealed class Part21ResourceResolutionContext
 
     internal Part21SignatureVerificationOptions? SignatureVerification => _options.SignatureVerification;
 
+    internal IReadOnlyList<Part21ResourceSignatureReport> CreateSignatureReports() => _documents.Values
+        .Where(static document => document is not null)
+        .Select(static document => document!)
+        .DistinctBy(static document => document.Address.Key, StringComparer.Ordinal)
+        .Where(static document => document.Structure.Signatures.Count > 0)
+        .Select(static document => new Part21ResourceSignatureReport(
+            document.Address.ReportIdentity,
+            document.Structure.Signatures))
+        .ToArray();
+
     internal void ResolveReferences(ExchangeStructure structure, DocumentAddress address, int depth)
     {
         EnsureDepth(depth);
@@ -1114,7 +1124,12 @@ internal sealed class Part21ResourceResolutionContext
         string Key,
         Uri? BaseUri,
         ResourceContainer? Container,
-        string? EntryPath);
+        string? EntryPath)
+    {
+        internal string ReportIdentity => EntryPath is null
+            ? BaseUri?.AbsoluteUri ?? Key
+            : $"{Container!.Identity}!/{EntryPath}";
+    }
 
     internal sealed record ResourceContainer(
         Uri Identity,

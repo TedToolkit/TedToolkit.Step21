@@ -321,6 +321,62 @@ public sealed class SignatureTests
         await Assert.That(failure.Diagnostics.Any(value => value.Code == "P21-SIGNATURE-SYNTAX")).IsTrue();
     }
 
+    /// <summary>Publishes trusted and policy-accepted external results with their resource identity.</summary>
+    [Test]
+    public async Task Should_publish_complete_signature_reports_for_external_resources()
+    {
+        using var certificate = CreateCertificate("CN=External Report Signer");
+        using var otherRoot = CreateCertificate("CN=Other Root");
+        var signedChild = Sign(certificate);
+        var trusted = ReadExternalSignedResource(
+            signedChild,
+            Verification([certificate], new Part21SignatureAcceptancePolicy()));
+        var acceptedUntrusted = ReadExternalSignedResource(
+            signedChild,
+            Verification([otherRoot], new Part21SignatureAcceptancePolicy(acceptUntrusted: true)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(trusted.Signatures).IsEmpty();
+            await Assert.That(trusted.SignatureReports.Count).IsEqualTo(1);
+            await Assert.That(trusted.SignatureReports[0].ResourceIdentity)
+                .IsEqualTo("https://example.test/signatures/signed-child.p21");
+            await Assert.That(trusted.SignatureReports[0].Signatures[0].Signers[0].TrustStatus)
+                .IsEqualTo(Part21SignatureTrustStatus.Trusted);
+            await Assert.That(acceptedUntrusted.SignatureReports[0].Signatures[0].Signers[0].TrustStatus)
+                .IsEqualTo(Part21SignatureTrustStatus.Untrusted);
+        }
+    }
+
+    /// <summary>Accepts a chain only when every intermediate is supplied by the caller or CMS.</summary>
+    [Test]
+    public async Task Should_require_every_chain_certificate_to_be_explicit()
+    {
+        using var certificates = CreateCertificateChain();
+        var signed = Sign(certificates.Leaf);
+        var root = new Part21Certificate(certificates.Root.RawData);
+        var withoutIntermediate = ReadWith(
+            signed,
+            new Part21SignatureVerificationOptions(
+                VerificationTime,
+                [root],
+                acceptancePolicy: new Part21SignatureAcceptancePolicy(acceptUntrusted: true)));
+        var withIntermediate = ReadWith(
+            signed,
+            new Part21SignatureVerificationOptions(
+                VerificationTime,
+                [root],
+                additionalCertificates: [new Part21Certificate(certificates.Intermediate.RawData)]));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(withoutIntermediate.Signatures[0].Signers[0].TrustStatus)
+                .IsEqualTo(Part21SignatureTrustStatus.Untrusted);
+            await Assert.That(withIntermediate.Signatures[0].Signers[0].TrustStatus)
+                .IsEqualTo(Part21SignatureTrustStatus.Trusted);
+        }
+    }
+
     /// <summary>Applies the explicit evaluated-state acceptance policy before model publication.</summary>
     [Test]
     public async Task Should_apply_rejection_policy_before_publishing_a_structure()
@@ -478,6 +534,31 @@ public sealed class SignatureTests
             Descriptors,
             ExchangeStructureReadOptions.WithSignatureVerification(verification));
 
+    private static ExchangeStructure ReadExternalSignedResource(
+        string signedChild,
+        Part21SignatureVerificationOptions verification)
+    {
+        const string childIdentity = "https://example.test/signatures/signed-child.p21";
+        var root = Unsigned.Replace(
+            "ENDSEC;\nEND-ISO-10303-21;",
+            "ENDSEC;\nREFERENCE;\n#1=<signed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
+            StringComparison.Ordinal);
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(signedChild)),
+        });
+        return ExchangeStructure.Read(
+            new StringReader(root),
+            Descriptors,
+            ExchangeStructureReadOptions.WithSignatureVerification(
+                verification,
+                new Uri("https://example.test/signatures/root.p21"),
+                provider));
+    }
+
     private static Part21SignatureVerificationOptions Verification(
         IEnumerable<X509Certificate2> roots,
         Part21SignatureAcceptancePolicy policy,
@@ -501,6 +582,52 @@ public sealed class SignatureTests
         return certificate.CopyWithPrivateKey(privateKey);
     }
 
+    private static CertificateChainFixture CreateCertificateChain()
+    {
+        var notBefore = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var notAfter = new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        using var rootKey = RSA.Create(2048);
+        var rootRequest = CreateCertificateRequest("CN=Explicit Root", rootKey, isCertificateAuthority: true);
+        using var rootWithKey = rootRequest.CreateSelfSigned(notBefore, notAfter);
+        var root = X509CertificateLoader.LoadCertificate(rootWithKey.RawData);
+
+        using var intermediateKey = RSA.Create(2048);
+        var intermediateRequest = CreateCertificateRequest(
+            "CN=Explicit Intermediate",
+            intermediateKey,
+            isCertificateAuthority: true);
+        using var intermediatePublic = intermediateRequest.Create(
+            rootWithKey,
+            notBefore,
+            notAfter,
+            [1]);
+        using var intermediateWithKey = intermediatePublic.CopyWithPrivateKey(intermediateKey);
+        var intermediate = X509CertificateLoader.LoadCertificate(intermediatePublic.RawData);
+
+        using var leafKey = RSA.Create(2048);
+        var leafRequest = CreateCertificateRequest("CN=Explicit Leaf", leafKey, isCertificateAuthority: false);
+        using var leafPublic = leafRequest.Create(intermediateWithKey, notBefore, notAfter, [2]);
+        var leaf = leafPublic.CopyWithPrivateKey(leafKey);
+        return new CertificateChainFixture(root, intermediate, leaf);
+    }
+
+    private static CertificateRequest CreateCertificateRequest(string subject, RSA key, bool isCertificateAuthority)
+    {
+        var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            isCertificateAuthority,
+            hasPathLengthConstraint: isCertificateAuthority,
+            pathLengthConstraint: isCertificateAuthority ? 1 : 0,
+            critical: true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            isCertificateAuthority
+                ? X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign
+                : X509KeyUsageFlags.DigitalSignature,
+            critical: true));
+        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+        return request;
+    }
+
     private const string Unsigned = """
         ISO-10303-21;
         HEADER;
@@ -514,6 +641,25 @@ public sealed class SignatureTests
     private sealed class EmptySigner : IPart21SignatureSigner
     {
         public ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content) => ReadOnlyMemory<byte>.Empty;
+    }
+
+    private sealed class CertificateChainFixture(
+        X509Certificate2 root,
+        X509Certificate2 intermediate,
+        X509Certificate2 leaf) : IDisposable
+    {
+        internal X509Certificate2 Root { get; } = root;
+
+        internal X509Certificate2 Intermediate { get; } = intermediate;
+
+        internal X509Certificate2 Leaf { get; } = leaf;
+
+        public void Dispose()
+        {
+            Root.Dispose();
+            Intermediate.Dispose();
+            Leaf.Dispose();
+        }
     }
 
     private sealed class RecordingSigner(IPart21SignatureSigner inner) : IPart21SignatureSigner

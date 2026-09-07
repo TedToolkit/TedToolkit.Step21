@@ -10,7 +10,10 @@ alphabet, including any earlier signature section; excluded control characters d
   values atomically. Without verification options, a complete structure is published with `NotEvaluated` results.
 - `Part21SignatureVerificationOptions` snapshots the verification time, custom trust roots, additional certificates,
   caller-declared revoked certificates, and evaluated-state acceptance policy. Verification disables certificate
-  downloads and machine trust, uses only the supplied custom roots, and never performs online revocation checks.
+  downloads, rejects any chain containing a certificate absent from explicit or embedded inputs, uses only the
+  supplied custom roots, and never performs online revocation checks.
+- `SignatureReports` publishes each signed root or external resource's identity and complete signature results in
+  deterministic resolution order, including results accepted by policy.
 - Cryptographic status and trust status are independent. Results distinguish invalid signatures, unknown signers,
   expired/not-yet-valid certificates, caller-declared revocation, untrusted chains, and trusted chains.
 - Writing a signed structure requires explicit `ExchangeStructureWriteOptions` signers. The writer buffers and validates

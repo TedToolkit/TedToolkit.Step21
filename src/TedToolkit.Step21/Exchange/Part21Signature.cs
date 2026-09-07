@@ -123,3 +123,23 @@ public sealed class Part21Signature
     /// <summary>Gets every CMS signer result in encoded order.</summary>
     public IReadOnlyList<Part21SignatureSignerResult> Signers => _signers;
 }
+
+/// <summary>Reports every signature evaluated for one root or external Part 21 resource.</summary>
+public sealed class Part21ResourceSignatureReport
+{
+    private readonly ReadOnlyCollection<Part21Signature> _signatures;
+
+    internal Part21ResourceSignatureReport(
+        string resourceIdentity,
+        IEnumerable<Part21Signature> signatures)
+    {
+        ResourceIdentity = resourceIdentity;
+        _signatures = Array.AsReadOnly(signatures.ToArray());
+    }
+
+    /// <summary>Gets the stable root, URI, or archive-entry identity used by the read operation.</summary>
+    public string ResourceIdentity { get; }
+
+    /// <summary>Gets the resource's signature sections in physical order.</summary>
+    public IReadOnlyList<Part21Signature> Signatures => _signatures;
+}
