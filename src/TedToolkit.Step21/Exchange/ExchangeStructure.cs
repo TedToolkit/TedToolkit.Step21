@@ -1347,9 +1347,12 @@ public sealed class ExchangeStructure
     {
         var selected = new HashSet<Entity>(entries.Select(entry => entry.Entity), ReferenceEqualityComparer.Instance);
         var hasOutsideReference = entries.Any(entry => entry.Entity.DirectReferences.Any(reference =>
-            reference is not null
-            && populationEntities.Contains(reference)
-            && !selected.Contains(reference)));
+        {
+            if (reference is null)
+                return false;
+            var canonical = entry.Owner.GetCanonicalPopulationEntity(reference);
+            return populationEntities.Contains(canonical) && !selected.Contains(canonical);
+        }));
         var allDirectlyGoverned = entries.All(entry =>
         {
             var owner = descriptorsBySection[entry.DataSection];
@@ -1580,10 +1583,26 @@ public sealed class ExchangeStructure
                          projectedEntities[entry.Entity],
                          components))
             {
-                failures.Add(new ValidationFailure(
-                    "P21.POPULATION.PROJECTION",
-                    entry.Path,
-                    diagnostic.Message));
+                if (diagnostic.Code == "P21-BIND-PARAMETER"
+                    && TryGetHydrationParameterIndex(diagnostic.Message, out var parameterIndex)
+                    && projectedComponents[entry.Entity].Any(component =>
+                        parameterIndex < component.Value.Count
+                        && entry.Owner.ContainsOutsidePopulationReference(
+                            component.Value[parameterIndex],
+                            projectedEntities)))
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.POPULATION.REFERENCE.UNSET",
+                        $"{entry.Path}.Parameters[{parameterIndex}]",
+                        "A required reference is outside the schema instance population and therefore behaves as unset."));
+                }
+                else
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.POPULATION.PROJECTION",
+                        entry.Path,
+                        diagnostic.Message));
+                }
             }
         }
 
@@ -1653,6 +1672,18 @@ public sealed class ExchangeStructure
         if (value.TryGetAggregate(out var values))
             return values.Any(ContainsDomainProjection);
         return value.TryGetTyped(out _, out var inner) && ContainsDomainProjection(inner);
+    }
+
+    private bool ContainsOutsidePopulationReference(
+        ParameterValue value,
+        IReadOnlyDictionary<Entity, Entity> populationEntities)
+    {
+        if (value.TryGetEntity(out var entity))
+            return !populationEntities.ContainsKey(GetCanonicalPopulationEntity(entity!));
+        if (value.TryGetAggregate(out var values))
+            return values.Any(item => ContainsOutsidePopulationReference(item, populationEntities));
+        return value.TryGetTyped(out _, out var inner)
+            && ContainsOutsidePopulationReference(inner, populationEntities);
     }
 
     private static bool TryGetHydrationParameterIndex(string message, out int parameterIndex)

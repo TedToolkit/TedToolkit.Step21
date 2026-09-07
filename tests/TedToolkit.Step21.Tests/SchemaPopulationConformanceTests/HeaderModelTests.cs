@@ -65,6 +65,18 @@ public sealed class HeaderModelTests
         END_SCHEMA;
         """;
 
+    private const string LONGB_REFERENCE_SCHEMA = """
+        SCHEMA longb;
+        ENTITY b;
+          name : STRING;
+        END_ENTITY;
+        ENTITY c;
+          addressed_item : b;
+          address : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>Retains public SCHEMA_POPULATION and FILE_POPULATION models through canonical writing.</summary>
     [Test]
     public async Task Should_read_edit_write_and_reread_population_declarations()
@@ -708,6 +720,44 @@ public sealed class HeaderModelTests
         }
     }
 
+    /// <summary>Treats a domain-projected reference outside a section-boundary population as unset.</summary>
+    [Test]
+    public async Task Should_canonicalize_domain_projected_references_when_detecting_population_boundaries()
+    {
+        var longaB = new SchemaEntityType(new SchemaName("longa"), "b");
+        var longbB = new SchemaEntityType(new SchemaName("longb"), "b");
+        SchemaDomainEquivalence[] equivalences = [
+            new(longaB, longbB),
+            new(longbB, longaB),
+        ];
+        var source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('Annex E projected boundary'),'4;2');
+            FILE_NAME('annex-e.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('LONGA','LONGB'));
+            FILE_POPULATION('LONGB','SECTION_BOUNDARY',('TWO'));
+            ENDSEC;
+            DATA('ONE',('LONGA'));
+            #1=B('Sam Smith');
+            ENDSEC;
+            DATA('TWO',('LONGB'));
+            #2=C(#1,'100 Main Street');
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        var failure = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader(source),
+            CreateAnnexEDescriptors(LONGB_REFERENCE_SCHEMA),
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                new IdentityDomainEquivalenceProvider(equivalences))));
+
+        var unsetReference = failure.ValidationResult.Failures.Single(item =>
+            item.Code == "P21.POPULATION.REFERENCE.UNSET");
+        await Assert.That(unsetReference.Path).IsEqualTo("DataSections[1].#2.Parameters[0]");
+    }
+
     /// <summary>Rejects invalid caller parameter projections before publishing the exchange structure.</summary>
     [Test]
     public async Task Should_reject_invalid_domain_equivalence_parameter_projections_atomically()
@@ -895,11 +945,11 @@ public sealed class HeaderModelTests
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!).ToArray();
     }
 
-    private static IReadOnlyCollection<SchemaDescriptor> CreateAnnexEDescriptors()
+    private static IReadOnlyCollection<SchemaDescriptor> CreateAnnexEDescriptors(string? longbSchema = null)
     {
         var result = GeneratorHostTests.Run(
             ("schemas/longa.exp", LONGA_SCHEMA),
-            ("schemas/longb.exp", LONGB_SCHEMA));
+            ("schemas/longb.exp", longbSchema ?? LONGB_SCHEMA));
         var diagnostics = result.Diagnostics
             .Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
