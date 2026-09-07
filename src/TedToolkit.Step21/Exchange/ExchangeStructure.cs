@@ -1503,9 +1503,16 @@ public sealed class ExchangeStructure
             var owner = descriptorsBySection[entry.DataSection];
             var sourceComponents = owner.ProjectEntity(entry.Entity);
             IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components;
+            SchemaDescriptor projectionDescriptor;
             if (SchemaIdentifiersAssociate(owner.Name, governingDescriptor.Name))
             {
                 components = sourceComponents;
+                projectionDescriptor = governingDescriptor;
+            }
+            else if (governingDescriptor.IsEntityReferenceCompatible(entry.Entity))
+            {
+                components = sourceComponents;
+                projectionDescriptor = owner;
             }
             else
             {
@@ -1551,9 +1558,10 @@ public sealed class ExchangeStructure
                         equivalence.Source.EntityName.ToUpperInvariant(),
                         projectedParameters),
                 ];
+                projectionDescriptor = governingDescriptor;
             }
 
-            var clone = governingDescriptor.AllocateEntity(components.Select(component => component.Key).ToArray());
+            var clone = projectionDescriptor.AllocateEntity(components.Select(component => component.Key).ToArray());
             if (components.Count == 0 || clone is null)
             {
                 failures.Add(new ValidationFailure(
@@ -1570,6 +1578,11 @@ public sealed class ExchangeStructure
 
         foreach (var entry in entries.Where(entry => projectedEntities.ContainsKey(entry.Entity)))
         {
+            var owner = descriptorsBySection[entry.DataSection];
+            var projectionDescriptor = !SchemaIdentifiersAssociate(owner.Name, governingDescriptor.Name)
+                && governingDescriptor.IsEntityReferenceCompatible(entry.Entity)
+                    ? owner
+                    : governingDescriptor;
             var components = projectedComponents[entry.Entity]
                 .Select(component => new KeyValuePair<string, IReadOnlyList<ParameterValue>>(
                     component.Key,
@@ -1578,7 +1591,7 @@ public sealed class ExchangeStructure
                             projectedEntities,
                             $"{entry.Path}.Parameters[{index}]")).ToArray()))
                 .ToArray();
-            foreach (var diagnostic in governingDescriptor.HydrateEntity(
+            foreach (var diagnostic in projectionDescriptor.HydrateEntity(
                          projected,
                          projectedEntities[entry.Entity],
                          components))

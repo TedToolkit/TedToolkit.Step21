@@ -77,6 +77,24 @@ public sealed class HeaderModelTests
         END_SCHEMA;
         """;
 
+    private const string INTERFACE_BASE_SCHEMA = """
+        SCHEMA base_model;
+        ENTITY address;
+          label : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string INTERFACE_EXTENSION_SCHEMA = """
+        SCHEMA extension_model;
+        USE FROM base_model (address);
+        ENTITY person;
+          name : STRING;
+          address_ref : address;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>Retains public SCHEMA_POPULATION and FILE_POPULATION models through canonical writing.</summary>
     [Test]
     public async Task Should_read_edit_write_and_reread_population_declarations()
@@ -471,6 +489,61 @@ public sealed class HeaderModelTests
 
         await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code))
             .Contains("POPULATION_MODEL.RULE.AT_MOST_ONE.WHERE.SINGLE");
+    }
+
+    /// <summary>Accepts external population members made compatible by an EXPRESS interface.</summary>
+    [Test]
+    public async Task Should_validate_external_interface_compatible_population_members_without_domain_equivalence()
+    {
+        const string childIdentity = "https://example.test/interface/child.p21";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('interface child'),'4;1');
+                    FILE_NAME('child.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('BASE_MODEL'));
+                    ENDSEC;
+                    DATA;
+                    #1=ADDRESS('home');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+
+        var structure = ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('external interface population'),'4;2');
+                FILE_NAME('root.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('EXTENSION_MODEL'));
+                SCHEMA_POPULATION((('child.p21',$,$)));
+                FILE_POPULATION('EXTENSION_MODEL','SECTION_BOUNDARY',$);
+                ENDSEC;
+                REFERENCE;
+                #1=<child.p21#1>;
+                ENDSEC;
+                DATA;
+                #2=PERSON('Ada',#1);
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateInterfaceDescriptors(),
+            new ExchangeStructureReadOptions(
+                new Uri("https://example.test/interface/root.p21"),
+                provider));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.Validate().IsValid).IsTrue();
+            await Assert.That(structure.SchemaPopulationEntities.Count()).IsEqualTo(2);
+            await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
+        }
     }
 
     /// <summary>Resolves explicit governed-section names against the completed external population graph.</summary>
@@ -919,54 +992,41 @@ public sealed class HeaderModelTests
     private static SchemaDescriptor CreateDescriptor() => CreateDescriptors().Single(descriptor =>
         descriptor.Name.Equals(new SchemaName("population_model")));
 
-    private static IReadOnlyCollection<SchemaDescriptor> CreateDescriptors()
-    {
-        var result = GeneratorHostTests.Run(
-            ("schemas/population.exp", SCHEMA),
-            ("schemas/other.exp", OTHER_SCHEMA));
-        var diagnostics = result.Diagnostics
-            .Concat(result.OutputCompilation.GetDiagnostics())
-            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
-            .ToArray();
-        if (diagnostics.Length > 0)
-            throw new InvalidOperationException(string.Join(Environment.NewLine, diagnostics.AsEnumerable()));
+    private static IReadOnlyCollection<SchemaDescriptor> CreateDescriptors() => CreateGeneratedDescriptors(
+        [("schemas/population.exp", SCHEMA), ("schemas/other.exp", OTHER_SCHEMA)],
+        "TedToolkit.Step21.Generated.PopulationModel.SchemaDescriptor",
+        "TedToolkit.Step21.Generated.OtherModel.SchemaDescriptor");
 
-        using var stream = new MemoryStream();
-        var emit = result.OutputCompilation.Emit(stream);
-        if (!emit.Success)
-            throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
-        var assembly = System.Reflection.Assembly.Load(stream.ToArray());
-        return new[]
-        {
-            "TedToolkit.Step21.Generated.PopulationModel.SchemaDescriptor",
-            "TedToolkit.Step21.Generated.OtherModel.SchemaDescriptor",
-        }.Select(typeName => (SchemaDescriptor)assembly.GetType(
-            typeName,
-            throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!).ToArray();
-    }
-
-    private static IReadOnlyCollection<SchemaDescriptor> CreateAnnexEDescriptors(string? longbSchema = null)
-    {
-        var result = GeneratorHostTests.Run(
-            ("schemas/longa.exp", LONGA_SCHEMA),
-            ("schemas/longb.exp", longbSchema ?? LONGB_SCHEMA));
-        var diagnostics = result.Diagnostics
-            .Concat(result.OutputCompilation.GetDiagnostics())
-            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
-            .ToArray();
-        if (diagnostics.Length > 0)
-            throw new InvalidOperationException(string.Join(Environment.NewLine, diagnostics.AsEnumerable()));
-
-        using var stream = new MemoryStream();
-        var emit = result.OutputCompilation.Emit(stream);
-        if (!emit.Success)
-            throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
-        var assembly = System.Reflection.Assembly.Load(stream.ToArray());
-        return new[]
-        {
+    private static IReadOnlyCollection<SchemaDescriptor> CreateAnnexEDescriptors(string? longbSchema = null) =>
+        CreateGeneratedDescriptors(
+            [("schemas/longa.exp", LONGA_SCHEMA), ("schemas/longb.exp", longbSchema ?? LONGB_SCHEMA)],
             "TedToolkit.Step21.Generated.Longa.SchemaDescriptor",
-            "TedToolkit.Step21.Generated.Longb.SchemaDescriptor",
-        }.Select(typeName => (SchemaDescriptor)assembly.GetType(
+            "TedToolkit.Step21.Generated.Longb.SchemaDescriptor");
+
+    private static IReadOnlyCollection<SchemaDescriptor> CreateInterfaceDescriptors() => CreateGeneratedDescriptors(
+        [("schemas/base_model.exp", INTERFACE_BASE_SCHEMA),
+            ("schemas/extension_model.exp", INTERFACE_EXTENSION_SCHEMA)],
+        "TedToolkit.Step21.Generated.BaseModel.SchemaDescriptor",
+        "TedToolkit.Step21.Generated.ExtensionModel.SchemaDescriptor");
+
+    private static IReadOnlyCollection<SchemaDescriptor> CreateGeneratedDescriptors(
+        (string Path, string Text)[] sources,
+        params string[] descriptorTypeNames)
+    {
+        var result = GeneratorHostTests.Run(sources);
+        var diagnostics = result.Diagnostics
+            .Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        if (diagnostics.Length > 0)
+            throw new InvalidOperationException(string.Join(Environment.NewLine, diagnostics.AsEnumerable()));
+
+        using var stream = new MemoryStream();
+        var emit = result.OutputCompilation.Emit(stream);
+        if (!emit.Success)
+            throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
+        var assembly = System.Reflection.Assembly.Load(stream.ToArray());
+        return descriptorTypeNames.Select(typeName => (SchemaDescriptor)assembly.GetType(
             typeName,
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!).ToArray();
     }
