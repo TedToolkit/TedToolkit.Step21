@@ -5,7 +5,7 @@ namespace TedToolkit.Step21.Tests.ExchangeStructureTests;
 internal sealed class PublicContractTests
 {
     /// <summary>
-    /// Verifies the exact section-required Add/Remove, validation, and construction surface with no Replace operation.
+    /// Verifies the exact Add/Remove, validation, construction, and explicit signed-write surface.
     /// </summary>
     [Test]
     public async Task Should_expose_only_approved_exchange_structure_operations()
@@ -31,6 +31,7 @@ internal sealed class PublicContractTests
                 "Remove(EntityInstanceName) -> Boolean",
                 "Validate() -> ValidationResult",
                 "Write(TextWriter) -> Void",
+                "Write(TextWriter, ExchangeStructureWriteOptions) -> Void",
                 "WriteEntity(TextWriter, Entity) -> Void",
             ]);
             await Assert.That(type.GetMethod("Replace")).IsNull();

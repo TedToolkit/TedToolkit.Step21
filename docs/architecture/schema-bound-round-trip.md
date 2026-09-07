@@ -166,7 +166,7 @@ Writing is a model operation driven by generated schema metadata, not general ob
 
 The standard permits references before definitions and does not require entity instances to be ordered. The default canonical writer orders local entity instances by canonical instance name for reproducibility; this is an output policy, not a semantic requirement.
 
-The delivered operational set is intentionally narrower than the complete Edition 3 document syntax. Anchor resolution, external resource retrieval, and signature verification remain explicit capability failures. Validation executes the supported statically generated validation-reachable EXPRESS closure; it does not expose a general EXPRESS interpreter.
+The delivered operational set is intentionally narrower than the complete Edition 3 document syntax. Anchor resolution, external resource retrieval, and detached CMS signature verification use explicit caller-owned resource, trust, time, and signing inputs. Validation executes the supported statically generated validation-reachable EXPRESS closure; it does not expose a general EXPRESS interpreter.
 
 ### Public lifecycle and atomic boundaries
 

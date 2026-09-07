@@ -43,6 +43,8 @@ internal sealed class Part21ResourceResolutionContext
         Container: null,
         EntryPath: null);
 
+    internal Part21SignatureVerificationOptions? SignatureVerification => _options.SignatureVerification;
+
     internal void ResolveReferences(ExchangeStructure structure, DocumentAddress address, int depth)
     {
         EnsureDepth(depth);
@@ -659,8 +661,12 @@ internal sealed class Part21ResourceResolutionContext
 
     private static bool IsExternalStructureFailure(Exception exception) =>
         exception is ExchangeStructureSyntaxException
-            or ExchangeStructureBindingException
-            or ExchangeStructureReadValidationException;
+            || exception is ExchangeStructureBindingException binding
+                && binding.Diagnostics.All(diagnostic =>
+                    !diagnostic.Code.StartsWith("P21-SIGNATURE-", StringComparison.Ordinal))
+            || exception is ExchangeStructureReadValidationException validation
+                && validation.ValidationResult.Failures.All(failure =>
+                    !failure.Code.StartsWith("P21.SIGNATURE.", StringComparison.Ordinal));
 
     private static bool IsEncodingFailure(Exception exception) =>
         exception is ExchangeStructureCapabilityException capability

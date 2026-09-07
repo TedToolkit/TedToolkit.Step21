@@ -13,6 +13,7 @@ This index states what the current package delivers, what the grammars recognize
 | Atomic simple read, same-schema sections, local references, and multi-schema populations | [simple read](atomic-simple-read.md), [same-schema sections](same-schema-data-sections.md), [reference hydration](reference-hydration.md), [multi-schema populations](multi-schema-populations.md) |
 | Edition 3 anchors, occurrence identities, UUID mapping, and schema-neutral reference declarations | [anchor/occurrence/UUID semantics](anchor-occurrence-uuid.md) |
 | Explicit distributed reference, directory, and ZIP resolution | [distributed resource resolution](distributed-resource-resolution.md) |
+| Detached CMS signature decoding, explicit trust verification, and atomic signing | [CMS signatures](cms-signatures.md) |
 | Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
 
@@ -23,7 +24,6 @@ Repository-owned semantic round-trip fixtures compare entity identity, generated
 | Facility | Observable boundary |
 | --- | --- |
 | EXPRESS constant occurrences | Constant occurrence names remain a separately tracked DATA-binding capability. |
-| `SIGNATURE` sections | Parsing succeeds; signature verification reports `P21-CAP-SIGNATURE`. |
 
 These are operational capability failures, not syntax errors. The public `ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.
 

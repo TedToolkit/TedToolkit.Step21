@@ -115,7 +115,8 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 ## Explicit limits
 
 - Physical anchor items, tags, all four occurrence-name categories, UUID anchor identity, and schema-neutral `REFERENCE` declarations can be read, edited, validated, canonically written, and reread; see the [conformance record](https://github.com/TedToolkit/TedToolkit.Step21/blob/main/docs/conformance/anchor-occurrence-uuid.md).
-- External resource acquisition is opt-in through per-read capabilities; local fragments, external clear text, in-memory directories, ZIP roots/subsidiaries, UUID registry responses, and other-format conversion are supported. The legacy overload keeps unresolved-reference diagnostics, and no overload performs implicit I/O. Signature verification remains unsupported.
+- External resource acquisition is opt-in through per-read capabilities; local fragments, external clear text, in-memory directories, ZIP roots/subsidiaries, UUID registry responses, and other-format conversion are supported. The legacy overload keeps unresolved-reference diagnostics, and no overload performs implicit I/O.
+- Signature sections are decoded as detached CMS. Optional per-read verification uses only explicit time, certificates, revocation input, custom roots, and acceptance policy; signed writing requires explicit signers and remains zero-output atomic on failure.
 - Complex mappings outside the documented flat `ANDOR` form and SDAI domain-equivalence metadata are unsupported.
 - This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.

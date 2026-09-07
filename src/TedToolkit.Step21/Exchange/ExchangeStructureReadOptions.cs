@@ -143,7 +143,8 @@ public sealed class ExchangeStructureReadOptions
         Uri? baseUri = null,
         IPart21ResourceProvider? resourceProvider = null,
         IPart21ResourceConverter? resourceConverter = null,
-        Part21ResourceLimits? resourceLimits = null)
+        Part21ResourceLimits? resourceLimits = null,
+        Part21SignatureVerificationOptions? signatureVerification = null)
     {
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
@@ -152,6 +153,7 @@ public sealed class ExchangeStructureReadOptions
         ResourceProvider = resourceProvider;
         ResourceConverter = resourceConverter;
         ResourceLimits = resourceLimits ?? new Part21ResourceLimits();
+        SignatureVerification = signatureVerification;
     }
 
     /// <summary>Gets the optional absolute identity of the character source.</summary>
@@ -165,4 +167,7 @@ public sealed class ExchangeStructureReadOptions
 
     /// <summary>Gets the per-read resource limits.</summary>
     public Part21ResourceLimits ResourceLimits { get; }
+
+    /// <summary>Gets the optional explicit CMS certificate, time, revocation, and acceptance inputs.</summary>
+    public Part21SignatureVerificationOptions? SignatureVerification { get; }
 }
