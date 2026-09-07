@@ -103,7 +103,6 @@ public sealed class ExchangeStructure
     /// <param name="schemaDescriptors">The generated schema descriptors available to the closed read operation.</param>
     /// <returns>A complete validated mutable exchange structure.</returns>
     /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The descriptor set contains duplicate schema names.</exception>
     /// <exception cref="ArgumentException">
     /// A descriptor name is invalid or resolves to the same nominal binding identifier as another descriptor. This is
     /// detected before <paramref name="source"/> is consumed.
@@ -139,6 +138,10 @@ public sealed class ExchangeStructure
     /// <param name="options">The per-read base identity, resource capabilities, and limits.</param>
     /// <returns>A complete validated mutable exchange structure.</returns>
     /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A descriptor name is invalid or resolves to the same nominal binding identifier as another descriptor. This is
+    /// detected before <paramref name="source"/> is consumed.
+    /// </exception>
     /// <exception cref="ExchangeStructureCapabilityException">
     /// A required provider or converter is absent, re-enters reading, or exceeds a resource limit.
     /// </exception>

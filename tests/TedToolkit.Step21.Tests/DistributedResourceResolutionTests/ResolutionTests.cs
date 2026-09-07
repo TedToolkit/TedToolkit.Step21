@@ -365,7 +365,15 @@ public sealed class ResolutionTests
             await Assert.That(structure.References.All(reference =>
                     reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved))
                 .IsTrue();
+            var targets = structure.Registrations.Select(registration =>
+                    registration.Entity.GetType().GetProperty("Target")!.GetValue(registration.Entity))
+                .ToArray();
+            await Assert.That(targets[1]).IsSameReferenceAs(targets[0]);
             await Assert.That(converter.CallCount).IsEqualTo(2);
+            await Assert.That(converter.InputIdentities).IsEquivalentTo([
+                directoryIdentity + "!/child.jt",
+                zipIdentity + "!/child.jt",
+            ]);
             await Assert.That(structure.Validate().IsValid).IsTrue();
         }
     }
@@ -1388,6 +1396,7 @@ public sealed class ResolutionTests
         var end = FindSignature(bytes, [0x50, 0x4b, 0x05, 0x06]);
         var comment = new byte[30];
         WriteUInt32(comment, 0, 0x06054b50);
+        WriteUInt16(comment, 20, 8);
         bytes = InsertBytes(bytes, bytes.Length, comment);
         WriteUInt16(bytes, end + 20, checked((ushort)comment.Length));
         return bytes;
@@ -1549,9 +1558,14 @@ public sealed class ResolutionTests
     {
         internal int CallCount { get; private set; }
 
+        internal List<string> InputIdentities { get; } = [];
+
         public Part21ResourceContent Convert(Part21ResourceContent content)
         {
             CallCount++;
+            InputIdentities.Add(content.Identity.IsAbsoluteUri
+                ? content.Identity.AbsoluteUri
+                : content.Identity.OriginalString);
             return converted;
         }
     }

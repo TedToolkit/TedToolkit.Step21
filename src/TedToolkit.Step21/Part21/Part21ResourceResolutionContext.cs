@@ -11,6 +11,7 @@ internal sealed class Part21ResourceResolutionContext
 {
     private const string ArchiveRootName = "ISO-10303.p21";
     private const string ContainerCachePrefix = "\0container:";
+    private const string ConvertedCachePrefix = "\0converted:";
     private static readonly AsyncLocal<CallbackFrame<IPart21ResourceConverter>?> ActiveConverters = new();
     private static readonly AsyncLocal<CallbackFrame<IPart21ResourceProvider>?> ActiveProviders = new();
     private static readonly uint[] Crc32Table = CreateCrc32Table();
@@ -536,14 +537,20 @@ internal sealed class Part21ResourceResolutionContext
             throw;
         }
 
+        var sourceIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
         var converted = ConvertContent(new Part21ResourceContent(
-            new Uri(entryPath, UriKind.Relative),
+            sourceIdentity,
             Part21ResourceContentKind.Other,
             bytes));
         CountSuppliedBytes(converted);
+        var convertedKey = ConvertedCachePrefix + GetIdentityKey(converted.Identity);
+        if (_documents.TryGetValue(convertedKey, out var convertedCached))
+            return convertedCached;
+        AddDocument(convertedKey, null);
+        string[] aliases = [cacheKey, convertedKey];
         if (converted.Kind == Part21ResourceContentKind.ClearText)
-            return ReadClearText(container.Identity, converted.Bytes, container, entryPath, depth);
-        return LoadContent(converted, depth, container.ArchiveDepth, [cacheKey]);
+            return ReadRoot(container.Identity, converted.Bytes, container, entryPath, depth, aliases);
+        return LoadContent(converted, depth, container.ArchiveDepth, aliases);
     }
 
     private IReadOnlyDictionary<string, ReadOnlyMemory<byte>> ReadZip(ReadOnlyMemory<byte> bytes, int archiveDepth)
@@ -659,6 +666,10 @@ internal sealed class Part21ResourceResolutionContext
         exception is ExchangeStructureCapabilityException capability
         && capability.Diagnostics.Count == 1
         && capability.Diagnostics[0].Code == "P21-RESOURCE-ENCODING";
+
+    private static bool IsArchiveFormatFailure(ExchangeStructureCapabilityException exception) =>
+        exception.Diagnostics.Count == 1
+        && exception.Diagnostics[0].Code == "P21-RESOURCE-ARCHIVE-FORMAT";
 
     private static bool ContainsCallback<T>(CallbackFrame<T>? frame, T callback)
         where T : class
@@ -869,20 +880,30 @@ internal sealed class Part21ResourceResolutionContext
     private static int ValidatePkZip204(ReadOnlySpan<byte> bytes)
     {
         const uint endSignature = 0x06054b50;
-        var end = -1;
         var firstPossible = Math.Max(0, bytes.Length - 65557);
+        ExchangeStructureCapabilityException? lastFailure = null;
         for (var index = bytes.Length - 22; index >= firstPossible; index--)
         {
             if (ReadUInt32(bytes, index) == endSignature
                 && index + 22 + ReadUInt16(bytes, index + 20) == bytes.Length)
             {
-                end = index;
-                break;
+                try
+                {
+                    ValidatePkZipEndCandidate(bytes, index);
+                    return index;
+                }
+                catch (ExchangeStructureCapabilityException exception) when (IsArchiveFormatFailure(exception))
+                {
+                    lastFailure = exception;
+                }
             }
         }
-        if (end < 0)
-            ThrowArchiveFormat("The ZIP end-of-central-directory record is missing or invalid.");
+        throw lastFailure
+            ?? Capability("P21-RESOURCE-ARCHIVE-FORMAT", "The ZIP end-of-central-directory record is missing or invalid.");
+    }
 
+    private static void ValidatePkZipEndCandidate(ReadOnlySpan<byte> bytes, int end)
+    {
         if (ReadUInt16(bytes, end + 4) != 0 || ReadUInt16(bytes, end + 6) != 0)
             ThrowArchiveFormat("Multi-disk ZIP archives are outside PKZip 2.04g transport.");
         var entriesOnDisk = ReadUInt16(bytes, end + 8);
@@ -998,7 +1019,6 @@ internal sealed class Part21ResourceResolutionContext
             if (localRanges[index].Start < localRanges[index - 1].End)
                 ThrowArchiveFormat("ZIP local-file ranges overlap.");
         }
-        return end;
     }
 
     private static bool DataDescriptorMatches(
