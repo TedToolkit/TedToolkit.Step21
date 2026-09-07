@@ -264,13 +264,25 @@ internal static class ExchangeStructureReader
             ]);
         }
 
-        var validationResult = structure.Validate();
-        if (!validationResult.IsValid)
-            throw new ExchangeStructureReadValidationException(validationResult);
+        var deferPopulationValidation = resolutionContext is not null
+            && depth > 0
+            && resolutionContext.DeferValidationUntilPopulationComplete(structure);
+        if (!deferPopulationValidation)
+        {
+            var validationResult = structure.Validate();
+            if (!validationResult.IsValid)
+                throw new ExchangeStructureReadValidationException(validationResult);
+        }
         if (resolutionContext is not null && depth == 0)
             structure.SetSignatureReports(resolutionContext.CreateSignatureReports());
 
         resolutionContext?.MarkDocumentCompleted(structure);
+        if (resolutionContext is not null)
+        {
+            var deferredValidation = resolutionContext.ValidateReadyDeferredPopulations();
+            if (deferredValidation is not null)
+                throw new ExchangeStructureReadValidationException(deferredValidation);
+        }
         if (resolutionContext is not null && depth == 0)
         {
             var dependencyValidation = resolutionContext.ValidateCompletedDependencies(structure);

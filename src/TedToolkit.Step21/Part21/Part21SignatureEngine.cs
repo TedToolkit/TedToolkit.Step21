@@ -173,7 +173,10 @@ internal static class Part21SignatureEngine
     private static bool IsCovered(char character) =>
         character is >= '\u0020' and <= '\u007e' or >= '\u0080';
 
-    internal static byte[] ValidateSignerOutput(ReadOnlyMemory<byte> encodedCms, ReadOnlyMemory<byte> content)
+    internal static byte[] ValidateSignerOutput(
+        ReadOnlyMemory<byte> encodedCms,
+        ReadOnlyMemory<byte> content,
+        out string digestAlgorithm)
     {
         if (encodedCms.IsEmpty)
         {
@@ -201,6 +204,10 @@ internal static class Part21SignatureEngine
                 "P21-CAP-SIGNATURE-SIGNER",
                 "A signature signer did not return valid detached CMS for the supplied content.");
         }
+        digestAlgorithm = cms.SignerInfos[0].DigestAlgorithm.Value
+            ?? throw Capability(
+                "P21-CAP-SIGNATURE-SIGNER",
+                "A signature signer did not identify its first CMS digest algorithm.");
         return copy;
     }
 

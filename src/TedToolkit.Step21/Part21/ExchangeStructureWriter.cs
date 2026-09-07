@@ -24,10 +24,7 @@ internal static class ExchangeStructureWriter
         TextWriter destination,
         ExchangeStructureWriteOptions? options)
     {
-        PreflightValidation(
-            structure,
-            additionalFailures: null,
-            willSign: options is not null && options.Signers.Count > 0);
+        PreflightValidation(structure, additionalFailures: null);
         if (structure.Signatures.Count > 0 && (options is null || options.Signers.Count == 0))
         {
             throw new ExchangeStructureCapabilityException([
@@ -45,17 +42,21 @@ internal static class ExchangeStructureWriter
         AppendReferences(builder, structure);
         AppendDataSections(builder, structure, projected);
         _ = builder.Append("END-ISO-10303-21;");
-        AppendSignatures(builder, options);
+        AppendSignatures(builder, structure, options);
         destination.Write(builder.ToString());
     }
 
-    private static void AppendSignatures(StringBuilder builder, ExchangeStructureWriteOptions? options)
+    private static void AppendSignatures(
+        StringBuilder builder,
+        ExchangeStructure structure,
+        ExchangeStructureWriteOptions? options)
     {
         if (options is null)
             return;
 
-        foreach (var signer in options.Signers)
+        for (var signerIndex = 0; signerIndex < options.Signers.Count; signerIndex++)
         {
+            var signer = options.Signers[signerIndex];
             _ = builder.Append('\n');
             var content = Part21SignatureEngine.EncodeCoveredCharacters(builder);
             ReadOnlyMemory<byte> supplied;
@@ -76,11 +77,40 @@ internal static class ExchangeStructureWriter
             // The callback received array-backed memory and is therefore outside our trust boundary.
             // Re-create the canonical content from the private builder before validating its result.
             var verificationContent = Part21SignatureEngine.EncodeCoveredCharacters(builder);
-            var encodedCms = Part21SignatureEngine.ValidateSignerOutput(supplied, verificationContent);
+            var encodedCms = Part21SignatureEngine.ValidateSignerOutput(
+                supplied,
+                verificationContent,
+                out var digestAlgorithm);
+            if (signerIndex == 0)
+                ThrowIfPopulationDigestAlgorithmChanges(structure, digestAlgorithm);
             _ = builder.Append("SIGNATURE ")
                 .Append(Convert.ToBase64String(encodedCms))
                 .Append(" ENDSEC;");
         }
+    }
+
+    private static void ThrowIfPopulationDigestAlgorithmChanges(
+        ExchangeStructure structure,
+        string outgoingDigestAlgorithm)
+    {
+        if (!structure.SchemaPopulationExternalFiles.Any(static externalFile => externalFile.MessageDigest is not null)
+            || string.Equals(
+                structure.Signatures[0].DigestAlgorithm,
+                outgoingDigestAlgorithm,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new ExchangeStructureWriteValidationException(new ValidationResult(
+            structure.SchemaPopulationExternalFiles
+                .Select((externalFile, index) => (externalFile, index))
+                .Where(item => item.externalFile.MessageDigest is not null)
+                .Select(item => new ValidationFailure(
+                    "P21.WRITE.SCHEMA_POPULATION.DIGEST.ALGORITHM",
+                    $"SchemaPopulation[{item.index}].MessageDigest",
+                    "The first outgoing signature digest algorithm differs from the algorithm that verified "
+                    + "the schema-population message digest."))));
     }
 
     private static bool IsRecoverableSignerFailure(Exception exception) => exception is not (
@@ -102,7 +132,7 @@ internal static class ExchangeStructureWriter
                     "The entity is not registered in this exchange structure."),
             }
             : null;
-        PreflightValidation(structure, additionalFailures, willSign: false);
+        PreflightValidation(structure, additionalFailures);
         if (registration is null)
         {
             throw new InvalidOperationException("Successful write preflight requires a registered entity.");
@@ -115,17 +145,10 @@ internal static class ExchangeStructureWriter
 
     private static void PreflightValidation(
         ExchangeStructure structure,
-        IEnumerable<ValidationFailure>? additionalFailures,
-        bool willSign)
+        IEnumerable<ValidationFailure>? additionalFailures)
     {
         var validation = structure.Validate();
-        var validationFailures = validation.Failures.Where(failure =>
-            !willSign
-            || !string.Equals(
-                failure.Code,
-                "P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.SIGNATURE_REQUIRED",
-                StringComparison.Ordinal));
-        var failures = validationFailures.Concat(additionalFailures ?? []).ToArray();
+        var failures = validation.Failures.Concat(additionalFailures ?? []).ToArray();
         if (failures.Length == 0)
         {
             return;

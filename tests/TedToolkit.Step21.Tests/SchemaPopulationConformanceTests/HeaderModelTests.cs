@@ -345,6 +345,10 @@ public sealed class HeaderModelTests
             new StringReader(validSource),
             [CreateDescriptor()],
             new ExchangeStructureReadOptions(new Uri(rootIdentity), provider));
+        var rejectedDestination = new StringWriter();
+        var changedAlgorithm = Assert.Throws<ExchangeStructureWriteValidationException>(() => valid.Write(
+            rejectedDestination,
+            new ExchangeStructureWriteOptions([new Part21CmsSigner(certificate)])));
         var rewritten = new StringWriter();
         valid.Write(
             rewritten,
@@ -370,6 +374,9 @@ public sealed class HeaderModelTests
         {
             await Assert.That(valid.SchemaPopulation.Single().DigestStatus)
                 .IsEqualTo(SchemaPopulationDigestStatus.Verified);
+            await Assert.That(changedAlgorithm.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(["P21.WRITE.SCHEMA_POPULATION.DIGEST.ALGORITHM"]);
+            await Assert.That(rejectedDestination.ToString()).IsEmpty();
             await Assert.That(reread.SchemaPopulation.Single().DigestStatus)
                 .IsEqualTo(SchemaPopulationDigestStatus.Verified);
             await Assert.That(mismatch.ValidationResult.Failures.Select(failure => failure.Code))
@@ -459,6 +466,71 @@ public sealed class HeaderModelTests
             await Assert.That(root.SchemaPopulationEntities.Count()).IsEqualTo(2);
             await Assert.That(child.SchemaPopulationEntities.Count()).IsEqualTo(2);
             await Assert.That(child.SchemaPopulation.Single().Structure).IsSameReferenceAs(root);
+            await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
+        }
+    }
+
+    /// <summary>Validates cyclic schema populations only after their transitive fixed point is complete.</summary>
+    [Test]
+    public async Task Should_defer_rule_sensitive_cycle_validation_until_the_population_is_complete()
+    {
+        const string rootIdentity = "https://example.test/rule-cycles/root.p21";
+        const string childIdentity = "https://example.test/rule-cycles/child.p21";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('rule-sensitive cycle child'),'4;2');
+                    FILE_NAME('child.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('LONGB'));
+                    SCHEMA_POPULATION((('root.p21',$,$)));
+                    FILE_POPULATION('LONGB','SECTION_BOUNDARY',$);
+                    ENDSEC;
+                    REFERENCE;
+                    #9=<root.p21#1>;
+                    ENDSEC;
+                    DATA('child',('LONGB'));
+                    #2=C(#9,'addr');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+
+        var root = ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('rule-sensitive cycle root'),'4;2');
+                FILE_NAME('root.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('LONGB'));
+                SCHEMA_POPULATION((('child.p21',$,$)));
+                FILE_POPULATION('LONGB','SECTION_BOUNDARY',$);
+                ENDSEC;
+                DATA('root',('LONGB'));
+                #1=B('root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateAnnexEDescriptors(),
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider));
+        var child = root.SchemaPopulation.Single().Structure!;
+        _ = root.TryGetEntity(new EntityInstanceName("1"), out var rootEntity);
+        _ = child.TryGetEntity(new EntityInstanceName("2"), out var childEntity);
+        var addressedItem = childEntity!.GetType().GetProperty("AddressedItem")!.GetValue(childEntity);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(root.SchemaPopulation.Single().ResourceStatus)
+                .IsEqualTo(SchemaPopulationResourceStatus.Resolved);
+            await Assert.That(root.SchemaPopulationEntities.Count()).IsEqualTo(2);
+            await Assert.That(child.SchemaPopulationEntities.Count()).IsEqualTo(2);
+            await Assert.That(root.Validate().IsValid).IsTrue();
+            await Assert.That(child.Validate().IsValid).IsTrue();
+            await Assert.That(addressedItem).IsSameReferenceAs(rootEntity);
             await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
         }
     }

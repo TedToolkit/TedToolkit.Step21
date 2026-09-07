@@ -25,6 +25,7 @@ internal sealed class Part21ResourceResolutionContext
     private readonly Dictionary<ExchangeStructure, List<ExchangeStructure>> _populationDependencies =
         new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<ExchangeStructure> _completedStructures = new(ReferenceEqualityComparer.Instance);
+    private HashSet<ExchangeStructure>? _deferredPopulationValidations;
     private readonly List<ExchangeStructure> _completionOrder = [];
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
     private readonly Stack<DocumentCacheTransaction> _cacheTransactions = new();
@@ -177,6 +178,66 @@ internal sealed class Part21ResourceResolutionContext
             _completionOrder.Add(structure);
         foreach (var completed in _completionOrder)
             CompleteSchemaPopulation(completed);
+    }
+
+    internal bool DeferValidationUntilPopulationComplete(ExchangeStructure structure)
+    {
+        if (IsPopulationClosureComplete(structure))
+            return false;
+        (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance))
+            .Add(structure);
+        return true;
+    }
+
+    internal ValidationResult? ValidateReadyDeferredPopulations()
+    {
+        if (_deferredPopulationValidations is null || _deferredPopulationValidations.Count == 0)
+            return null;
+        var failures = new List<ValidationFailure>();
+        var ready = _deferredPopulationValidations
+            .Where(IsPopulationClosureComplete)
+            .ToArray();
+        for (var index = 0; index < ready.Length; index++)
+        {
+            var structure = ready[index];
+            _deferredPopulationValidations.Remove(structure);
+            foreach (var failure in structure.Validate().Failures)
+            {
+                failures.Add(new ValidationFailure(
+                    failure.Code,
+                    $"DeferredSchemaPopulation[{index}].{failure.Path}",
+                    failure.Message,
+                    failure.SourceLocation));
+            }
+        }
+
+        if (_deferredPopulationValidations.Count == 0)
+            _deferredPopulationValidations = null;
+        return failures.Count == 0 ? null : new ValidationResult(failures);
+    }
+
+    private bool IsPopulationClosureComplete(ExchangeStructure structure)
+    {
+        if (!_populationDependencies.TryGetValue(structure, out var direct) || direct.Count == 0)
+            return true;
+        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { structure };
+        var pending = new Stack<ExchangeStructure>();
+        for (var index = direct.Count - 1; index >= 0; index--)
+            pending.Push(direct[index]);
+
+        while (pending.TryPop(out var current))
+        {
+            if (ReferenceEquals(current, structure) || !visited.Add(current))
+                continue;
+            if (!_completedStructures.Contains(current))
+                return false;
+            if (!_populationDependencies.TryGetValue(current, out var children))
+                continue;
+            for (var index = children.Count - 1; index >= 0; index--)
+                pending.Push(children[index]);
+        }
+
+        return true;
     }
 
     internal ValidationResult ValidateCompletedDependencies(ExchangeStructure root)
