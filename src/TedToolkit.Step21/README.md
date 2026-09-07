@@ -66,7 +66,8 @@ cross-schema domain equivalence, use `ExchangeStructureReadOptions.WithDomainEqu
 provider for the complete relation and physical-parameter projection; the runtime performs target-schema allocation,
 hydration, identity-alias control, and validation without
 requiring a Part 22 repository or inferring compatibility by name or shape. Population message digests require a
-signature and use the first signature section's digest algorithm.
+signature, use the first signature section's digest algorithm over the referenced file bytes, and can verify
+content-only resources without materializing a false exchange model.
 
 Use `structure.WriteEntity(writer, entity)` when only one registered entity-instance record is required. Both write operations validate the final graph before producing output.
 

@@ -11,6 +11,9 @@ public enum SchemaPopulationResourceStatus
 
     /// <summary>The resource resolved to the associated exchange structure.</summary>
     Resolved = 2,
+
+    /// <summary>The resource was supplied and digestable but was not an exchange structure.</summary>
+    ContentOnly = 3,
 }
 
 /// <summary>Describes the ISO timestamp observation for an external schema-population resource.</summary>

@@ -164,6 +164,19 @@ public sealed class MultiSchemaReadTests
                 ENDSEC;
                 """)),
             generated.Descriptors));
+        var missingSection = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "base_model','extension_model",
+                "FILE_POPULATION('base_model','SECTION_BOUNDARY',('absent'));",
+                """
+                DATA('base',('base_model'));
+                #1=ADDRESS('home');
+                ENDSEC;
+                DATA('extension',('extension_model'));
+                #2=PERSON('Ada',#1,$);
+                ENDSEC;
+                """)),
+            generated.Descriptors));
         var reference = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
             new StringReader(CreateExchange(
                 "extension_model','foreign_model",
@@ -183,9 +196,11 @@ public sealed class MultiSchemaReadTests
             await Assert.That(binding.Diagnostics.Count(diagnostic => diagnostic.Code == "P21-BIND-SCHEMA"))
                 .IsEqualTo(1);
             await Assert.That(binding.Diagnostics.Count(diagnostic =>
-                diagnostic.Code == "P21-BIND-SCHEMA-POPULATION")).IsEqualTo(3);
+                diagnostic.Code == "P21-BIND-SCHEMA-POPULATION")).IsEqualTo(2);
             await Assert.That(binding.Diagnostics.All(diagnostic => diagnostic.SourceLocation is
             { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
+            await Assert.That(missingSection.ValidationResult.Failures.Select(failure => failure.Code))
+                .Contains("P21.STRUCTURE.SCHEMA_POPULATION.SECTION");
             await Assert.That(reference.ValidationResult.Failures.Select(failure => failure.Code))
                 .IsEquivalentTo(["P21.READ.REFERENCE.TYPE"]);
             await Assert.That(reference.ValidationResult.Failures[0].Path)

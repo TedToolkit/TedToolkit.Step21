@@ -29,6 +29,7 @@ internal sealed class Part21ResourceResolutionContext
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
     private readonly Stack<DocumentCacheTransaction> _cacheTransactions = new();
     private readonly Stack<LoadingDocumentAliases> _loadingAliases = new();
+    private readonly Stack<DigestMaterial> _digestMaterials = new();
     private int _resourceCount;
     private int _archiveEntryCount;
     private long _totalBytes;
@@ -54,10 +55,10 @@ internal sealed class Part21ResourceResolutionContext
         .Where(static document => document is not null)
         .Select(static document => document!)
         .DistinctBy(static document => document.Address.Key, StringComparer.Ordinal)
-        .Where(static document => document.Structure.Signatures.Count > 0)
+        .Where(static document => document.Structure is not null && document.Structure.Signatures.Count > 0)
         .Select(static document => new Part21ResourceSignatureReport(
             document.Address.ReportIdentity,
-            document.Structure.Signatures))
+            document.Structure!.Signatures))
         .ToArray();
 
     internal void ConfigureStructure(ExchangeStructure structure) =>
@@ -77,10 +78,11 @@ internal sealed class Part21ResourceResolutionContext
         EnsureDepth(depth);
         foreach (var externalFile in structure.SchemaPopulationExternalFiles)
         {
-            var identity = externalFile.Location.IsAbsoluteUri
-                ? externalFile.Location
-                : ResolveExternalIdentity(address.BaseUri, externalFile.Location.OriginalString);
-            var document = AcquireProviderDocument(identity, depth + 1);
+            var document = LoadResourceDocument(
+                address,
+                externalFile.Location.OriginalString,
+                depth + 1,
+                allowOpaque: true);
             if (document is null)
             {
                 externalFile.ResourceStatus = SchemaPopulationResourceStatus.Missing;
@@ -89,9 +91,13 @@ internal sealed class Part21ResourceResolutionContext
 
             VerifySchemaPopulationDigest(structure, externalFile, document);
             externalFile.Structure = document.Structure;
-            externalFile.ResourceStatus = SchemaPopulationResourceStatus.Resolved;
-            AddPopulationDependency(structure, document.Structure);
-            if (externalFile.TimeStamp is not null
+            externalFile.ResourceStatus = document.Structure is null
+                ? SchemaPopulationResourceStatus.ContentOnly
+                : SchemaPopulationResourceStatus.Resolved;
+            if (document.Structure is not null)
+                AddPopulationDependency(structure, document.Structure);
+            if (document.Structure is not null
+                && externalFile.TimeStamp is not null
                 && Part21LexicalForms.TryParseTimeStamp(externalFile.TimeStamp, out var visited)
                 && Part21LexicalForms.TryParseTimeStamp(
                     document.Structure.Header.FileName.TimeStamp,
@@ -110,6 +116,16 @@ internal sealed class Part21ResourceResolutionContext
     {
         if (externalFile.MessageDigest is null || owner.Signatures.Count == 0)
             return;
+
+        if (!document.HasDigestContent)
+        {
+            throw new ExchangeStructureCapabilityException([
+                new Step21Diagnostic(
+                    "P21-CAP-SCHEMA-POPULATION-DIGEST-CONTENT",
+                    Step21DiagnosticSeverity.Error,
+                    $"Resource '{document.Address.ReportIdentity}' has no byte representation for digest verification."),
+            ]);
+        }
 
         var digest = Part21SignatureEngine.TryComputeDigest(
             owner.Signatures[0].DigestAlgorithm,
@@ -233,10 +249,14 @@ internal sealed class Part21ResourceResolutionContext
     internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address, string source)
     {
         _populationDependencies.TryAdd(structure, []);
+        var digestMaterial = _digestMaterials.TryPeek(out var supplied)
+            ? supplied
+            : new DigestMaterial(Part21SignatureEngine.EncodeCoveredCharacters(source), HasContent: true);
         var document = new LoadedDocument(
             structure,
             address,
-            Part21SignatureEngine.EncodeCoveredCharacters(source));
+            digestMaterial.Content,
+            digestMaterial.HasContent);
         SetDocument(address.Key, document);
         if (_loadingAliases.TryPeek(out var loading)
             && loading.AddressKey == address.Key)
@@ -257,7 +277,7 @@ internal sealed class Part21ResourceResolutionContext
         if (hash < 0)
         {
             var populationDocument = LoadResourceDocument(address, resource, depth);
-            if (populationDocument is not null)
+            if (populationDocument?.Structure is not null)
                 AddPopulationDependency(owner, populationDocument.Structure);
             return ParameterValue.Omitted;
         }
@@ -267,7 +287,7 @@ internal sealed class Part21ResourceResolutionContext
             if (pathWithoutFragment.Length > 0)
             {
                 var populationDocument = LoadResourceDocument(address, pathWithoutFragment, depth);
-                if (populationDocument is not null)
+                if (populationDocument?.Structure is not null)
                     AddPopulationDependency(owner, populationDocument.Structure);
             }
             return ParameterValue.Omitted;
@@ -293,7 +313,7 @@ internal sealed class Part21ResourceResolutionContext
             document = AcquireProviderDocument(identity, depth);
         }
 
-        if (document is null)
+        if (document?.Structure is null)
             return ParameterValue.Omitted;
         AddPopulationDependency(owner, document.Structure);
         var target = ResolveFragment(document.Structure, document.Address, fragment, depth);
@@ -302,13 +322,17 @@ internal sealed class Part21ResourceResolutionContext
             : ParameterValue.Omitted;
     }
 
-    private LoadedDocument? LoadResourceDocument(DocumentAddress address, string path, int depth)
+    private LoadedDocument? LoadResourceDocument(
+        DocumentAddress address,
+        string path,
+        int depth,
+        bool allowOpaque = false)
     {
         if (address.Container is not null && !Uri.TryCreate(path, UriKind.Absolute, out _))
-            return LoadContainerEntry(address, path, depth);
+            return LoadContainerEntry(address, path, depth, allowOpaque);
 
         var identity = ResolveExternalIdentity(address.BaseUri, path);
-        return AcquireProviderDocument(identity, depth);
+        return AcquireProviderDocument(identity, depth, allowOpaque);
     }
 
     private void AddPopulationDependency(ExchangeStructure owner, ExchangeStructure target)
@@ -416,7 +440,7 @@ internal sealed class Part21ResourceResolutionContext
         return item;
     }
 
-    private LoadedDocument? AcquireProviderDocument(Uri identity, int depth)
+    private LoadedDocument? AcquireProviderDocument(Uri identity, int depth, bool allowOpaque = false)
     {
         EnsureDepth(depth);
         var key = identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
@@ -454,6 +478,9 @@ internal sealed class Part21ResourceResolutionContext
                 return null;
             }
             CountSuppliedBytes(content);
+            var originalIdentity = content.Identity;
+            var originalBytes = content.Bytes;
+            var hasDigestContent = content.Kind != Part21ResourceContentKind.Directory;
             var aliases = new HashSet<string>(StringComparer.Ordinal) { key };
             var providerKey = GetIdentityKey(content.Identity);
             if (!aliases.Contains(providerKey) && _documents.TryGetValue(providerKey, out var providerCached))
@@ -463,6 +490,18 @@ internal sealed class Part21ResourceResolutionContext
                 return providerCached;
             }
             ReserveAlias(providerKey, aliases);
+
+            if (allowOpaque
+                && content.Kind == Part21ResourceContentKind.Other
+                && _options.ResourceConverter is null)
+            {
+                var opaque = CreateOpaqueDocument(originalIdentity, originalBytes);
+                foreach (var alias in aliases)
+                    SetDocument(alias, opaque);
+                SetDocument(opaque.Address.Key, opaque);
+                CommitCacheTransaction(transaction);
+                return opaque;
+            }
 
             var wasConverted = content.Kind == Part21ResourceContentKind.Other;
             content = ConvertContent(content);
@@ -479,16 +518,31 @@ internal sealed class Part21ResourceResolutionContext
             ReserveAlias(convertedKey, aliases);
 
             LoadedDocument? loaded;
+            _digestMaterials.Push(new DigestMaterial(originalBytes, hasDigestContent));
             try
             {
                 loaded = LoadContent(content, depth, archiveDepth: 0, aliases);
             }
-            catch (Exception exception) when (IsExternalStructureFailure(exception))
+            catch (Exception exception) when (IsExternalStructureFailure(exception) || IsEncodingFailure(exception))
             {
                 RollbackCacheTransaction(transaction);
+                if (allowOpaque && hasDigestContent)
+                {
+                    var opaque = CreateOpaqueDocument(originalIdentity, originalBytes);
+                    foreach (var alias in aliases)
+                        SetDocument(alias, opaque);
+                    SetDocument(opaque.Address.Key, opaque);
+                    return opaque;
+                }
+                if (IsEncodingFailure(exception))
+                    throw;
                 foreach (var alias in aliases)
                     SetDocument(alias, null);
                 return null;
+            }
+            finally
+            {
+                _ = _digestMaterials.Pop();
             }
             foreach (var alias in aliases)
                 SetDocument(alias, loaded);
@@ -506,6 +560,16 @@ internal sealed class Part21ResourceResolutionContext
 
     private static string GetIdentityKey(Uri identity) =>
         identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
+
+    private static LoadedDocument CreateOpaqueDocument(Uri identity, ReadOnlyMemory<byte> bytes)
+    {
+        var key = GetIdentityKey(identity);
+        return new LoadedDocument(
+            Structure: null,
+            new DocumentAddress(key, identity.IsAbsoluteUri ? identity : null, Container: null, EntryPath: null),
+            bytes,
+            HasDigestContent: true);
+    }
 
     private void ReserveAlias(string alias, ISet<string> aliases)
     {
@@ -647,7 +711,11 @@ internal sealed class Part21ResourceResolutionContext
                     new SchemaName(targetIdentifier))));
     }
 
-    private LoadedDocument? LoadContainerEntry(DocumentAddress address, string relativePath, int depth)
+    private LoadedDocument? LoadContainerEntry(
+        DocumentAddress address,
+        string relativePath,
+        int depth,
+        bool allowOpaque = false)
     {
         EnsureDepth(depth);
         var entryPath = ResolveEntryPath(address.EntryPath!, relativePath);
@@ -663,6 +731,7 @@ internal sealed class Part21ResourceResolutionContext
         {
             AddDocument(key, null);
             LoadedDocument? loaded;
+            _digestMaterials.Push(new DigestMaterial(bytes, HasContent: true));
             try
             {
                 if (LooksLikeZip(bytes.Span))
@@ -678,7 +747,13 @@ internal sealed class Part21ResourceResolutionContext
                 }
                 else
                 {
-                    loaded = ReadOrConvertContainerEntry(container, entryPath, key, bytes, depth);
+                    loaded = ReadOrConvertContainerEntry(
+                        container,
+                        entryPath,
+                        key,
+                        bytes,
+                        depth,
+                        allowOpaque);
                 }
             }
             catch (Exception exception) when (IsExternalStructureFailure(exception))
@@ -687,7 +762,10 @@ internal sealed class Part21ResourceResolutionContext
                 SetDocument(key, null);
                 return null;
             }
-
+            finally
+            {
+                _ = _digestMaterials.Pop();
+            }
             SetDocument(key, loaded);
             CommitCacheTransaction(transaction);
             return loaded;
@@ -704,7 +782,8 @@ internal sealed class Part21ResourceResolutionContext
         string entryPath,
         string cacheKey,
         ReadOnlyMemory<byte> bytes,
-        int depth)
+        int depth,
+        bool allowOpaque)
     {
         var clearTextAttempt = BeginCacheTransaction();
         try
@@ -718,6 +797,14 @@ internal sealed class Part21ResourceResolutionContext
             RollbackCacheTransaction(clearTextAttempt);
             if (_options.ResourceConverter is null)
             {
+                if (allowOpaque)
+                {
+                    return new LoadedDocument(
+                        Structure: null,
+                        new DocumentAddress(cacheKey, container.Identity, container, entryPath),
+                        bytes,
+                        HasDigestContent: true);
+                }
                 if (IsEncodingFailure(exception))
                     throw;
                 return null;
@@ -1329,11 +1416,14 @@ internal sealed class Part21ResourceResolutionContext
 
     private readonly record struct DocumentCacheEntry(bool Exists, LoadedDocument? Document);
 
+    private readonly record struct DigestMaterial(ReadOnlyMemory<byte> Content, bool HasContent);
+
     private sealed record CallbackFrame<T>(T Callback, CallbackFrame<T>? Parent)
         where T : class;
 
     private sealed record LoadedDocument(
-        ExchangeStructure Structure,
+        ExchangeStructure? Structure,
         DocumentAddress Address,
-        ReadOnlyMemory<byte> DigestContent);
+        ReadOnlyMemory<byte> DigestContent,
+        bool HasDigestContent);
 }

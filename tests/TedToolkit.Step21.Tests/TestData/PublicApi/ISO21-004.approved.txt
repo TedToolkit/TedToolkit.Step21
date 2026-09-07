@@ -75,6 +75,7 @@ enum TedToolkit.Step21.SchemaPopulationResourceStatus
   value Unresolved = 0
   value Missing = 1
   value Resolved = 2
+  value ContentOnly = 3
 enum TedToolkit.Step21.SchemaPopulationTimestampStatus
   value NotProvided = 0
   value NotVerified = 1

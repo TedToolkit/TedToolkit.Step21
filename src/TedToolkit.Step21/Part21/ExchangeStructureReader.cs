@@ -105,7 +105,6 @@ internal static class ExchangeStructureReader
         structure.SetSchemaPopulations(BindSchemaPopulations(
             syntax.Header.AdditionalEntities,
             header.FileSchema.SchemaIdentifiers,
-            structure.DataSections.ToArray(),
             bindingDiagnostics));
         var occurrenceNames = new HashSet<EntityInstanceName>();
         var allocations = sectionBindings.SelectMany(binding => AllocateEntities(
@@ -543,13 +542,9 @@ internal static class ExchangeStructureReader
     private static IReadOnlyList<SchemaPopulationDefinition> BindSchemaPopulations(
         IReadOnlyList<HeaderEntitySyntax> additionalEntities,
         IReadOnlyList<string> headerSchemaNames,
-        IReadOnlyList<DataSection> dataSections,
         ICollection<Step21Diagnostic> diagnostics)
     {
         var definitions = new List<SchemaPopulationDefinition>();
-        var sectionsByName = dataSections
-            .Where(section => section.Name is not null)
-            .ToDictionary(section => section.Name!, StringComparer.Ordinal);
         foreach (var syntax in additionalEntities.Where(entity => string.Equals(
                      entity.Name,
                      "FILE_POPULATION",
@@ -602,14 +597,10 @@ internal static class ExchangeStructureReader
                 valid = false;
             }
 
-            var inputs = new List<DataSection>();
             var inputNames = new List<string>();
             var sectionParameter = syntax.Parameters[2];
-            if (sectionParameter.Kind == Part21ValueKind.Omitted)
-            {
-                inputs.AddRange(dataSections);
-            }
-            else if (sectionParameter.Kind != Part21ValueKind.List)
+            if (sectionParameter.Kind != Part21ValueKind.Omitted
+                && sectionParameter.Kind != Part21ValueKind.List)
             {
                 diagnostics.Add(PopulationDiagnostic(
                     sectionParameter,
@@ -638,18 +629,7 @@ internal static class ExchangeStructureReader
                         valid = false;
                         continue;
                     }
-
                     inputNames.Add(sectionName);
-                    if (!sectionsByName.TryGetValue(sectionName, out var section))
-                    {
-                        diagnostics.Add(PopulationDiagnostic(
-                            value,
-                            $"FILE_POPULATION names absent data section '{sectionName}'."));
-                        valid = false;
-                        continue;
-                    }
-
-                    inputs.Add(section);
                 }
             }
 
@@ -658,7 +638,6 @@ internal static class ExchangeStructureReader
                 definitions.Add(new SchemaPopulationDefinition(
                     schemaName,
                     method,
-                    inputs,
                     sectionParameter.Kind == Part21ValueKind.Omitted ? null : inputNames));
             }
         }

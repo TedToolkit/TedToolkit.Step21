@@ -284,7 +284,7 @@ public sealed class HeaderModelTests
         const string childIdentity = "https://example.test/digests/child.p21";
         const string sha384Oid = "2.16.840.1.101.3.4.2.2";
         var child = Exchange(string.Empty);
-        var correctDigest = Convert.ToBase64String(SHA384.HashData(EncodePart21Alphabet(child)));
+        var correctDigest = Convert.ToBase64String(SHA384.HashData(Encoding.UTF8.GetBytes(child)));
         var wrongDigest = Convert.ToBase64String(new byte[SHA384.HashSizeInBytes]);
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -342,6 +342,58 @@ public sealed class HeaderModelTests
                 .Contains("P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.MISMATCH");
             await Assert.That(missingSignature.ValidationResult.Failures.Select(failure => failure.Code))
                 .Contains("P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.SIGNATURE_REQUIRED");
+        }
+    }
+
+    /// <summary>Verifies signed content-only population members without requiring an exchange conversion.</summary>
+    [Test]
+    public async Task Should_verify_non_exchange_population_content_without_materializing_a_model()
+    {
+        const string rootIdentity = "https://example.test/content/root.p21";
+        const string assetIdentity = "https://example.test/content/facets.stl";
+        var asset = Encoding.UTF8.GetBytes("solid facets\nendsolid facets\n");
+        var correctDigest = Convert.ToBase64String(SHA256.HashData(asset));
+        var wrongDigest = Convert.ToBase64String(new byte[SHA256.HashSizeInBytes]);
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [assetIdentity] = new(
+                new Uri(assetIdentity),
+                Part21ResourceContentKind.Other,
+                asset),
+        });
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=Content-only Population Digest",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(
+            new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        var valid = ExchangeStructure.Read(
+            new StringReader(Sign(
+                Exchange($"SCHEMA_POPULATION(((\'facets.stl\',$,\'{correctDigest}\')));"),
+                new Part21CmsSigner(certificate))),
+            [CreateDescriptor()],
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider));
+        var mismatch = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader(Sign(
+                Exchange($"SCHEMA_POPULATION(((\'facets.stl\',$,\'{wrongDigest}\')));"),
+                new Part21CmsSigner(certificate))),
+            [CreateDescriptor()],
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(valid.SchemaPopulation.Single().ResourceStatus)
+                .IsEqualTo(SchemaPopulationResourceStatus.ContentOnly);
+            await Assert.That(valid.SchemaPopulation.Single().DigestStatus)
+                .IsEqualTo(SchemaPopulationDigestStatus.Verified);
+            await Assert.That(valid.SchemaPopulation.Single().Structure).IsNull();
+            await Assert.That(valid.SchemaPopulationEntities.Count()).IsEqualTo(1);
+            await Assert.That(mismatch.ValidationResult.Failures.Select(failure => failure.Code))
+                .Contains("P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.MISMATCH");
         }
     }
 
@@ -403,6 +455,62 @@ public sealed class HeaderModelTests
 
         await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code))
             .Contains("POPULATION_MODEL.RULE.AT_MOST_ONE.WHERE.SINGLE");
+    }
+
+    /// <summary>Resolves explicit governed-section names against the completed external population graph.</summary>
+    [Test]
+    public async Task Should_resolve_governed_sections_that_exist_only_in_external_population_members()
+    {
+        const string childIdentity = "https://example.test/combined/child-only.p21";
+        var longaA = new SchemaEntityType(new SchemaName("longa"), "a");
+        var longbA = new SchemaEntityType(new SchemaName("longb"), "a");
+        SchemaDomainEquivalence[] equivalences = [
+            new(longaA, longbA),
+            new(longbA, longaA),
+        ];
+        var child = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('external section'),'4;2');
+            FILE_NAME('child-only.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('LONGA'));
+            ENDSEC;
+            DATA('child',('LONGA'));
+            #1=A(-3.5);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(child)),
+        });
+
+        var failure = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('external governed section'),'4;2');
+                FILE_NAME('root.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('LONGA','LONGB'));
+                SCHEMA_POPULATION((('child-only.p21',$,$)));
+                FILE_POPULATION('LONGB','SECTION_BOUNDARY',('child'));
+                ENDSEC;
+                DATA('root',('LONGA'));
+                #1=B('root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateAnnexEDescriptors(),
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                new IdentityDomainEquivalenceProvider(equivalences),
+                new Uri("https://example.test/combined/root.p21"),
+                provider)));
+
+        await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code))
+            .Contains("LONGB.RULE.NO_A.WHERE.NONE");
     }
 
     /// <summary>Includes an exchange structure named by a reference URI even when the URI has no fragment.</summary>
@@ -545,6 +653,54 @@ public sealed class HeaderModelTests
             await Assert.That(string.Join("|", failure.ValidationResult.Failures.Select(item => item.Code)))
                 .IsEqualTo("LONGB.RULE.NO_A.WHERE.NONE");
             await Assert.That(equivalenceProvider.ProjectionCount).IsGreaterThan(0);
+        }
+    }
+
+    /// <summary>Includes only instances directly referenced from governed sections under Annex E.2.3.</summary>
+    [Test]
+    public async Task Should_apply_the_include_referenced_population_method()
+    {
+        var longaA = new SchemaEntityType(new SchemaName("longa"), "a");
+        var longbA = new SchemaEntityType(new SchemaName("longb"), "a");
+        var longaB = new SchemaEntityType(new SchemaName("longa"), "b");
+        var longbB = new SchemaEntityType(new SchemaName("longb"), "b");
+        SchemaDomainEquivalence[] equivalences = [
+            new(longaA, longbA),
+            new(longbA, longaA),
+            new(longaB, longbB),
+            new(longbB, longaB),
+        ];
+        var source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('Annex E include referenced'),'4;2');
+            FILE_NAME('annex-e.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('LONGA','LONGB'));
+            FILE_POPULATION('LONGB','INCLUDE_REFERENCED',('TWO'));
+            ENDSEC;
+            DATA('ONE',('LONGA'));
+            #1=A(-3.5);
+            #2=B('Sam Smith');
+            ENDSEC;
+            DATA('TWO',('LONGB'));
+            #3=C(#2,'100 Main Street');
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        var structure = ExchangeStructure.Read(
+            new StringReader(source),
+            CreateAnnexEDescriptors(),
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                new IdentityDomainEquivalenceProvider(equivalences)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.FilePopulations.Single().Determination)
+                .IsEqualTo(SchemaPopulationDetermination.IncludeReferenced);
+            await Assert.That(structure.TryGetEntity(new EntityInstanceName("1"), out _)).IsTrue();
+            await Assert.That(structure.TryGetEntity(new EntityInstanceName("2"), out _)).IsTrue();
+            await Assert.That(structure.TryGetEntity(new EntityInstanceName("3"), out _)).IsTrue();
         }
     }
 
