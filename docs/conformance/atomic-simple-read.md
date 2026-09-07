@@ -1,8 +1,9 @@
 # Atomic simple typed reading
 
 The public `ExchangeStructure.Read` overloads consume a closed descriptor set, parse into private immutable syntax,
-and bind one named or unnamed `DATA` section or multiple named sections governed by explicitly supplied schemas. They hydrate generated entities through direct
-descriptor dispatch, run `ExchangeStructure.Validate()`, and return only the complete validated mutable structure.
+and bind zero `DATA` sections for forwarding-only structures, one named or unnamed section, or multiple named sections
+governed by explicitly supplied schemas. They hydrate generated entities through direct descriptor dispatch, run
+`ExchangeStructure.Validate()`, and return only the complete validated mutable structure.
 
 ```csharp
 using var source = File.OpenText("sample.p21");
@@ -17,9 +18,10 @@ diagnostics use the stable logical source name `<reader>` because this overload 
 
 ## Supported publication slice
 
-The current typed-read slice requires at least one data section and exactly one `FILE_SCHEMA` string. A lone section
-may be unnamed; a named section and every section in a multi-section structure carries the Edition 3 section-name and
-single-schema parameter pair. Every governing schema name must equal the header identifier and supplied descriptor.
+The typed entity-publication slice requires exactly one `FILE_SCHEMA` string. A forwarding-only distributed structure
+may omit `DATA`; when data is present, a lone section may be unnamed, while a named section and every section in a
+multi-section structure carries the Edition 3 section-name and single-schema parameter pair. Every governing schema
+name must equal the header identifier and supplied descriptor.
 Every simple instance across every section is allocated before hydration, occurrence names are unique in the complete
 exchange structure and canonicalized without CLR integer narrowing, and physical parameters retain descriptor order.
 See the [same-schema data-section boundary](same-schema-data-sections.md) and

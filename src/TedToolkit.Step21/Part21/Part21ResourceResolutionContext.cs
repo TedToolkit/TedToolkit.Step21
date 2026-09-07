@@ -10,6 +10,7 @@ namespace TedToolkit.Step21;
 internal sealed class Part21ResourceResolutionContext
 {
     private const string ArchiveRootName = "ISO-10303.p21";
+    private const string ContainerCachePrefix = "\0container:";
     private static readonly AsyncLocal<CallbackFrame<IPart21ResourceConverter>?> ActiveConverters = new();
     private static readonly AsyncLocal<CallbackFrame<IPart21ResourceProvider>?> ActiveProviders = new();
     private static readonly uint[] Crc32Table = CreateCrc32Table();
@@ -123,9 +124,12 @@ internal sealed class Part21ResourceResolutionContext
             document = AcquireProviderDocument(identity, depth);
         }
 
-        return document is null
-            ? ParameterValue.Omitted
-            : ResolveFragment(document.Structure, document.Address, fragment, depth);
+        if (document is null)
+            return ParameterValue.Omitted;
+        var target = ResolveFragment(document.Structure, document.Address, fragment, depth);
+        return IsSchemaCompatible(owner, document.Structure, target)
+            ? target
+            : ParameterValue.Omitted;
     }
 
     private ParameterValue ResolveFragment(
@@ -423,14 +427,39 @@ internal sealed class Part21ResourceResolutionContext
     }
 
     private static string GetDocumentKey(Uri identity, ResourceContainer? container, string? entryPath) =>
-        container is null ? GetIdentityKey(identity) : identity + "!/" + entryPath;
+        container is null ? GetIdentityKey(identity) : ContainerCachePrefix + identity + "!/" + entryPath;
+
+    private static bool IsSchemaCompatible(
+        ExchangeStructure owner,
+        ExchangeStructure targetStructure,
+        ParameterValue target)
+    {
+        if (target.TryGetEntity(out var entity))
+        {
+            foreach (var identifier in owner.Header.FileSchema.SchemaIdentifiers)
+            {
+                if (owner.TryGetSchemaDescriptor(new SchemaName(identifier), out var descriptor)
+                    && descriptor!.IsEntityReferenceCompatible(entity!))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        return owner.Header.FileSchema.SchemaIdentifiers.Any(ownerIdentifier =>
+            targetStructure.Header.FileSchema.SchemaIdentifiers.Any(targetIdentifier =>
+                ExchangeStructure.SchemaIdentifiersAssociate(
+                    new SchemaName(ownerIdentifier),
+                    new SchemaName(targetIdentifier))));
+    }
 
     private LoadedDocument? LoadContainerEntry(DocumentAddress address, string relativePath, int depth)
     {
         EnsureDepth(depth);
         var entryPath = ResolveEntryPath(address.EntryPath!, relativePath);
         var container = address.Container!;
-        var key = container.Identity + "!/" + entryPath;
+        var key = GetDocumentKey(container.Identity, container, entryPath);
         if (_documents.TryGetValue(key, out var cached))
             return cached;
         if (!container.Entries.TryGetValue(entryPath, out var bytes))
@@ -440,14 +469,14 @@ internal sealed class Part21ResourceResolutionContext
         try
         {
             AddDocument(key, null);
-            LoadedDocument loaded;
+            LoadedDocument? loaded;
             try
             {
                 if (LooksLikeZip(bytes.Span))
                 {
                     if (container.ArchiveDepth >= _options.ResourceLimits.MaximumArchiveDepth)
                         ThrowCapability("P21-RESOURCE-ARCHIVE-RECURSION", "Nested archive depth exceeds the configured limit.");
-                    var nestedIdentity = new Uri(key, UriKind.RelativeOrAbsolute);
+                    var nestedIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
                     loaded = LoadContent(
                         new Part21ResourceContent(nestedIdentity, Part21ResourceContentKind.ZipArchive, bytes),
                         depth,
@@ -456,7 +485,7 @@ internal sealed class Part21ResourceResolutionContext
                 }
                 else
                 {
-                    loaded = ReadClearText(container.Identity, bytes, container, entryPath, depth);
+                    loaded = ReadOrConvertContainerEntry(container, entryPath, key, bytes, depth);
                 }
             }
             catch (Exception exception) when (IsExternalStructureFailure(exception))
@@ -477,15 +506,56 @@ internal sealed class Part21ResourceResolutionContext
         }
     }
 
+    private LoadedDocument? ReadOrConvertContainerEntry(
+        ResourceContainer container,
+        string entryPath,
+        string cacheKey,
+        ReadOnlyMemory<byte> bytes,
+        int depth)
+    {
+        var clearTextAttempt = BeginCacheTransaction();
+        try
+        {
+            var loaded = ReadClearText(container.Identity, bytes, container, entryPath, depth);
+            CommitCacheTransaction(clearTextAttempt);
+            return loaded;
+        }
+        catch (Exception exception) when (IsExternalStructureFailure(exception) || IsEncodingFailure(exception))
+        {
+            RollbackCacheTransaction(clearTextAttempt);
+            if (_options.ResourceConverter is null)
+            {
+                if (IsEncodingFailure(exception))
+                    throw;
+                return null;
+            }
+        }
+        catch
+        {
+            RollbackCacheTransaction(clearTextAttempt);
+            throw;
+        }
+
+        var converted = ConvertContent(new Part21ResourceContent(
+            new Uri(entryPath, UriKind.Relative),
+            Part21ResourceContentKind.Other,
+            bytes));
+        CountSuppliedBytes(converted);
+        if (converted.Kind == Part21ResourceContentKind.ClearText)
+            return ReadClearText(container.Identity, converted.Bytes, container, entryPath, depth);
+        return LoadContent(converted, depth, container.ArchiveDepth, [cacheKey]);
+    }
+
     private IReadOnlyDictionary<string, ReadOnlyMemory<byte>> ReadZip(ReadOnlyMemory<byte> bytes, int archiveDepth)
     {
         if (archiveDepth > _options.ResourceLimits.MaximumArchiveDepth)
             ThrowCapability("P21-RESOURCE-ARCHIVE-RECURSION", "Nested archive depth exceeds the configured limit.");
-        ValidatePkZip204(bytes.Span);
+        var end = ValidatePkZip204(bytes.Span);
+        var readableBytes = RemoveZipComment(bytes, end);
         var result = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
         try
         {
-            using var stream = CreateReadStream(bytes);
+            using var stream = CreateReadStream(readableBytes);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             foreach (var entry in archive.Entries)
             {
@@ -508,6 +578,16 @@ internal sealed class Part21ResourceResolutionContext
             throw Capability("P21-RESOURCE-ARCHIVE", $"The ZIP archive is invalid: {exception.Message}");
         }
 
+        return result;
+    }
+
+    private static ReadOnlyMemory<byte> RemoveZipComment(ReadOnlyMemory<byte> bytes, int end)
+    {
+        if (end + 22 == bytes.Length)
+            return bytes;
+        var result = bytes[..(end + 22)].ToArray();
+        result[end + 20] = 0;
+        result[end + 21] = 0;
         return result;
     }
 
@@ -574,6 +654,11 @@ internal sealed class Part21ResourceResolutionContext
         exception is ExchangeStructureSyntaxException
             or ExchangeStructureBindingException
             or ExchangeStructureReadValidationException;
+
+    private static bool IsEncodingFailure(Exception exception) =>
+        exception is ExchangeStructureCapabilityException capability
+        && capability.Diagnostics.Count == 1
+        && capability.Diagnostics[0].Code == "P21-RESOURCE-ENCODING";
 
     private static bool ContainsCallback<T>(CallbackFrame<T>? frame, T callback)
         where T : class
@@ -781,20 +866,21 @@ internal sealed class Part21ResourceResolutionContext
         return new MemoryStream(bytes.ToArray(), writable: false);
     }
 
-    private static void ValidatePkZip204(ReadOnlySpan<byte> bytes)
+    private static int ValidatePkZip204(ReadOnlySpan<byte> bytes)
     {
         const uint endSignature = 0x06054b50;
         var end = -1;
         var firstPossible = Math.Max(0, bytes.Length - 65557);
         for (var index = bytes.Length - 22; index >= firstPossible; index--)
         {
-            if (ReadUInt32(bytes, index) == endSignature)
+            if (ReadUInt32(bytes, index) == endSignature
+                && index + 22 + ReadUInt16(bytes, index + 20) == bytes.Length)
             {
                 end = index;
                 break;
             }
         }
-        if (end < 0 || end + 22 + ReadUInt16(bytes, end + 20) != bytes.Length)
+        if (end < 0)
             ThrowArchiveFormat("The ZIP end-of-central-directory record is missing or invalid.");
 
         if (ReadUInt16(bytes, end + 4) != 0 || ReadUInt16(bytes, end + 6) != 0)
@@ -912,6 +998,7 @@ internal sealed class Part21ResourceResolutionContext
             if (localRanges[index].Start < localRanges[index - 1].End)
                 ThrowArchiveFormat("ZIP local-file ranges overlap.");
         }
+        return end;
     }
 
     private static bool DataDescriptorMatches(

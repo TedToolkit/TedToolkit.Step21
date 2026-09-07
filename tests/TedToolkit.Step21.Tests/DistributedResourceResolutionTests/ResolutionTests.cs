@@ -37,7 +37,19 @@ public sealed class ResolutionTests
         END_SCHEMA;
         """;
 
+    private const string FOREIGN_SCHEMA = """
+        SCHEMA foreign_resource;
+        ENTITY foreign_node;
+          label : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private static readonly Lazy<SchemaDescriptor> Descriptor = new(CreateDescriptor);
+    private static readonly Lazy<SchemaDescriptor> ForeignDescriptor = new(() => CreateDescriptor(
+        "schemas/foreign-resource.exp",
+        FOREIGN_SCHEMA,
+        "ForeignResource"));
 
     /// <summary>Resolves local anchors, shared external entity identity, and external values.</summary>
     [Test]
@@ -305,6 +317,59 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Converts other-format subsidiaries inside directory and ZIP transports.</summary>
+    [Test]
+    public async Task Should_convert_directory_and_zip_subsidiaries_with_the_explicit_converter()
+    {
+        var root = Exchange(
+            "ANCHOR;<published>=<child.jt#target>;ENDSEC;",
+            string.Empty,
+            "#1=NODE('root',$);");
+        var convertedSource = Exchange(
+            "ANCHOR;<target>=#1;ENDSEC;",
+            string.Empty,
+            "#1=NODE('converted subsidiary',$);");
+        const string directoryIdentity = "https://example.test/converted-subsidiary/";
+        const string zipIdentity = "https://example.test/converted-subsidiary.zip";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [directoryIdentity] = new(
+                new Uri(directoryIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(root),
+                    ["child.jt"] = new byte[] { 0xff, 0xfe, 0xfd },
+                }),
+            [zipIdentity] = new(
+                new Uri(zipIdentity),
+                Part21ResourceContentKind.ZipArchive,
+                CreateZip(new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(root),
+                    ["child.jt"] = Utf8("opaque subsidiary"),
+                })),
+        });
+        var converter = new StaticConverter(ClearText(
+            "https://example.test/converted-subsidiary.p21",
+            convertedSource));
+
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{directoryIdentity}#published>;#91=<{zipIdentity}#published>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider, resourceConverter: converter));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.All(reference =>
+                    reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved))
+                .IsTrue();
+            await Assert.That(converter.CallCount).IsEqualTo(2);
+            await Assert.That(structure.Validate().IsValid).IsTrue();
+        }
+    }
+
     /// <summary>Reads a ZIP root and subsidiary entirely from supplied memory.</summary>
     [Test]
     public async Task Should_resolve_zip_root_and_subsidiary_in_memory()
@@ -341,6 +406,72 @@ public sealed class ResolutionTests
             await Assert.That(structure.References.All(reference =>
                 reference.ResolutionStatus == Part21ReferenceResolutionStatus.Resolved)).IsTrue();
             await Assert.That(provider.Requests).IsEquivalentTo(["https://example.test/package.zip"]);
+        }
+    }
+
+    /// <summary>Keeps internal container entries outside the externally addressable URI cache.</summary>
+    [Test]
+    public async Task Should_not_expose_directory_or_zip_subsidiaries_as_external_resources()
+    {
+        const string directoryIdentity = "https://example.test/cache-boundary/";
+        const string directoryOutside = "https://example.test/cache-boundary/!/parts/child.p21";
+        const string zipIdentity = "https://example.test/cache-boundary.zip";
+        const string zipOutside = "https://example.test/cache-boundary.zip!/parts/child.p21";
+        var root = Exchange(
+            "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
+            string.Empty,
+            "#1=NODE('root',$);");
+        var directoryChild = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('inside directory',$);");
+        var zipChild = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('inside zip',$);");
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [directoryIdentity] = new(
+                new Uri(directoryIdentity),
+                new Dictionary<string, ReadOnlyMemory<byte>>
+                {
+                    ["ISO-10303.p21"] = Utf8(root),
+                    ["parts/child.p21"] = Utf8(directoryChild),
+                }),
+            [directoryOutside] = ClearText(
+                directoryOutside,
+                Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('provider directory',$);")),
+            [zipIdentity] = new(
+                new Uri(zipIdentity),
+                Part21ResourceContentKind.ZipArchive,
+                CreateZip(new Dictionary<string, string>
+                {
+                    ["ISO-10303.p21"] = root,
+                    ["parts/child.p21"] = zipChild,
+                })),
+            [zipOutside] = ClearText(
+                zipOutside,
+                Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('provider zip',$);")),
+        });
+
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{directoryIdentity}#published>;#91=<{directoryOutside}#target>;"
+                    + $"#92=<{zipIdentity}#published>;#93=<{zipOutside}#target>;ENDSEC;",
+                "#1=HOLDER(#90);#2=HOLDER(#91);#3=HOLDER(#92);#4=HOLDER(#93);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+        var labels = structure.Registrations
+            .OrderBy(registration => registration.Name.CanonicalDigits, StringComparer.Ordinal)
+            .Select(registration => registration.Entity)
+            .Select(holder => holder.GetType().GetProperty("Target")!.GetValue(holder))
+            .Select(target => (string)target!.GetType().GetProperty("Label")!.GetValue(target)!)
+            .ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(labels).IsEquivalentTo([
+                "inside directory",
+                "provider directory",
+                "inside zip",
+                "provider zip",
+            ]);
+            await Assert.That(provider.Requests).Contains(directoryOutside);
+            await Assert.That(provider.Requests).Contains(zipOutside);
         }
     }
 
@@ -995,6 +1126,27 @@ public sealed class ResolutionTests
         }
     }
 
+    /// <summary>Accepts a valid PKZip comment containing a false EOCD signature.</summary>
+    [Test]
+    public async Task Should_ignore_false_end_signatures_inside_a_valid_zip_comment()
+    {
+        const string identity = "https://example.test/comment.zip";
+        var source = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('comment',$);");
+        var archive = AddZipCommentWithFalseEndSignature(
+            CreateZip(new Dictionary<string, string> { ["ISO-10303.p21"] = source }));
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [identity] = new(new Uri(identity), Part21ResourceContentKind.ZipArchive, archive),
+        });
+
+        var structure = Read(
+            Exchange(string.Empty, $"REFERENCE;#90=<{identity}#target>;ENDSEC;", "#1=HOLDER(#90);"),
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+
+        await Assert.That(structure.References.Single().ResolutionStatus)
+            .IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+    }
+
     /// <summary>Uses a UUID registry, nulls an invalid external schema, and preserves type mismatch evidence.</summary>
     [Test]
     public async Task Should_use_uuid_registry_null_invalid_external_schema_and_report_type_mismatch()
@@ -1044,6 +1196,42 @@ public sealed class ResolutionTests
             await Assert.That(schemaMismatch.Registrations.Single().Entity
                     .GetType().GetProperty("Target")!.GetValue(schemaMismatch.Registrations.Single().Entity))
                 .IsNull();
+        }
+    }
+
+    /// <summary>Nulls entity and unused value targets outside the receiving FILE_SCHEMA.</summary>
+    [Test]
+    public async Task Should_require_external_targets_to_be_compatible_with_the_receiving_file_schema()
+    {
+        const string foreignIdentity = "https://example.test/foreign.p21";
+        var foreignSource = Exchange(
+                "ANCHOR;<target>=#1;<size>=42;ENDSEC;",
+                string.Empty,
+                "#1=FOREIGN_NODE('foreign');",
+                "4;1")
+            .Replace("distributed_resource", "foreign_resource", StringComparison.Ordinal);
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [foreignIdentity] = ClearText(foreignIdentity, foreignSource),
+        });
+
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange(
+                string.Empty,
+                $"REFERENCE;#90=<{foreignIdentity}#target>;@91=<{foreignIdentity}#size>;ENDSEC;",
+                "#1=HOLDER(#90);")),
+            [Descriptor.Value, ForeignDescriptor.Value],
+            new ExchangeStructureReadOptions(resourceProvider: provider));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.References.All(reference =>
+                    reference.ResolutionStatus == Part21ReferenceResolutionStatus.Null))
+                .IsTrue();
+            await Assert.That(structure.Registrations.Single().Entity
+                    .GetType().GetProperty("Target")!.GetValue(structure.Registrations.Single().Entity))
+                .IsNull();
+            await Assert.That(provider.Requests).IsEquivalentTo([foreignIdentity]);
         }
     }
 
@@ -1194,6 +1382,17 @@ public sealed class ResolutionTests
         return bytes;
     }
 
+    private static ReadOnlyMemory<byte> AddZipCommentWithFalseEndSignature(ReadOnlyMemory<byte> archive)
+    {
+        var bytes = archive.ToArray();
+        var end = FindSignature(bytes, [0x50, 0x4b, 0x05, 0x06]);
+        var comment = new byte[30];
+        WriteUInt32(comment, 0, 0x06054b50);
+        bytes = InsertBytes(bytes, bytes.Length, comment);
+        WriteUInt16(bytes, end + 20, checked((ushort)comment.Length));
+        return bytes;
+    }
+
     private static ReadOnlyMemory<byte> MutateZip(
         ReadOnlyMemory<byte> archive,
         ushort? versionNeeded = null,
@@ -1308,9 +1507,14 @@ public sealed class ResolutionTests
             | bytes[offset + 2] << 16
             | bytes[offset + 3] << 24);
 
-    private static SchemaDescriptor CreateDescriptor()
+    private static SchemaDescriptor CreateDescriptor() => CreateDescriptor(
+        "schemas/distributed-resource.exp",
+        SCHEMA,
+        "DistributedResource");
+
+    private static SchemaDescriptor CreateDescriptor(string path, string schema, string generatedNamespace)
     {
-        var result = GeneratorHostTests.Run(("schemas/distributed-resource.exp", SCHEMA));
+        var result = GeneratorHostTests.Run((path, schema));
         var diagnostics = result.Diagnostics
             .Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
@@ -1324,7 +1528,7 @@ public sealed class ResolutionTests
             throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.DistributedResource.SchemaDescriptor",
+            $"TedToolkit.Step21.Generated.{generatedNamespace}.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 

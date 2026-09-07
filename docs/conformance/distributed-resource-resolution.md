@@ -14,19 +14,21 @@ Repository fixtures are minimal original examples, not copied standard examples.
 | 10.2.1 | Fragmentless references resolve to `$` without acquisition | Provider request log remains empty for the fragmentless entry |
 | 10.2.2 and Annex G | Fragment-only UUIDs are passed to the explicit provider as registry requests; the returned structure must contain the UUID anchor | UUID registry fixture |
 | 10.2.3, 10.2.5–10.2.7 | Local anchor, entity/value category, named anchor, and numeric legacy entity target selection | Local/entity/value/type matrix, including direct/nested/typed `@n` binding and external numeric fragments |
-| 10.2.4 | `IPart21ResourceConverter` returns schema-neutral clear text, ZIP, or directory content | Other-format conversion fixture |
-| Annex A.4 | `Part21ResourceContentKind.ZipArchive`; PKZip 2.04g exclusions; exact `ISO-10303.p21` root; scoped subsidiary paths; in-memory extraction | ZIP root/subsidiary, ZIP64 sentinel/extra-field, encryption, Unicode-name and Deflate64 rejection, exact-root, CRC/length/offset, recursion, and escape fixtures |
-| Annex A.5 | Directory entry snapshot follows the same root and relative-address rules | Directory root/subsidiary fixture |
+| 10.2.4 | `IPart21ResourceConverter` returns schema-neutral clear text, ZIP, or directory content for provider roots or carried subsidiaries | Root and directory/ZIP subsidiary conversion fixtures |
+| Annex A.4 | `Part21ResourceContentKind.ZipArchive`; PKZip 2.04g exclusions; exact `ISO-10303.p21` root; root-only external identity; scoped subsidiary paths; in-memory extraction | ZIP root/subsidiary, external-boundary, ZIP64 sentinel/extra-field, encryption, Unicode-name and Deflate64 rejection, exact-root, CRC/length/offset/comment, recursion, and escape fixtures |
+| Annex A.5 | Directory entry snapshot follows the same root, external-boundary, and relative-address rules | Directory root/subsidiary and external-boundary fixtures |
 
 The per-read graph caches each resolved resource identity once, so repeated fragments share the same parsed model and
 CLR entity identity. Resolved external entities remain outside local data registrations but participate in generated
 reference-type hydration and their own resource document's complete schema validation. The receiving structure owns
 only the local occurrence alias used to write the `REFERENCE` association; no resolver, proxy, cache, or I/O state is
-stored in a generated entity.
+stored in a generated entity. Internal container-entry cache identities are disjoint from external URIs, so only the
+container root can be addressed from outside a ZIP or directory.
 
 No provider is invoked for local non-UUID fragments or fragmentless references. Relative external paths require an
 explicit absolute base URI. A missing or nonconforming delivered exchange structure, absent anchor, category mismatch,
-or standard reference cycle produces the null result. Missing provider/converter capability, provider/converter
+receiving-`FILE_SCHEMA` incompatibility, or standard reference cycle produces the null result. Missing
+provider/converter capability, provider/converter
 re-entry, quota exhaustion, archive recursion, invalid archive/root, compression-ratio violation, and archive path
 escape are atomic capability failures with distinct `P21-CAP-RESOURCE-*` or `P21-RESOURCE-*` diagnostic codes.
 

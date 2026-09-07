@@ -103,6 +103,7 @@ public sealed class ExchangeStructure
     /// <param name="schemaDescriptors">The generated schema descriptors available to the closed read operation.</param>
     /// <returns>A complete validated mutable exchange structure.</returns>
     /// <exception cref="ArgumentNullException">An argument or descriptor is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The descriptor set contains duplicate schema names.</exception>
     /// <exception cref="ArgumentException">
     /// A descriptor name is invalid or resolves to the same nominal binding identifier as another descriptor. This is
     /// detected before <paramref name="source"/> is consumed.
@@ -151,6 +152,7 @@ public sealed class ExchangeStructure
     /// <remarks>
     /// A delivered external exchange structure that cannot be parsed, bound, or validated resolves its reference
     /// to the ISO 10303-21 null result; capability, quota, and archive-integrity failures remain atomic exceptions.
+    /// Exceptions raised by the underlying <see cref="TextReader"/> propagate unchanged.
     /// </remarks>
     public static ExchangeStructure Read(
         TextReader source,
