@@ -38,6 +38,27 @@ internal sealed class PublicContractTests
         }
     }
 
+    /// <summary>Preserves the pre-signature CLR constructor while adding signature verification.</summary>
+    [Test]
+    public async Task Should_preserve_the_original_read_options_constructor()
+    {
+        _ = new ExchangeStructureReadOptions(null);
+        _ = new ExchangeStructureReadOptions(null, null);
+        var constructors = typeof(ExchangeStructureReadOptions)
+            .GetConstructors()
+            .Select(Format)
+            .Order()
+            .ToArray();
+
+        await Assert.That(constructors).IsEquivalentTo([
+            ".ctor(Uri, IPart21ResourceProvider, IPart21ResourceConverter, Part21ResourceLimits)",
+        ]);
+        var factory = typeof(ExchangeStructureReadOptions).GetMethod(
+            nameof(ExchangeStructureReadOptions.WithSignatureVerification),
+            BindingFlags.Public | BindingFlags.Static);
+        await Assert.That(factory).IsNotNull();
+    }
+
     /// <summary>
     /// Exposes registered model values for public navigation without exposing occurrence registrations.
     /// </summary>

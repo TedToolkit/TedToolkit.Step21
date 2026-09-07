@@ -660,7 +660,9 @@ internal sealed class Part21ResourceResolutionContext
     }
 
     private static bool IsExternalStructureFailure(Exception exception) =>
-        exception is ExchangeStructureSyntaxException
+        exception is ExchangeStructureSyntaxException syntax
+            && syntax.Diagnostics.All(diagnostic =>
+                !diagnostic.Code.StartsWith("P21-SIGNATURE-", StringComparison.Ordinal))
             || exception is ExchangeStructureBindingException binding
                 && binding.Diagnostics.All(diagnostic =>
                     !diagnostic.Code.StartsWith("P21-SIGNATURE-", StringComparison.Ordinal))

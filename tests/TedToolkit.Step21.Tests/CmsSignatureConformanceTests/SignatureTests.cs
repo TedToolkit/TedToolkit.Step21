@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -59,7 +60,7 @@ public sealed class SignatureTests
         var structure = ExchangeStructure.Read(
             new StringReader(replaced),
             Descriptors,
-            new ExchangeStructureReadOptions(signatureVerification: verification));
+            ExchangeStructureReadOptions.WithSignatureVerification(verification));
 
         using (Assert.Multiple())
         {
@@ -119,6 +120,10 @@ public sealed class SignatureTests
             [signerCertificate],
             new Part21SignatureAcceptancePolicy(acceptExpired: true),
             new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        var notYetValid = ReadWith(signed, Verification(
+            [signerCertificate],
+            new Part21SignatureAcceptancePolicy(acceptExpired: true),
+            new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero)));
         var revoked = ReadWith(signed, new Part21SignatureVerificationOptions(
             VerificationTime,
             [new Part21Certificate(signerCertificate.RawData)],
@@ -130,6 +135,8 @@ public sealed class SignatureTests
             await Assert.That(untrusted.Signatures[0].Signers[0].TrustStatus)
                 .IsEqualTo(Part21SignatureTrustStatus.Untrusted);
             await Assert.That(expired.Signatures[0].Signers[0].TrustStatus)
+                .IsEqualTo(Part21SignatureTrustStatus.Expired);
+            await Assert.That(notYetValid.Signatures[0].Signers[0].TrustStatus)
                 .IsEqualTo(Part21SignatureTrustStatus.Expired);
             await Assert.That(revoked.Signatures[0].Signers[0].TrustStatus)
                 .IsEqualTo(Part21SignatureTrustStatus.Revoked);
@@ -207,6 +214,17 @@ public sealed class SignatureTests
         await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-CMS");
     }
 
+    /// <summary>Rejects valid but non-canonical Base64 spelling before CMS decoding.</summary>
+    [Test]
+    public async Task Should_reject_noncanonical_base64()
+    {
+        var failure = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Unsigned + "\nSIGNATURE AB== ENDSEC;"),
+            Descriptors));
+
+        await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-BASE64");
+    }
+
     /// <summary>Rejects CMS with embedded content because clause 14 requires external content.</summary>
     [Test]
     public async Task Should_reject_cms_with_embedded_content()
@@ -223,6 +241,30 @@ public sealed class SignatureTests
             ExchangeStructure.Read(new StringReader(source), Descriptors));
 
         await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-CMS-CONTENT");
+    }
+
+    /// <summary>Rejects attached CMS even when its embedded content has zero length.</summary>
+    [Test]
+    public async Task Should_reject_zero_length_embedded_cms_content()
+    {
+        var source = Unsigned + $"\nSIGNATURE {Convert.ToBase64String(CreateEmptyAttachedCms())} ENDSEC;";
+
+        var failure = Assert.Throws<ExchangeStructureBindingException>(() =>
+            ExchangeStructure.Read(new StringReader(source), Descriptors));
+
+        await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-CMS-CONTENT");
+    }
+
+    /// <summary>Rejects structurally valid detached CMS SignedData with no signer information.</summary>
+    [Test]
+    public async Task Should_reject_detached_cms_without_a_signer()
+    {
+        var source = Unsigned + $"\nSIGNATURE {Convert.ToBase64String(CreateEmptyDetachedCms())} ENDSEC;";
+
+        var failure = Assert.Throws<ExchangeStructureBindingException>(() =>
+            ExchangeStructure.Read(new StringReader(source), Descriptors));
+
+        await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-CMS-SIGNER");
     }
 
     /// <summary>Propagates malformed CMS from an external structure instead of treating it as a null reference.</summary>
@@ -252,6 +294,33 @@ public sealed class SignatureTests
         await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-SIGNATURE-CMS");
     }
 
+    /// <summary>Propagates malformed signature-section syntax from every external structure.</summary>
+    [Test]
+    public async Task Should_reject_malformed_signature_syntax_atomically_across_the_resource_graph()
+    {
+        const string childIdentity = "https://example.test/signatures/malformed-child.p21";
+        var root = Unsigned.Replace(
+            "ENDSEC;\nEND-ISO-10303-21;",
+            "ENDSEC;\nREFERENCE;\n#1=<malformed-child.p21#1>;\nENDSEC;\nEND-ISO-10303-21;",
+            StringComparison.Ordinal);
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(Unsigned + "\nSIGNATURE ENDSEC;")),
+        });
+
+        var failure = Assert.Throws<ExchangeStructureSyntaxException>(() => ExchangeStructure.Read(
+            new StringReader(root),
+            Descriptors,
+            new ExchangeStructureReadOptions(
+                new Uri("https://example.test/signatures/root.p21"),
+                provider)));
+
+        await Assert.That(failure.Diagnostics.Any(value => value.Code == "P21-SIGNATURE-SYNTAX")).IsTrue();
+    }
+
     /// <summary>Applies the explicit evaluated-state acceptance policy before model publication.</summary>
     [Test]
     public async Task Should_apply_rejection_policy_before_publishing_a_structure()
@@ -266,6 +335,40 @@ public sealed class SignatureTests
 
         await Assert.That(failure.ValidationResult.Failures.Single().Code)
             .IsEqualTo("P21.SIGNATURE.UNTRUSTED");
+    }
+
+    /// <summary>Rejects every non-trusted evaluated state unless its individual switch is enabled.</summary>
+    [Test]
+    public async Task Should_default_every_signature_acceptance_switch_to_reject()
+    {
+        using var certificate = CreateCertificate("CN=Policy Signer");
+        var signed = Sign(certificate);
+        var unknownCms = CreateCertificateOmittedSource(certificate);
+        var unknown = Assert.Throws<ExchangeStructureReadValidationException>(() => ReadWith(
+            unknownCms,
+            new Part21SignatureVerificationOptions(VerificationTime, [])));
+        var expired = Assert.Throws<ExchangeStructureReadValidationException>(() => ReadWith(
+            signed,
+            Verification(
+                [certificate],
+                new Part21SignatureAcceptancePolicy(),
+                new DateTimeOffset(2040, 1, 1, 0, 0, 0, TimeSpan.Zero))));
+        var revoked = Assert.Throws<ExchangeStructureReadValidationException>(() => ReadWith(
+            signed,
+            new Part21SignatureVerificationOptions(
+                VerificationTime,
+                [new Part21Certificate(certificate.RawData)],
+                revokedCertificates: [new Part21Certificate(certificate.RawData)])));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(unknown.ValidationResult.Failures.Single().Code)
+                .IsEqualTo("P21.SIGNATURE.UNKNOWNSIGNER");
+            await Assert.That(expired.ValidationResult.Failures.Single().Code)
+                .IsEqualTo("P21.SIGNATURE.EXPIRED");
+            await Assert.That(revoked.ValidationResult.Failures.Single().Code)
+                .IsEqualTo("P21.SIGNATURE.REVOKED");
+        }
     }
 
     /// <summary>Never exposes partial output when signing fails or the required signer is absent.</summary>
@@ -293,6 +396,25 @@ public sealed class SignatureTests
         }
     }
 
+    /// <summary>Validates signer output against a private canonical snapshot after the callback returns.</summary>
+    [Test]
+    public async Task Should_reject_a_signer_that_mutates_its_input_buffer()
+    {
+        using var certificate = CreateCertificate("CN=Mutating Signer");
+        var structure = ExchangeStructure.Read(new StringReader(Unsigned), Descriptors);
+        var destination = new StringWriter();
+
+        var failure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
+            destination,
+            new ExchangeStructureWriteOptions([new MutatingSigner(new Part21CmsSigner(certificate))])));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-CAP-SIGNATURE-SIGNER");
+            await Assert.That(destination.ToString()).IsEmpty();
+        }
+    }
+
     private static DateTimeOffset VerificationTime =>
         new(2026, 9, 7, 12, 0, 0, TimeSpan.Zero);
 
@@ -306,11 +428,55 @@ public sealed class SignatureTests
         return destination.ToString();
     }
 
+    private static string CreateCertificateOmittedSource(X509Certificate2 certificate)
+    {
+        var prefix = Unsigned + "\n";
+        var cms = new SignedCms(
+            new ContentInfo(Part21SignatureEngine.EncodeCoveredCharacters(prefix.AsSpan())),
+            detached: true);
+        cms.ComputeSignature(new CmsSigner(certificate) { IncludeOption = X509IncludeOption.None }, silent: true);
+        return prefix + $"SIGNATURE {Convert.ToBase64String(cms.Encode())} ENDSEC;";
+    }
+
+    private static byte[] CreateEmptyAttachedCms()
+        => CreateEmptyCms(includeContent: true);
+
+    private static byte[] CreateEmptyDetachedCms()
+        => CreateEmptyCms(includeContent: false);
+
+    private static byte[] CreateEmptyCms(bool includeContent)
+    {
+        var explicitTag = new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true);
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        writer.PushSequence();
+        writer.WriteObjectIdentifier("1.2.840.113549.1.7.2");
+        writer.PushSequence(explicitTag);
+        writer.PushSequence();
+        writer.WriteInteger(1);
+        writer.PushSetOf();
+        writer.PopSetOf();
+        writer.PushSequence();
+        writer.WriteObjectIdentifier("1.2.840.113549.1.7.1");
+        if (includeContent)
+        {
+            writer.PushSequence(explicitTag);
+            writer.WriteOctetString([]);
+            writer.PopSequence(explicitTag);
+        }
+        writer.PopSequence();
+        writer.PushSetOf();
+        writer.PopSetOf();
+        writer.PopSequence();
+        writer.PopSequence(explicitTag);
+        writer.PopSequence();
+        return writer.Encode();
+    }
+
     private static ExchangeStructure ReadWith(string source, Part21SignatureVerificationOptions verification) =>
         ExchangeStructure.Read(
             new StringReader(source),
             Descriptors,
-            new ExchangeStructureReadOptions(signatureVerification: verification));
+            ExchangeStructureReadOptions.WithSignatureVerification(verification));
 
     private static Part21SignatureVerificationOptions Verification(
         IEnumerable<X509Certificate2> roots,
@@ -357,6 +523,17 @@ public sealed class SignatureTests
         public ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content)
         {
             Content = content.ToArray();
+            return inner.Sign(content);
+        }
+    }
+
+    private sealed class MutatingSigner(IPart21SignatureSigner inner) : IPart21SignatureSigner
+    {
+        public ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content)
+        {
+            if (!MemoryMarshal.TryGetArray(content, out var segment) || segment.Array is null)
+                throw new InvalidOperationException("The writer did not expose the expected callback buffer.");
+            segment.Array[segment.Offset + segment.Count - 1] ^= 1;
             return inner.Sign(content);
         }
     }

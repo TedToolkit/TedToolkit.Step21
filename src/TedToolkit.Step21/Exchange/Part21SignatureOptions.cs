@@ -63,7 +63,10 @@ public sealed class Part21SignatureVerificationOptions
     private readonly ReadOnlyCollection<Part21Certificate> _additionalCertificates;
     private readonly IReadOnlySet<string> _revokedFingerprints;
 
-    /// <summary>Creates an immutable verification input snapshot.</summary>
+    /// <summary>
+    /// Creates an immutable verification input snapshot. Revocation entries identify signer
+    /// certificates; chain revocation remains entirely caller-supplied and does not use network state.
+    /// </summary>
     public Part21SignatureVerificationOptions(
         DateTimeOffset verificationTime,
         IEnumerable<Part21Certificate> trustedRoots,
@@ -109,7 +112,10 @@ public sealed class Part21SignatureVerificationOptions
 /// <summary>Creates one detached CMS signature over the supplied standard Part 21 content bytes.</summary>
 public interface IPart21SignatureSigner
 {
-    /// <summary>Returns one complete DER-encoded detached CMS SignedData value.</summary>
+    /// <summary>
+    /// Returns one complete DER-encoded detached CMS SignedData value. The input is valid only for
+    /// this call and must not be retained or mutated.
+    /// </summary>
     ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content);
 }
 

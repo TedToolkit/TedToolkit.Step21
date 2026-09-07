@@ -26,6 +26,7 @@ internal static class ExchangeStructureSyntaxParser
 
         if (diagnostics.Count > 0)
         {
+            ReclassifySignatureDiagnostics(tokens, diagnostics);
             throw new ExchangeStructureSyntaxException(
                 diagnostics
                     .OrderBy(value => value.SourceLocation?.Line)
@@ -34,6 +35,49 @@ internal static class ExchangeStructureSyntaxParser
         }
 
         return new ExchangeStructureSyntaxVisitor(filePath).Create(tree);
+    }
+
+    private static void ReclassifySignatureDiagnostics(
+        CommonTokenStream tokens,
+        IList<Step21Diagnostic> diagnostics)
+    {
+        tokens.Fill();
+        IToken? signature = null;
+        var sawTerminalDelimiter = false;
+        for (var index = 0; index < tokens.Size; index++)
+        {
+            var token = tokens.Get(index);
+            if (token.Type == STEPLexer.ISO_END)
+            {
+                sawTerminalDelimiter = true;
+            }
+            else if (sawTerminalDelimiter && token.Type == STEPLexer.SIGNATURE)
+            {
+                signature = token;
+                break;
+            }
+        }
+
+        if (signature is null)
+            return;
+
+        for (var index = 0; index < diagnostics.Count; index++)
+        {
+            var diagnostic = diagnostics[index];
+            var location = diagnostic.SourceLocation;
+            if (location is null
+                || location.Line < signature.Line
+                || location.Line == signature.Line && location.Column < signature.Column + 1)
+            {
+                continue;
+            }
+
+            diagnostics[index] = new Step21Diagnostic(
+                "P21-SIGNATURE-SYNTAX",
+                diagnostic.Severity,
+                diagnostic.Message,
+                location);
+        }
     }
 }
 

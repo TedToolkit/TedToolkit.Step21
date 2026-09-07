@@ -138,13 +138,35 @@ public sealed class Part21ResourceLimits
 /// <summary>Binds explicit resource capabilities and quotas to one exchange-structure read.</summary>
 public sealed class ExchangeStructureReadOptions
 {
-    /// <summary>Creates an immutable per-read capability snapshot.</summary>
+    /// <summary>Creates an immutable per-read resource capability snapshot.</summary>
     public ExchangeStructureReadOptions(
         Uri? baseUri = null,
         IPart21ResourceProvider? resourceProvider = null,
         IPart21ResourceConverter? resourceConverter = null,
-        Part21ResourceLimits? resourceLimits = null,
-        Part21SignatureVerificationOptions? signatureVerification = null)
+        Part21ResourceLimits? resourceLimits = null)
+        : this(baseUri, resourceProvider, resourceConverter, resourceLimits, signatureVerification: null)
+    {
+    }
+
+    /// <summary>Creates an immutable per-read signature and resource capability snapshot.</summary>
+    public static ExchangeStructureReadOptions WithSignatureVerification(
+        Part21SignatureVerificationOptions signatureVerification,
+        Uri? baseUri = null,
+        IPart21ResourceProvider? resourceProvider = null,
+        IPart21ResourceConverter? resourceConverter = null,
+        Part21ResourceLimits? resourceLimits = null) => new(
+            baseUri,
+            resourceProvider,
+            resourceConverter,
+            resourceLimits,
+            signatureVerification ?? throw new ArgumentNullException(nameof(signatureVerification)));
+
+    private ExchangeStructureReadOptions(
+        Uri? baseUri,
+        IPart21ResourceProvider? resourceProvider,
+        IPart21ResourceConverter? resourceConverter,
+        Part21ResourceLimits? resourceLimits,
+        Part21SignatureVerificationOptions? signatureVerification)
     {
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));

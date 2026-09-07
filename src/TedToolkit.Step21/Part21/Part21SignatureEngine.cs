@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -52,7 +53,7 @@ internal static class Part21SignatureEngine
             {
                 var encodedEnvelope = new SignedCms();
                 encodedEnvelope.Decode(encodedCms);
-                if (encodedEnvelope.ContentInfo.Content.Length > 0)
+                if (HasEmbeddedContent(encodedCms))
                 {
                     throw Malformed(
                         "P21-SIGNATURE-CMS-CONTENT",
@@ -61,7 +62,7 @@ internal static class Part21SignatureEngine
                 }
                 cms.Decode(encodedCms);
             }
-            catch (CryptographicException)
+            catch (Exception exception) when (exception is CryptographicException or AsnContentException)
             {
                 throw Malformed(
                     "P21-SIGNATURE-CMS",
@@ -187,20 +188,34 @@ internal static class Part21SignatureEngine
         {
             var encodedEnvelope = new SignedCms();
             encodedEnvelope.Decode(copy);
-            if (encodedEnvelope.ContentInfo.Content.Length > 0)
+            if (HasEmbeddedContent(copy))
                 throw new CryptographicException("CMS content is embedded.");
             cms.Decode(copy);
             if (cms.SignerInfos.Count == 0)
                 throw new CryptographicException("CMS SignedData contains no signer.");
             cms.CheckSignature(verifySignatureOnly: true);
         }
-        catch (CryptographicException)
+        catch (Exception exception) when (exception is CryptographicException or AsnContentException)
         {
             throw Capability(
                 "P21-CAP-SIGNATURE-SIGNER",
                 "A signature signer did not return valid detached CMS for the supplied content.");
         }
         return copy;
+    }
+
+    private static bool HasEmbeddedContent(ReadOnlyMemory<byte> encodedCms)
+    {
+        var contentInfo = new AsnReader(encodedCms, AsnEncodingRules.BER).ReadSequence();
+        _ = contentInfo.ReadObjectIdentifier();
+        var explicitContent = contentInfo.ReadSequence(
+            new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true));
+        var signedData = explicitContent.ReadSequence();
+        _ = signedData.ReadInteger();
+        _ = signedData.ReadSetOf();
+        var encapsulatedContent = signedData.ReadSequence();
+        _ = encapsulatedContent.ReadObjectIdentifier();
+        return encapsulatedContent.HasData;
     }
 
     private static IReadOnlyList<Part21SignatureSignerResult> CreateNotEvaluatedResults(SignedCms cms) =>

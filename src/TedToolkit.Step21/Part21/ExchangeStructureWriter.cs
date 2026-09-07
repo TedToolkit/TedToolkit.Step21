@@ -70,7 +70,10 @@ internal static class ExchangeStructureWriter
                 ]);
             }
 
-            var encodedCms = Part21SignatureEngine.ValidateSignerOutput(supplied, content);
+            // The callback received array-backed memory and is therefore outside our trust boundary.
+            // Re-create the canonical content from the private builder before validating its result.
+            var verificationContent = Part21SignatureEngine.EncodeCoveredCharacters(builder);
+            var encodedCms = Part21SignatureEngine.ValidateSignerOutput(supplied, verificationContent);
             _ = builder.Append("SIGNATURE ")
                 .Append(Convert.ToBase64String(encodedCms))
                 .Append(" ENDSEC;");
