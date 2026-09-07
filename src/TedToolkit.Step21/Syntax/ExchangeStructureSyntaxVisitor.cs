@@ -171,6 +171,7 @@ internal sealed class ExchangeStructureSyntaxVisitor : STEPParserBaseVisitor<Par
     public override Part21SyntaxNode VisitSignatureSection(STEPParser.SignatureSectionContext context) =>
         new SignatureSectionSyntax(
             CreateLeaf(Part21ValueKind.Signature, context.SignatureContent()),
+            context.Start.StartIndex,
             CreateSpan(context));
 
     private HeaderEntitySyntax CreateHeaderEntity(

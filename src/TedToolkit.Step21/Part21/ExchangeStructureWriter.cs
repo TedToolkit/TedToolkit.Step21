@@ -7,7 +7,33 @@ internal static class ExchangeStructureWriter
 {
     internal static void Write(ExchangeStructure structure, TextWriter destination)
     {
+        WriteCore(structure, destination, options: null);
+    }
+
+    internal static void Write(
+        ExchangeStructure structure,
+        TextWriter destination,
+        ExchangeStructureWriteOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        WriteCore(structure, destination, options);
+    }
+
+    private static void WriteCore(
+        ExchangeStructure structure,
+        TextWriter destination,
+        ExchangeStructureWriteOptions? options)
+    {
         PreflightValidation(structure, additionalFailures: null);
+        if (structure.Signatures.Count > 0 && (options is null || options.Signers.Count == 0))
+        {
+            throw new ExchangeStructureCapabilityException([
+                new Step21Diagnostic(
+                    "P21-CAP-SIGNATURE-SIGNER",
+                    Step21DiagnosticSeverity.Error,
+                    "Writing a previously signed structure requires an explicit signing capability."),
+            ]);
+        }
         var projected = Project(structure, registration: null);
         ThrowIfProjectedValuesAreInvalid(structure, projected);
         var builder = new StringBuilder();
@@ -16,8 +42,50 @@ internal static class ExchangeStructureWriter
         AppendReferences(builder, structure);
         AppendDataSections(builder, structure, projected);
         _ = builder.Append("END-ISO-10303-21;");
+        AppendSignatures(builder, options);
         destination.Write(builder.ToString());
     }
+
+    private static void AppendSignatures(StringBuilder builder, ExchangeStructureWriteOptions? options)
+    {
+        if (options is null)
+            return;
+
+        foreach (var signer in options.Signers)
+        {
+            _ = builder.Append('\n');
+            var content = Part21SignatureEngine.EncodeCoveredCharacters(builder);
+            ReadOnlyMemory<byte> supplied;
+            try
+            {
+                supplied = signer.Sign(content);
+            }
+            catch (Exception exception) when (IsRecoverableSignerFailure(exception))
+            {
+                throw new ExchangeStructureCapabilityException([
+                    new Step21Diagnostic(
+                        "P21-CAP-SIGNATURE-SIGNER",
+                        Step21DiagnosticSeverity.Error,
+                        "A signature signer failed to produce CMS."),
+                ]);
+            }
+
+            // The callback received array-backed memory and is therefore outside our trust boundary.
+            // Re-create the canonical content from the private builder before validating its result.
+            var verificationContent = Part21SignatureEngine.EncodeCoveredCharacters(builder);
+            var encodedCms = Part21SignatureEngine.ValidateSignerOutput(supplied, verificationContent);
+            _ = builder.Append("SIGNATURE ")
+                .Append(Convert.ToBase64String(encodedCms))
+                .Append(" ENDSEC;");
+        }
+    }
+
+    private static bool IsRecoverableSignerFailure(Exception exception) => exception is not (
+        ExchangeStructureCapabilityException
+        or OperationCanceledException
+        or OutOfMemoryException
+        or StackOverflowException
+        or AccessViolationException);
 
     internal static void WriteEntity(ExchangeStructure structure, TextWriter destination, Entity entity)
     {

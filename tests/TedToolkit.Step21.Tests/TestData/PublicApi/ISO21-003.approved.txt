@@ -1,0 +1,77 @@
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Anchor> Anchors { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Reference> References { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21ResourceSignatureReport> SignatureReports { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors, TedToolkit.Step21.ExchangeStructureReadOptions options)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+  method TedToolkit.Step21.ValidationResult Validate()
+  method System.Void Write(System.IO.TextWriter destination)
+  method System.Void Write(System.IO.TextWriter destination, TedToolkit.Step21.ExchangeStructureWriteOptions options)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity)
+sealed class TedToolkit.Step21.ExchangeStructureReadOptions : System.Object
+  constructor (System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+  property System.Uri? BaseUri { get; }
+  property TedToolkit.Step21.IPart21ResourceConverter? ResourceConverter { get; }
+  property TedToolkit.Step21.Part21ResourceLimits ResourceLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceProvider? ResourceProvider { get; }
+  property TedToolkit.Step21.Part21SignatureVerificationOptions? SignatureVerification { get; }
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithSignatureVerification(TedToolkit.Step21.Part21SignatureVerificationOptions signatureVerification, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+sealed class TedToolkit.Step21.ExchangeStructureWriteOptions : System.Object
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.IPart21SignatureSigner> signers)
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.IPart21SignatureSigner> Signers { get; }
+interface TedToolkit.Step21.IPart21SignatureSigner
+  abstract method System.ReadOnlyMemory<System.Byte> Sign(System.ReadOnlyMemory<System.Byte> content)
+sealed class TedToolkit.Step21.Part21Certificate : System.Object
+  constructor (System.ReadOnlySpan<System.Byte> encoded)
+  property System.ReadOnlyMemory<System.Byte> Encoded { get; }
+  property System.String Fingerprint { get; }
+sealed class TedToolkit.Step21.Part21CmsSigner : System.Object
+  interface TedToolkit.Step21.IPart21SignatureSigner
+  constructor (System.Security.Cryptography.X509Certificates.X509Certificate2 certificate, System.Security.Cryptography.Oid? digestAlgorithm = null)
+  method System.ReadOnlyMemory<System.Byte> Sign(System.ReadOnlyMemory<System.Byte> content)
+sealed class TedToolkit.Step21.Part21Signature : System.Object
+  property System.String Content { get; }
+  property System.String DigestAlgorithm { get; }
+  property System.ReadOnlyMemory<System.Byte>? MessageDigest { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21SignatureSignerResult> Signers { get; }
+sealed class TedToolkit.Step21.Part21ResourceSignatureReport : System.Object
+  property System.String ResourceIdentity { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
+sealed class TedToolkit.Step21.Part21SignatureAcceptancePolicy : System.Object
+  constructor (System.Boolean acceptCryptographicallyInvalid = False, System.Boolean acceptUnknownSigner = False, System.Boolean acceptExpired = False, System.Boolean acceptRevoked = False, System.Boolean acceptUntrusted = False)
+  property System.Boolean AcceptCryptographicallyInvalid { get; }
+  property System.Boolean AcceptExpired { get; }
+  property System.Boolean AcceptRevoked { get; }
+  property System.Boolean AcceptUnknownSigner { get; }
+  property System.Boolean AcceptUntrusted { get; }
+enum TedToolkit.Step21.Part21SignatureCryptographicStatus
+  value NotEvaluated = 0
+  value Invalid = 1
+  value Valid = 2
+sealed class TedToolkit.Step21.Part21SignatureSignerResult : System.Object
+  property System.String? CertificateFingerprint { get; }
+  property TedToolkit.Step21.Part21SignatureCryptographicStatus CryptographicStatus { get; }
+  property TedToolkit.Step21.Part21SignatureTrustStatus TrustStatus { get; }
+enum TedToolkit.Step21.Part21SignatureTrustStatus
+  value NotEvaluated = 0
+  value UnknownSigner = 1
+  value Expired = 2
+  value Revoked = 3
+  value Untrusted = 4
+  value Trusted = 5
+sealed class TedToolkit.Step21.Part21SignatureVerificationOptions : System.Object
+  constructor (System.DateTimeOffset verificationTime, System.Collections.Generic.IEnumerable<TedToolkit.Step21.Part21Certificate> trustedRoots, System.Collections.Generic.IEnumerable<TedToolkit.Step21.Part21Certificate>? additionalCertificates = null, System.Collections.Generic.IEnumerable<TedToolkit.Step21.Part21Certificate>? revokedCertificates = null, TedToolkit.Step21.Part21SignatureAcceptancePolicy? acceptancePolicy = null)
+  property TedToolkit.Step21.Part21SignatureAcceptancePolicy AcceptancePolicy { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Certificate> AdditionalCertificates { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Certificate> TrustedRoots { get; }
+  property System.DateTimeOffset VerificationTime { get; }

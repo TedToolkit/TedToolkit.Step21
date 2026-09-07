@@ -65,6 +65,12 @@ internal static class ExchangeStructureReader
         var syntax = ExchangeStructureSyntaxParser.Parse(source, address?.Key ?? SOURCE_NAME);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
         ThrowIfReadCapabilityIsExceeded(syntax, allowValueInstanceParameters: resolutionContext is not null);
+        var signatures = syntax.SignatureSections.Count == 0
+            ? Array.Empty<Part21Signature>()
+            : Part21SignatureEngine.Evaluate(
+                source,
+                syntax.SignatureSections,
+                resolutionContext?.SignatureVerification);
 
         var bindingDiagnostics = new List<Step21Diagnostic>();
         var referenceFailures = new List<ValidationFailure>();
@@ -73,6 +79,7 @@ internal static class ExchangeStructureReader
             throw new ExchangeStructureBindingException(bindingDiagnostics);
 
         var structure = new ExchangeStructure(header, descriptors);
+        structure.SetSignatures(signatures);
         foreach (var identifier in header.FileSchema.SchemaIdentifiers)
         {
             var schemaName = new SchemaName(identifier);
@@ -236,6 +243,8 @@ internal static class ExchangeStructureReader
         var validationResult = structure.Validate();
         if (!validationResult.IsValid)
             throw new ExchangeStructureReadValidationException(validationResult);
+        if (resolutionContext is not null && depth == 0)
+            structure.SetSignatureReports(resolutionContext.CreateSignatureReports());
 
         return structure;
     }

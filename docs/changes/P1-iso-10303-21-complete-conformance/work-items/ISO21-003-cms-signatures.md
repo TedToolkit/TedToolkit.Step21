@@ -62,6 +62,36 @@
 Record candidate revision, exact covered-byte vectors, certificate/time/policy fixtures, state/publication matrix counts,
 commands, package graph and Native AOT result.
 
+## Completion evidence
+
+- Verified on 2026-09-07 at candidate and fast-forward integration revision
+  `b24584a0be2c21d58372e1968117363301a7f7f4` (baseline
+  `5b4bd247f11964d24aef2ea24352219fb7679b66`). A fresh independent delivery-candidate review concluded
+  **Ready to merge** with no blocking or important findings and no design deviations.
+- Clause-14 coverage uses every preceding Part 21 alphabet character, including earlier signature sections; CMS is
+  detached, canonical Base64, and structurally decoded even when verification is not requested. Tests cover multiple
+  signatures, excluded control characters, malformed and attached CMS (including zero-length attached content),
+  signer-less CMS, and hostile signer mutation with zero destination output.
+- The explicit state/policy matrix covers `NotEvaluated`, cryptographically valid and invalid content, trusted and
+  untrusted chains, unknown signer, expired, not-yet-valid, and caller-declared revoked signer states. Trust uses only
+  caller-supplied roots/additional certificates plus CMS-embedded certificates, explicit time, no downloads, and no
+  implicit machine intermediate or root acceptance.
+- Complete signature reports retain stable resource identities for the root and every resolved external structure in
+  deterministic resolution order, including policy-accepted untrusted results. Malformed signature syntax or CMS in
+  any resource fails publication atomically.
+- Exact focused integration proof selected 19 `CmsSignatureConformanceTests`, the cumulative public API snapshot, and
+  the original four-parameter read-options constructor compatibility test; all `21/21` passed in Release after the
+  fast-forward integration.
+- Exact-candidate broad proof built the full Release solution with `0` warnings and `0` errors and ran `611` tests:
+  `609` passed, with only the two baseline-proven unchanged QUERY-emitter failures at
+  `ExpressExpressionEmitter.cs:1327`. Package inspection found `System.Security.Cryptography.Pkcs` direct only in the
+  core runtime and transitive in AP203/AP214/AP242.
+- The packed Native AOT consumer executed actual certificate creation, CMS signing, writing, rereading and
+  verification, producing `PACKED_AOT_OK` and `NATIVE_AOT_PACKAGE_PROOF_OK` for win-x64.
+- Supplied contract: ISO21-004 may consume complete per-resource signature and digest-verification results;
+  ISO21-007 may compose the explicit trust/capability boundary; ISO21-008 may reuse the package, compatibility and
+  Native AOT evidence.
+
 ## Risks and implementation notes
 
 Cryptographic validity and caller trust acceptance are distinct; test names and public results must not collapse them into one Boolean.

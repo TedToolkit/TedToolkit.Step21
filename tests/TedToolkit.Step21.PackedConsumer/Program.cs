@@ -6,6 +6,8 @@
 // -----------------------------------------------------------------------
 
 using System.Numerics;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 
 using TedToolkit.Step21;
 using TedToolkit.Step21.Generated.CatalogCore;
@@ -178,14 +180,19 @@ internal static class Program
             return 13;
         }
 
-        if (!VerifyAggregateSelectAtomicity(descriptors, structure, specialization))
+        if (!VerifyCmsSignature(descriptors, reread))
         {
             return 14;
         }
 
-        if (!VerifySingularInverse())
+        if (!VerifyAggregateSelectAtomicity(descriptors, structure, specialization))
         {
             return 15;
+        }
+
+        if (!VerifySingularInverse())
+        {
+            return 16;
         }
 
         Console.WriteLine("PACKED_AOT_OK");
@@ -338,6 +345,40 @@ internal static class Program
                     FailureEvidence(explicitFailure.Failures[0]),
                     StringComparison.Ordinal);
         }
+    }
+
+    private static bool VerifyCmsSignature(
+        IReadOnlyList<SchemaDescriptor> descriptors,
+        ExchangeStructure structure)
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=Packed AOT CMS",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+        using var certificate = request.CreateSelfSigned(
+            new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        var output = new StringWriter();
+        structure.Write(
+            output,
+            new ExchangeStructureWriteOptions([new Part21CmsSigner(certificate)]));
+        var verification = new Part21SignatureVerificationOptions(
+            new DateTimeOffset(2026, 9, 7, 0, 0, 0, TimeSpan.Zero),
+            [new Part21Certificate(certificate.RawData)]);
+        var reread = ExchangeStructure.Read(
+            new StringReader(output.ToString()),
+            descriptors,
+            ExchangeStructureReadOptions.WithSignatureVerification(verification));
+        return reread.Signatures.Count == 1
+            && reread.Signatures[0].Signers.Count == 1
+            && reread.Signatures[0].Signers[0].CryptographicStatus
+                == Part21SignatureCryptographicStatus.Valid
+            && reread.Signatures[0].Signers[0].TrustStatus == Part21SignatureTrustStatus.Trusted;
     }
 
     private static ExchangeStructure CreateCatalogStructure()

@@ -75,16 +75,6 @@ internal sealed class ExchangeStructureSyntax : Part21SyntaxNode
                     Reference.Span.Start));
         }
 
-        foreach (var signature in SignatureSections)
-        {
-            diagnostics.Add(
-                new Step21Diagnostic(
-                    "P21-CAP-SIGNATURE",
-                    Step21DiagnosticSeverity.Error,
-                    "Digital signature verification is not implemented.",
-                    signature.Span.Start));
-        }
-
         if (diagnostics.Count > 0)
             throw new ExchangeStructureCapabilityException(diagnostics);
     }
@@ -267,14 +257,18 @@ internal sealed class EntityRecordSyntax : Part21SyntaxNode
 
 internal sealed class SignatureSectionSyntax : Part21SyntaxNode
 {
-    internal SignatureSectionSyntax(ValueSyntax content, Part21SourceSpan span)
+    internal SignatureSectionSyntax(ValueSyntax content, int startIndex, Part21SourceSpan span)
         : base(span)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentOutOfRangeException.ThrowIfNegative(startIndex);
         Content = content;
+        StartIndex = startIndex;
     }
 
     internal ValueSyntax Content { get; }
+
+    internal int StartIndex { get; }
 }
 
 internal enum Part21ValueKind

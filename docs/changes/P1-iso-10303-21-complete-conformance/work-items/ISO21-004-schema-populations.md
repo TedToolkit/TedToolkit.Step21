@@ -3,12 +3,12 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-004 -->
 
-<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
+<!-- approval-source: user-approved-revised-delivery-map-2026-09-07 -->
 
 ## Outcome
 
 完整执行 Annex E 的 reference-validity 和 schema-population determination methods，包括调用方显式提供且由
-runtime 验证的 schema-neutral SDAI-domain-equivalence 关系。
+runtime 验证的 schema-neutral SDAI-domain-equivalence 关系与参数投影。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
@@ -25,6 +25,7 @@ runtime 验证的 schema-neutral SDAI-domain-equivalence 关系。
 | --- | --- | --- |
 | ISO21-001 Verified | Stable local occurrence/value identities | ISO21-001 completion evidence |
 | ISO21-002 Verified | Stable external exchange-structure identity and schema-bound reference result | ISO21-002 completion evidence |
+| ISO21-003 Verified | Stable CMS digest verification and signature-order result | ISO21-003 completion evidence |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
@@ -37,8 +38,9 @@ runtime 验证的 schema-neutral SDAI-domain-equivalence 关系。
 <!-- work-item: delivery-constraints -->
 ## Constraints
 
-- Domain equivalence is caller-supplied data, validated as an equivalence relation, and required only when the input selects that method.
+- Domain equivalence is supplied through an explicit caller-owned provider that declares the relation and projects source physical parameters into the target schema; runtime validates relation closure and every projected target view.
 - Do not depend on Part 22 or infer equivalence by names/schema shapes; retain deterministic ordering and complete validation failures.
+- Runtime owns allocation and canonical occurrence aliasing for projected strong views; providers cannot replace canonical entities or use reflection/dynamic proxies through the runtime contract.
 - Preserve existing same/multi-schema results that already conform.
 
 <!-- work-item: proof-plan -->
@@ -64,4 +66,4 @@ API changes and the population contract supplied to dependents.
 
 ## Risks and implementation notes
 
-The standard names an SDAI concept, but this product accepts only the minimal schema-neutral relation data needed to execute Annex E.
+The standard names an SDAI concept, but this product accepts only the minimal schema-neutral provider needed to execute Annex E: explicit relation data plus schema-neutral physical-parameter projection. It does not expose a Part 22 repository.

@@ -97,10 +97,22 @@ function Copy-CachedPackage {
         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         Select-Object -First 1
     if (-not $packagePath) {
-        throw "Required cached Native AOT toolchain package '$Id/$Version' is missing from all configured package folders."
+        throw "Required cached Native AOT package '$Id/$Version' is missing from all configured package folders."
     }
 
-    Copy-Item -LiteralPath $packagePath -Destination $packageDirectory
+    Copy-Item -LiteralPath $packagePath -Destination $packageDirectory -Force
+}
+
+function Copy-ProjectPackageClosure {
+    $assetsPath = Join-Path $repositoryRoot 'src/TedToolkit.Step21/obj/project.assets.json'
+    $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
+    foreach ($library in $assets.libraries.PSObject.Properties | Where-Object { $_.Value.type -eq 'package' }) {
+        $separator = $library.Name.LastIndexOf('/')
+        if ($separator -lt 1 -or $separator -eq $library.Name.Length - 1) {
+            throw "Invalid package identity '$($library.Name)' in '$assetsPath'."
+        }
+        Copy-CachedPackage -Id $library.Name.Substring(0, $separator) -Version $library.Name.Substring($separator + 1)
+    }
 }
 
 function Get-LatestCachedPackageVersion {
@@ -198,7 +210,7 @@ try {
         ) | Out-Null
     }
 
-    Copy-CachedPackage -Id 'Antlr4.Runtime.Standard' -Version '4.13.1'
+    Copy-ProjectPackageClosure
     $compilerVersion = Get-LatestCachedPackageVersion -Id 'Microsoft.DotNet.ILCompiler'
     Copy-CachedPackage -Id 'Microsoft.DotNet.ILCompiler' -Version $compilerVersion
     Copy-CachedPackage -Id "runtime.$runtimeIdentifier.Microsoft.DotNet.ILCompiler" -Version $compilerVersion
