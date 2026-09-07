@@ -150,7 +150,7 @@ internal static class ExchangeStructureReader
             firstSchemaDescriptor,
             bindingDiagnostics);
         if (resolutionContext is not null)
-            resolutionContext.RegisterDocument(structure, address!, source);
+            resolutionContext.RegisterDocument(structure, address!);
         resolutionContext?.ResolveSchemaPopulation(structure, address!, depth);
         resolutionContext?.ResolveReferences(structure, address!, depth);
         resolutionContext?.CompleteSchemaPopulation(structure);
@@ -241,7 +241,20 @@ internal static class ExchangeStructureReader
             }
         }
 
-        domainProjections.Hydrate(bindingDiagnostics);
+        resolutionContext?.MarkPhysicalHydrationCompleted(structure);
+        var projectionsHydrated = domainProjections.Hydrate(
+            bindingDiagnostics,
+            resolutionContext is null
+                ? null
+                : entity => resolutionContext.IsEntityPhysicallyHydrated(entity));
+        if (!projectionsHydrated)
+        {
+            resolutionContext!.DeferDomainProjectionHydration(diagnostics => domainProjections.Hydrate(
+                diagnostics,
+                resolutionContext.IsEntityPhysicallyHydrated));
+        }
+        if (resolutionContext is not null && depth == 0)
+            resolutionContext.HydrateDeferredDomainProjections(bindingDiagnostics);
 
         if (bindingDiagnostics.Count > 0)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
@@ -621,6 +634,13 @@ internal static class ExchangeStructureReader
             }
             else
             {
+                if (sectionParameter.Kind == Part21ValueKind.List && sectionParameter.Values.Count == 0)
+                {
+                    diagnostics.Add(PopulationDiagnostic(
+                        sectionParameter,
+                        "FILE_POPULATION explicit data-section names cannot be empty."));
+                    valid = false;
+                }
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var value in sectionParameter.Values)
                 {
@@ -1518,11 +1538,21 @@ internal static class ExchangeStructureReader
             return projection;
         }
 
-        internal void Hydrate(ICollection<Step21Diagnostic> diagnostics)
+        internal bool Hydrate(
+            ICollection<Step21Diagnostic> diagnostics,
+            Func<Entity, bool>? isExternalSourceReady = null)
         {
-            for (var index = 0; index < _pending.Count; index++)
+            for (var index = 0; index < _pending.Count;)
             {
                 var binding = _pending[index];
+                if (!physicalComponents.ContainsKey(binding.Source)
+                    && isExternalSourceReady is not null
+                    && !isExternalSourceReady(binding.Source))
+                {
+                    index++;
+                    continue;
+                }
+                _pending.RemoveAt(index);
                 try
                 {
                     var sourceComponents = physicalComponents.TryGetValue(binding.Source, out var captured)
@@ -1586,6 +1616,7 @@ internal static class ExchangeStructureReader
                             + exception.Message));
                 }
             }
+            return _pending.Count == 0;
         }
 
         private ParameterValue ProjectParameter(SchemaDescriptor receivingDescriptor, ParameterValue parameter)

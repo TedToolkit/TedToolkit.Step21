@@ -172,6 +172,7 @@ public sealed class HeaderModelTests
             new StringReader(Exchange("""
                 SCHEMA_POPULATION((('child.p21','not-a-time',$),('other.p21',$,'not base64')));
                 SCHEMA_POPULATION((('duplicate.p21',$,$)));
+                FILE_POPULATION('population_model','SECTION_BOUNDARY',());
                 """)),
             [descriptor]));
 
@@ -179,7 +180,7 @@ public sealed class HeaderModelTests
         {
             await Assert.That(failure.Diagnostics.Count(diagnostic =>
                     diagnostic.Code == "P21-BIND-SCHEMA-POPULATION"))
-                .IsEqualTo(3);
+                .IsEqualTo(4);
             await Assert.That(failure.Diagnostics.All(diagnostic => diagnostic.SourceLocation is
             { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
         }
@@ -386,6 +387,42 @@ public sealed class HeaderModelTests
         }
     }
 
+    /// <summary>Does not reconstruct root TextReader characters as original bytes for a cyclic digest reference.</summary>
+    [Test]
+    public async Task Should_reject_population_digest_when_a_cycle_targets_root_without_original_bytes()
+    {
+        const string rootIdentity = "https://example.test/root-digest-cycle/root.p21";
+        const string childIdentity = "https://example.test/root-digest-cycle/child.p21";
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=Root Digest Cycle",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(
+            new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var unavailableDigest = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes("unavailable root bytes")));
+        var child = Sign(
+            Exchange($"SCHEMA_POPULATION(((\'root.p21\',$,\'{unavailableDigest}\')));"),
+            new Part21CmsSigner(certificate));
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(child)),
+        });
+
+        var failure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("SCHEMA_POPULATION(((\'child.p21\',$,$)));")),
+            [CreateDescriptor()],
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider)));
+
+        await Assert.That(failure.Diagnostics.Select(item => item.Code))
+            .IsEquivalentTo(["P21-CAP-SCHEMA-POPULATION-DIGEST-CONTENT"]);
+    }
+
     /// <summary>Verifies signed content-only population members without requiring an exchange conversion.</summary>
     [Test]
     public async Task Should_verify_non_exchange_population_content_without_materializing_a_model()
@@ -435,6 +472,44 @@ public sealed class HeaderModelTests
             await Assert.That(valid.SchemaPopulationEntities.Count()).IsEqualTo(1);
             await Assert.That(mismatch.ValidationResult.Failures.Select(failure => failure.Code))
                 .Contains("P21.STRUCTURE.SCHEMA_POPULATION.DIGEST.MISMATCH");
+        }
+    }
+
+    /// <summary>Rolls back deferred population state when a nested exchange is retained only as content.</summary>
+    [Test]
+    public async Task Should_rollback_nested_population_state_before_content_only_fallback()
+    {
+        const string rootIdentity = "https://example.test/population-rollback/root.p21";
+        const string badIdentity = "https://example.test/population-rollback/bad.p21";
+        const string orphanIdentity = "https://example.test/population-rollback/orphan.p21";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [badIdentity] = new(
+                new Uri(badIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(Exchange("SCHEMA_POPULATION(((\'orphan.p21\',$,$)));")
+                    .Replace("#1=NODE('root');", "#1=UNKNOWN();", StringComparison.Ordinal))),
+            [orphanIdentity] = new(
+                new Uri(orphanIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes(Exchange("SCHEMA_POPULATION(((\'root.p21\',$,$)));")
+                    .Replace(
+                        "#1=NODE('root');",
+                        "#1=NODE('orphan-one');\n#2=NODE('orphan-two');",
+                        StringComparison.Ordinal))),
+        });
+
+        var root = ExchangeStructure.Read(
+            new StringReader(Exchange("SCHEMA_POPULATION(((\'bad.p21\',$,$)));")),
+            [CreateDescriptor()],
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(root.SchemaPopulation.Single().ResourceStatus)
+                .IsEqualTo(SchemaPopulationResourceStatus.ContentOnly);
+            await Assert.That(root.Validate().IsValid).IsTrue();
+            await Assert.That(provider.Requests).IsEquivalentTo([badIdentity, orphanIdentity]);
         }
     }
 
@@ -532,6 +607,155 @@ public sealed class HeaderModelTests
             await Assert.That(child.Validate().IsValid).IsTrue();
             await Assert.That(addressedItem).IsSameReferenceAs(rootEntity);
             await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
+        }
+    }
+
+    /// <summary>Hydrates a cross-schema projection only after every physical entity in a resource cycle is ready.</summary>
+    [Test]
+    public async Task Should_defer_cross_schema_projection_hydration_across_resource_cycles()
+    {
+        const string rootIdentity = "https://example.test/projected-cycles/root.p21";
+        const string childIdentity = "https://example.test/projected-cycles/child.p21";
+        var longaB = new SchemaEntityType(new SchemaName("longa"), "b");
+        var longbB = new SchemaEntityType(new SchemaName("longb"), "b");
+        SchemaDomainEquivalence[] equivalences = [
+            new(longaB, longbB),
+            new(longbB, longaB),
+        ];
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('projected cycle child'),'4;2');
+                    FILE_NAME('child.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('LONGB'));
+                    SCHEMA_POPULATION((('root.p21',$,$)));
+                    FILE_POPULATION('LONGB','SECTION_BOUNDARY',$);
+                    ENDSEC;
+                    REFERENCE;
+                    #9=<root.p21#1>;
+                    ENDSEC;
+                    DATA('child',('LONGB'));
+                    #2=C(#9,'addr');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+
+        var root = ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('projected cycle root'),'4;2');
+                FILE_NAME('root.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('LONGA','LONGB'));
+                SCHEMA_POPULATION((('child.p21',$,$)));
+                FILE_POPULATION('LONGB','SECTION_BOUNDARY',$);
+                ENDSEC;
+                DATA('root',('LONGA'));
+                #1=B('root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateAnnexEDescriptors(),
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                new IdentityDomainEquivalenceProvider(equivalences),
+                new Uri(rootIdentity),
+                provider));
+        var child = root.SchemaPopulation.Single().Structure!;
+        _ = root.TryGetEntity(new EntityInstanceName("1"), out var rootEntity);
+        _ = child.TryGetEntity(new EntityInstanceName("2"), out var childEntity);
+        var addressedItem = childEntity!.GetType().GetProperty("AddressedItem")!.GetValue(childEntity)!;
+        var projectedName = addressedItem.GetType().GetProperty("Name")!.GetValue(addressedItem);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(root.Validate().IsValid).IsTrue();
+            await Assert.That(child.Validate().IsValid).IsTrue();
+            await Assert.That(addressedItem).IsNotSameReferenceAs(rootEntity);
+            await Assert.That(projectedName?.ToString()).IsEqualTo("root");
+            await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
+        }
+    }
+
+    /// <summary>Orders simultaneous deferred cycle failures by deterministic document completion order.</summary>
+    [Test]
+    public async Task Should_order_multiple_deferred_population_failures_deterministically()
+    {
+        const string rootIdentity = "https://example.test/ordered-cycles/root.p21";
+        const string firstIdentity = "https://example.test/ordered-cycles/first.p21";
+        const string secondIdentity = "https://example.test/ordered-cycles/second.p21";
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [firstIdentity] = new(
+                new Uri(firstIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('ordered cycle first'),'4;2');
+                    FILE_NAME('first.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('population_model','LONGB'));
+                    SCHEMA_POPULATION((('second.p21',$,$)));
+                    FILE_POPULATION('population_model','SECTION_BOUNDARY',('root-p','first-p'));
+                    ENDSEC;
+                    DATA('first-p',('population_model'));
+                    #2=NODE('first');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+            [secondIdentity] = new(
+                new Uri(secondIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('ordered cycle second'),'4;2');
+                    FILE_NAME('second.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('population_model','LONGB'));
+                    SCHEMA_POPULATION((('root.p21',$,$)));
+                    FILE_POPULATION('LONGB','SECTION_BOUNDARY',('root-l','second-l'));
+                    ENDSEC;
+                    DATA('second-l',('LONGB'));
+                    #3=B('second');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+
+        var failure = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('ordered cycle root'),'4;2');
+                FILE_NAME('root.p21','2026-09-07T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('population_model','LONGB'));
+                SCHEMA_POPULATION((('first.p21',$,$)));
+                ENDSEC;
+                DATA('root-p',('population_model'));
+                #1=NODE('root');
+                ENDSEC;
+                DATA('root-l',('LONGB'));
+                #4=B('root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateDeterministicCycleDescriptors(),
+            new ExchangeStructureReadOptions(new Uri(rootIdentity), provider)));
+
+        using (Assert.Multiple())
+        {
+            var paths = failure.ValidationResult.Failures.Select(item => item.Path).ToArray();
+            await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code)).IsEquivalentTo([
+                "LONGB.RULE.ONE_B.WHERE.EXACTLY_ONE",
+                "POPULATION_MODEL.RULE.AT_MOST_ONE.WHERE.SINGLE",
+            ]);
+            await Assert.That(paths[0]).StartsWith("DeferredSchemaPopulation[0].");
+            await Assert.That(paths[1]).StartsWith("DeferredSchemaPopulation[1].");
         }
     }
 
@@ -1008,6 +1232,28 @@ public sealed class HeaderModelTests
         }
     }
 
+    /// <summary>Rejects a public FILE_POPULATION edit whose governing schema is absent from FILE_SCHEMA.</summary>
+    [Test]
+    public async Task Should_reject_population_schema_outside_file_schema_atomically()
+    {
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange(string.Empty)),
+            CreateDescriptors());
+        structure.FilePopulations.Add(new SchemaPopulationDefinition(
+            new SchemaName("other_model"),
+            SchemaPopulationDetermination.SectionBoundary));
+        var destination = new StringWriter();
+
+        var failure = Assert.Throws<ExchangeStructureWriteValidationException>(() => structure.Write(destination));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code))
+                .Contains("P21.STRUCTURE.SCHEMA_POPULATION.FILE_SCHEMA");
+            await Assert.That(destination.ToString()).IsEmpty();
+        }
+    }
+
     private static string Exchange(string populations) => $$"""
         ISO-10303-21;
         HEADER;
@@ -1073,6 +1319,12 @@ public sealed class HeaderModelTests
         CreateGeneratedDescriptors(
             [("schemas/longa.exp", LONGA_SCHEMA), ("schemas/longb.exp", longbSchema ?? LONGB_SCHEMA)],
             "TedToolkit.Step21.Generated.Longa.SchemaDescriptor",
+            "TedToolkit.Step21.Generated.Longb.SchemaDescriptor");
+
+    private static IReadOnlyCollection<SchemaDescriptor> CreateDeterministicCycleDescriptors() =>
+        CreateGeneratedDescriptors(
+            [("schemas/population.exp", SCHEMA), ("schemas/longb.exp", LONGB_SCHEMA)],
+            "TedToolkit.Step21.Generated.PopulationModel.SchemaDescriptor",
             "TedToolkit.Step21.Generated.Longb.SchemaDescriptor");
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateInterfaceDescriptors() => CreateGeneratedDescriptors(

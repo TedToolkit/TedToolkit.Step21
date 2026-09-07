@@ -110,6 +110,8 @@ internal static class ExpressSchemaDescriptorEmitter
 
         descriptor.AddMember(CreateCapabilityMethod());
         descriptor.AddMember(CreateProjectMethod(entities, complexEntities, resolver));
+        descriptor.AddMember(CreateProjectsEntityMethod(entities, complexEntities, resolver));
+        descriptor.AddMember(CreateHasEntityTypeMethod(entities, complexEntities, resolver));
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
         var entityConstantNames = GetConstantNames(schema, entityConstants: true);
         if (entityConstantNames.Length > 0)
@@ -401,6 +403,48 @@ internal static class ExpressSchemaDescriptorEmitter
             : string.Join(" || ", entityTypes.Select(type => $"value is {type}"));
         method.AddStatement(new CustomExpression(expression).Return);
         AddSummary(method, "Determines EXPRESS interface compatibility for schema-population inclusion.");
+        return method;
+    }
+
+    private static Method CreateProjectsEntityMethod(
+        IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        var method = CreateOverrideMethod(
+            "ProjectsEntityCore",
+            new DataType("global::System.Boolean"));
+        method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
+        var types = entities.Where(entity => CanMapEntity(entity, resolver))
+            .Select(entity => entity.Name)
+            .Concat(complexEntities.Select(entity => entity.Name));
+        var expression = string.Join(" || ", types.Select(type => $"value is {type}"));
+        method.AddStatement(new CustomExpression(expression.Length == 0 ? "false" : expression).Return);
+        AddSummary(method, "Determines physical projection support without reading hydrated attribute values.");
+        return method;
+    }
+
+    private static Method CreateHasEntityTypeMethod(
+        IReadOnlyList<ExpressEntityProjection> entities,
+        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
+        ExpressGeneratedTypeResolver resolver)
+    {
+        var method = CreateOverrideMethod(
+            "HasEntityTypeCore",
+            new DataType("global::System.Boolean"));
+        method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
+        method.AddParameter(SourceComposer.Parameter(new DataType("global::System.String"), "entityName"));
+        var matches = entities.Where(entity => CanMapEntity(entity, resolver))
+            .Select(entity =>
+                $"(value is {entity.Name} && global::System.String.Equals(entityName, "
+                    + $"\"{entity.Entity.Name.ToUpperInvariant()}\", global::System.StringComparison.OrdinalIgnoreCase))")
+            .Concat(complexEntities.SelectMany(entity => entity.Components.Select(component =>
+                $"(value is {entity.Name} && global::System.String.Equals(entityName, "
+                    + $"\"{component.Entity.Name.ToUpperInvariant()}\", "
+                    + "global::System.StringComparison.OrdinalIgnoreCase))")));
+        var expression = string.Join(" || ", matches);
+        method.AddStatement(new CustomExpression(expression.Length == 0 ? "false" : expression).Return);
+        AddSummary(method, "Matches physical entity type identity without reading hydrated attribute values.");
         return method;
     }
 

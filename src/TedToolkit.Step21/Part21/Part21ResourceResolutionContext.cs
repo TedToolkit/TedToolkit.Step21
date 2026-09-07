@@ -25,8 +25,11 @@ internal sealed class Part21ResourceResolutionContext
     private readonly Dictionary<ExchangeStructure, List<ExchangeStructure>> _populationDependencies =
         new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<ExchangeStructure> _completedStructures = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ExchangeStructure> _physicallyHydratedStructures = new(ReferenceEqualityComparer.Instance);
     private HashSet<ExchangeStructure>? _deferredPopulationValidations;
     private readonly List<ExchangeStructure> _completionOrder = [];
+    private readonly List<ExchangeStructure> _physicalHydrationOrder = [];
+    private List<Func<ICollection<Step21Diagnostic>, bool>>? _deferredDomainProjectionHydrations;
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
     private readonly Stack<DocumentCacheTransaction> _cacheTransactions = new();
     private readonly Stack<LoadingDocumentAliases> _loadingAliases = new();
@@ -180,10 +183,43 @@ internal sealed class Part21ResourceResolutionContext
             CompleteSchemaPopulation(completed);
     }
 
+    internal void MarkPhysicalHydrationCompleted(ExchangeStructure structure)
+    {
+        if (_physicallyHydratedStructures.Add(structure))
+            _physicalHydrationOrder.Add(structure);
+    }
+
+    internal bool IsEntityPhysicallyHydrated(Entity entity) => _physicalHydrationOrder.Any(
+        structure => structure.OwnsPhysicalEntity(entity));
+
+    internal void DeferDomainProjectionHydration(Func<ICollection<Step21Diagnostic>, bool> hydration)
+    {
+        ArgumentNullException.ThrowIfNull(hydration);
+        (_deferredDomainProjectionHydrations ??= []).Add(hydration);
+    }
+
+    internal void HydrateDeferredDomainProjections(ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (_deferredDomainProjectionHydrations is null)
+            return;
+        foreach (var hydration in _deferredDomainProjectionHydrations)
+        {
+            if (!hydration(diagnostics))
+            {
+                diagnostics.Add(new Step21Diagnostic(
+                    "P21-BIND-DOMAIN-PROJECTION",
+                    Step21DiagnosticSeverity.Error,
+                    "A cyclic domain projection remained unresolved after physical hydration completed."));
+            }
+        }
+        _deferredDomainProjectionHydrations = null;
+    }
+
     internal bool DeferValidationUntilPopulationComplete(ExchangeStructure structure)
     {
         if (IsPopulationClosureComplete(structure))
             return false;
+        RecordDeferredPopulationValidationMutation(structure);
         (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance))
             .Add(structure);
         return true;
@@ -194,12 +230,14 @@ internal sealed class Part21ResourceResolutionContext
         if (_deferredPopulationValidations is null || _deferredPopulationValidations.Count == 0)
             return null;
         var failures = new List<ValidationFailure>();
-        var ready = _deferredPopulationValidations
+        var ready = _completionOrder
+            .Where(_deferredPopulationValidations.Contains)
             .Where(IsPopulationClosureComplete)
             .ToArray();
         for (var index = 0; index < ready.Length; index++)
         {
             var structure = ready[index];
+            RecordDeferredPopulationValidationMutation(structure);
             _deferredPopulationValidations.Remove(structure);
             foreach (var failure in structure.Validate().Failures)
             {
@@ -307,12 +345,16 @@ internal sealed class Part21ResourceResolutionContext
         structure.SetResolvedReference(reference, value ?? ParameterValue.Omitted);
     }
 
-    internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address, string source)
+    internal void RegisterDocument(ExchangeStructure structure, DocumentAddress address)
     {
-        _populationDependencies.TryAdd(structure, []);
+        if (!_populationDependencies.ContainsKey(structure))
+        {
+            RecordPopulationDependencyAddition(structure);
+            _populationDependencies.Add(structure, []);
+        }
         var digestMaterial = _digestMaterials.TryPeek(out var supplied)
             ? supplied
-            : new DigestMaterial(Part21SignatureEngine.EncodeCoveredCharacters(source), HasContent: true);
+            : new DigestMaterial(ReadOnlyMemory<byte>.Empty, HasContent: false);
         var document = new LoadedDocument(
             structure,
             address,
@@ -402,11 +444,15 @@ internal sealed class Part21ResourceResolutionContext
             return;
         if (!_populationDependencies.TryGetValue(owner, out var dependencies))
         {
+            RecordPopulationDependencyAddition(owner);
             dependencies = [];
             _populationDependencies.Add(owner, dependencies);
         }
         if (!dependencies.Any(candidate => ReferenceEquals(candidate, target)))
+        {
+            RecordPopulationDependencyMutation(owner);
             dependencies.Add(target);
+        }
     }
 
     private ParameterValue ResolveFragment(
@@ -1030,7 +1076,10 @@ internal sealed class Part21ResourceResolutionContext
 
     private DocumentCacheTransaction BeginCacheTransaction()
     {
-        var transaction = new DocumentCacheTransaction();
+        var transaction = new DocumentCacheTransaction(
+            _completionOrder.Count,
+            _physicalHydrationOrder.Count,
+            _deferredDomainProjectionHydrations?.Count ?? 0);
         _cacheTransactions.Push(transaction);
         return transaction;
     }
@@ -1061,6 +1110,44 @@ internal sealed class Part21ResourceResolutionContext
         }
     }
 
+    private void RecordPopulationDependencyMutation(ExchangeStructure structure)
+    {
+        foreach (var transaction in _cacheTransactions)
+        {
+            if (transaction.AddedPopulationStructures?.Any(candidate => ReferenceEquals(candidate, structure)) == true)
+                continue;
+            if (transaction.OriginalPopulationDependencies?.ContainsKey(structure) == true)
+                continue;
+            (transaction.OriginalPopulationDependencies ??= new Dictionary<
+                ExchangeStructure,
+                List<ExchangeStructure>>(ReferenceEqualityComparer.Instance)).Add(
+                structure,
+                [.. _populationDependencies[structure]]);
+        }
+    }
+
+    private void RecordPopulationDependencyAddition(ExchangeStructure structure)
+    {
+        foreach (var transaction in _cacheTransactions)
+        {
+            var additions = transaction.AddedPopulationStructures ??= [];
+            if (!additions.Any(candidate => ReferenceEquals(candidate, structure)))
+                additions.Add(structure);
+        }
+    }
+
+    private void RecordDeferredPopulationValidationMutation(ExchangeStructure structure)
+    {
+        foreach (var transaction in _cacheTransactions)
+        {
+            (transaction.OriginalDeferredPopulationValidations ??= new Dictionary<
+                ExchangeStructure,
+                bool>(ReferenceEqualityComparer.Instance)).TryAdd(
+                structure,
+                _deferredPopulationValidations?.Contains(structure) == true);
+        }
+    }
+
     private void CommitCacheTransaction(DocumentCacheTransaction transaction)
     {
         if (!transaction.IsActive)
@@ -1086,6 +1173,59 @@ internal sealed class Part21ResourceResolutionContext
             else
                 _ = _documents.Remove(original.Key);
         }
+        foreach (var original in transaction.OriginalPopulationDependencies ?? [])
+            _populationDependencies[original.Key] = original.Value;
+        foreach (var added in transaction.AddedPopulationStructures ?? [])
+            _ = _populationDependencies.Remove(added);
+        for (var index = _completionOrder.Count - 1;
+             index >= transaction.OriginalCompletionOrderCount;
+             index--)
+        {
+            _ = _completedStructures.Remove(_completionOrder[index]);
+        }
+        if (_completionOrder.Count > transaction.OriginalCompletionOrderCount)
+        {
+            _completionOrder.RemoveRange(
+                transaction.OriginalCompletionOrderCount,
+                _completionOrder.Count - transaction.OriginalCompletionOrderCount);
+        }
+        for (var index = _physicalHydrationOrder.Count - 1;
+             index >= transaction.OriginalPhysicalHydrationOrderCount;
+             index--)
+        {
+            _ = _physicallyHydratedStructures.Remove(_physicalHydrationOrder[index]);
+        }
+        if (_physicalHydrationOrder.Count > transaction.OriginalPhysicalHydrationOrderCount)
+        {
+            _physicalHydrationOrder.RemoveRange(
+                transaction.OriginalPhysicalHydrationOrderCount,
+                _physicalHydrationOrder.Count - transaction.OriginalPhysicalHydrationOrderCount);
+        }
+        if (_deferredDomainProjectionHydrations is not null
+            && _deferredDomainProjectionHydrations.Count > transaction.OriginalDeferredDomainProjectionCount)
+        {
+            _deferredDomainProjectionHydrations.RemoveRange(
+                transaction.OriginalDeferredDomainProjectionCount,
+                _deferredDomainProjectionHydrations.Count - transaction.OriginalDeferredDomainProjectionCount);
+            if (_deferredDomainProjectionHydrations.Count == 0)
+                _deferredDomainProjectionHydrations = null;
+        }
+        foreach (var original in transaction.OriginalDeferredPopulationValidations ?? [])
+        {
+            if (original.Value)
+            {
+                (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(
+                    ReferenceEqualityComparer.Instance)).Add(original.Key);
+            }
+            else
+            {
+                _deferredPopulationValidations?.Remove(original.Key);
+            }
+        }
+        if (_deferredPopulationValidations?.Count == 0)
+            _deferredPopulationValidations = null;
+        foreach (var completed in _completionOrder)
+            CompleteSchemaPopulation(completed);
     }
 
     private void CountSuppliedBytes(Part21ResourceContent content)
@@ -1468,9 +1608,25 @@ internal sealed class Part21ResourceResolutionContext
         string AddressKey,
         IReadOnlyCollection<string> Aliases);
 
-    private sealed class DocumentCacheTransaction
+    private sealed class DocumentCacheTransaction(
+        int originalCompletionOrderCount,
+        int originalPhysicalHydrationOrderCount,
+        int originalDeferredDomainProjectionCount)
     {
         internal Dictionary<string, DocumentCacheEntry> OriginalDocuments { get; } = new(StringComparer.Ordinal);
+
+        internal Dictionary<ExchangeStructure, List<ExchangeStructure>>? OriginalPopulationDependencies
+        { get; set; }
+
+        internal List<ExchangeStructure>? AddedPopulationStructures { get; set; }
+
+        internal Dictionary<ExchangeStructure, bool>? OriginalDeferredPopulationValidations { get; set; }
+
+        internal int OriginalCompletionOrderCount { get; } = originalCompletionOrderCount;
+
+        internal int OriginalPhysicalHydrationOrderCount { get; } = originalPhysicalHydrationOrderCount;
+
+        internal int OriginalDeferredDomainProjectionCount { get; } = originalDeferredDomainProjectionCount;
 
         internal bool IsActive { get; set; } = true;
     }

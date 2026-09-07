@@ -42,6 +42,10 @@ public abstract class SchemaDescriptor
     internal IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntity(Entity value) =>
         ProjectEntityCore(value);
 
+    internal bool ProjectsEntity(Entity value) => ProjectsEntityCore(value);
+
+    internal bool HasEntityType(Entity value, string entityName) => HasEntityTypeCore(value, entityName);
+
     internal bool IsEntityReferenceCompatible(Entity value) => IsEntityReferenceCompatibleCore(value);
 
     internal bool ContainsConstantEntity(string name) => ContainsConstantEntityCore(name);
@@ -89,6 +93,13 @@ public abstract class SchemaDescriptor
     /// <returns>The physical component names and strong parameter lists in standard order.</returns>
     protected abstract IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
         Entity value);
+
+    /// <summary>Determines whether this descriptor can physically project the entity without reading its values.</summary>
+    protected virtual bool ProjectsEntityCore(Entity value) => ProjectEntityCore(value).Count > 0;
+
+    /// <summary>Determines whether the entity has a named physical component without reading its values.</summary>
+    protected virtual bool HasEntityTypeCore(Entity value, string entityName) => ProjectEntityCore(value)
+        .Any(component => string.Equals(component.Key, entityName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Determines whether this schema can reference an entity type through a local declaration or EXPRESS interface.

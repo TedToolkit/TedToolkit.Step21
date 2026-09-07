@@ -867,21 +867,18 @@ public sealed class ExchangeStructure
         if (owningDescriptor is null)
             return false;
 
-        var sourceComponentNames = owningDescriptor.ProjectEntity(source)
-            .Select(component => component.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var candidates = _domainEquivalences.Where(candidate =>
                 SchemaIdentifiersAssociate(candidate.Source.SchemaName, receivingDescriptor.Name)
                 && SchemaIdentifiersAssociate(candidate.Target.SchemaName, owningDescriptor.Name)
-                && sourceComponentNames.Contains(candidate.Target.EntityName))
+                && owningDescriptor.HasEntityType(source, candidate.Target.EntityName))
             .ToArray();
         if (candidates.Length == 0)
             return false;
         if (candidates.Length > 1)
         {
             throw new ArgumentException(
-                $"Domain equivalence is contradictory for '{receivingDescriptor.Name}' and "
-                    + $"'{owningDescriptor.Name}.{string.Join("/", sourceComponentNames)}'.",
+                    $"Domain equivalence is contradictory for '{receivingDescriptor.Name}' and "
+                    + $"'{owningDescriptor.Name}'.",
                 nameof(_domainEquivalences));
         }
 
@@ -905,7 +902,7 @@ public sealed class ExchangeStructure
         SchemaDescriptor? match = null;
         foreach (var descriptor in _schemaDescriptors)
         {
-            if (descriptor.ProjectEntity(entity).Count == 0)
+            if (!descriptor.ProjectsEntity(entity))
                 continue;
             if (match is not null)
                 throw new ArgumentException("An entity is projected by more than one supplied schema descriptor.", nameof(entity));
@@ -949,13 +946,10 @@ public sealed class ExchangeStructure
     {
         if (_domainEquivalences.Count == 0)
             return false;
-        var targetTypes = targetDescriptor.ProjectEntity(target)
-            .Select(component => component.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return _domainEquivalences.Any(equivalence =>
             SchemaIdentifiersAssociate(equivalence.Source.SchemaName, governingDescriptor.Name)
             && SchemaIdentifiersAssociate(equivalence.Target.SchemaName, targetDescriptor.Name)
-            && targetTypes.Contains(equivalence.Target.EntityName));
+            && targetDescriptor.HasEntityType(target, equivalence.Target.EntityName));
     }
 
     internal void SetSignatures(IReadOnlyList<Part21Signature> signatures)
@@ -1036,6 +1030,9 @@ public sealed class ExchangeStructure
         name = default;
         return false;
     }
+
+    internal bool OwnsPhysicalEntity(Entity entity) => _registrationsByEntity.ContainsKey(entity)
+        && !_domainProjectionSources.ContainsKey(entity);
 
     internal void SetResolvedReference(Part21Reference reference, ParameterValue? value)
     {
@@ -1252,6 +1249,15 @@ public sealed class ExchangeStructure
 
             foreach (var section in inputSections)
                 claimedSections.Add(section);
+            if (!Header.FileSchema.SchemaIdentifiers.Any(identifier => SchemaIdentifiersAssociate(
+                    new SchemaName(identifier),
+                    definition.SchemaName)))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.SCHEMA_POPULATION.FILE_SCHEMA",
+                    $"SchemaPopulations[{definition.SchemaName}]",
+                    $"Governing schema '{definition.SchemaName}' does not occur in FILE_SCHEMA."));
+            }
             if (!_schemaDescriptorsByName.TryGetValue(definition.SchemaName, out var descriptor))
             {
                 failures.Add(new ValidationFailure(
@@ -1433,8 +1439,8 @@ public sealed class ExchangeStructure
                              descriptorsBySection[entry.DataSection].Name,
                              governingDescriptor.Name)
                          || !projections[entry.Entity]
-                             .SelectMany(component => component.Value)
-                             .Any(ContainsDomainProjection))))
+                              .SelectMany(component => component.Value)
+                              .Any(entry.Owner.ContainsDomainProjection))))
         {
             var owner = descriptorsBySection[entry.DataSection];
             var components = projections[entry.Entity]
@@ -1443,7 +1449,8 @@ public sealed class ExchangeStructure
                     component.Value.Select((parameter, index) => RewritePopulationParameter(
                             parameter,
                             clones,
-                            $"{entry.Path}.Parameters[{index}]"))
+                            $"{entry.Path}.Parameters[{index}]",
+                            entry.Owner))
                         .ToArray()))
                 .ToArray();
             foreach (var diagnostic in owner.HydrateEntity(detached, clones[entry.Entity], components))
@@ -1589,7 +1596,8 @@ public sealed class ExchangeStructure
                     component.Value.Select((parameter, index) => RewritePopulationParameter(
                             parameter,
                             projectedEntities,
-                            $"{entry.Path}.Parameters[{index}]")).ToArray()))
+                            $"{entry.Path}.Parameters[{index}]",
+                            entry.Owner)).ToArray()))
                 .ToArray();
             foreach (var diagnostic in projectionDescriptor.HydrateEntity(
                          projected,
@@ -1650,13 +1658,14 @@ public sealed class ExchangeStructure
     private ParameterValue RewritePopulationParameter(
         ParameterValue value,
         IReadOnlyDictionary<Entity, Entity> clones,
-        string path)
+        string path,
+        ExchangeStructure owner)
     {
         if (value.TryGetEntity(out var entity))
         {
             if (clones.TryGetValue(entity, out var clone))
                 return ParameterValue.FromEntity(clone);
-            if (_domainProjectionSources.TryGetValue(entity!, out var source)
+            if (owner._domainProjectionSources.TryGetValue(entity!, out var source)
                 && clones.TryGetValue(source, out clone))
             {
                 return ParameterValue.FromEntity(clone);
@@ -1670,11 +1679,12 @@ public sealed class ExchangeStructure
             return ParameterValue.FromAggregate(values.Select((item, index) => RewritePopulationParameter(
                 item,
                 clones,
-                $"{path}[{index}]")));
+                $"{path}[{index}]",
+                owner)));
         }
 
         if (value.TryGetTyped(out var typeName, out var inner))
-            return ParameterValue.FromTyped(typeName, RewritePopulationParameter(inner, clones, path));
+            return ParameterValue.FromTyped(typeName, RewritePopulationParameter(inner, clones, path, owner));
         return value;
     }
 
