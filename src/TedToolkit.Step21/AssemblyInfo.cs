@@ -6,5 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System;
+using System.Runtime.CompilerServices;
 
 [assembly: CLSCompliant(true)]
+[assembly: InternalsVisibleTo("TedToolkit.Step21.AnnexF")]

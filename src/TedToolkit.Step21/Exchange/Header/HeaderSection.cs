@@ -5,6 +5,8 @@ namespace TedToolkit.Step21;
 /// </summary>
 public sealed class HeaderSection
 {
+    private FileName _fileName;
+
     /// <summary>Initializes a header section from its required ISO entities.</summary>
     /// <param name="fileDescription">The required file-description entity.</param>
     /// <param name="fileName">The required file-name entity.</param>
@@ -17,7 +19,7 @@ public sealed class HeaderSection
         ArgumentNullException.ThrowIfNull(fileSchema);
 
         FileDescription = fileDescription;
-        FileName = fileName;
+        _fileName = fileName;
         FileSchema = fileSchema;
     }
 
@@ -25,8 +27,14 @@ public sealed class HeaderSection
     public FileDescription FileDescription { get; }
 
     /// <summary>Gets the required file-name entity.</summary>
-    public FileName FileName { get; }
+    public FileName FileName => _fileName;
 
     /// <summary>Gets the required file-schema entity.</summary>
     public FileSchema FileSchema { get; }
+
+    internal void ReplaceFileName(FileName fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        _fileName = fileName;
+    }
 }

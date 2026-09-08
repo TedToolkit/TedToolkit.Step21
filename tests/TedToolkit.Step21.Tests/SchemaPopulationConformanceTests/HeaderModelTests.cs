@@ -1088,7 +1088,7 @@ public sealed class HeaderModelTests
                 Part21ResourceContentKind.ClearText,
                 System.Text.Encoding.UTF8.GetBytes(Exchange(string.Empty))),
         });
-        var source = Exchange(string.Empty).Replace(
+        var source = Exchange(string.Empty).ReplaceLineEndings("\n").Replace(
             "ENDSEC;\nDATA('main'",
             "ENDSEC;\nREFERENCE;\n#90=<child.p21>;\nENDSEC;\nDATA('main'",
             StringComparison.Ordinal);
@@ -1137,7 +1137,7 @@ public sealed class HeaderModelTests
                 Part21ResourceContentKind.ClearText,
                 System.Text.Encoding.UTF8.GetBytes(target)),
         });
-        var source = Exchange(string.Empty).Replace(
+        var source = Exchange(string.Empty).ReplaceLineEndings("\n").Replace(
             "ENDSEC;\nDATA('main'",
             $"ENDSEC;\nREFERENCE;\n#90=<{targetIdentity}#target>;\nENDSEC;\nDATA('main'",
             StringComparison.Ordinal);

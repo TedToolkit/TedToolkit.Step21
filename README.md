@@ -16,6 +16,7 @@ TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and wri
 | Path | Responsibility |
 | --- | --- |
 | `src/TedToolkit.Step21` | Public runtime, generated ISO 10303-21 parser, and packaged analyzer. |
+| `src/TedToolkit.Step21.AnnexF` | Optional engine-neutral ISO 10303-21 Annex F ECMAScript binding; [host guide](src/TedToolkit.Step21.AnnexF/README.md). |
 | `src/TedToolkit.Step21.Ap203` | Optional precompiled AP203 Amendment 1 `CONFIG_CONTROL_DESIGN` package. |
 | `src/TedToolkit.Step21.Ap214` | Optional precompiled AP214 `AUTOMOTIVE_DESIGN` package; [consumer guide](src/TedToolkit.Step21.Ap214/README.md). |
 | `src/TedToolkit.Step21.Ap242` | AP242 N11521 MIM long-form stable package; [consumer guide](src/TedToolkit.Step21.Ap242/README.md). |

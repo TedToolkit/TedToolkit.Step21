@@ -1074,6 +1074,8 @@ public sealed class ExchangeStructure
         return false;
     }
 
+    internal void ReplaceFileName(FileName fileName) => Header.ReplaceFileName(fileName);
+
     private sealed class SchemaIdentifierComparer : IEqualityComparer<SchemaName>
     {
         public bool Equals(SchemaName left, SchemaName right)
