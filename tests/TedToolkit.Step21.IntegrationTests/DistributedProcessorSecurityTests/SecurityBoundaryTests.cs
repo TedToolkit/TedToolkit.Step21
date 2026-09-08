@@ -325,12 +325,45 @@ internal sealed class SecurityBoundaryTests
 
         using var firstCertificate = CreateCertificate("first");
         using var secondCertificate = CreateCertificate("second");
+        var sampleCmsLength = CreateCms(new byte[] { 1 }, firstCertificate).Length;
+        var totalWriteCalls = 0;
+        var totalWriteDestination = new StringWriter();
+        var totalWriteFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
+            totalWriteDestination,
+            new ExchangeStructureWriteOptions(
+                [
+                    new DelegateSigner(content =>
+                    {
+                        totalWriteCalls++;
+                        return CreateCms(content, firstCertificate);
+                    }),
+                    new DelegateSigner(content =>
+                    {
+                        totalWriteCalls++;
+                        return CreateCms(content, firstCertificate);
+                    }),
+                ],
+                new Part21ProcessingLimits(maximumTotalSignatureBytes: sampleCmsLength * 2 - 1))));
         var signerCountDestination = new StringWriter();
         var signerCountFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
             signerCountDestination,
             new ExchangeStructureWriteOptions(
                 [new DelegateSigner(content => CreateCms(content, firstCertificate, secondCertificate))],
                 new Part21ProcessingLimits(maximumCmsSignerCount: 1))));
+
+        var multiSignerPrefix = Exchange(string.Empty) + "\n";
+        var multiSignerCms = CreateCms(
+            Part21SignatureEngine.EncodeCoveredCharacters(multiSignerPrefix.AsSpan()),
+            firstCertificate,
+            secondCertificate);
+        var multiSignerSource = multiSignerPrefix
+            + $"SIGNATURE {Convert.ToBase64String(multiSignerCms.Span)} ENDSEC;";
+        var readSignerCountFailure = Assert.Throws<ExchangeStructureCapabilityException>(() =>
+            ExchangeStructure.Read(
+                new StringReader(multiSignerSource),
+                [SecuritySchemaDescriptor.Instance],
+                ExchangeStructureReadOptions.WithProcessingLimits(
+                    new Part21ProcessingLimits(maximumCmsSignerCount: 1))));
 
         var malformedFailure = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
             new StringReader(Exchange(string.Empty) + "SIGNATURE AQID ENDSEC;"),
@@ -361,6 +394,12 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(signerCountFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
             await Assert.That(signerCountDestination.ToString()).IsEmpty();
+            await Assert.That(totalWriteFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
+            await Assert.That(totalWriteCalls).IsEqualTo(2);
+            await Assert.That(totalWriteDestination.ToString()).IsEmpty();
+            await Assert.That(readSignerCountFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
             await Assert.That(malformedFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-SIGNATURE-CMS");
             await Assert.That(trustFailure.ValidationResult.Failures.Single().Code)
