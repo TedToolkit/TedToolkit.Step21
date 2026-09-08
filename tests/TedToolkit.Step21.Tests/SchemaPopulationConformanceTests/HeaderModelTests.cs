@@ -77,6 +77,24 @@ public sealed class HeaderModelTests
         END_SCHEMA;
         """;
 
+    private const string CYCLIC_LONGA_SCHEMA = """
+        SCHEMA cyclic_longa;
+        ENTITY b;
+          peer : OPTIONAL b;
+          name : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
+    private const string CYCLIC_LONGB_SCHEMA = """
+        SCHEMA cyclic_longb;
+        ENTITY b;
+          peer : OPTIONAL b;
+          name : STRING;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string INTERFACE_BASE_SCHEMA = """
         SCHEMA base_model;
         ENTITY address;
@@ -513,6 +531,73 @@ public sealed class HeaderModelTests
         }
     }
 
+    /// <summary>Rolls back projections and deferred hydration created by a failed content-only exchange attempt.</summary>
+    [Test]
+    public async Task Should_rollback_created_domain_projections_before_content_only_fallback()
+    {
+        const string rootIdentity = "https://example.test/projection-rollback/root.p21";
+        const string badIdentity = "https://example.test/projection-rollback/bad.p21";
+        var longaB = new SchemaEntityType(new SchemaName("longa"), "b");
+        var longbB = new SchemaEntityType(new SchemaName("longb"), "b");
+        var equivalenceProvider = new IdentityDomainEquivalenceProvider([
+            new SchemaDomainEquivalence(longaB, longbB),
+            new SchemaDomainEquivalence(longbB, longaB),
+        ]);
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [badIdentity] = new(
+                new Uri(badIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('projection rollback child'),'4;2');
+                    FILE_NAME('bad.p21','2026-09-08T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('LONGB'));
+                    SCHEMA_POPULATION((('root.p21',$,$)));
+                    ENDSEC;
+                    REFERENCE;
+                    #9=<root.p21#1>;
+                    ENDSEC;
+                    DATA('bad',('LONGB'));
+                    #2=C(#9,'valid projection');
+                    #3=C($,'required reference is unset');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+
+        var root = ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('projection rollback root'),'4;2');
+                FILE_NAME('root.p21','2026-09-08T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('LONGA'));
+                SCHEMA_POPULATION((('bad.p21',$,$)));
+                ENDSEC;
+                DATA('root',('LONGA'));
+                #1=B('root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            CreateAnnexEDescriptors(),
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                equivalenceProvider,
+                new Uri(rootIdentity),
+                provider));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(root.SchemaPopulation.Single().ResourceStatus)
+                .IsEqualTo(SchemaPopulationResourceStatus.ContentOnly);
+            await Assert.That(equivalenceProvider.ProjectionCount).IsEqualTo(0);
+            await Assert.That(root.SchemaPopulationEntities.Count()).IsEqualTo(1);
+            await Assert.That(root.Validate().IsValid).IsTrue();
+            await Assert.That(provider.Requests).IsEquivalentTo([badIdentity]);
+        }
+    }
+
     /// <summary>Completes every structure's transitive population after a normative resource cycle closes.</summary>
     [Test]
     public async Task Should_complete_schema_populations_across_resource_cycles()
@@ -678,6 +763,98 @@ public sealed class HeaderModelTests
             await Assert.That(child.Validate().IsValid).IsTrue();
             await Assert.That(addressedItem).IsNotSameReferenceAs(rootEntity);
             await Assert.That(projectedName?.ToString()).IsEqualTo("root");
+            await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
+        }
+    }
+
+    /// <summary>Resolves mutually recursive projected references to one canonical physical occurrence per resource.</summary>
+    [Test]
+    public async Task Should_reach_a_fixed_point_for_recursive_cross_schema_projection_cycles()
+    {
+        const string rootIdentity = "https://example.test/recursive-projected-cycles/root.p21";
+        const string childIdentity = "https://example.test/recursive-projected-cycles/child.p21";
+        var longaB = new SchemaEntityType(new SchemaName("cyclic_longa"), "b");
+        var longbB = new SchemaEntityType(new SchemaName("cyclic_longb"), "b");
+        SchemaDomainEquivalence[] equivalences = [
+            new(longaB, longbB),
+            new(longbB, longaB),
+        ];
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            [childIdentity] = new(
+                new Uri(childIdentity),
+                Part21ResourceContentKind.ClearText,
+                Encoding.UTF8.GetBytes("""
+                    ISO-10303-21;
+                    HEADER;
+                    FILE_DESCRIPTION(('recursive projected cycle child'),'4;2');
+                    FILE_NAME('child.p21','2026-09-08T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                    FILE_SCHEMA(('CYCLIC_LONGB'));
+                    SCHEMA_POPULATION((('root.p21',$,$)));
+                    ENDSEC;
+                    REFERENCE;
+                    #8=<root.p21#1>;
+                    ENDSEC;
+                    DATA('child',('CYCLIC_LONGB'));
+                    #2=B(#8,'child');
+                    ENDSEC;
+                    END-ISO-10303-21;
+                    """)),
+        });
+        var descriptors = CreateGeneratedDescriptors(
+            [("schemas/cyclic-longa.exp", CYCLIC_LONGA_SCHEMA),
+                ("schemas/cyclic-longb.exp", CYCLIC_LONGB_SCHEMA)],
+            "TedToolkit.Step21.Generated.CyclicLonga.SchemaDescriptor",
+            "TedToolkit.Step21.Generated.CyclicLongb.SchemaDescriptor");
+
+        var root = ExchangeStructure.Read(
+            new StringReader("""
+                ISO-10303-21;
+                HEADER;
+                FILE_DESCRIPTION(('recursive projected cycle root'),'4;2');
+                FILE_NAME('root.p21','2026-09-08T00:00:00Z',('Author'),('Org'),'Pre','System','Auth');
+                FILE_SCHEMA(('CYCLIC_LONGA'));
+                SCHEMA_POPULATION((('child.p21',$,$)));
+                ENDSEC;
+                REFERENCE;
+                #9=<child.p21#2>;
+                ENDSEC;
+                DATA('root',('CYCLIC_LONGA'));
+                #1=B(#9,'root');
+                ENDSEC;
+                END-ISO-10303-21;
+                """),
+            descriptors,
+            ExchangeStructureReadOptions.WithDomainEquivalenceProvider(
+                new IdentityDomainEquivalenceProvider(equivalences),
+                new Uri(rootIdentity),
+                provider));
+        var child = root.SchemaPopulation.Single().Structure!;
+        _ = root.TryGetEntity(new EntityInstanceName("1"), out var rootEntity);
+        _ = child.TryGetEntity(new EntityInstanceName("2"), out var childEntity);
+        var rootPeer = (Entity)rootEntity!.GetType().GetProperty("Peer")!.GetValue(rootEntity)!;
+        var childPeer = (Entity)childEntity!.GetType().GetProperty("Peer")!.GetValue(childEntity)!;
+        var rootPeerPeer = rootPeer.GetType().GetProperty("Peer")!.GetValue(rootPeer);
+        var childPeerPeer = childPeer.GetType().GetProperty("Peer")!.GetValue(childPeer);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(rootPeer.GetType().GetProperty("Name")!.GetValue(rootPeer)?.ToString())
+                .IsEqualTo("child");
+            await Assert.That(childPeer.GetType().GetProperty("Name")!.GetValue(childPeer)?.ToString())
+                .IsEqualTo("root");
+            await Assert.That(rootPeerPeer).IsSameReferenceAs(rootEntity);
+            await Assert.That(childPeerPeer).IsSameReferenceAs(childEntity);
+            await Assert.That(root.TryGetName(rootPeer, out var rootPeerName)
+                    && rootPeerName.Equals(new EntityInstanceName("9")))
+                .IsTrue();
+            await Assert.That(child.TryGetName(childPeer, out var childPeerName)
+                    && childPeerName.Equals(new EntityInstanceName("8")))
+                .IsTrue();
+            await Assert.That(root.SchemaPopulationEntities.Count()).IsEqualTo(2);
+            await Assert.That(child.SchemaPopulationEntities.Count()).IsEqualTo(2);
+            await Assert.That(root.Validate().IsValid).IsTrue();
+            await Assert.That(child.Validate().IsValid).IsTrue();
             await Assert.That(provider.Requests).IsEquivalentTo([childIdentity]);
         }
     }

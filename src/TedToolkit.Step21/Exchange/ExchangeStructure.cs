@@ -893,7 +893,8 @@ public sealed class ExchangeStructure
 
     private SchemaDescriptor? FindOwningDescriptor(Entity entity)
     {
-        if (_registrationsByEntity.TryGetValue(entity, out var registration)
+        if (!_domainProjectionSources.ContainsKey(entity)
+            && _registrationsByEntity.TryGetValue(entity, out var registration)
             && _schemaDescriptorsByName.TryGetValue(registration.DataSection.SchemaName, out var localDescriptor))
         {
             return localDescriptor;
@@ -1315,7 +1316,7 @@ public sealed class ExchangeStructure
                 {
                     if (reference is null)
                         continue;
-                    var canonical = entry.Owner.GetCanonicalPopulationEntity(reference);
+                    var canonical = GetCanonicalPopulationEntity(reference, entry.Owner);
                     if (available.Contains(canonical))
                         selected.Add(canonical);
                 }
@@ -1337,12 +1338,37 @@ public sealed class ExchangeStructure
         return allEntries.Where(entry => selected.Contains(entry.Entity)).ToArray();
     }
 
-    private Entity GetCanonicalPopulationEntity(Entity entity)
+    private Entity GetCanonicalPopulationEntity(Entity entity, ExchangeStructure owner)
     {
         var current = entity;
-        while (_domainProjectionSources.TryGetValue(current, out var source))
+        HashSet<Entity>? visited = null;
+        while (TryGetDomainProjectionSource(current, owner, out var source))
+        {
+            visited ??= new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+            if (!visited.Add(current))
+                break;
             current = source;
+        }
         return current;
+    }
+
+    private bool TryGetDomainProjectionSource(Entity entity, ExchangeStructure owner, out Entity source)
+    {
+        if (owner._domainProjectionSources.TryGetValue(entity, out source!))
+            return true;
+        if (!ReferenceEquals(owner, this) && _domainProjectionSources.TryGetValue(entity, out source!))
+            return true;
+        foreach (var included in _includedPopulationStructures)
+        {
+            if (!ReferenceEquals(included, owner)
+                && included._domainProjectionSources.TryGetValue(entity, out source!))
+            {
+                return true;
+            }
+        }
+
+        source = null!;
+        return false;
     }
 
     private IReadOnlyList<ValidationFailure> ValidatePopulation(
@@ -1356,7 +1382,7 @@ public sealed class ExchangeStructure
         {
             if (reference is null)
                 return false;
-            var canonical = entry.Owner.GetCanonicalPopulationEntity(reference);
+            var canonical = GetCanonicalPopulationEntity(reference, entry.Owner);
             return populationEntities.Contains(canonical) && !selected.Contains(canonical);
         }));
         var allDirectlyGoverned = entries.All(entry =>
@@ -1440,7 +1466,7 @@ public sealed class ExchangeStructure
                              governingDescriptor.Name)
                          || !projections[entry.Entity]
                               .SelectMany(component => component.Value)
-                              .Any(entry.Owner.ContainsDomainProjection))))
+                              .Any(parameter => ContainsDomainProjection(parameter, entry.Owner)))))
         {
             var owner = descriptorsBySection[entry.DataSection];
             var components = projections[entry.Entity]
@@ -1608,9 +1634,10 @@ public sealed class ExchangeStructure
                     && TryGetHydrationParameterIndex(diagnostic.Message, out var parameterIndex)
                     && projectedComponents[entry.Entity].Any(component =>
                         parameterIndex < component.Value.Count
-                        && entry.Owner.ContainsOutsidePopulationReference(
+                        && ContainsOutsidePopulationReference(
                             component.Value[parameterIndex],
-                            projectedEntities)))
+                            projectedEntities,
+                            entry.Owner)))
                 {
                     failures.Add(new ValidationFailure(
                         "P21.POPULATION.REFERENCE.UNSET",
@@ -1665,8 +1692,8 @@ public sealed class ExchangeStructure
         {
             if (clones.TryGetValue(entity, out var clone))
                 return ParameterValue.FromEntity(clone);
-            if (owner._domainProjectionSources.TryGetValue(entity!, out var source)
-                && clones.TryGetValue(source, out clone))
+            var canonical = GetCanonicalPopulationEntity(entity!, owner);
+            if (!ReferenceEquals(canonical, entity) && clones.TryGetValue(canonical, out clone))
             {
                 return ParameterValue.FromEntity(clone);
             }
@@ -1688,25 +1715,26 @@ public sealed class ExchangeStructure
         return value;
     }
 
-    private bool ContainsDomainProjection(ParameterValue value)
+    private bool ContainsDomainProjection(ParameterValue value, ExchangeStructure owner)
     {
         if (value.TryGetEntity(out var entity))
-            return _domainProjectionSources.ContainsKey(entity!);
+            return TryGetDomainProjectionSource(entity!, owner, out _);
         if (value.TryGetAggregate(out var values))
-            return values.Any(ContainsDomainProjection);
-        return value.TryGetTyped(out _, out var inner) && ContainsDomainProjection(inner);
+            return values.Any(item => ContainsDomainProjection(item, owner));
+        return value.TryGetTyped(out _, out var inner) && ContainsDomainProjection(inner, owner);
     }
 
     private bool ContainsOutsidePopulationReference(
         ParameterValue value,
-        IReadOnlyDictionary<Entity, Entity> populationEntities)
+        IReadOnlyDictionary<Entity, Entity> populationEntities,
+        ExchangeStructure owner)
     {
         if (value.TryGetEntity(out var entity))
-            return !populationEntities.ContainsKey(GetCanonicalPopulationEntity(entity!));
+            return !populationEntities.ContainsKey(GetCanonicalPopulationEntity(entity!, owner));
         if (value.TryGetAggregate(out var values))
-            return values.Any(item => ContainsOutsidePopulationReference(item, populationEntities));
+            return values.Any(item => ContainsOutsidePopulationReference(item, populationEntities, owner));
         return value.TryGetTyped(out _, out var inner)
-            && ContainsOutsidePopulationReference(inner, populationEntities);
+            && ContainsOutsidePopulationReference(inner, populationEntities, owner);
     }
 
     private static bool TryGetHydrationParameterIndex(string message, out int parameterIndex)

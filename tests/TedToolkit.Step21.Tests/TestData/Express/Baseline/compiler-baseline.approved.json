@@ -1762,6 +1762,26 @@
           "sha256": "7BCA8EE9A5187A7810A2B4989285CED91AFD130605BCFE9D6137F4EB8D5E8387"
         },
         {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressEntityTypeIdentityShard0.g.cs",
+          "sha256": "92E61E05B30219D62DBE0C30A9501D65008CA06B7C5AED2D23D9856AD80FDAE8"
+        },
+        {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressEntityTypeIdentityShard1.g.cs",
+          "sha256": "9F946A14346171EBF014387F9FC48489BFA4E118E442566225CFCFDF443D4FB3"
+        },
+        {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressEntityTypeIdentityShard2.g.cs",
+          "sha256": "5EE1B5627F94007711354C000AE2D3EA4E225618BD3E53D65FF1B6CDCFAD6E2D"
+        },
+        {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressEntityTypeIdentityShard3.g.cs",
+          "sha256": "62F4EA536E867A65F86C6F65B2DAB194FD08533E3F9B77E93C12765EE9894B32"
+        },
+        {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressEntityTypeIdentityShard4.g.cs",
+          "sha256": "BE427F8985B2A79FEAE7D3E5C3C3E662D1FABFF506438960A9B4A50BFC4ACA68"
+        },
+        {
           "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressHydrationShard0.g.cs",
           "sha256": "A3388A426656301A42D752B16A53D9DDBDEA94E8F86A4438A3467EDB06D52FBA"
         },
@@ -3483,7 +3503,7 @@
         },
         {
           "hintName": "ExpressSchema_CONFIG_CONTROL_DESIGN.g.cs",
-          "sha256": "46E6410ACE614E6F869E5D0DF7DB3BABCF78038AEE5FD73E957A3E1D7E421550"
+          "sha256": "9D14D7C564EFB8D315A0CB34B9D2B5BA6E9C4476087C721F13354F9996EA1F05"
         },
         {
           "hintName": "ExpressValue_CONFIG_CONTROL_DESIGN_AHEAD_OR_BEHIND.g.cs",
@@ -3790,7 +3810,7 @@
         },
         {
           "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
-          "sha256": "7088E3F3B6A92F8409D87EF0E1BC3E3600B99012E5EEB385C6C91D0CD237D741"
+          "sha256": "F862AAA577F7970A14F38B7160FAD0D01F38686EB76DA4BB30DB22AF1C8ABC73"
         }
       ],
       "generatorDiagnostics": [
@@ -3840,7 +3860,7 @@
         },
         {
           "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
-          "sha256": "4DD701768747B1CD2FB104A3ADB0401A66EC825D0AEC64B537B9AE1DEC4E55A1"
+          "sha256": "EB592FEF624EF1E72BDFC75800F51695A7792302402C839A825DF953A75D0E1B"
         }
       ],
       "generatorDiagnostics": [
@@ -3934,7 +3954,7 @@
         },
         {
           "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
-          "sha256": "A38C881923C668B189FB5FDD443945C0E001E11414AC82DC313D3C27F5D62E5A"
+          "sha256": "8166482DA106D4A46CEA330DCD1EB6E2EF9DD5FE0876CBCAD66E7EAEFD8FE073"
         }
       ],
       "generatorDiagnostics": [
@@ -4014,7 +4034,7 @@
         },
         {
           "hintName": "ExpressSchema_BASELINE_VALID.g.cs",
-          "sha256": "BDFF77369E6574489B1D9436E09B20CA3174715D36AA8F1386482F1A64C72DFE"
+          "sha256": "06BFEDFFBE328B48C29D8372652B79108237EAFCDD20CAA9EF9412548FD1E991"
         }
       ],
       "generatorDiagnostics": [

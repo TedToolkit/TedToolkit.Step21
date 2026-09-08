@@ -26,10 +26,14 @@ internal sealed class Part21ResourceResolutionContext
         new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<ExchangeStructure> _completedStructures = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<ExchangeStructure> _physicallyHydratedStructures = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<Entity> _hydratedDomainProjections = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Entity, Entity> _domainProjectionSources = new(ReferenceEqualityComparer.Instance);
     private HashSet<ExchangeStructure>? _deferredPopulationValidations;
     private readonly List<ExchangeStructure> _completionOrder = [];
     private readonly List<ExchangeStructure> _physicalHydrationOrder = [];
-    private List<Func<ICollection<Step21Diagnostic>, bool>>? _deferredDomainProjectionHydrations;
+    private readonly List<Entity> _hydratedDomainProjectionOrder = [];
+    private readonly List<Entity> _domainProjectionOrder = [];
+    private List<Func<ICollection<Step21Diagnostic>, int>>? _deferredDomainProjectionHydrations;
     private readonly HashSet<string> _activeTargets = new(StringComparer.Ordinal);
     private readonly Stack<DocumentCacheTransaction> _cacheTransactions = new();
     private readonly Stack<LoadingDocumentAliases> _loadingAliases = new();
@@ -189,10 +193,40 @@ internal sealed class Part21ResourceResolutionContext
             _physicalHydrationOrder.Add(structure);
     }
 
-    internal bool IsEntityPhysicallyHydrated(Entity entity) => _physicalHydrationOrder.Any(
-        structure => structure.OwnsPhysicalEntity(entity));
+    internal bool IsEntityHydrated(Entity entity)
+    {
+        if (_hydratedDomainProjections.Contains(entity))
+            return true;
+        for (var index = 0; index < _physicalHydrationOrder.Count; index++)
+        {
+            if (_physicalHydrationOrder[index].OwnsPhysicalEntity(entity))
+                return true;
+        }
 
-    internal void DeferDomainProjectionHydration(Func<ICollection<Step21Diagnostic>, bool> hydration)
+        return false;
+    }
+
+    internal void MarkDomainProjectionHydrated(Entity projection)
+    {
+        if (_hydratedDomainProjections.Add(projection))
+            _hydratedDomainProjectionOrder.Add(projection);
+    }
+
+    internal void RegisterDomainProjection(Entity projection, Entity source)
+    {
+        _domainProjectionSources.Add(projection, source);
+        _domainProjectionOrder.Add(projection);
+    }
+
+    internal Entity GetCanonicalDomainEntity(Entity entity)
+    {
+        var current = entity;
+        while (_domainProjectionSources.TryGetValue(current, out var source))
+            current = source;
+        return current;
+    }
+
+    internal void DeferDomainProjectionHydration(Func<ICollection<Step21Diagnostic>, int> hydration)
     {
         ArgumentNullException.ThrowIfNull(hydration);
         (_deferredDomainProjectionHydrations ??= []).Add(hydration);
@@ -202,15 +236,26 @@ internal sealed class Part21ResourceResolutionContext
     {
         if (_deferredDomainProjectionHydrations is null)
             return;
-        foreach (var hydration in _deferredDomainProjectionHydrations)
+        while (_deferredDomainProjectionHydrations.Count > 0)
         {
-            if (!hydration(diagnostics))
+            var hydratedCount = _hydratedDomainProjectionOrder.Count;
+            for (var index = _deferredDomainProjectionHydrations.Count - 1; index >= 0; index--)
             {
-                diagnostics.Add(new Step21Diagnostic(
-                    "P21-BIND-DOMAIN-PROJECTION",
-                    Step21DiagnosticSeverity.Error,
-                    "A cyclic domain projection remained unresolved after physical hydration completed."));
+                if (_deferredDomainProjectionHydrations[index](diagnostics) == 0)
+                    _deferredDomainProjectionHydrations.RemoveAt(index);
             }
+
+            if (_deferredDomainProjectionHydrations.Count == 0)
+                break;
+            if (_hydratedDomainProjectionOrder.Count != hydratedCount)
+                continue;
+
+            diagnostics.Add(new Step21Diagnostic(
+                "P21-BIND-DOMAIN-PROJECTION",
+                Step21DiagnosticSeverity.Error,
+                $"{_deferredDomainProjectionHydrations.Count} cyclic domain projection group(s) remained "
+                    + "unresolved after physical hydration reached a fixed point."));
+            break;
         }
         _deferredDomainProjectionHydrations = null;
     }
@@ -1079,6 +1124,8 @@ internal sealed class Part21ResourceResolutionContext
         var transaction = new DocumentCacheTransaction(
             _completionOrder.Count,
             _physicalHydrationOrder.Count,
+            _hydratedDomainProjectionOrder.Count,
+            _domainProjectionOrder.Count,
             _deferredDomainProjectionHydrations?.Count ?? 0);
         _cacheTransactions.Push(transaction);
         return transaction;
@@ -1200,6 +1247,30 @@ internal sealed class Part21ResourceResolutionContext
             _physicalHydrationOrder.RemoveRange(
                 transaction.OriginalPhysicalHydrationOrderCount,
                 _physicalHydrationOrder.Count - transaction.OriginalPhysicalHydrationOrderCount);
+        }
+        for (var index = _hydratedDomainProjectionOrder.Count - 1;
+             index >= transaction.OriginalHydratedDomainProjectionCount;
+             index--)
+        {
+            _ = _hydratedDomainProjections.Remove(_hydratedDomainProjectionOrder[index]);
+        }
+        if (_hydratedDomainProjectionOrder.Count > transaction.OriginalHydratedDomainProjectionCount)
+        {
+            _hydratedDomainProjectionOrder.RemoveRange(
+                transaction.OriginalHydratedDomainProjectionCount,
+                _hydratedDomainProjectionOrder.Count - transaction.OriginalHydratedDomainProjectionCount);
+        }
+        for (var index = _domainProjectionOrder.Count - 1;
+             index >= transaction.OriginalDomainProjectionCount;
+             index--)
+        {
+            _ = _domainProjectionSources.Remove(_domainProjectionOrder[index]);
+        }
+        if (_domainProjectionOrder.Count > transaction.OriginalDomainProjectionCount)
+        {
+            _domainProjectionOrder.RemoveRange(
+                transaction.OriginalDomainProjectionCount,
+                _domainProjectionOrder.Count - transaction.OriginalDomainProjectionCount);
         }
         if (_deferredDomainProjectionHydrations is not null
             && _deferredDomainProjectionHydrations.Count > transaction.OriginalDeferredDomainProjectionCount)
@@ -1611,6 +1682,8 @@ internal sealed class Part21ResourceResolutionContext
     private sealed class DocumentCacheTransaction(
         int originalCompletionOrderCount,
         int originalPhysicalHydrationOrderCount,
+        int originalHydratedDomainProjectionCount,
+        int originalDomainProjectionCount,
         int originalDeferredDomainProjectionCount)
     {
         internal Dictionary<string, DocumentCacheEntry> OriginalDocuments { get; } = new(StringComparer.Ordinal);
@@ -1625,6 +1698,10 @@ internal sealed class Part21ResourceResolutionContext
         internal int OriginalCompletionOrderCount { get; } = originalCompletionOrderCount;
 
         internal int OriginalPhysicalHydrationOrderCount { get; } = originalPhysicalHydrationOrderCount;
+
+        internal int OriginalHydratedDomainProjectionCount { get; } = originalHydratedDomainProjectionCount;
+
+        internal int OriginalDomainProjectionCount { get; } = originalDomainProjectionCount;
 
         internal int OriginalDeferredDomainProjectionCount { get; } = originalDeferredDomainProjectionCount;
 

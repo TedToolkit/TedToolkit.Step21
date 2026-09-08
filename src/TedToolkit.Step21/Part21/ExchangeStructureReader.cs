@@ -158,7 +158,7 @@ internal static class ExchangeStructureReader
         var physicalComponents = new Dictionary<
             Entity,
             IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(ReferenceEqualityComparer.Instance);
-        var domainProjections = new DomainProjectionContext(structure, physicalComponents);
+        var domainProjections = new DomainProjectionContext(structure, physicalComponents, resolutionContext);
         foreach (var allocation in allocations)
         {
             var components = new List<KeyValuePair<string, IReadOnlyList<ParameterValue>>>(
@@ -242,16 +242,20 @@ internal static class ExchangeStructureReader
         }
 
         resolutionContext?.MarkPhysicalHydrationCompleted(structure);
-        var projectionsHydrated = domainProjections.Hydrate(
+        var pendingProjectionCount = domainProjections.Hydrate(
             bindingDiagnostics,
             resolutionContext is null
                 ? null
-                : entity => resolutionContext.IsEntityPhysicallyHydrated(entity));
-        if (!projectionsHydrated)
+                : resolutionContext.IsEntityHydrated,
+            resolutionContext is null
+                ? null
+                : resolutionContext.MarkDomainProjectionHydrated);
+        if (pendingProjectionCount > 0)
         {
             resolutionContext!.DeferDomainProjectionHydration(diagnostics => domainProjections.Hydrate(
                 diagnostics,
-                resolutionContext.IsEntityPhysicallyHydrated));
+                resolutionContext.IsEntityHydrated,
+                resolutionContext.MarkDomainProjectionHydrated));
         }
         if (resolutionContext is not null && depth == 0)
             resolutionContext.HydrateDeferredDomainProjections(bindingDiagnostics);
@@ -1501,14 +1505,18 @@ internal static class ExchangeStructureReader
 
     private sealed class DomainProjectionContext(
         ExchangeStructure structure,
-        IReadOnlyDictionary<Entity, IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>> physicalComponents)
+        IReadOnlyDictionary<Entity, IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>> physicalComponents,
+        Part21ResourceResolutionContext? resolutionContext)
     {
         private readonly Dictionary<Entity, Dictionary<SchemaDescriptor, Entity>> _projections =
             new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<Entity> _hydratedProjections = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<Entity, Entity> _projectionSources = new(ReferenceEqualityComparer.Instance);
         private readonly List<DomainProjectionBinding> _pending = [];
 
         internal Entity Project(SchemaDescriptor receivingDescriptor, Entity source)
         {
+            source = resolutionContext?.GetCanonicalDomainEntity(source) ?? GetCanonicalSource(source);
             if (receivingDescriptor.IsEntityReferenceCompatible(source))
                 return source;
             if (_projections.TryGetValue(source, out var byDescriptor)
@@ -1529,6 +1537,8 @@ internal static class ExchangeStructureReader
             byDescriptor ??= new Dictionary<SchemaDescriptor, Entity>(ReferenceEqualityComparer.Instance);
             _projections[source] = byDescriptor;
             byDescriptor.Add(receivingDescriptor, projection);
+            _projectionSources.Add(projection, source);
+            resolutionContext?.RegisterDomainProjection(projection, source);
             _pending.Add(new DomainProjectionBinding(
                 source,
                 sourceDescriptor,
@@ -1538,16 +1548,25 @@ internal static class ExchangeStructureReader
             return projection;
         }
 
-        internal bool Hydrate(
+        private Entity GetCanonicalSource(Entity entity)
+        {
+            var current = entity;
+            while (_projectionSources.TryGetValue(current, out var source))
+                current = source;
+            return current;
+        }
+
+        internal int Hydrate(
             ICollection<Step21Diagnostic> diagnostics,
-            Func<Entity, bool>? isExternalSourceReady = null)
+            Func<Entity, bool>? isExternalSourceReady = null,
+            Action<Entity>? markExternalProjectionHydrated = null)
         {
             for (var index = 0; index < _pending.Count;)
             {
                 var binding = _pending[index];
                 if (!physicalComponents.ContainsKey(binding.Source)
-                    && isExternalSourceReady is not null
-                    && !isExternalSourceReady(binding.Source))
+                    && !_hydratedProjections.Contains(binding.Source)
+                    && (isExternalSourceReady is null || !isExternalSourceReady(binding.Source)))
                 {
                     index++;
                     continue;
@@ -1606,6 +1625,8 @@ internal static class ExchangeStructureReader
                                 + $"'{binding.Equivalence.Source}' failed: {diagnostic.Message}",
                             diagnostic.SourceLocation));
                     }
+                    _hydratedProjections.Add(binding.Projection);
+                    markExternalProjectionHydrated?.Invoke(binding.Projection);
                 }
                 catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
                 {
@@ -1616,7 +1637,7 @@ internal static class ExchangeStructureReader
                             + exception.Message));
                 }
             }
-            return _pending.Count == 0;
+            return _pending.Count;
         }
 
         private ParameterValue ProjectParameter(SchemaDescriptor receivingDescriptor, ParameterValue parameter)

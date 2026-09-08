@@ -41,6 +41,8 @@ runtime 验证的 schema-neutral SDAI-domain-equivalence 关系与参数投影�
 - Domain equivalence is supplied through an explicit caller-owned provider that declares the relation and projects source physical parameters into the target schema; runtime validates relation closure and every projected target view.
 - Do not depend on Part 22 or infer equivalence by names/schema shapes; retain deterministic ordering and complete validation failures.
 - Runtime owns allocation and canonical occurrence aliasing for projected strong views; providers cannot replace canonical entities or use reflection/dynamic proxies through the runtime contract.
+- Recursive cross-resource projections normalize to the ultimate physical occurrence and hydrate to a deterministic fixed point; transaction fallback restores projection identity, readiness and deferred work together.
+- Generated descriptors register one shared, allocation-free physical-type matcher through the additive protected `ConfigureEntityTypeIdentity` infrastructure seam. Large schemas use bounded static shards; generated AP public surfaces remain unchanged.
 - Preserve existing same/multi-schema results that already conform.
 
 <!-- work-item: proof-plan -->
@@ -64,6 +66,11 @@ runtime 验证的 schema-neutral SDAI-domain-equivalence 关系与参数投影�
 Record candidate revision, method/equivalence partitions, expected and actual populations, diagnostics, commands,
 API changes and the population contract supplied to dependents.
 
+The runtime API disposition for this work item is additive: `SchemaDescriptor.ConfigureEntityTypeIdentity` is a
+protected source-generator/custom-descriptor optimization seam and adds no ISO domain concept. Existing subclasses
+remain source and binary compatible through the projection fallback; generated AP203/AP214/AP242 public API hashes
+must remain unchanged.
+
 ## Risks and implementation notes
 
-The standard names an SDAI concept, but this product accepts only the minimal schema-neutral provider needed to execute Annex E: explicit relation data plus schema-neutral physical-parameter projection. It does not expose a Part 22 repository.
+The standard names an SDAI concept, but this product accepts only the minimal schema-neutral provider needed to execute Annex E: explicit relation data plus schema-neutral physical-parameter projection. It does not expose a Part 22 repository. AP-004 governs the durable preference for shared schema-neutral mechanisms without reducing required ISO behavior; this work item does not create a duplicate principle.

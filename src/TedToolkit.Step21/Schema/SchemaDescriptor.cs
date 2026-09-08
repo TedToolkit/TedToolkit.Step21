@@ -10,6 +10,8 @@ namespace TedToolkit.Step21;
 /// </remarks>
 public abstract class SchemaDescriptor
 {
+    private Func<Entity, string?, bool>? _entityTypeIdentity;
+
     /// <summary>Initializes the base of a generated schema descriptor.</summary>
     protected SchemaDescriptor()
     {
@@ -42,9 +44,23 @@ public abstract class SchemaDescriptor
     internal IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntity(Entity value) =>
         ProjectEntityCore(value);
 
-    internal bool ProjectsEntity(Entity value) => ProjectsEntityCore(value);
+    internal bool ProjectsEntity(Entity value) => _entityTypeIdentity?.Invoke(value, null)
+        ?? ProjectEntityCore(value).Count > 0;
 
-    internal bool HasEntityType(Entity value, string entityName) => HasEntityTypeCore(value, entityName);
+    internal bool HasEntityType(Entity value, string entityName)
+    {
+        if (_entityTypeIdentity is not null)
+            return _entityTypeIdentity(value, entityName);
+
+        var components = ProjectEntityCore(value);
+        for (var index = 0; index < components.Count; index++)
+        {
+            if (string.Equals(components[index].Key, entityName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 
     internal bool IsEntityReferenceCompatible(Entity value) => IsEntityReferenceCompatibleCore(value);
 
@@ -94,12 +110,18 @@ public abstract class SchemaDescriptor
     protected abstract IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
         Entity value);
 
-    /// <summary>Determines whether this descriptor can physically project the entity without reading its values.</summary>
-    protected virtual bool ProjectsEntityCore(Entity value) => ProjectEntityCore(value).Count > 0;
-
-    /// <summary>Determines whether the entity has a named physical component without reading its values.</summary>
-    protected virtual bool HasEntityTypeCore(Entity value, string entityName) => ProjectEntityCore(value)
-        .Any(component => string.Equals(component.Key, entityName, StringComparison.OrdinalIgnoreCase));
+    /// <summary>Configures allocation-free physical entity type matching for this descriptor.</summary>
+    /// <param name="matcher">
+    /// A matcher receiving an entity and an optional physical component name; a null name asks only whether the
+    /// descriptor can project the entity.
+    /// </param>
+    protected void ConfigureEntityTypeIdentity(Func<Entity, string?, bool> matcher)
+    {
+        ArgumentNullException.ThrowIfNull(matcher);
+        if (_entityTypeIdentity is not null)
+            throw new InvalidOperationException("Entity type identity can be configured only once.");
+        _entityTypeIdentity = matcher;
+    }
 
     /// <summary>
     /// Determines whether this schema can reference an entity type through a local declaration or EXPRESS interface.

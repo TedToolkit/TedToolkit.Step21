@@ -21,6 +21,8 @@ internal static class ExpressSchemaDescriptorEmitter
 {
     private const int HYDRATION_BRANCHES_PER_METHOD = 32;
 
+    private const int ENTITY_TYPE_IDENTITY_BRANCHES_PER_METHOD = 256;
+
     private const int SELECT_HYDRATION_METHODS_PER_SHARD = 16;
 
     /// <summary>
@@ -51,6 +53,7 @@ internal static class ExpressSchemaDescriptorEmitter
             ExpressDescriptorShards.IsRequired(entities.Count + complexEntities.Count));
 
         descriptor.AddMember(CreateConstructor());
+        descriptor.AddMember(CreateEntityTypeIdentityMethod(entities, complexEntities, resolver, shards));
         descriptor.AddMember(CreateInstanceProperty());
         if (rulePlan.ReachableSingularInverseAttributes.Count > 0)
         {
@@ -110,8 +113,6 @@ internal static class ExpressSchemaDescriptorEmitter
 
         descriptor.AddMember(CreateCapabilityMethod());
         descriptor.AddMember(CreateProjectMethod(entities, complexEntities, resolver));
-        descriptor.AddMember(CreateProjectsEntityMethod(entities, complexEntities, resolver));
-        descriptor.AddMember(CreateHasEntityTypeMethod(entities, complexEntities, resolver));
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
         var entityConstantNames = GetConstantNames(schema, entityConstants: true);
         if (entityConstantNames.Length > 0)
@@ -133,6 +134,7 @@ internal static class ExpressSchemaDescriptorEmitter
     {
         var constructor = SourceComposer<ExpressIncrementalGenerator>.Constructor();
         constructor.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+        constructor.AddStatement(new CustomExpression("ConfigureEntityTypeIdentity(MatchesEntityTypeIdentity)"));
         AddSummary(constructor, "Initializes the singleton schema descriptor.");
         return constructor;
     }
@@ -406,45 +408,58 @@ internal static class ExpressSchemaDescriptorEmitter
         return method;
     }
 
-    private static Method CreateProjectsEntityMethod(
+    private static Method CreateEntityTypeIdentityMethod(
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
-        ExpressGeneratedTypeResolver resolver)
+        ExpressGeneratedTypeResolver resolver,
+        ExpressDescriptorShards shards)
     {
-        var method = CreateOverrideMethod(
-            "ProjectsEntityCore",
-            new DataType("global::System.Boolean"));
+        var method = SourceComposer<ExpressIncrementalGenerator>.Method(
+            "MatchesEntityTypeIdentity",
+            SourceComposer.ReturnType(new DataType("global::System.Boolean")));
+        method.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+        method.IsStatic = true;
         method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
-        var types = entities.Where(entity => CanMapEntity(entity, resolver))
-            .Select(entity => entity.Name)
-            .Concat(complexEntities.Select(entity => entity.Name));
-        var expression = string.Join(" || ", types.Select(type => $"value is {type}"));
-        method.AddStatement(new CustomExpression(expression.Length == 0 ? "false" : expression).Return);
-        AddSummary(method, "Determines physical projection support without reading hydrated attribute values.");
-        return method;
-    }
-
-    private static Method CreateHasEntityTypeMethod(
-        IReadOnlyList<ExpressEntityProjection> entities,
-        IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
-        ExpressGeneratedTypeResolver resolver)
-    {
-        var method = CreateOverrideMethod(
-            "HasEntityTypeCore",
-            new DataType("global::System.Boolean"));
-        method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
-        method.AddParameter(SourceComposer.Parameter(new DataType("global::System.String"), "entityName"));
+        method.AddParameter(SourceComposer.Parameter(new DataType("global::System.String?"), "entityName"));
         var matches = entities.Where(entity => CanMapEntity(entity, resolver))
             .Select(entity =>
-                $"(value is {entity.Name} && global::System.String.Equals(entityName, "
+                $"value is {entity.Name} && (entityName is null || global::System.String.Equals(entityName, "
                     + $"\"{entity.Entity.Name.ToUpperInvariant()}\", global::System.StringComparison.OrdinalIgnoreCase))")
             .Concat(complexEntities.SelectMany(entity => entity.Components.Select(component =>
-                $"(value is {entity.Name} && global::System.String.Equals(entityName, "
+                $"value is {entity.Name} && (entityName is null || global::System.String.Equals(entityName, "
                     + $"\"{component.Entity.Name.ToUpperInvariant()}\", "
-                    + "global::System.StringComparison.OrdinalIgnoreCase))")));
-        var expression = string.Join(" || ", matches);
-        method.AddStatement(new CustomExpression(expression.Length == 0 ? "false" : expression).Return);
-        AddSummary(method, "Matches physical entity type identity without reading hydrated attribute values.");
+                    + "global::System.StringComparison.OrdinalIgnoreCase))")))
+            .ToArray();
+        for (var offset = 0; offset < matches.Length; offset += ENTITY_TYPE_IDENTITY_BRANCHES_PER_METHOD)
+        {
+            var groupIndex = offset / ENTITY_TYPE_IDENTITY_BRANCHES_PER_METHOD;
+            var suffix = groupIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var methodName = $"__ExpressMatchesEntityTypeIdentityGroup{suffix}";
+            var shardName = $"__ExpressEntityTypeIdentityShard{suffix}";
+            method.AddStatement(new IfStatement(new CustomExpression(
+                    $"{shards.Qualify(methodName, shardName)}(value, entityName)"))
+                .AddStatement(new CustomExpression("true").Return));
+
+            var group = SourceComposer<ExpressIncrementalGenerator>.Method(
+                methodName,
+                SourceComposer.ReturnType(new DataType("global::System.Boolean")));
+            group.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+            group.IsStatic = true;
+            group.AddParameter(SourceComposer.Parameter(
+                new DataType("global::TedToolkit.Step21.Entity"),
+                "value"));
+            group.AddParameter(SourceComposer.Parameter(new DataType("global::System.String?"), "entityName"));
+            foreach (var match in matches.Skip(offset).Take(ENTITY_TYPE_IDENTITY_BRANCHES_PER_METHOD))
+            {
+                group.AddStatement(new IfStatement(new CustomExpression(match))
+                    .AddStatement(new CustomExpression("true").Return));
+            }
+
+            group.AddStatement(new CustomExpression("false").Return);
+            shards.Add(group, shardName);
+        }
+
+        method.AddStatement(new CustomExpression("false").Return);
         return method;
     }
 

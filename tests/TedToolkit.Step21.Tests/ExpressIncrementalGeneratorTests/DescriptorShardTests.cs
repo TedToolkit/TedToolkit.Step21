@@ -84,6 +84,11 @@ public sealed class DescriptorShardTests
             source.HintName.Contains("__ExpressValidationShard", StringComparison.Ordinal))).IsEqualTo(257);
         await Assert.That(result.GeneratedSources.Count(source =>
             source.HintName.Contains("__ExpressHydrationShard", StringComparison.Ordinal))).IsEqualTo(9);
+        var identityShards = result.GeneratedSources.Where(source =>
+            source.HintName.Contains("__ExpressEntityTypeIdentityShard", StringComparison.Ordinal)).ToArray();
+        await Assert.That(identityShards.Length).IsEqualTo(2);
+        await Assert.That(identityShards.All(source => source.SourceText.ToString()
+            .Contains("__ExpressMatchesEntityTypeIdentityGroup", StringComparison.Ordinal))).IsTrue();
     }
 
     /// <summary>Keeps value-equality delegate caches outside the shared descriptor while preserving calls.</summary>
