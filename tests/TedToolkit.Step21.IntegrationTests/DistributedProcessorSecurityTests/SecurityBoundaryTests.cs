@@ -1,4 +1,7 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
@@ -63,7 +66,16 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(threats.Length).IsEqualTo(16);
             await Assert.That(threats.Select(item => item.GetProperty("id").GetString()).Distinct().Count())
                 .IsEqualTo(threats.Length);
-            await Assert.That(threats.All(item => item.GetProperty("evidence").GetString()!.Length > 0)).IsTrue();
+            var executableTests = typeof(SecurityBoundaryTests)
+                .GetMethods()
+                .Where(method => method.IsDefined(typeof(TestAttribute), inherit: true))
+                .Select(method => $"SecurityBoundaryTests.{method.Name}")
+                .ToHashSet(StringComparer.Ordinal);
+            await Assert.That(threats.All(item =>
+                    item.GetProperty("focusedEvidence").EnumerateArray().Any()
+                    && item.GetProperty("focusedEvidence").EnumerateArray().All(evidence =>
+                        executableTests.Contains(evidence.GetString()!))))
+                .IsTrue();
             await Assert.That(threats.All(item => item.GetProperty("atomic").GetString()!.Length > 0)).IsTrue();
         }
     }
@@ -174,6 +186,30 @@ internal sealed class SecurityBoundaryTests
             [SecuritySchemaDescriptor.Instance],
             new ExchangeStructureReadOptions(resourceProvider: traversalProvider)));
 
+        var other = new Part21ResourceContent(
+            new Uri("https://example.test/resource"),
+            Part21ResourceContentKind.Other,
+            new byte[] { 1 });
+        var converterProvider = new RecordingProvider(other);
+        ExchangeStructureReadOptions? converterOptions = null;
+        var converter = new DelegateConverter(content =>
+        {
+            _ = content;
+            var ignored = ExchangeStructure.Read(
+                new StringReader(source),
+                [SecuritySchemaDescriptor.Instance],
+                converterOptions!);
+            _ = ignored;
+            return null;
+        });
+        converterOptions = new ExchangeStructureReadOptions(
+            resourceProvider: converterProvider,
+            resourceConverter: converter);
+        var converterFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(source),
+            [SecuritySchemaDescriptor.Instance],
+            converterOptions));
+
         using (Assert.Multiple())
         {
             await Assert.That(reentryFailure.Diagnostics.Single().Code)
@@ -181,6 +217,9 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(reentryProvider.RequestCount).IsEqualTo(1);
             await Assert.That(traversalFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-RESOURCE-ARCHIVE-PATH");
+            await Assert.That(converterFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-CONVERTER-REENTRY");
+            await Assert.That(converter.CallCount).IsEqualTo(1);
         }
     }
 
@@ -229,6 +268,74 @@ internal sealed class SecurityBoundaryTests
                 .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
             await Assert.That(byteFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
+        }
+    }
+
+    [Test]
+    public async Task Should_enforce_total_cms_signer_and_write_signature_limits_before_publication()
+    {
+        var totalSource = Exchange(string.Empty) + "SIGNATURE AQI= ENDSEC;";
+        var totalFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(totalSource),
+            [SecuritySchemaDescriptor.Instance],
+            ExchangeStructureReadOptions.WithProcessingLimits(new Part21ProcessingLimits(
+                maximumSignatureBytes: 8,
+                maximumTotalSignatureBytes: 1))));
+
+        var structure = CreateStructure();
+        var writeCountCalls = 0;
+        var writeCountDestination = new StringWriter();
+        var writeCountFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
+            writeCountDestination,
+            new ExchangeStructureWriteOptions(
+                [
+                    new DelegateSigner(_ => { writeCountCalls++; return ReadOnlyMemory<byte>.Empty; }),
+                    new DelegateSigner(_ => { writeCountCalls++; return ReadOnlyMemory<byte>.Empty; }),
+                ],
+                new Part21ProcessingLimits(maximumSignatureCount: 1))));
+
+        using var firstCertificate = CreateCertificate("first");
+        using var secondCertificate = CreateCertificate("second");
+        var signerCountDestination = new StringWriter();
+        var signerCountFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
+            signerCountDestination,
+            new ExchangeStructureWriteOptions(
+                [new DelegateSigner(content => CreateCms(content, firstCertificate, secondCertificate))],
+                new Part21ProcessingLimits(maximumCmsSignerCount: 1))));
+
+        var malformedFailure = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange(string.Empty) + "SIGNATURE AQID ENDSEC;"),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions()));
+
+        var signedPrefix = Exchange(string.Empty) + "\n";
+        var signedCms = CreateCms(
+            Part21SignatureEngine.EncodeCoveredCharacters(signedPrefix.AsSpan()),
+            firstCertificate);
+        var signedSource = signedPrefix + $"SIGNATURE {Convert.ToBase64String(signedCms.Span)} ENDSEC;";
+        var trustFailure = Assert.Throws<ExchangeStructureReadValidationException>(() => ExchangeStructure.Read(
+            new StringReader(signedSource),
+            [SecuritySchemaDescriptor.Instance],
+            ExchangeStructureReadOptions.WithSignatureVerification(new Part21SignatureVerificationOptions(
+                DateTimeOffset.UtcNow,
+                trustedRoots: [],
+                additionalCertificates: [new Part21Certificate(firstCertificate.RawData)]))));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(totalFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
+            await Assert.That(writeCountFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
+            await Assert.That(writeCountCalls).IsEqualTo(0);
+            await Assert.That(writeCountDestination.ToString()).IsEmpty();
+            await Assert.That(signerCountFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-SIGNATURE");
+            await Assert.That(signerCountDestination.ToString()).IsEmpty();
+            await Assert.That(malformedFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-SIGNATURE-CMS");
+            await Assert.That(trustFailure.ValidationResult.Failures.Single().Code)
+                .IsEqualTo("P21.SIGNATURE.UNTRUSTED");
         }
     }
 
@@ -287,6 +394,47 @@ internal sealed class SecurityBoundaryTests
     }
 
     [Test]
+    public async Task Should_bound_entity_and_annex_f_output_and_uri_before_publication()
+    {
+        var structure = CreateStructure();
+        var entity = new SecurityEntity(new string('A', 1024));
+        structure.Add(structure.DataSections.Single(), entity);
+        var entityDestination = new StringWriter();
+        var entityFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.WriteEntity(
+            entityDestination,
+            entity,
+            new Part21ProcessingLimits(maximumOutputCharacters: 16)));
+
+        var outputBridge = new AnnexFModelBridge(
+            structure,
+            new Part21Resource("urn:x"),
+            new Part21ProcessingLimits(maximumOutputCharacters: 16));
+        var outputFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => outputBridge.ExportState());
+
+        var uriLimits = new Part21ProcessingLimits(maximumUriCharacters: 8);
+        var bridgeUriFailure = Assert.Throws<JsonException>(() => new AnnexFModelBridge(
+            structure,
+            new Part21Resource("urn:too-long"),
+            uriLimits));
+        structure.Anchors.Add(new Part21Anchor(
+            new AnchorName("resource"),
+            ParameterValue.FromResource(new Part21Resource("urn:too-long"))));
+        var resourceBridge = new AnnexFModelBridge(structure, new Part21Resource("urn:x"), uriLimits);
+        var resourceUriFailure = Assert.Throws<JsonException>(() => resourceBridge.ExportState());
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(entityFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
+            await Assert.That(entityDestination.ToString()).IsEmpty();
+            await Assert.That(outputFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
+            await Assert.That(bridgeUriFailure.Message).Contains("URI-character");
+            await Assert.That(resourceUriFailure.Message).Contains("URI-character");
+        }
+    }
+
+    [Test]
     public async Task Should_apply_annex_f_input_item_and_depth_limits_without_mutation()
     {
         var structure = CreateStructure();
@@ -341,6 +489,103 @@ internal sealed class SecurityBoundaryTests
         }
     }
 
+    [Test]
+    public async Task Should_enforce_resource_archive_and_recursion_partitions()
+    {
+        var child = Exchange("ANCHOR;<target>=$;ENDSEC;");
+        var provider = new DelegateProvider(identity => new Part21ResourceContent(
+            identity,
+            Part21ResourceContentKind.ClearText,
+            Encoding.UTF8.GetBytes(child)));
+        var twoResources = Exchange(
+            "REFERENCE;#1=<https://example.test/a.p21#target>;"
+            + "#2=<https://example.test/b.p21#target>;ENDSEC;");
+        var resourceCount = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(twoResources),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceLimits: new Part21ResourceLimits(maximumResourceCount: 1))));
+        var resourceBytes = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("REFERENCE;#1=<https://example.test/a.p21#target>;ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: provider,
+                resourceLimits: new Part21ResourceLimits(maximumTotalBytes: 1))));
+        var referenceDepth = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange(
+                "ANCHOR;<first>=<#second>;<second>=$;ENDSEC;"
+                + "REFERENCE;#1=<#first>;ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceLimits: new Part21ResourceLimits(maximumReferenceDepth: 1))));
+
+        var archiveIdentity = new Uri("https://example.test/archive.zip");
+        var largeRoot = Exchange($"ANCHOR;<target>='{new string('A', 1024)}';ENDSEC;");
+        var archiveBytes = CreateZip(new Dictionary<string, ReadOnlyMemory<byte>>
+        {
+            ["ISO-10303.p21"] = Encoding.UTF8.GetBytes(largeRoot),
+            ["extra.txt"] = new byte[] { 1 },
+        });
+        var archiveProvider = new RecordingProvider(new Part21ResourceContent(
+            archiveIdentity,
+            Part21ResourceContentKind.ZipArchive,
+            archiveBytes));
+        var archiveSource = Exchange("REFERENCE;#1=<https://example.test/archive.zip#target>;ENDSEC;");
+        var entryCount = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(archiveSource),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveProvider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveEntryCount: 1))));
+        var expanded = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(archiveSource),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveProvider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveUncompressedBytes: 64))));
+        var ratio = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(archiveSource),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: archiveProvider,
+                resourceLimits: new Part21ResourceLimits(maximumCompressionRatio: 1))));
+
+        var nested = CreateZip(new Dictionary<string, ReadOnlyMemory<byte>>
+        {
+            ["ISO-10303.p21"] = Encoding.UTF8.GetBytes(child),
+        });
+        var outer = CreateZip(new Dictionary<string, ReadOnlyMemory<byte>>
+        {
+            ["ISO-10303.p21"] = Encoding.UTF8.GetBytes(
+                Exchange("ANCHOR;<target>=<nested.zip#target>;ENDSEC;")),
+            ["nested.zip"] = nested,
+        });
+        var recursionProvider = new RecordingProvider(new Part21ResourceContent(
+            new Uri("https://example.test/outer.zip"),
+            Part21ResourceContentKind.ZipArchive,
+            outer));
+        var recursion = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("REFERENCE;#1=<https://example.test/outer.zip#target>;ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions(
+                resourceProvider: recursionProvider,
+                resourceLimits: new Part21ResourceLimits(maximumArchiveDepth: 1))));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(resourceCount.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(resourceBytes.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(referenceDepth.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(entryCount.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(expanded.Diagnostics.Single().Code).IsEqualTo("P21-RESOURCE-LIMIT");
+            await Assert.That(ratio.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-LIMIT-COMPRESSION-RATIO");
+            await Assert.That(recursion.Diagnostics.Single().Code)
+                .IsEqualTo("P21-RESOURCE-ARCHIVE-RECURSION");
+        }
+    }
+
     private static ExchangeStructure CreateStructure()
     {
         var header = new HeaderSection(
@@ -385,6 +630,44 @@ internal sealed class SecurityBoundaryTests
         return stream.ToArray();
     }
 
+    private static ReadOnlyMemory<byte> CreateZip(
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> entries)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in entries)
+            {
+                using var destination = archive.CreateEntry(entry.Key, CompressionLevel.SmallestSize).Open();
+                destination.Write(entry.Value.Span);
+            }
+        }
+        return stream.ToArray();
+    }
+
+    private static X509Certificate2 CreateCertificate(string name)
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            $"CN={name}",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    private static ReadOnlyMemory<byte> CreateCms(
+        ReadOnlyMemory<byte> content,
+        params X509Certificate2[] certificates)
+    {
+        var cms = new SignedCms(new ContentInfo(content.ToArray()), detached: true);
+        foreach (var certificate in certificates)
+            cms.ComputeSignature(new CmsSigner(certificate));
+        return cms.Encode();
+    }
+
     private sealed class CountingReader(string value) : StringReader(value)
     {
         internal int CharactersRead { get; private set; }
@@ -420,10 +703,29 @@ internal sealed class SecurityBoundaryTests
         }
     }
 
+    private sealed class DelegateConverter(Func<Part21ResourceContent, Part21ResourceContent?> convert)
+        : IPart21ResourceConverter
+    {
+        internal int CallCount { get; private set; }
+
+        public Part21ResourceContent? Convert(Part21ResourceContent content)
+        {
+            CallCount++;
+            return convert(content);
+        }
+    }
+
     private sealed class DelegateSigner(Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> sign)
         : IPart21SignatureSigner
     {
         public ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content) => sign(content);
+    }
+
+    private sealed class SecurityEntity(string value) : Entity
+    {
+        internal string Value { get; } = value;
+
+        public override IEnumerable<Entity> DirectReferences => [];
     }
 
     private sealed class SecuritySchemaDescriptor : SchemaDescriptor
@@ -447,6 +749,8 @@ internal sealed class SecurityBoundaryTests
             ExchangeStructure structure) => [];
 
         protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
-            Entity value) => [];
+            Entity value) => value is SecurityEntity security
+                ? [new("SECURITY_ENTITY", [ParameterValue.FromString(security.Value)])]
+                : [];
     }
 }

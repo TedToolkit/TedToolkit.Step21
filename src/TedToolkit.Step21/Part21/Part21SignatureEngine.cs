@@ -31,8 +31,11 @@ internal static class Part21SignatureEngine
         for (var signatureIndex = 0; signatureIndex < signatures.Count; signatureIndex++)
         {
             var syntax = signatures[signatureIndex];
-            var maximumEncodedLength = ((long)limits.MaximumSignatureBytes + 2) / 3 * 4;
-            if (syntax.Content.Text.Length > maximumEncodedLength)
+            var remainingSignatureBytes = limits.MaximumTotalSignatureBytes - totalSignatureBytes;
+            var maximumDecodedLength = Math.Min(limits.MaximumSignatureBytes, remainingSignatureBytes);
+            var maximumEncodedLength = (maximumDecodedLength + 2) / 3 * 4;
+            if (syntax.Content.Text.Length > maximumEncodedLength
+                || GetDecodedBase64Length(syntax.Content.Text) > maximumDecodedLength)
                 throw Limit("CMS byte");
             if (!TryDecodeCanonicalBase64(syntax.Content.Text, out var encodedCms))
             {
@@ -395,6 +398,16 @@ internal static class Part21SignatureEngine
         {
             return false;
         }
+    }
+
+    private static long GetDecodedBase64Length(string value)
+    {
+        if (value.Length == 0 || value.Length % 4 != 0)
+            return 0;
+        var padding = value[^1] == '=' ? 1 : 0;
+        if (padding == 1 && value[^2] == '=')
+            padding++;
+        return (long)value.Length / 4 * 3 - padding;
     }
 
     internal static byte[]? TryComputeDigest(string algorithm, ReadOnlySpan<byte> content)

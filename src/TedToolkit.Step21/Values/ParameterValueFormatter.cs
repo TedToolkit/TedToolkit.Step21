@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 
 namespace TedToolkit.Step21;
 
@@ -15,169 +14,195 @@ internal static class ParameterValueFormatter
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(getEntityName);
-
-        return value.Kind switch
-        {
-            ParameterValueKind.Omitted => "$",
-            ParameterValueKind.Derived => "*",
-            ParameterValueKind.Integer => FormatInteger(value),
-            ParameterValueKind.Real => FormatReal(value),
-            ParameterValueKind.String => FormatString(value),
-            ParameterValueKind.Binary => FormatBinary(value),
-            ParameterValueKind.Boolean => FormatBoolean(value),
-            ParameterValueKind.Logical => FormatLogical(value),
-            ParameterValueKind.Enumeration => FormatEnumeration(value),
-            ParameterValueKind.Entity => FormatEntity(value, getEntityName),
-            ParameterValueKind.EntityInstance => FormatEntityInstance(value),
-            ParameterValueKind.ValueInstance => FormatValueInstance(value),
-            ParameterValueKind.ConstantEntity => FormatConstantEntity(value),
-            ParameterValueKind.ConstantValue => FormatConstantValue(value),
-            ParameterValueKind.Resource => FormatResource(value),
-            ParameterValueKind.Aggregate => FormatAggregate(value, getEntityName),
-            ParameterValueKind.Typed => FormatTyped(value, getEntityName),
-            _ => throw new InvalidOperationException($"Unsupported parameter value kind '{value.Kind}'."),
-        };
+        var builder = new Part21TextBuilder(int.MaxValue, static () => throw new OutOfMemoryException());
+        Append(builder, value, getEntityName);
+        return builder.ToString();
     }
 
-    private static string FormatInteger(ParameterValue value)
+    internal static void Append(
+        Part21TextBuilder builder,
+        ParameterValue value,
+        Func<Entity, EntityInstanceName> getEntityName)
     {
-        _ = value.TryGetInteger(out var integer);
-        return integer.ToString(CultureInfo.InvariantCulture);
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(getEntityName);
+        switch (value.Kind)
+        {
+            case ParameterValueKind.Omitted:
+                builder.Append('$');
+                break;
+            case ParameterValueKind.Derived:
+                builder.Append('*');
+                break;
+            case ParameterValueKind.Integer:
+                _ = value.TryGetInteger(out var integer);
+                builder.AppendFormattable(integer);
+                break;
+            case ParameterValueKind.Real:
+                AppendReal(builder, value);
+                break;
+            case ParameterValueKind.String:
+                AppendString(builder, value);
+                break;
+            case ParameterValueKind.Binary:
+                AppendBinary(builder, value);
+                break;
+            case ParameterValueKind.Boolean:
+                _ = value.TryGetBoolean(out var boolean);
+                builder.Append(boolean ? ".T." : ".F.");
+                break;
+            case ParameterValueKind.Logical:
+                AppendLogical(builder, value);
+                break;
+            case ParameterValueKind.Enumeration:
+                if (!value.TryGetEnumeration(out var symbol))
+                    throw InconsistentValue(value);
+                builder.Append('.').Append(symbol).Append('.');
+                break;
+            case ParameterValueKind.Entity:
+                if (!value.TryGetEntity(out var entity))
+                    throw InconsistentValue(value);
+                builder.Append(getEntityName(entity).ToString());
+                break;
+            case ParameterValueKind.EntityInstance:
+                builder.Append(value.TryGetEntityInstance(out var entityName)
+                    ? entityName.ToString() : throw InconsistentValue(value));
+                break;
+            case ParameterValueKind.ValueInstance:
+                builder.Append(value.TryGetValueInstance(out var valueName)
+                    ? valueName.ToString() : throw InconsistentValue(value));
+                break;
+            case ParameterValueKind.ConstantEntity:
+                builder.Append(value.TryGetConstantEntity(out var constantEntity)
+                    ? constantEntity.ToString() : throw InconsistentValue(value));
+                break;
+            case ParameterValueKind.ConstantValue:
+                builder.Append(value.TryGetConstantValue(out var constantValue)
+                    ? constantValue.ToString() : throw InconsistentValue(value));
+                break;
+            case ParameterValueKind.Resource:
+                builder.Append(value.TryGetResource(out var resource)
+                    ? resource.ToString() : throw InconsistentValue(value));
+                break;
+            case ParameterValueKind.Aggregate:
+                AppendAggregate(builder, value, getEntityName);
+                break;
+            case ParameterValueKind.Typed:
+                AppendTyped(builder, value, getEntityName);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported parameter value kind '{value.Kind}'.");
+        }
     }
 
-    private static string FormatReal(ParameterValue value)
+    private static void AppendReal(Part21TextBuilder builder, ParameterValue value)
     {
         _ = value.TryGetReal(out var real);
-        var significand = real.Significand.ToString(CultureInfo.InvariantCulture);
         if (real.Significand.IsZero)
-            return "0.";
-
-        var exponent = real.Exponent.ToString(CultureInfo.InvariantCulture);
-        return string.Concat(significand, ".E", exponent);
+        {
+            builder.Append("0.");
+            return;
+        }
+        builder.AppendFormattable(real.Significand);
+        builder.Append(".E");
+        builder.AppendFormattable(real.Exponent);
     }
 
-    private static string FormatString(ParameterValue value)
+    private static void AppendString(Part21TextBuilder builder, ParameterValue value)
     {
         if (!value.TryGetString(out var text))
             throw InconsistentValue(value);
 
-        var builder = new StringBuilder(text.Length + 2).Append('\'');
+        builder.Append('\'');
         foreach (var rune in text.EnumerateRunes())
         {
             switch (rune.Value)
             {
                 case '\'':
-                    _ = builder.Append("''");
+                    builder.Append("''");
                     break;
                 case '\\':
-                    _ = builder.Append("\\\\");
+                    builder.Append("\\\\");
                     break;
                 case >= 0x20 and <= 0x7E:
-                    _ = builder.Append((char)rune.Value);
+                    builder.Append((char)rune.Value);
                     break;
                 case <= 0xFFFF:
-                    _ = builder.Append("\\X2\\")
-                        .Append(rune.Value.ToString("X4", CultureInfo.InvariantCulture))
-                        .Append("\\X0\\");
+                    builder.Append("\\X2\\");
+                    builder.AppendFormattable(rune.Value, "X4");
+                    builder.Append("\\X0\\");
                     break;
                 default:
-                    _ = builder.Append("\\X4\\")
-                        .Append(rune.Value.ToString("X8", CultureInfo.InvariantCulture))
-                        .Append("\\X0\\");
+                    builder.Append("\\X4\\");
+                    builder.AppendFormattable(rune.Value, "X8");
+                    builder.Append("\\X0\\");
                     break;
             }
         }
 
-        return builder.Append('\'').ToString();
+        builder.Append('\'');
     }
 
-    private static string FormatBinary(ParameterValue value)
+    private static void AppendBinary(Part21TextBuilder builder, ParameterValue value)
     {
         if (!value.TryGetBinary(out var binary))
             throw InconsistentValue(value);
 
-        var bits = binary.ToString();
-        var unusedBits = (4 - (bits.Length % 4)) % 4;
-        var paddedBits = bits.PadRight(bits.Length + unusedBits, '0');
-        var builder = new StringBuilder((paddedBits.Length / 4) + 3)
-            .Append('\"')
-            .Append(unusedBits);
-        for (var index = 0; index < paddedBits.Length; index += 4)
+        var unusedBits = (4 - (binary.Length % 4)) % 4;
+        builder.Append('\"');
+        builder.AppendFormattable(unusedBits);
+        for (var index = 0; index < binary.Length; index += 4)
         {
-            _ = builder.Append(Convert.ToInt32(paddedBits.Substring(index, 4), 2)
-                .ToString("X", CultureInfo.InvariantCulture));
+            var nibble = 0;
+            for (var bit = 0; bit < 4; bit++)
+                nibble = nibble << 1 | (index + bit < binary.Length && binary[index + bit] ? 1 : 0);
+            builder.Append("0123456789ABCDEF"[nibble]);
         }
-
-        return builder.Append('\"').ToString();
+        builder.Append('\"');
     }
 
-    private static string FormatBoolean(ParameterValue value)
-    {
-        _ = value.TryGetBoolean(out var boolean);
-        return boolean ? ".T." : ".F.";
-    }
-
-    private static string FormatLogical(ParameterValue value)
+    private static void AppendLogical(Part21TextBuilder builder, ParameterValue value)
     {
         _ = value.TryGetLogical(out var logical);
-        return logical switch
+        builder.Append(logical switch
         {
             LogicalValue.False => ".F.",
             LogicalValue.Unknown => ".U.",
             LogicalValue.True => ".T.",
             _ => throw new InvalidOperationException($"Unsupported LOGICAL value '{logical}'."),
-        };
+        });
     }
 
-    private static string FormatEnumeration(ParameterValue value)
-    {
-        _ = value.TryGetEnumeration(out var symbol);
-        return string.Concat(".", symbol, ".");
-    }
-
-    private static string FormatEntity(
-        ParameterValue value,
-        Func<Entity, EntityInstanceName> getEntityName)
-    {
-        if (!value.TryGetEntity(out var entity))
-            throw InconsistentValue(value);
-
-        return getEntityName(entity).ToString();
-    }
-
-    private static string FormatAggregate(
+    private static void AppendAggregate(
+        Part21TextBuilder builder,
         ParameterValue value,
         Func<Entity, EntityInstanceName> getEntityName)
     {
         if (!value.TryGetAggregate(out var elements))
             throw InconsistentValue(value);
 
-        return string.Concat("(", string.Join(',', elements.Select(element => Format(element, getEntityName))), ")");
+        builder.Append('(');
+        for (var index = 0; index < elements.Count; index++)
+        {
+            if (index > 0)
+                builder.Append(',');
+            Append(builder, elements[index], getEntityName);
+        }
+        builder.Append(')');
     }
 
-    private static string FormatEntityInstance(ParameterValue value) =>
-        value.TryGetEntityInstance(out var name) ? name.ToString() : throw InconsistentValue(value);
-
-    private static string FormatValueInstance(ParameterValue value) =>
-        value.TryGetValueInstance(out var name) ? name.ToString() : throw InconsistentValue(value);
-
-    private static string FormatConstantEntity(ParameterValue value) =>
-        value.TryGetConstantEntity(out var name) ? name.ToString() : throw InconsistentValue(value);
-
-    private static string FormatConstantValue(ParameterValue value) =>
-        value.TryGetConstantValue(out var name) ? name.ToString() : throw InconsistentValue(value);
-
-    private static string FormatResource(ParameterValue value) =>
-        value.TryGetResource(out var resource) ? resource.ToString() : throw InconsistentValue(value);
-
-    private static string FormatTyped(
+    private static void AppendTyped(
+        Part21TextBuilder builder,
         ParameterValue value,
         Func<Entity, EntityInstanceName> getEntityName)
     {
         if (!value.TryGetTyped(out var typeName, out var inner))
             throw InconsistentValue(value);
 
-        return string.Concat(typeName, "(", Format(inner, getEntityName), ")");
+        builder.Append(typeName).Append('(');
+        Append(builder, inner, getEntityName);
+        builder.Append(')');
     }
 
     private static InvalidOperationException InconsistentValue(ParameterValue value) =>

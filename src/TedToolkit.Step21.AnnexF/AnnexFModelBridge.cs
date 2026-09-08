@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -51,28 +52,36 @@ public sealed partial class AnnexFModelBridge
     {
         EnsureUri(_uri.Value, _limits);
         var budget = new BridgeBudget(_limits);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
+        var output = new Part21TextBuilder(
+            _limits.MaximumOutputCharacters,
+            static () => throw new ExchangeStructureCapabilityException([
+                new Step21Diagnostic(
+                    "P21-PROCESSING-LIMIT-OUTPUT",
+                    Step21DiagnosticSeverity.Error,
+                    "The Annex F bridge output-character limit was exceeded."),
+            ]));
+        output.Append("{\"formatVersion\":");
+        output.AppendFormattable(AnnexFEcmaScriptModule.BridgeFormatVersion);
+        output.Append(",\"uri\":");
+        AppendJsonString(output, _uri.Value);
+        output.Append(",\"name\":");
+        AppendJsonString(output, _structure.Header.FileName.Name);
+        output.Append(",\"anchors\":[");
+        for (var index = 0; index < _structure.Anchors.Count; index++)
         {
-            writer.WriteStartObject();
-            writer.WriteNumber("formatVersion", AnnexFEcmaScriptModule.BridgeFormatVersion);
-            writer.WriteString("uri", _uri.Value);
-            writer.WriteString("name", _structure.Header.FileName.Name);
-            writer.WriteStartArray("anchors");
-            foreach (var anchor in _structure.Anchors)
-                WriteAnchor(writer, anchor, budget);
-            writer.WriteEndArray();
-            writer.WriteStartArray("schemaPopulation");
-            foreach (var population in _structure.SchemaPopulation)
-                WritePopulation(writer, population, budget);
-            writer.WriteEndArray();
-            writer.WriteEndObject();
+            if (index > 0)
+                output.Append(',');
+            WriteAnchor(output, _structure.Anchors[index], budget);
         }
-
-        var bytes = stream.GetBuffer().AsSpan(0, checked((int)stream.Length));
-        if (Encoding.UTF8.GetCharCount(bytes) > _limits.MaximumOutputCharacters)
-            throw new InvalidOperationException("The Annex F bridge output-character limit was exceeded.");
-        return Encoding.UTF8.GetString(bytes);
+        output.Append("],\"schemaPopulation\":[");
+        for (var index = 0; index < _structure.SchemaPopulation.Count; index++)
+        {
+            if (index > 0)
+                output.Append(',');
+            WritePopulation(output, _structure.SchemaPopulation[index], budget);
+        }
+        output.Append("]}");
+        return output.ToString();
     }
 
     /// <summary>
@@ -124,58 +133,75 @@ public sealed partial class AnnexFModelBridge
         _uri = uri;
     }
 
-    private void WriteAnchor(Utf8JsonWriter writer, Part21Anchor anchor, BridgeBudget budget)
+    private void WriteAnchor(Part21TextBuilder writer, Part21Anchor anchor, BridgeBudget budget)
     {
         budget.CountItem();
-        writer.WriteStartObject();
-        writer.WriteString("name", anchor.Name.Value);
-        writer.WritePropertyName("value");
+        writer.Append("{\"name\":");
+        AppendJsonString(writer, anchor.Name.Value);
+        writer.Append(",\"value\":");
         WriteValue(writer, anchor.Item, budget, depth: 1);
-        writer.WriteStartArray("tags");
-        foreach (var tag in anchor.Tags)
+        writer.Append(",\"tags\":[");
+        for (var index = 0; index < anchor.Tags.Count; index++)
         {
+            if (index > 0)
+                writer.Append(',');
+            var tag = anchor.Tags[index];
             budget.CountItem();
-            writer.WriteStartObject();
-            writer.WriteString("name", tag.Name);
-            writer.WritePropertyName("value");
+            writer.Append("{\"name\":");
+            AppendJsonString(writer, tag.Name);
+            writer.Append(",\"value\":");
             WriteValue(writer, tag.Item, budget, depth: 1);
-            writer.WriteEndObject();
+            writer.Append('}');
         }
-        writer.WriteEndArray();
-        writer.WriteEndObject();
+        writer.Append("]}");
     }
 
-    private void WriteValue(Utf8JsonWriter writer, ParameterValue value, BridgeBudget budget, int depth)
+    private void WriteValue(Part21TextBuilder writer, ParameterValue value, BridgeBudget budget, int depth)
     {
         budget.CountValue(depth);
-        writer.WriteStartObject();
+        writer.Append("{\"kind\":");
         switch (value.Kind)
         {
             case ParameterValueKind.Omitted:
-                writer.WriteString("kind", "null");
+                writer.Append("\"null\"");
                 break;
             case ParameterValueKind.Integer:
-                writer.WriteString("kind", "integer");
-                writer.WriteString("p21", Format(value));
+                if (!value.TryGetInteger(out var integer))
+                    throw new InvalidOperationException("An Annex F integer has no retained value.");
+                writer.Append("\"integer\",\"p21\":\"");
+                writer.AppendFormattable(integer);
+                writer.Append('\"');
                 break;
             case ParameterValueKind.Real:
-                writer.WriteString("kind", "real");
-                writer.WriteString("p21", Format(value));
+                if (!value.TryGetReal(out var real))
+                    throw new InvalidOperationException("An Annex F real has no retained value.");
+                writer.Append("\"real\",\"p21\":\"");
+                if (real.Significand.IsZero)
+                {
+                    writer.Append("0.");
+                }
+                else
+                {
+                    writer.AppendFormattable(real.Significand);
+                    writer.Append(".E");
+                    writer.AppendFormattable(real.Exponent);
+                }
+                writer.Append('\"');
                 break;
             case ParameterValueKind.String:
                 _ = value.TryGetString(out var text);
-                writer.WriteString("kind", "string");
-                writer.WriteString("value", text);
+                writer.Append("\"string\",\"value\":");
+                AppendJsonString(writer, text!);
                 break;
             case ParameterValueKind.Enumeration:
                 _ = value.TryGetEnumeration(out var symbol);
-                writer.WriteString("kind", "enumeration");
-                writer.WriteString("value", symbol);
+                writer.Append("\"enumeration\",\"value\":");
+                AppendJsonString(writer, symbol!);
                 break;
             case ParameterValueKind.Binary:
-                var binary = Format(value);
-                writer.WriteString("kind", "binary");
-                writer.WriteString("value", binary[1..^1]);
+                writer.Append("\"binary\",\"value\":\"");
+                AppendBinary(writer, value);
+                writer.Append('\"');
                 break;
             case ParameterValueKind.Entity:
                 if (!value.TryGetEntity(out var entity) || !_structure.TryGetName(entity, out var entityName))
@@ -201,49 +227,99 @@ public sealed partial class AnnexFModelBridge
             case ParameterValueKind.Aggregate:
                 if (!value.TryGetAggregate(out var items))
                     throw new InvalidOperationException("An Annex F list has no retained members.");
-                writer.WriteString("kind", "list");
-                writer.WriteStartArray("values");
-                foreach (var item in items)
-                    WriteValue(writer, item, budget, depth + 1);
-                writer.WriteEndArray();
+                writer.Append("\"list\",\"values\":[");
+                for (var index = 0; index < items.Count; index++)
+                {
+                    if (index > 0)
+                        writer.Append(',');
+                    WriteValue(writer, items[index], budget, depth + 1);
+                }
+                writer.Append(']');
                 break;
             case ParameterValueKind.Resource:
-                _ = value.TryGetResource(out var resource);
-                writer.WriteString("kind", "uri");
-                writer.WriteString("value", resource.Value);
+                if (!value.TryGetResource(out var resource))
+                    throw new InvalidOperationException("An Annex F URI has no retained resource.");
+                EnsureUri(resource.Value, _limits);
+                writer.Append("\"uri\",\"value\":");
+                AppendJsonString(writer, resource.Value);
                 break;
             default:
                 throw new InvalidOperationException(
                     $"Parameter kind '{value.Kind}' is not an ISO 10303-21 Annex F anchor value.");
         }
-        writer.WriteEndObject();
+        writer.Append('}');
     }
 
-    private static void WriteOccurrence(Utf8JsonWriter writer, string kind, string name)
+    private static void WriteOccurrence(Part21TextBuilder writer, string kind, string name)
     {
-        writer.WriteString("kind", kind);
-        writer.WriteString("name", name);
+        AppendJsonString(writer, kind);
+        writer.Append(",\"name\":");
+        AppendJsonString(writer, name);
     }
 
     private void WritePopulation(
-        Utf8JsonWriter writer,
+        Part21TextBuilder writer,
         SchemaPopulationExternalFile population,
         BridgeBudget budget)
     {
         budget.CountItem();
         EnsureUri(population.Location.OriginalString, _limits);
-        writer.WriteStartObject();
-        writer.WriteString("uri", population.Location.OriginalString);
+        writer.Append("{\"uri\":");
+        AppendJsonString(writer, population.Location.OriginalString);
+        writer.Append(",\"stamp\":");
         if (population.TimeStamp is null)
-            writer.WriteNull("stamp");
+            writer.Append("null");
         else
-            writer.WriteString("stamp", population.TimeStamp);
+            AppendJsonString(writer, population.TimeStamp);
+        writer.Append(",\"messageDigest\":");
         if (population.MessageDigest is null)
-            writer.WriteNull("messageDigest");
+            writer.Append("null");
         else
-            writer.WriteString("messageDigest", population.MessageDigest);
-        writer.WriteBoolean("verification", population.DigestStatus == SchemaPopulationDigestStatus.Verified);
-        writer.WriteEndObject();
+            AppendJsonString(writer, population.MessageDigest);
+        writer.Append(",\"verification\":")
+            .Append(population.DigestStatus == SchemaPopulationDigestStatus.Verified ? "true" : "false")
+            .Append('}');
+    }
+
+    private static void AppendBinary(Part21TextBuilder writer, ParameterValue value)
+    {
+        if (!value.TryGetBinary(out var binary))
+            throw new InvalidOperationException("An Annex F binary has no retained value.");
+        var unusedBits = (4 - binary.Length % 4) % 4;
+        writer.Append((char)('0' + unusedBits));
+        for (var index = 0; index < binary.Length; index += 4)
+        {
+            var nibble = 0;
+            for (var bit = 0; bit < 4; bit++)
+                nibble = nibble << 1 | (index + bit < binary.Length && binary[index + bit] ? 1 : 0);
+            writer.Append("0123456789ABCDEF"[nibble]);
+        }
+    }
+
+    private static void AppendJsonString(Part21TextBuilder writer, string value)
+    {
+        writer.Append('\"');
+        using var destination = new BuilderTextWriter(writer);
+        JavaScriptEncoder.Default.Encode(destination, value);
+        writer.Append('\"');
+    }
+
+    private sealed class BuilderTextWriter(Part21TextBuilder builder) : TextWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override void Write(char value) => builder.Append(value);
+
+        public override void Write(char[] buffer, int index, int count) =>
+            builder.Append(buffer.AsSpan(index, count));
+
+        public override void Write(string? value)
+        {
+            if (value is not null)
+                builder.Append(value);
+        }
+
+        public override void Write(ReadOnlySpan<char> buffer) => builder.Append(buffer);
     }
 
     private List<Part21Anchor> ReadAnchors(JsonElement array, BridgeBudget budget)
@@ -392,11 +468,6 @@ public sealed partial class AnnexFModelBridge
             }
         }
     }
-
-    private string Format(ParameterValue value) => ParameterValueFormatter.Format(value, entity =>
-        _structure.TryGetName(entity, out var name)
-            ? name
-            : throw new InvalidOperationException("The entity is not registered in the bridged structure."));
 
     private static BigInteger ParseInteger(string value)
     {

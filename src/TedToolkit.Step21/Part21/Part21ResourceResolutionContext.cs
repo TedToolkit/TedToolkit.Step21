@@ -369,6 +369,7 @@ internal sealed class Part21ResourceResolutionContext
         if (reference.ResolutionStatus != Part21ReferenceResolutionStatus.Unresolved)
             return;
         EnsureDepth(depth);
+        EnsureUriLength(reference.Resource.Value);
         var targetKey = address.Key + "|" + reference.Resource.Value;
         ParameterValue? value;
         if (!_activeTargets.Add(targetKey))
