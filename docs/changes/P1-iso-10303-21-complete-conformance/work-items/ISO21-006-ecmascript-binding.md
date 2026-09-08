@@ -83,6 +83,9 @@ commands, dependency graph, AOT result and supplied isolation contract.
   consumer executable was 6,742,016 bytes using compiler package `10.0.11`.
 - Supplied contract: ISO21-007/008 may rely on a caller-owned, explicit transactional host boundary, deterministic
   LF-pinned module bytes, no implicit I/O or dynamic-code dependency in core, and full Annex-F row traceability.
+- Authoritative integration: fast-forwarded to
+  `0de98230a6fcaa49bd81fd9542c045ef7fb079f0`; integrated Annex F 4/4, schema-population 28/28 and core public
+  validation-contract 16/16 suites passed before the work item advanced to `Verified`.
 
 ## Risks and implementation notes
 
