@@ -71,6 +71,23 @@ protected source-generator/custom-descriptor optimization seam and adds no ISO d
 remain source and binary compatible through the projection fallback; generated AP203/AP214/AP242 public API hashes
 must remain unchanged.
 
+## Completion evidence
+
+- Implementation candidate: `059436286a51f2d4afd07cdacb5a9fc0242e5c8b`.
+- Independent implementation review: **Ready to merge** against baseline
+  `5531365b47c69278d0b0ad7adc37527558b713e7`; no blocking or important candidate findings.
+- Annex E/schema-population component proof: 28 passed, 0 failed. This includes every determination method,
+  external resources and digests, deterministic cycle failures, recursive cross-schema projected references,
+  final physical-occurrence identity, cross-owner canonicalization, and projection-created transaction rollback.
+- Compatibility proof: same-schema reads 4/4; multi-schema reads 5/5; AP214 contracts 14/14; AP242 contracts 4/4;
+  public API contracts 16/16; compiler generated-source manifest 1/1.
+- Full Release solution build: 0 warnings, 0 errors. Main suite: 638/640 passed; the only two failures are the
+  unchanged pre-candidate QUERY aggregate-source defects outside ISO21-004. Full integration/package/Native AOT:
+  15 passed, 0 failed, 1 explicitly skipped external-network corpus.
+- Scale and allocation disposition: generated type identity uses one configured static matcher, performs no entity
+  value projection on generated paths, and partitions at 256 sequential branches. Real AP242 generation/compilation
+  passes without the former compiler-complexity failure; AP203/AP214/AP242 generated public surfaces are preserved.
+
 ## Risks and implementation notes
 
 The standard names an SDAI concept, but this product accepts only the minimal schema-neutral provider needed to execute Annex E: explicit relation data plus schema-neutral physical-parameter projection. It does not expose a Part 22 repository. AP-004 governs the durable preference for shared schema-neutral mechanisms without reducing required ISO behavior; this work item does not create a duplicate principle.
