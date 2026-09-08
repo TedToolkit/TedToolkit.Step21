@@ -52,7 +52,7 @@ internal sealed class Part21ResourceResolutionContext
     }
 
     internal DocumentAddress RootAddress => new(
-        _options.BaseUri?.AbsoluteUri ?? "<reader>",
+        _options.BaseUri is null ? "<reader>" : GetCheckedIdentityKey(_options.BaseUri),
         _options.BaseUri,
         Container: null,
         EntryPath: null);
@@ -599,9 +599,8 @@ internal sealed class Part21ResourceResolutionContext
 
     private LoadedDocument? AcquireProviderDocument(Uri identity, int depth, bool allowOpaque = false)
     {
-        EnsureUriLength(GetIdentityKey(identity));
         EnsureDepth(depth);
-        var key = identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
+        var key = GetCheckedIdentityKey(identity);
         if (_documents.TryGetValue(key, out var cached))
             return cached;
         var provider = _options.ResourceProvider;
@@ -635,13 +634,12 @@ internal sealed class Part21ResourceResolutionContext
                 CommitCacheTransaction(transaction);
                 return null;
             }
-            EnsureUriLength(GetIdentityKey(content.Identity));
+            var providerKey = GetCheckedIdentityKey(content.Identity);
             CountSuppliedBytes(content);
             var originalIdentity = content.Identity;
             var originalBytes = content.Bytes;
             var hasDigestContent = content.Kind != Part21ResourceContentKind.Directory;
             var aliases = new HashSet<string>(StringComparer.Ordinal) { key };
-            var providerKey = GetIdentityKey(content.Identity);
             if (!aliases.Contains(providerKey) && _documents.TryGetValue(providerKey, out var providerCached))
             {
                 SetDocument(key, providerCached);
@@ -664,10 +662,9 @@ internal sealed class Part21ResourceResolutionContext
 
             var wasConverted = content.Kind == Part21ResourceContentKind.Other;
             content = ConvertContent(content);
-            EnsureUriLength(GetIdentityKey(content.Identity));
+            var convertedKey = GetCheckedIdentityKey(content.Identity);
             if (wasConverted)
                 CountSuppliedBytes(content);
-            var convertedKey = GetIdentityKey(content.Identity);
             if (!aliases.Contains(convertedKey) && _documents.TryGetValue(convertedKey, out var convertedCached))
             {
                 foreach (var alias in aliases)
@@ -718,12 +715,17 @@ internal sealed class Part21ResourceResolutionContext
         }
     }
 
-    private static string GetIdentityKey(Uri identity) =>
-        identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
-
-    private static LoadedDocument CreateOpaqueDocument(Uri identity, ReadOnlyMemory<byte> bytes)
+    private string GetCheckedIdentityKey(Uri identity)
     {
-        var key = GetIdentityKey(identity);
+        EnsureUriLength(identity.OriginalString);
+        var key = identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
+        EnsureUriLength(key);
+        return key;
+    }
+
+    private LoadedDocument CreateOpaqueDocument(Uri identity, ReadOnlyMemory<byte> bytes)
+    {
+        var key = GetCheckedIdentityKey(identity);
         return new LoadedDocument(
             Structure: null,
             new DocumentAddress(key, identity.IsAbsoluteUri ? identity : null, Container: null, EntryPath: null),
@@ -843,8 +845,14 @@ internal sealed class Part21ResourceResolutionContext
             ?? throw new InvalidOperationException("A completed resource read must retain its registered document.");
     }
 
-    private static string GetDocumentKey(Uri identity, ResourceContainer? container, string? entryPath) =>
-        container is null ? GetIdentityKey(identity) : ContainerCachePrefix + identity + "!/" + entryPath;
+    private string GetDocumentKey(Uri identity, ResourceContainer? container, string? entryPath)
+    {
+        var identityKey = GetCheckedIdentityKey(identity);
+        if (container is null)
+            return identityKey;
+        EnsureCombinedUriLength(identityKey.Length, 2, entryPath!.Length);
+        return ContainerCachePrefix + identityKey + "!/" + entryPath;
+    }
 
     private static bool IsSchemaCompatible(
         ExchangeStructure owner,
@@ -900,8 +908,11 @@ internal sealed class Part21ResourceResolutionContext
                 {
                     if (container.ArchiveDepth >= _options.ResourceLimits.MaximumArchiveDepth)
                         ThrowCapability("P21-RESOURCE-ARCHIVE-RECURSION", "Nested archive depth exceeds the configured limit.");
-                    var nestedIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
-                    EnsureUriLength(GetIdentityKey(nestedIdentity));
+                    var containerIdentity = GetCheckedIdentityKey(container.Identity);
+                    EnsureCombinedUriLength(containerIdentity.Length, 2, entryPath.Length);
+                    var nestedIdentity = new Uri(
+                        containerIdentity + "!/" + entryPath,
+                        UriKind.RelativeOrAbsolute);
                     loaded = LoadContent(
                         new Part21ResourceContent(nestedIdentity, Part21ResourceContentKind.ZipArchive, bytes),
                         depth,
@@ -979,15 +990,16 @@ internal sealed class Part21ResourceResolutionContext
             throw;
         }
 
-        var sourceIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
-        EnsureUriLength(GetIdentityKey(sourceIdentity));
+        var containerIdentity = GetCheckedIdentityKey(container.Identity);
+        EnsureCombinedUriLength(containerIdentity.Length, 2, entryPath.Length);
+        var sourceIdentity = new Uri(containerIdentity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
         var converted = ConvertContent(new Part21ResourceContent(
             sourceIdentity,
             Part21ResourceContentKind.Other,
             bytes));
         CountSuppliedBytes(converted);
-        EnsureUriLength(GetIdentityKey(converted.Identity));
-        var convertedKey = ConvertedCachePrefix + GetIdentityKey(converted.Identity);
+        var convertedIdentityKey = GetCheckedIdentityKey(converted.Identity);
+        var convertedKey = ConvertedCachePrefix + convertedIdentityKey;
         if (_documents.TryGetValue(convertedKey, out var convertedCached))
             return convertedCached;
         AddDocument(convertedKey, null);
@@ -1436,6 +1448,17 @@ internal sealed class Part21ResourceResolutionContext
     private void EnsureUriLength(string value)
     {
         if (value.Length > _options.ProcessingLimits.MaximumUriCharacters)
+        {
+            ThrowCapability(
+                "P21-PROCESSING-LIMIT-URI",
+                "The configured URI-character limit was exceeded.");
+        }
+    }
+
+    private void EnsureCombinedUriLength(int firstLength, int separatorLength, int secondLength)
+    {
+        var total = (long)firstLength + separatorLength + secondLength;
+        if (total > _options.ProcessingLimits.MaximumUriCharacters)
         {
             ThrowCapability(
                 "P21-PROCESSING-LIMIT-URI",

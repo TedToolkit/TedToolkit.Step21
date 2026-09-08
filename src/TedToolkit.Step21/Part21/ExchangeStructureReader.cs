@@ -72,13 +72,6 @@ internal static class ExchangeStructureReader
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(limits);
-        if (source.GetType() == typeof(StringReader))
-        {
-            var inMemorySource = source.ReadToEnd();
-            if (inMemorySource.Length > limits.MaximumInputCharacters)
-                ThrowInputLimit();
-            return inMemorySource;
-        }
         var buffer = ArrayPool<char>.Shared.Rent(4096);
         var result = new StringBuilder();
         try

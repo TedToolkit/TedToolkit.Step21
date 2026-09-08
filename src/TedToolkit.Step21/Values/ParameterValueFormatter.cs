@@ -63,27 +63,32 @@ internal static class ParameterValueFormatter
             case ParameterValueKind.Entity:
                 if (!value.TryGetEntity(out var entity))
                     throw InconsistentValue(value);
-                builder.Append(getEntityName(entity).ToString());
+                builder.Append('#').Append(getEntityName(entity).CanonicalDigits);
                 break;
             case ParameterValueKind.EntityInstance:
-                builder.Append(value.TryGetEntityInstance(out var entityName)
-                    ? entityName.ToString() : throw InconsistentValue(value));
+                if (!value.TryGetEntityInstance(out var entityName))
+                    throw InconsistentValue(value);
+                builder.Append('#').Append(entityName.CanonicalDigits);
                 break;
             case ParameterValueKind.ValueInstance:
-                builder.Append(value.TryGetValueInstance(out var valueName)
-                    ? valueName.ToString() : throw InconsistentValue(value));
+                if (!value.TryGetValueInstance(out var valueName))
+                    throw InconsistentValue(value);
+                builder.Append('@').Append(valueName.CanonicalDigits);
                 break;
             case ParameterValueKind.ConstantEntity:
-                builder.Append(value.TryGetConstantEntity(out var constantEntity)
-                    ? constantEntity.ToString() : throw InconsistentValue(value));
+                if (!value.TryGetConstantEntity(out var constantEntity))
+                    throw InconsistentValue(value);
+                builder.Append('#').Append(constantEntity.Value);
                 break;
             case ParameterValueKind.ConstantValue:
-                builder.Append(value.TryGetConstantValue(out var constantValue)
-                    ? constantValue.ToString() : throw InconsistentValue(value));
+                if (!value.TryGetConstantValue(out var constantValue))
+                    throw InconsistentValue(value);
+                builder.Append('@').Append(constantValue.Value);
                 break;
             case ParameterValueKind.Resource:
-                builder.Append(value.TryGetResource(out var resource)
-                    ? resource.ToString() : throw InconsistentValue(value));
+                if (!value.TryGetResource(out var resource))
+                    throw InconsistentValue(value);
+                builder.Append('<').Append(resource.Value).Append('>');
                 break;
             case ParameterValueKind.Aggregate:
                 AppendAggregate(builder, value, getEntityName);

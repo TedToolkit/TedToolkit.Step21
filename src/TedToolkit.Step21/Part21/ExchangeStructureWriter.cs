@@ -493,9 +493,7 @@ internal static class ExchangeStructureWriter
         builder.Append("ANCHOR;\n");
         foreach (var anchor in structure.AnchorEntries)
         {
-            builder.Append(anchor.Name.ToString())
-                .Append('=')
-                ;
+            builder.Append('<').Append(anchor.Name.Value).Append(">=");
             ParameterValueFormatter.Append(builder, anchor.Item, entity => ResolveName(structure, entity));
             foreach (var tag in anchor.Tags)
             {
@@ -520,9 +518,11 @@ internal static class ExchangeStructureWriter
         builder.Append("REFERENCE;\n");
         foreach (var reference in structure.ReferenceEntries)
         {
-            builder.Append(reference.FormatName())
-                .Append('=')
-                .Append(reference.Resource.ToString())
+            builder.Append(reference.Kind == Part21ReferenceKind.EntityInstance ? '#' : '@')
+                .Append(reference.CanonicalDigits)
+                .Append("=<")
+                .Append(reference.Resource.Value)
+                .Append('>')
                 .Append(";\n");
         }
 
@@ -535,7 +535,7 @@ internal static class ExchangeStructureWriter
         EntityRegistration registration,
         ProjectedEntity projected)
     {
-        builder.Append(registration.Name.ToString()).Append('=');
+        builder.Append('#').Append(registration.Name.CanonicalDigits).Append('=');
         if (projected.Components.Count > 1)
             builder.Append('(');
         foreach (var component in projected.Components)

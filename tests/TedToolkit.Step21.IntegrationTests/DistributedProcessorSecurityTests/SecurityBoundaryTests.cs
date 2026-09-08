@@ -117,6 +117,15 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-INPUT");
             await Assert.That(source.CharactersRead).IsEqualTo(17);
         }
+
+        var exactStringReader = new StringReader(new string('X', 18));
+        _ = exactStringReader.Read();
+        var exactFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            exactStringReader,
+            [],
+            ExchangeStructureReadOptions.WithProcessingLimits(limits)));
+        await Assert.That(exactFailure.Diagnostics.Single().Code)
+            .IsEqualTo("P21-PROCESSING-LIMIT-INPUT");
     }
 
     [Test]
@@ -131,10 +140,30 @@ internal sealed class SecurityBoundaryTests
             [SecuritySchemaDescriptor.Instance],
             ExchangeStructureReadOptions.WithProcessingLimits(limits, resourceProvider: provider)));
 
+        var returnedIdentity = new Uri("https://example.test/" + new string('a', 128));
+        var returnedProvider = new RecordingProvider(new Part21ResourceContent(
+            returnedIdentity,
+            Part21ResourceContentKind.ClearText,
+            Encoding.UTF8.GetBytes(Exchange(string.Empty))));
+        var returnedFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("REFERENCE;#1=<https://x.test/a#target>;ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            ExchangeStructureReadOptions.WithProcessingLimits(
+                new Part21ProcessingLimits(maximumUriCharacters: 64),
+                resourceProvider: returnedProvider)));
+        var baseUriFailure = Assert.Throws<ArgumentException>(() =>
+            ExchangeStructureReadOptions.WithProcessingLimits(
+                new Part21ProcessingLimits(maximumUriCharacters: 16),
+                baseUri: new Uri("https://example.test/" + new string('b', 128))));
+
         using (Assert.Multiple())
         {
             await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-URI");
             await Assert.That(provider.Requests).IsEmpty();
+            await Assert.That(returnedFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-URI");
+            await Assert.That(returnedProvider.Requests.Count).IsEqualTo(1);
+            await Assert.That(baseUriFailure.ParamName).IsEqualTo("baseUri");
         }
     }
 
@@ -405,6 +434,64 @@ internal sealed class SecurityBoundaryTests
             entity,
             new Part21ProcessingLimits(maximumOutputCharacters: 16)));
 
+        var namedStructure = CreateStructure();
+        var namedEntity = new SecurityEntity("value");
+        namedStructure.Add(
+            namedStructure.DataSections.Single(),
+            new EntityInstanceName(new string('9', 1024)),
+            namedEntity);
+        var namedDestination = new StringWriter();
+        var namedFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => namedStructure.WriteEntity(
+            namedDestination,
+            namedEntity,
+            new Part21ProcessingLimits(maximumOutputCharacters: 16)));
+
+        foreach (var payload in new ParameterValue[]
+                 {
+                     ParameterValue.FromEntityInstance(new EntityInstanceName(new string('8', 1024))),
+                     ParameterValue.FromValueInstance(new ValueInstanceName(new string('7', 1024))),
+                     ParameterValue.FromConstantEntity(new ConstantEntityName(new string('A', 1024))),
+                     ParameterValue.FromConstantValue(new ConstantValueName(new string('B', 1024))),
+                     ParameterValue.FromResource(new Part21Resource("urn:" + new string('c', 1024))),
+                 })
+        {
+            var payloadStructure = CreateStructure();
+            var payloadEntity = new SecurityEntity(payload);
+            payloadStructure.Add(payloadStructure.DataSections.Single(), payloadEntity);
+            var payloadDestination = new StringWriter();
+            _ = Assert.Throws<ExchangeStructureCapabilityException>(() => payloadStructure.WriteEntity(
+                payloadDestination,
+                payloadEntity,
+                new Part21ProcessingLimits(maximumOutputCharacters: 64)));
+            await Assert.That(payloadDestination.ToString()).IsEmpty();
+        }
+
+        var baselineDestination = new StringWriter();
+        CreateStructure().Write(baselineDestination);
+        var anchorStructure = CreateStructure();
+        anchorStructure.Anchors.Add(new Part21Anchor(
+            new AnchorName(new string('a', 1024)),
+            ParameterValue.Omitted));
+        var anchorDestination = new StringWriter();
+        _ = Assert.Throws<ExchangeStructureCapabilityException>(() => anchorStructure.Write(
+            anchorDestination,
+            new ExchangeStructureWriteOptions(
+                [],
+                new Part21ProcessingLimits(
+                    maximumOutputCharacters: baselineDestination.ToString().Length + 16))));
+        var referenceStructure = ExchangeStructure.Read(
+            new StringReader(Exchange(
+                "REFERENCE;#1=<#" + new string('d', 1024) + ">;ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            new ExchangeStructureReadOptions());
+        var referenceDestination = new StringWriter();
+        _ = Assert.Throws<ExchangeStructureCapabilityException>(() => referenceStructure.Write(
+            referenceDestination,
+            new ExchangeStructureWriteOptions(
+                [],
+                new Part21ProcessingLimits(
+                    maximumOutputCharacters: baselineDestination.ToString().Length + 16))));
+
         var outputBridge = new AnnexFModelBridge(
             structure,
             new Part21Resource("urn:x"),
@@ -427,6 +514,11 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(entityFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
             await Assert.That(entityDestination.ToString()).IsEmpty();
+            await Assert.That(namedFailure.Diagnostics.Single().Code)
+                .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
+            await Assert.That(namedDestination.ToString()).IsEmpty();
+            await Assert.That(anchorDestination.ToString()).IsEmpty();
+            await Assert.That(referenceDestination.ToString()).IsEmpty();
             await Assert.That(outputFailure.Diagnostics.Single().Code)
                 .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
             await Assert.That(bridgeUriFailure.Message).Contains("URI-character");
@@ -721,9 +813,19 @@ internal sealed class SecurityBoundaryTests
         public ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content) => sign(content);
     }
 
-    private sealed class SecurityEntity(string value) : Entity
+    private sealed class SecurityEntity : Entity
     {
-        internal string Value { get; } = value;
+        internal SecurityEntity(string value)
+            : this(ParameterValue.FromString(value))
+        {
+        }
+
+        internal SecurityEntity(ParameterValue value)
+        {
+            Value = value;
+        }
+
+        internal ParameterValue Value { get; }
 
         public override IEnumerable<Entity> DirectReferences => [];
     }
@@ -750,7 +852,7 @@ internal sealed class SecurityBoundaryTests
 
         protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
             Entity value) => value is SecurityEntity security
-                ? [new("SECURITY_ENTITY", [ParameterValue.FromString(security.Value)])]
+                ? [new("SECURITY_ENTITY", [security.Value])]
                 : [];
     }
 }

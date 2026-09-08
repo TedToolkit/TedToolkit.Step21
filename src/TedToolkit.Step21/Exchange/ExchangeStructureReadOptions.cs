@@ -215,8 +215,13 @@ public sealed class ExchangeStructureReadOptions
         ArgumentNullException.ThrowIfNull(processingLimits);
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
-        if (baseUri is not null && baseUri.AbsoluteUri.Length > processingLimits.MaximumUriCharacters)
-            throw new ArgumentException("A Part 21 base URI exceeds the configured URI limit.", nameof(baseUri));
+        if (baseUri is not null)
+        {
+            if (baseUri.OriginalString.Length > processingLimits.MaximumUriCharacters)
+                throw new ArgumentException("A Part 21 base URI exceeds the configured URI limit.", nameof(baseUri));
+            if (baseUri.AbsoluteUri.Length > processingLimits.MaximumUriCharacters)
+                throw new ArgumentException("A Part 21 base URI exceeds the configured URI limit.", nameof(baseUri));
+        }
 
         BaseUri = baseUri;
         ResourceProvider = resourceProvider;
