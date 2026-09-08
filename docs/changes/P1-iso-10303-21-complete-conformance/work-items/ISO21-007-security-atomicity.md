@@ -64,6 +64,29 @@
 Record candidate revision, threat/limit partitions, default/custom limits, diagnostics, publication/output observations,
 exact commands and supplied security manifest identity.
 
+## Completion evidence
+
+- Candidate: `31785bbe188249ea20b0d4d22fad3375d1142ad9`, independently reviewed against baseline
+  `422e33dd4d885cdfe86e47729d11115aed86b730`; final implementation review concluded `Ready to merge`
+  with no blocking or important findings.
+- Security identity: `distributed-processor-security.json` contains 16 mechanically bound threat rows and SHA-256
+  `9B3726B189B60D790DF55E97AADFB891BDFB1F6C65F9073EF53F78214D2CBC78`. Shared finite defaults cover root input,
+  output, URI, signature count/per-envelope/aggregate bytes, CMS signer count, nesting, items and archive-entry bytes.
+- Boundary proof: Release `SecurityBoundaryTests` passed 15/15. It covers generic and partially consumed exact
+  readers; input/base/provider/converter URI limits before canonicalization/cache keys; resource/archive count, bytes,
+  depth, traversal, compression and recursion; provider/converter/signer re-entry; read/write signature count,
+  per-envelope/aggregate CMS bytes and signer count; malformed/trust policy; capped whole/entity/Annex-F output;
+  Annex-F input/item/depth/URI; zero publication; and normative reference-cycle null semantics.
+- Regression proof: resource resolution 26/26, CMS signatures 19/19, Annex F 4/4, schema populations 28/28,
+  canonical parameter formatting 1/1, canonical simple writer 4/4, complex mapping 17/17, atomic prewrite 5/5 and
+  public API 1/1 passed in Release.
+- Build proof: exact production candidate dependency build covering core, Analyzer, Annex F, AP203, AP214, AP242 and
+  integration host passed with 0 warnings and 0 errors in 7:09.30. The immediately preceding full solution build also
+  passed with 0 warnings and 0 errors in 7:07.78; the final candidate adds only the two reciprocal CMS test branches.
+- Supplied contract: ISO21-008 may rely on explicit caller-owned resource, conversion, signing, certificate, time and
+  revocation inputs; bounded work before library-controlled materialization/decoding; zero partial model/output; and
+  an executable AC-09 threat/default manifest.
+
 ## Risks and implementation notes
 
 Adversarial fixtures must remain small and generate expansion/recursion behavior in bounded test-controlled form.
