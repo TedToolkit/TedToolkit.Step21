@@ -9,6 +9,8 @@
     "use strict";
 
     var bridgeFormatVersion = 1;
+    var modelRecordName = "[P21.Model]";
+    var populationRecordName = "[P21.Population]";
 
     function fail(message) {
         throw new TypeError(message);
@@ -19,6 +21,14 @@
             fail(name + " must be a finite ECMAScript number.");
         }
         return value;
+    }
+
+    function leftPad(value, length) {
+        var result = String(value);
+        while (result.length < length) {
+            result = "0" + result;
+        }
+        return result;
     }
 
     function expandInteger(value) {
@@ -79,12 +89,12 @@
                     fail("P21.String contains an unpaired high surrogate.");
                 }
                 var scalar = 0x10000 + ((code - 0xD800) * 0x400) + low - 0xDC00;
-                result += "\\X4\\" + scalar.toString(16).toUpperCase().padStart(8, "0") + "\\X0\\";
+                result += "\\X4\\" + leftPad(scalar.toString(16).toUpperCase(), 8) + "\\X0\\";
                 index += 1;
             } else if (code >= 0xD800 && code <= 0xDFFF) {
                 fail("P21.String contains an unpaired surrogate.");
             } else {
-                result += "\\X2\\" + code.toString(16).toUpperCase().padStart(4, "0") + "\\X0\\";
+                result += "\\X2\\" + leftPad(code.toString(16).toUpperCase(), 4) + "\\X0\\";
             }
         }
         return result + "'";
@@ -338,108 +348,259 @@
         return JSON.parse(JSON.stringify(state));
     }
 
-    function commit(model) {
-        if (typeof model._host.apply === "function") {
-            model._host.apply(copyState(model._state));
+    function requireBridgeState(state) {
+        if (!state || state.formatVersion !== bridgeFormatVersion || !Array.isArray(state.anchors)
+                || !Array.isArray(state.schemaPopulation)) {
+            fail("The caller-supplied Annex F bridge snapshot is invalid or unsupported.");
         }
+        return state;
     }
 
-    function Anchor(model, state) {
-        var view = this;
-        Object.defineProperty(view, "$value", {
-            enumerable: true,
-            configurable: false,
-            get: function () { return fromNode(state.value, model._host); },
-            set: function (value) { state.value = toNode(value); commit(model); }
+    function modelRecord(model) {
+        if (!model || !Object.prototype.hasOwnProperty.call(model, modelRecordName)) {
+            fail("P21.Model is not owned by this P21 module.");
+        }
+        return model[modelRecordName];
+    }
+
+    function populationRecord(population) {
+        if (!population || !Object.prototype.hasOwnProperty.call(population, populationRecordName)) {
+            fail("P21.Population is not owned by this P21 module.");
+        }
+        return population[populationRecordName];
+    }
+
+    function populationState(population) {
+        var record = populationRecord(population);
+        return record.model === null
+            ? record.state
+            : modelRecord(record.model).state.schemaPopulation[record.index];
+    }
+
+    function attachPopulations(model, record) {
+        record.populations = record.state.schemaPopulation.map(function (population, index) {
+            return new Population(population, model, index);
         });
-        state.tags.forEach(function (tag) {
+    }
+
+    function applyModel(model, mutation) {
+        var record = modelRecord(model);
+        var candidate = copyState(record.state);
+        mutation(candidate);
+        var canonical = requireBridgeState(record.host.apply(copyState(candidate)));
+        record.state = copyState(canonical);
+        attachPopulations(model, record);
+    }
+
+    function readAnchorValue(model, anchorIndex) {
+        return fromNode(modelRecord(model).state.anchors[anchorIndex].value, modelRecord(model).host);
+    }
+
+    function writeAnchorValue(model, anchorIndex, value) {
+        applyModel(model, function (state) {
+            state.anchors[anchorIndex].value = toNode(value);
+        });
+    }
+
+    function readTagValue(model, anchorIndex, tagIndex) {
+        var record = modelRecord(model);
+        return fromNode(record.state.anchors[anchorIndex].tags[tagIndex].value, record.host);
+    }
+
+    function writeTagValue(model, anchorIndex, tagIndex, value) {
+        applyModel(model, function (state) {
+            state.anchors[anchorIndex].tags[tagIndex].value = toNode(value);
+        });
+    }
+
+    function AnchorPropertyCollision(model, anchorIndex, tagIndex) {
+        Object.defineProperty(this, "anchorValue", {
+            enumerable: true,
+            get: function () { return readAnchorValue(model, anchorIndex); },
+            set: function (value) { writeAnchorValue(model, anchorIndex, value); }
+        });
+        Object.defineProperty(this, "tagValue", {
+            enumerable: true,
+            get: function () { return readTagValue(model, anchorIndex, tagIndex); },
+            set: function (value) { writeTagValue(model, anchorIndex, tagIndex, value); }
+        });
+    }
+    AnchorPropertyCollision.prototype.valueOf = function () {
+        var value = this.anchorValue;
+        return value === null ? null : value.valueOf();
+    };
+    AnchorPropertyCollision.prototype.toString = function () {
+        var value = this.anchorValue;
+        return value === null ? "null" : value.toString();
+    };
+    AnchorPropertyCollision.prototype.toP21String = function () {
+        var value = this.anchorValue;
+        return value === null ? "$" : value.toP21String();
+    };
+
+    var modelMethodNames = {
+        uri: true,
+        name: true,
+        schema_population: true,
+        set_uri: true,
+        set_name: true,
+        set_schema_population: true
+    };
+
+    function Anchor(model, anchorIndex) {
+        var state = modelRecord(model).state.anchors[anchorIndex];
+        var view = modelMethodNames[state.name]
+            ? function () { return Model.prototype[state.name].apply(model, arguments); }
+            : {};
+        var valueTagIndex = -1;
+        state.tags.forEach(function (tag, tagIndex) {
+            if (tag.name === "value") {
+                valueTagIndex = tagIndex;
+            }
+        });
+        if (valueTagIndex >= 0) {
+            var collision = new AnchorPropertyCollision(model, anchorIndex, valueTagIndex);
+            Object.defineProperty(view, "$value", {
+                enumerable: true,
+                configurable: false,
+                get: function () { return collision; },
+                set: function (value) { writeAnchorValue(model, anchorIndex, value); }
+            });
+        } else {
+            Object.defineProperty(view, "$value", {
+                enumerable: true,
+                configurable: false,
+                get: function () { return readAnchorValue(model, anchorIndex); },
+                set: function (value) { writeAnchorValue(model, anchorIndex, value); }
+            });
+        }
+        state.tags.forEach(function (tag, tagIndex) {
+            if (tag.name === "value") {
+                return;
+            }
             Object.defineProperty(view, "$" + tag.name, {
                 enumerable: true,
                 configurable: false,
-                get: function () { return fromNode(tag.value, model._host); },
-                set: function (value) { tag.value = toNode(value); commit(model); }
+                get: function () { return readTagValue(model, anchorIndex, tagIndex); },
+                set: function (value) { writeTagValue(model, anchorIndex, tagIndex, value); }
             });
         });
+        return view;
     }
 
-    function Population(state, model) {
-        this._state = state || { uri: "#", stamp: null, messageDigest: null, verification: false };
-        this._model = model || null;
+    function Population(state, model, index) {
+        Object.defineProperty(this, populationRecordName, {
+            enumerable: false,
+            configurable: false,
+            writable: false,
+            value: {
+                state: state || { uri: "#", stamp: null, messageDigest: null, verification: false },
+                model: model || null,
+                index: index === undefined ? -1 : index
+            }
+        });
     }
-    Population.prototype.uri = function () { return new URI(this._state.uri, this._model && this._model._host); };
-    Population.prototype.stamp = function () { return this._state.stamp === null ? null : new Date(this._state.stamp); };
-    Population.prototype.verification = function () { return this._state.verification === true; };
+    Population.prototype.uri = function () {
+        var record = populationRecord(this);
+        return new URI(populationState(this).uri, record.model === null ? null : modelRecord(record.model).host);
+    };
+    Population.prototype.stamp = function () {
+        var stamp = populationState(this).stamp;
+        return stamp === null ? null : new Date(stamp);
+    };
+    Population.prototype.verification = function () { return populationState(this).verification === true; };
     Population.prototype.set_uri = function (value) {
         if (!(value instanceof URI)) { fail("P21.Population.set_uri requires a P21.URI."); }
-        this._state.uri = value.toString();
-        if (this._model) { commit(this._model); }
+        var record = populationRecord(this);
+        if (record.model === null) {
+            record.state.uri = value.toString();
+            record.state.messageDigest = null;
+            record.state.verification = false;
+            return;
+        }
+        applyModel(record.model, function (state) {
+            var population = state.schemaPopulation[record.index];
+            population.uri = value.toString();
+            population.messageDigest = null;
+            population.verification = false;
+        });
     };
     Population.prototype.set_stamp = function (value) {
         if (!(value instanceof Date) || isNaN(value.valueOf())) {
             fail("P21.Population.set_stamp requires a valid ECMAScript Date.");
         }
-        this._state.stamp = value.toISOString();
-        if (this._model) { commit(this._model); }
+        var record = populationRecord(this);
+        if (record.model === null) {
+            record.state.stamp = value.toISOString();
+            record.state.messageDigest = null;
+            record.state.verification = false;
+            return;
+        }
+        applyModel(record.model, function (state) {
+            var population = state.schemaPopulation[record.index];
+            population.stamp = value.toISOString();
+            population.messageDigest = null;
+            population.verification = false;
+        });
     };
     Population.prototype.set_verification = function () {
-        if (!this._model || typeof this._model._host.generateVerification !== "function") {
+        var record = populationRecord(this);
+        if (record.model === null || typeof modelRecord(record.model).host.generateVerification !== "function") {
             fail("P21.Population.set_verification requires the caller-supplied generateVerification capability.");
         }
-        var digest = this._model._host.generateVerification(this);
+        var digest = modelRecord(record.model).host.generateVerification(this);
         if (typeof digest !== "string" || digest.length === 0
                 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(digest)) {
             fail("The generated schema-population verification must be canonical Base64.");
         }
-        this._state.messageDigest = digest;
-        this._state.verification = true;
-        commit(this._model);
+        applyModel(record.model, function (state) {
+            state.schemaPopulation[record.index].messageDigest = digest;
+            state.schemaPopulation[record.index].verification = true;
+        });
     };
 
     function Model(host) {
-        if (!host || typeof host.snapshot !== "function") {
-            fail("P21.Model requires a caller-supplied host with snapshot().");
+        if (!host || typeof host.snapshot !== "function" || typeof host.apply !== "function") {
+            fail("P21.Model requires a caller-supplied host with snapshot() and transactional apply().");
         }
-        var state = host.snapshot();
-        if (!state || state.formatVersion !== bridgeFormatVersion || !Array.isArray(state.anchors)
-                || !Array.isArray(state.schemaPopulation)) {
-            fail("The caller-supplied Annex F bridge snapshot is invalid or unsupported.");
-        }
-        this._host = host;
-        this._state = copyState(state);
-        this._populations = this._state.schemaPopulation.map(function (population) {
-            return new Population(population, this);
-        }, this);
-        this._state.anchors.forEach(function (anchor) {
+        var record = { host: host, state: copyState(requireBridgeState(host.snapshot())), populations: [] };
+        Object.defineProperty(this, modelRecordName, {
+            enumerable: false,
+            configurable: false,
+            writable: false,
+            value: record
+        });
+        attachPopulations(this, record);
+        record.state.anchors.forEach(function (anchor, anchorIndex) {
             Object.defineProperty(this, anchor.name, {
                 enumerable: true,
                 configurable: false,
                 writable: false,
-                value: new Anchor(this, anchor)
+                value: new Anchor(this, anchorIndex)
             });
         }, this);
     }
-    Model.prototype.uri = function () { return new URI(this._state.uri, this._host); };
-    Model.prototype.name = function () { return new P21String(this._state.name); };
-    Model.prototype.schema_population = function () { return this._populations.slice(); };
+    Model.prototype.uri = function () {
+        var record = modelRecord(this);
+        return new URI(record.state.uri, record.host);
+    };
+    Model.prototype.name = function () { return new P21String(modelRecord(this).state.name); };
+    Model.prototype.schema_population = function () { return modelRecord(this).populations.slice(); };
     Model.prototype.set_uri = function (value) {
         if (!(value instanceof URI)) { fail("P21.Model.set_uri requires a P21.URI."); }
-        this._state.uri = value.toString();
-        commit(this);
+        applyModel(this, function (state) { state.uri = value.toString(); });
     };
     Model.prototype.set_name = function (value) {
         if (!(value instanceof P21String)) { fail("P21.Model.set_name requires a P21.String."); }
-        this._state.name = value.valueOf();
-        commit(this);
+        applyModel(this, function (state) { state.name = value.valueOf(); });
     };
     Model.prototype.set_schema_population = function (values) {
         if (!Array.isArray(values) || values.some(function (value) { return !(value instanceof Population); })) {
             fail("P21.Model.set_schema_population requires an array of P21.Population objects.");
         }
-        this._state.schemaPopulation = values.map(function (value) { return copyState(value._state); });
-        this._populations = this._state.schemaPopulation.map(function (population) {
-            return new Population(population, this);
-        }, this);
-        commit(this);
+        applyModel(this, function (state) {
+            state.schemaPopulation = values.map(function (value) { return copyState(populationState(value)); });
+        });
     };
 
     return Object.freeze({

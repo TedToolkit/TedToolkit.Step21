@@ -8,6 +8,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -40,9 +41,15 @@ internal sealed class AnnexFEcmaScriptBindingTests
             await File.WriteAllTextAsync(inputPath, original);
 
             var runner = Path.Combine(AppContext.BaseDirectory, "TestData", "AnnexF", "annex-f-integration.js");
-            var result = await Run("node", runner, modulePath, inputPath, outputPath);
+            var manifestPath = Path.Combine(
+                RepositoryPaths.FindRoot(),
+                "docs",
+                "conformance",
+                "annex-f-ecmascript-binding.json");
+            var result = await Run("node", runner, modulePath, inputPath, outputPath, manifestPath);
             var nodeVersion = await Run("node", "--version");
-            await Assert.That(result).Contains("ANNEX_F_NODE_OK assertions=46");
+            await Assert.That(result).Contains("ANNEX_F_NODE_OK assertions=");
+            await Assert.That(result).Contains("requirements=22");
             await Assert.That(nodeVersion).StartsWith("v");
 
             bridge.ApplyState(await File.ReadAllTextAsync(outputPath));
@@ -100,6 +107,37 @@ internal sealed class AnnexFEcmaScriptBindingTests
     }
 
     [Test]
+    public async Task Should_apply_and_validate_population_verification_state_atomically()
+    {
+        var bridge = new AnnexFModelBridge(CreateStructure(), new Part21Resource("urn:original"));
+        var before = bridge.ExportState();
+        var invalid = before.Replace(
+            "\"messageDigest\":\"AQID\",\"verification\":true",
+            "\"messageDigest\":null,\"verification\":true",
+            StringComparison.Ordinal);
+
+        await Assert.That(() => bridge.ApplyState(invalid)).Throws<JsonException>();
+        await Assert.That(bridge.ExportState()).IsEqualTo(before);
+
+        var unverified = before
+            .Replace("https://example.test/population.step", "https://example.test/replaced.step", StringComparison.Ordinal)
+            .Replace(
+                "\"messageDigest\":\"AQID\",\"verification\":true",
+                "\"messageDigest\":null,\"verification\":false",
+                StringComparison.Ordinal);
+        bridge.ApplyState(unverified);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(bridge.Structure.SchemaPopulation.Single().Location.OriginalString)
+                .IsEqualTo("https://example.test/replaced.step");
+            await Assert.That(bridge.Structure.SchemaPopulation.Single().MessageDigest).IsNull();
+            await Assert.That(bridge.Structure.SchemaPopulation.Single().DigestStatus)
+                .IsEqualTo(SchemaPopulationDigestStatus.NotProvided);
+        }
+    }
+
+    [Test]
     public async Task Should_package_the_versioned_module_without_an_engine_dependency()
     {
         var root = RepositoryPaths.FindRoot();
@@ -131,12 +169,16 @@ internal sealed class AnnexFEcmaScriptBindingTests
                 await Assert.That(names).Contains("README.md");
                 await Assert.That(source).IsEqualTo(AnnexFEcmaScriptModule.Source);
                 await Assert.That(AnnexFEcmaScriptModule.SourceSha256).Matches("^[0-9A-F]{64}$");
+                await Assert.That(AnnexFEcmaScriptModule.SourceSha256).IsEqualTo(Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(source))));
                 await Assert.That(specification).Contains(
                     "<dependency id=\"TedToolkit.Step21\" version=\"[1.0.0, 2.0.0)\" exclude=\"Build,Analyzers\" />");
                 await Assert.That(specification).DoesNotContain("Jint");
                 await Assert.That(specification).DoesNotContain("JavaScriptEngineSwitcher");
                 await Assert.That(File.ReadAllText(Path.Combine(root, "src", "TedToolkit.Step21", "TedToolkit.Step21.csproj")))
                     .DoesNotContain("AnnexF");
+                await Assert.That(File.ReadAllText(Path.Combine(root, ".gitattributes")))
+                    .Contains("/src/TedToolkit.Step21.AnnexF/AnnexF.js text eol=lf");
             }
 
             var approvedApi = NormalizeLineEndings(await File.ReadAllTextAsync(Path.Combine(
@@ -244,6 +286,8 @@ internal sealed class AnnexFEcmaScriptBindingTests
             await Assert.That(bridge.Structure.SchemaPopulation[0].Location.OriginalString)
                 .IsEqualTo("https://example.test/changed-population.step");
             await Assert.That(bridge.Structure.SchemaPopulation[0].MessageDigest).IsEqualTo("AQID");
+            await Assert.That(bridge.Structure.SchemaPopulation[0].DigestStatus)
+                .IsEqualTo(SchemaPopulationDigestStatus.Verified);
             await Assert.That(bridge.Structure.SchemaPopulation[1].Location.OriginalString)
                 .IsEqualTo("relative-population.step");
             await Assert.That(bridge.Structure.SchemaPopulation[1].TimeStamp)

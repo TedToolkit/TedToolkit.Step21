@@ -4,3 +4,5 @@
 /tests/TedToolkit.Step21.IntegrationTests/TestData/Ap*/*.step text eol=lf
 /src/TedToolkit.Step21/Generated/** text eol=lf
 /src/TedToolkit.Step21.Analyzer/Generated/** text eol=lf
+/src/TedToolkit.Step21.AnnexF/AnnexF.js text eol=lf
+/tests/TedToolkit.Step21.IntegrationTests/TestData/AnnexF/*.js text eol=lf

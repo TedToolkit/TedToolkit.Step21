@@ -248,15 +248,27 @@ public sealed partial class AnnexFModelBridge
             var uri = new Uri(RequireString(item, "uri"), UriKind.RelativeOrAbsolute);
             var stamp = ReadNullableString(item, "stamp");
             var digest = ReadNullableString(item, "messageDigest");
+            var verification = RequireBoolean(item, "verification");
+            if (verification && digest is null)
+                throw new JsonException("A verified Annex F schema population requires a message digest.");
             var current = index < _structure.SchemaPopulation.Count
                 ? _structure.SchemaPopulation[index]
                 : null;
-            populations.Add(current is not null
+            if (current is not null
                 && current.Location.Equals(uri)
                 && string.Equals(current.TimeStamp, stamp, StringComparison.Ordinal)
                 && string.Equals(current.MessageDigest, digest, StringComparison.Ordinal)
-                    ? current
-                    : new SchemaPopulationExternalFile(uri, stamp, digest));
+                && (current.DigestStatus == SchemaPopulationDigestStatus.Verified) == verification)
+            {
+                populations.Add(current);
+            }
+            else
+            {
+                var population = new SchemaPopulationExternalFile(uri, stamp, digest);
+                if (verification)
+                    population.DigestStatus = SchemaPopulationDigestStatus.Verified;
+                populations.Add(population);
+            }
             index++;
         }
         return populations;
@@ -394,6 +406,17 @@ public sealed partial class AnnexFModelBridge
         return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var result)
             ? result
             : throw new JsonException($"Annex F property '{propertyName}' must be an integer.");
+    }
+
+    private static bool RequireBoolean(JsonElement value, string propertyName)
+    {
+        var property = RequireProperty(value, propertyName);
+        return property.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new JsonException($"Annex F property '{propertyName}' must be a Boolean."),
+        };
     }
 
     private static string? ReadNullableString(JsonElement value, string propertyName)
