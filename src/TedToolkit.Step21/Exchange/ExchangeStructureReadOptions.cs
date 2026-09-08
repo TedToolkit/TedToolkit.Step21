@@ -149,10 +149,28 @@ public sealed class ExchangeStructureReadOptions
             resourceProvider,
             resourceConverter,
             resourceLimits,
+            Part21ProcessingLimits.Default,
             signatureVerification: null,
             domainEquivalenceProvider: null)
     {
     }
+
+    /// <summary>Creates an immutable per-read capability snapshot with explicit shared processing limits.</summary>
+    public static ExchangeStructureReadOptions WithProcessingLimits(
+        Part21ProcessingLimits processingLimits,
+        Uri? baseUri = null,
+        IPart21ResourceProvider? resourceProvider = null,
+        IPart21ResourceConverter? resourceConverter = null,
+        Part21ResourceLimits? resourceLimits = null,
+        Part21SignatureVerificationOptions? signatureVerification = null,
+        ISchemaDomainEquivalenceProvider? domainEquivalenceProvider = null) => new(
+            baseUri,
+            resourceProvider,
+            resourceConverter,
+            resourceLimits,
+            processingLimits ?? throw new ArgumentNullException(nameof(processingLimits)),
+            signatureVerification,
+            domainEquivalenceProvider);
 
     /// <summary>Creates an immutable per-read signature and resource capability snapshot.</summary>
     public static ExchangeStructureReadOptions WithSignatureVerification(
@@ -165,6 +183,7 @@ public sealed class ExchangeStructureReadOptions
             resourceProvider,
             resourceConverter,
             resourceLimits,
+            Part21ProcessingLimits.Default,
             signatureVerification ?? throw new ArgumentNullException(nameof(signatureVerification)),
             domainEquivalenceProvider: null);
 
@@ -180,6 +199,7 @@ public sealed class ExchangeStructureReadOptions
             resourceProvider,
             resourceConverter,
             resourceLimits,
+            Part21ProcessingLimits.Default,
             signatureVerification,
             domainEquivalenceProvider ?? throw new ArgumentNullException(nameof(domainEquivalenceProvider)));
 
@@ -188,16 +208,21 @@ public sealed class ExchangeStructureReadOptions
         IPart21ResourceProvider? resourceProvider,
         IPart21ResourceConverter? resourceConverter,
         Part21ResourceLimits? resourceLimits,
+        Part21ProcessingLimits processingLimits,
         Part21SignatureVerificationOptions? signatureVerification,
         ISchemaDomainEquivalenceProvider? domainEquivalenceProvider)
     {
+        ArgumentNullException.ThrowIfNull(processingLimits);
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
+        if (baseUri is not null && baseUri.AbsoluteUri.Length > processingLimits.MaximumUriCharacters)
+            throw new ArgumentException("A Part 21 base URI exceeds the configured URI limit.", nameof(baseUri));
 
         BaseUri = baseUri;
         ResourceProvider = resourceProvider;
         ResourceConverter = resourceConverter;
         ResourceLimits = resourceLimits ?? new Part21ResourceLimits();
+        ProcessingLimits = processingLimits;
         SignatureVerification = signatureVerification;
         DomainEquivalenceProvider = domainEquivalenceProvider;
         DomainEquivalences = SnapshotDomainEquivalences(domainEquivalenceProvider?.GetEquivalences());
@@ -214,6 +239,9 @@ public sealed class ExchangeStructureReadOptions
 
     /// <summary>Gets the per-read resource limits.</summary>
     public Part21ResourceLimits ResourceLimits { get; }
+
+    /// <summary>Gets the shared read, CMS, URI, archive-entry, and binding limits.</summary>
+    public Part21ProcessingLimits ProcessingLimits { get; }
 
     /// <summary>Gets the optional explicit CMS certificate, time, revocation, and acceptance inputs.</summary>
     public Part21SignatureVerificationOptions? SignatureVerification { get; }

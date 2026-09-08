@@ -161,14 +161,27 @@ public sealed class ExchangeStructureWriteOptions
 
     /// <summary>Creates an immutable signer snapshot in signature-section order.</summary>
     public ExchangeStructureWriteOptions(IEnumerable<IPart21SignatureSigner> signers)
+        : this(signers, Part21ProcessingLimits.Default)
+    {
+    }
+
+    /// <summary>Creates an immutable signer snapshot with explicit shared processing limits.</summary>
+    public ExchangeStructureWriteOptions(
+        IEnumerable<IPart21SignatureSigner> signers,
+        Part21ProcessingLimits processingLimits)
     {
         ArgumentNullException.ThrowIfNull(signers);
+        ArgumentNullException.ThrowIfNull(processingLimits);
         var result = signers.ToArray();
         if (result.Any(static signer => signer is null))
             throw new ArgumentException("Signer collections cannot contain null values.", nameof(signers));
         _signers = Array.AsReadOnly(result);
+        ProcessingLimits = processingLimits;
     }
 
     /// <summary>Gets signing capabilities in signature-section order.</summary>
     public IReadOnlyList<IPart21SignatureSigner> Signers => _signers;
+
+    /// <summary>Gets the shared output, callback, and CMS limits.</summary>
+    public Part21ProcessingLimits ProcessingLimits { get; }
 }

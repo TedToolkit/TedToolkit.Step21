@@ -59,6 +59,8 @@ internal sealed class Part21ResourceResolutionContext
 
     internal Part21SignatureVerificationOptions? SignatureVerification => _options.SignatureVerification;
 
+    internal Part21ProcessingLimits ProcessingLimits => _options.ProcessingLimits;
+
     internal IReadOnlyList<Part21ResourceSignatureReport> CreateSignatureReports() => _documents.Values
         .Where(static document => document is not null)
         .Select(static document => document!)
@@ -420,6 +422,7 @@ internal sealed class Part21ResourceResolutionContext
         string resource,
         int depth)
     {
+        EnsureUriLength(resource);
         EnsureDepth(depth);
         var hash = resource.IndexOf('#');
         if (hash < 0)
@@ -476,6 +479,7 @@ internal sealed class Part21ResourceResolutionContext
         int depth,
         bool allowOpaque = false)
     {
+        EnsureUriLength(path);
         if (address.Container is not null && !Uri.TryCreate(path, UriKind.Absolute, out _))
             return LoadContainerEntry(address, path, depth, allowOpaque);
 
@@ -594,6 +598,7 @@ internal sealed class Part21ResourceResolutionContext
 
     private LoadedDocument? AcquireProviderDocument(Uri identity, int depth, bool allowOpaque = false)
     {
+        EnsureUriLength(GetIdentityKey(identity));
         EnsureDepth(depth);
         var key = identity.IsAbsoluteUri ? identity.AbsoluteUri : identity.OriginalString;
         if (_documents.TryGetValue(key, out var cached))
@@ -629,6 +634,7 @@ internal sealed class Part21ResourceResolutionContext
                 CommitCacheTransaction(transaction);
                 return null;
             }
+            EnsureUriLength(GetIdentityKey(content.Identity));
             CountSuppliedBytes(content);
             var originalIdentity = content.Identity;
             var originalBytes = content.Bytes;
@@ -657,6 +663,7 @@ internal sealed class Part21ResourceResolutionContext
 
             var wasConverted = content.Kind == Part21ResourceContentKind.Other;
             content = ConvertContent(content);
+            EnsureUriLength(GetIdentityKey(content.Identity));
             if (wasConverted)
                 CountSuppliedBytes(content);
             var convertedKey = GetIdentityKey(content.Identity);
@@ -869,8 +876,10 @@ internal sealed class Part21ResourceResolutionContext
         int depth,
         bool allowOpaque = false)
     {
+        EnsureUriLength(relativePath);
         EnsureDepth(depth);
         var entryPath = ResolveEntryPath(address.EntryPath!, relativePath);
+        EnsureUriLength(entryPath);
         var container = address.Container!;
         var key = GetDocumentKey(container.Identity, container, entryPath);
         if (_documents.TryGetValue(key, out var cached))
@@ -891,6 +900,7 @@ internal sealed class Part21ResourceResolutionContext
                     if (container.ArchiveDepth >= _options.ResourceLimits.MaximumArchiveDepth)
                         ThrowCapability("P21-RESOURCE-ARCHIVE-RECURSION", "Nested archive depth exceeds the configured limit.");
                     var nestedIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
+                    EnsureUriLength(GetIdentityKey(nestedIdentity));
                     loaded = LoadContent(
                         new Part21ResourceContent(nestedIdentity, Part21ResourceContentKind.ZipArchive, bytes),
                         depth,
@@ -969,11 +979,13 @@ internal sealed class Part21ResourceResolutionContext
         }
 
         var sourceIdentity = new Uri(container.Identity + "!/" + entryPath, UriKind.RelativeOrAbsolute);
+        EnsureUriLength(GetIdentityKey(sourceIdentity));
         var converted = ConvertContent(new Part21ResourceContent(
             sourceIdentity,
             Part21ResourceContentKind.Other,
             bytes));
         CountSuppliedBytes(converted);
+        EnsureUriLength(GetIdentityKey(converted.Identity));
         var convertedKey = ConvertedCachePrefix + GetIdentityKey(converted.Identity);
         if (_documents.TryGetValue(convertedKey, out var convertedCached))
             return convertedCached;
@@ -997,6 +1009,7 @@ internal sealed class Part21ResourceResolutionContext
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             foreach (var entry in archive.Entries)
             {
+                EnsureUriLength(entry.FullName);
                 if (entry.FullName.Any(static character => character > 0x7f))
                     ThrowCapability("P21-RESOURCE-ARCHIVE-ENTRY", "PKZip 2.04g entry names must use ASCII characters.");
                 CountArchiveEntry(entry.FullName, entry.CompressedLength, entry.Length);
@@ -1035,6 +1048,7 @@ internal sealed class Part21ResourceResolutionContext
         var result = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
         foreach (var entry in entries)
         {
+            EnsureUriLength(entry.Key);
             CountContainerEntry(entry.Value.Length);
             var name = NormalizeEntryPath(entry.Key);
             RejectNormalizedRootAlias(entry.Key, name);
@@ -1332,6 +1346,12 @@ internal sealed class Part21ResourceResolutionContext
         if (_archiveEntryCount >= _options.ResourceLimits.MaximumArchiveEntryCount)
             ThrowLimit("archive entry count");
         _archiveEntryCount++;
+        if (uncompressedLength > _options.ProcessingLimits.MaximumArchiveEntryBytes)
+        {
+            ThrowCapability(
+                "P21-PROCESSING-LIMIT-ARCHIVE-ENTRY",
+                "The configured per-entry uncompressed-byte limit was exceeded.");
+        }
         if (uncompressedLength < 0
             || uncompressedLength > int.MaxValue
             || uncompressedLength > _options.ResourceLimits.MaximumArchiveUncompressedBytes - _archiveBytes)
@@ -1410,6 +1430,16 @@ internal sealed class Part21ResourceResolutionContext
     {
         if (depth > _options.ResourceLimits.MaximumReferenceDepth)
             ThrowLimit("reference depth");
+    }
+
+    private void EnsureUriLength(string value)
+    {
+        if (value.Length > _options.ProcessingLimits.MaximumUriCharacters)
+        {
+            ThrowCapability(
+                "P21-PROCESSING-LIMIT-URI",
+                "The configured URI-character limit was exceeded.");
+        }
     }
 
     private static bool MatchesReferenceKind(Part21ReferenceKind kind, ParameterValue value) => kind switch

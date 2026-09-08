@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -37,7 +38,13 @@ internal static class ExchangeStructureReader
     }
 
     internal static ExchangeStructure Read(string source, IReadOnlyCollection<SchemaDescriptor> descriptors) =>
-        ReadCore(source, descriptors, resolutionContext: null, address: null, depth: 0);
+        ReadCore(
+            source,
+            descriptors,
+            resolutionContext: null,
+            address: null,
+            depth: 0,
+            Part21ProcessingLimits.Default);
 
     internal static ExchangeStructure Read(
         string source,
@@ -45,7 +52,7 @@ internal static class ExchangeStructureReader
         ExchangeStructureReadOptions options)
     {
         var context = new Part21ResourceResolutionContext(descriptors, options);
-        return ReadCore(source, descriptors, context, context.RootAddress, depth: 0);
+        return ReadCore(source, descriptors, context, context.RootAddress, depth: 0, options.ProcessingLimits);
     }
 
     internal static ExchangeStructure Read(
@@ -53,15 +60,64 @@ internal static class ExchangeStructureReader
         IReadOnlyCollection<SchemaDescriptor> descriptors,
         Part21ResourceResolutionContext resolutionContext,
         Part21ResourceResolutionContext.DocumentAddress address,
-        int depth) => ReadCore(source, descriptors, resolutionContext, address, depth);
+        int depth) => ReadCore(
+            source,
+            descriptors,
+            resolutionContext,
+            address,
+            depth,
+            resolutionContext.ProcessingLimits);
+
+    internal static string ReadToEnd(TextReader source, Part21ProcessingLimits limits)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(limits);
+        if (source.GetType() == typeof(StringReader))
+        {
+            var inMemorySource = source.ReadToEnd();
+            if (inMemorySource.Length > limits.MaximumInputCharacters)
+                ThrowInputLimit();
+            return inMemorySource;
+        }
+        var buffer = ArrayPool<char>.Shared.Rent(4096);
+        var result = new StringBuilder();
+        try
+        {
+            while (true)
+            {
+                var remaining = limits.MaximumInputCharacters - result.Length;
+                var requested = remaining >= buffer.Length ? buffer.Length : remaining + 1;
+                var read = source.Read(buffer, 0, requested);
+                if (read == 0)
+                    return result.ToString();
+                if (read > remaining)
+                    ThrowInputLimit();
+                _ = result.Append(buffer, 0, read);
+            }
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
+
+    private static void ThrowInputLimit() => throw new ExchangeStructureCapabilityException([
+        new Step21Diagnostic(
+            "P21-PROCESSING-LIMIT-INPUT",
+            Step21DiagnosticSeverity.Error,
+            "The configured input-character limit was exceeded."),
+    ]);
 
     private static ExchangeStructure ReadCore(
         string source,
         IReadOnlyCollection<SchemaDescriptor> descriptors,
         Part21ResourceResolutionContext? resolutionContext,
         Part21ResourceResolutionContext.DocumentAddress? address,
-        int depth)
+        int depth,
+        Part21ProcessingLimits processingLimits)
     {
+        if (source.Length > processingLimits.MaximumInputCharacters)
+            ThrowInputLimit();
         var syntax = ExchangeStructureSyntaxParser.Parse(source, address?.Key ?? SOURCE_NAME);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
         ThrowIfReadCapabilityIsExceeded(syntax, allowValueInstanceParameters: resolutionContext is not null);
@@ -70,7 +126,8 @@ internal static class ExchangeStructureReader
             : Part21SignatureEngine.Evaluate(
                 source,
                 syntax.SignatureSections,
-                resolutionContext?.SignatureVerification);
+                resolutionContext?.SignatureVerification,
+                processingLimits);
 
         var bindingDiagnostics = new List<Step21Diagnostic>();
         var referenceFailures = new List<ValidationFailure>();

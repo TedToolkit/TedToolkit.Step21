@@ -1,0 +1,42 @@
+{
+  "standard": "ISO 10303-21:2016",
+  "acceptanceCase": "AC-09",
+  "policyType": "TedToolkit.Step21.Part21ProcessingLimits",
+  "defaults": {
+    "maximumInputCharacters": 67108864,
+    "maximumOutputCharacters": 67108864,
+    "maximumUriCharacters": 8192,
+    "maximumSignatureCount": 64,
+    "maximumSignatureBytes": 16777216,
+    "maximumTotalSignatureBytes": 67108864,
+    "maximumCmsSignerCount": 64,
+    "maximumNestingDepth": 128,
+    "maximumItemCount": 1048576,
+    "maximumArchiveEntryBytes": 67108864,
+    "maximumResourceCount": 64,
+    "maximumReferenceDepth": 16,
+    "maximumArchiveDepth": 8,
+    "maximumTotalResourceBytes": 268435456,
+    "maximumArchiveEntryCount": 4096,
+    "maximumArchiveUncompressedBytes": 268435456,
+    "maximumCompressionRatio": 100
+  },
+  "threats": [
+    { "id": "root-input-size", "diagnostic": "P21-PROCESSING-LIMIT-INPUT", "atomic": "no model", "evidence": "SecurityBoundaryTests.Should_stop_root_input_before_parse_or_model_publication" },
+    { "id": "uri-size", "diagnostic": "P21-PROCESSING-LIMIT-URI", "atomic": "zero provider calls", "evidence": "SecurityBoundaryTests.Should_reject_oversized_uri_before_provider_access" },
+    { "id": "archive-entry-size", "diagnostic": "P21-PROCESSING-LIMIT-ARCHIVE-ENTRY", "atomic": "no model", "evidence": "SecurityBoundaryTests.Should_bound_each_archive_entry_before_extraction" },
+    { "id": "resource-count-size-depth", "diagnostic": "P21-RESOURCE-LIMIT", "atomic": "no model", "evidence": "DistributedResourceResolutionTests.ResolutionTests" },
+    { "id": "archive-entry-count-expanded-size-ratio", "diagnostic": "P21-RESOURCE-LIMIT or P21-RESOURCE-LIMIT-COMPRESSION-RATIO", "atomic": "no model and no disk extraction", "evidence": "DistributedResourceResolutionTests.ResolutionTests" },
+    { "id": "archive-path-traversal", "diagnostic": "P21-RESOURCE-ARCHIVE-PATH", "atomic": "no model and no file access", "evidence": "SecurityBoundaryTests.Should_reject_provider_reentry_and_directory_traversal_before_publication" },
+    { "id": "archive-recursion", "diagnostic": "P21-RESOURCE-ARCHIVE-RECURSION", "atomic": "no model", "evidence": "DistributedResourceResolutionTests.ResolutionTests" },
+    { "id": "provider-converter-reentry", "diagnostic": "P21-RESOURCE-PROVIDER-REENTRY or P21-RESOURCE-CONVERTER-REENTRY", "atomic": "no model", "evidence": "SecurityBoundaryTests.Should_reject_provider_reentry_and_directory_traversal_before_publication and DistributedResourceResolutionTests.ResolutionTests" },
+    { "id": "signature-count-size", "diagnostic": "P21-PROCESSING-LIMIT-SIGNATURE", "atomic": "no model or output", "evidence": "SecurityBoundaryTests.Should_bound_signature_count_and_bytes_before_publication" },
+    { "id": "cms-malformed-trust-policy", "diagnostic": "P21-SIGNATURE-* or P21.SIGNATURE.*", "atomic": "complete accepted model or no model", "evidence": "CmsSignatureConformanceTests.SignatureTests" },
+    { "id": "signer-reentry", "diagnostic": "P21-SIGNATURE-SIGNER-REENTRY", "atomic": "zero destination characters", "evidence": "SecurityBoundaryTests.Should_reject_output_and_signer_reentry_with_zero_destination_characters" },
+    { "id": "signer-output-size", "diagnostic": "P21-PROCESSING-LIMIT-SIGNATURE", "atomic": "zero destination characters", "evidence": "SecurityBoundaryTests.Should_reject_oversized_signer_output_before_destination_publication" },
+    { "id": "canonical-output-size", "diagnostic": "P21-PROCESSING-LIMIT-OUTPUT", "atomic": "zero destination characters", "evidence": "SecurityBoundaryTests.Should_reject_output_and_signer_reentry_with_zero_destination_characters" },
+    { "id": "annex-f-state-items-depth-uri", "diagnostic": "JsonException", "atomic": "unchanged model", "evidence": "SecurityBoundaryTests.Should_apply_annex_f_input_item_and_depth_limits_without_mutation" },
+    { "id": "normative-reference-cycle", "diagnostic": "none", "atomic": "published complete model with null reference", "evidence": "SecurityBoundaryTests.Should_preserve_normative_reference_cycle_null_semantics" },
+    { "id": "implicit-io-or-machine-trust", "diagnostic": "explicit capability required", "atomic": "zero implicit access", "evidence": "SecurityBoundaryTests.Should_require_an_explicit_provider_for_file_uri_without_implicit_access and ADR-0009" }
+  ]
+}

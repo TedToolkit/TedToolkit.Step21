@@ -59,6 +59,9 @@ an `IPart21ResourceProvider` that returns only caller-authorized bytes or in-mem
 resolves URI/anchor chains, ZIP or directory roots, shared entity identity, and `$` outcomes; it never opens a path or
 network connection implicitly. `Part21ResourceLimits` bounds the complete per-read graph, and
 `IPart21ResourceConverter` is the explicit hook for another source format.
+`Part21ProcessingLimits.Default` is a shared finite policy for root input, URI/archive-entry size, CMS work, and
+atomic output. Use `ExchangeStructureReadOptions.WithProcessingLimits(...)` or the write-options overload to apply a
+stricter immutable policy without enabling any additional I/O or trust capability.
 
 `SCHEMA_POPULATION` resources use the same shared resolver graph and expose transitive population entities through
 `structure.SchemaPopulationEntities`. `FILE_POPULATION` supports all three Annex E determination methods. For
@@ -69,7 +72,9 @@ requiring a Part 22 repository or inferring compatibility by name or shape. Popu
 signature, use the first signature section's digest algorithm over the referenced file bytes, and can verify
 content-only resources without materializing a false exchange model.
 
-Use `structure.WriteEntity(writer, entity)` when only one registered entity-instance record is required. Both write operations validate the final graph before producing output.
+Use `structure.WriteEntity(writer, entity)` when only one registered entity-instance record is required; its overload
+accepts explicit `Part21ProcessingLimits`. All write operations validate and size-check the final staged output before
+producing destination characters.
 
 ## Construct a structure
 

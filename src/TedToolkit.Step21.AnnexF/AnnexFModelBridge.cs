@@ -13,15 +13,28 @@ namespace TedToolkit.Step21.AnnexF;
 public sealed partial class AnnexFModelBridge
 {
     private readonly ExchangeStructure _structure;
+    private readonly Part21ProcessingLimits _limits;
     private Part21Resource _uri;
 
     /// <summary>Creates a bridge over one existing exchange structure and its caller-owned address.</summary>
     public AnnexFModelBridge(ExchangeStructure structure, Part21Resource uri)
+        : this(structure, uri, Part21ProcessingLimits.Default)
+    {
+    }
+
+    /// <summary>Creates a bridge with explicit shared processing limits.</summary>
+    public AnnexFModelBridge(
+        ExchangeStructure structure,
+        Part21Resource uri,
+        Part21ProcessingLimits processingLimits)
     {
         ArgumentNullException.ThrowIfNull(structure);
+        ArgumentNullException.ThrowIfNull(processingLimits);
         _ = uri.Value;
+        EnsureUri(uri.Value, processingLimits);
         _structure = structure;
         _uri = uri;
+        _limits = processingLimits;
     }
 
     /// <summary>Gets the single exchange structure projected by this bridge.</summary>
@@ -30,9 +43,14 @@ public sealed partial class AnnexFModelBridge
     /// <summary>Gets the current caller-owned address of the exchange structure.</summary>
     public Part21Resource Uri => _uri;
 
+    /// <summary>Gets the shared limits applied at this bridge boundary.</summary>
+    public Part21ProcessingLimits ProcessingLimits => _limits;
+
     /// <summary>Exports a deterministic JSON snapshot accepted by <see cref="AnnexFEcmaScriptModule"/>.</summary>
     public string ExportState()
     {
+        EnsureUri(_uri.Value, _limits);
+        var budget = new BridgeBudget(_limits);
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
@@ -42,16 +60,19 @@ public sealed partial class AnnexFModelBridge
             writer.WriteString("name", _structure.Header.FileName.Name);
             writer.WriteStartArray("anchors");
             foreach (var anchor in _structure.Anchors)
-                WriteAnchor(writer, anchor);
+                WriteAnchor(writer, anchor, budget);
             writer.WriteEndArray();
             writer.WriteStartArray("schemaPopulation");
             foreach (var population in _structure.SchemaPopulation)
-                WritePopulation(writer, population);
+                WritePopulation(writer, population, budget);
             writer.WriteEndArray();
             writer.WriteEndObject();
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray());
+        var bytes = stream.GetBuffer().AsSpan(0, checked((int)stream.Length));
+        if (Encoding.UTF8.GetCharCount(bytes) > _limits.MaximumOutputCharacters)
+            throw new InvalidOperationException("The Annex F bridge output-character limit was exceeded.");
+        return Encoding.UTF8.GetString(bytes);
     }
 
     /// <summary>
@@ -60,22 +81,27 @@ public sealed partial class AnnexFModelBridge
     public void ApplyState(string state)
     {
         ArgumentNullException.ThrowIfNull(state);
+        if (state.Length > _limits.MaximumInputCharacters)
+            throw new JsonException("The Annex F bridge input-character limit was exceeded.");
         using var document = JsonDocument.Parse(state, new JsonDocumentOptions
         {
             AllowTrailingCommas = false,
             CommentHandling = JsonCommentHandling.Disallow,
-            MaxDepth = 128,
+            MaxDepth = _limits.MaximumNestingDepth,
         });
 
+        var budget = new BridgeBudget(_limits);
         var root = RequireObject(document.RootElement, "state");
         var version = RequireInt32(root, "formatVersion");
         if (version != AnnexFEcmaScriptModule.BridgeFormatVersion)
             throw new JsonException($"Unsupported Annex F bridge format version '{version}'.");
 
-        var uri = new Part21Resource(RequireString(root, "uri"));
+        var uriValue = RequireString(root, "uri");
+        EnsureUri(uriValue, _limits);
+        var uri = new Part21Resource(uriValue);
         var name = RequireString(root, "name");
-        var anchors = ReadAnchors(RequireArray(root, "anchors"));
-        var populations = ReadPopulations(RequireArray(root, "schemaPopulation"));
+        var anchors = ReadAnchors(RequireArray(root, "anchors"), budget);
+        var populations = ReadPopulations(RequireArray(root, "schemaPopulation"), budget);
         EnsureAnchorIdentityIsPreserved(anchors);
 
         var current = _structure.Header.FileName;
@@ -98,27 +124,30 @@ public sealed partial class AnnexFModelBridge
         _uri = uri;
     }
 
-    private void WriteAnchor(Utf8JsonWriter writer, Part21Anchor anchor)
+    private void WriteAnchor(Utf8JsonWriter writer, Part21Anchor anchor, BridgeBudget budget)
     {
+        budget.CountItem();
         writer.WriteStartObject();
         writer.WriteString("name", anchor.Name.Value);
         writer.WritePropertyName("value");
-        WriteValue(writer, anchor.Item);
+        WriteValue(writer, anchor.Item, budget, depth: 1);
         writer.WriteStartArray("tags");
         foreach (var tag in anchor.Tags)
         {
+            budget.CountItem();
             writer.WriteStartObject();
             writer.WriteString("name", tag.Name);
             writer.WritePropertyName("value");
-            WriteValue(writer, tag.Item);
+            WriteValue(writer, tag.Item, budget, depth: 1);
             writer.WriteEndObject();
         }
         writer.WriteEndArray();
         writer.WriteEndObject();
     }
 
-    private void WriteValue(Utf8JsonWriter writer, ParameterValue value)
+    private void WriteValue(Utf8JsonWriter writer, ParameterValue value, BridgeBudget budget, int depth)
     {
+        budget.CountValue(depth);
         writer.WriteStartObject();
         switch (value.Kind)
         {
@@ -175,7 +204,7 @@ public sealed partial class AnnexFModelBridge
                 writer.WriteString("kind", "list");
                 writer.WriteStartArray("values");
                 foreach (var item in items)
-                    WriteValue(writer, item);
+                    WriteValue(writer, item, budget, depth + 1);
                 writer.WriteEndArray();
                 break;
             case ParameterValueKind.Resource:
@@ -196,8 +225,13 @@ public sealed partial class AnnexFModelBridge
         writer.WriteString("name", name);
     }
 
-    private static void WritePopulation(Utf8JsonWriter writer, SchemaPopulationExternalFile population)
+    private void WritePopulation(
+        Utf8JsonWriter writer,
+        SchemaPopulationExternalFile population,
+        BridgeBudget budget)
     {
+        budget.CountItem();
+        EnsureUri(population.Location.OriginalString, _limits);
         writer.WriteStartObject();
         writer.WriteString("uri", population.Location.OriginalString);
         if (population.TimeStamp is null)
@@ -212,40 +246,47 @@ public sealed partial class AnnexFModelBridge
         writer.WriteEndObject();
     }
 
-    private List<Part21Anchor> ReadAnchors(JsonElement array)
+    private List<Part21Anchor> ReadAnchors(JsonElement array, BridgeBudget budget)
     {
         var anchors = new List<Part21Anchor>();
         var names = new HashSet<AnchorName>();
         foreach (var element in array.EnumerateArray())
         {
+            budget.CountItem();
             var item = RequireObject(element, "anchor");
             var name = new AnchorName(RequireString(item, "name"));
             if (!names.Add(name))
                 throw new JsonException($"Duplicate Annex F anchor '{name.Value}'.");
-            var value = ReadValue(RequireProperty(item, "value"));
+            var value = ReadValue(RequireProperty(item, "value"), budget, depth: 1);
             var tags = new List<Part21AnchorTag>();
             var tagNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var tagElement in RequireArray(item, "tags").EnumerateArray())
             {
+                budget.CountItem();
                 var tag = RequireObject(tagElement, "tag");
                 var tagName = RequireString(tag, "name");
                 if (!tagNames.Add(tagName))
                     throw new JsonException($"Duplicate Annex F tag '{tagName}' on anchor '{name.Value}'.");
-                tags.Add(new Part21AnchorTag(tagName, ReadValue(RequireProperty(tag, "value"))));
+                tags.Add(new Part21AnchorTag(
+                    tagName,
+                    ReadValue(RequireProperty(tag, "value"), budget, depth: 1)));
             }
             anchors.Add(new Part21Anchor(name, value, tags));
         }
         return anchors;
     }
 
-    private List<SchemaPopulationExternalFile> ReadPopulations(JsonElement array)
+    private List<SchemaPopulationExternalFile> ReadPopulations(JsonElement array, BridgeBudget budget)
     {
         var populations = new List<SchemaPopulationExternalFile>();
         var index = 0;
         foreach (var element in array.EnumerateArray())
         {
+            budget.CountItem();
             var item = RequireObject(element, "schema population");
-            var uri = new Uri(RequireString(item, "uri"), UriKind.RelativeOrAbsolute);
+            var uriValue = RequireString(item, "uri");
+            EnsureUri(uriValue, _limits);
+            var uri = new Uri(uriValue, UriKind.RelativeOrAbsolute);
             var stamp = ReadNullableString(item, "stamp");
             var digest = ReadNullableString(item, "messageDigest");
             var verification = RequireBoolean(item, "verification");
@@ -274,8 +315,9 @@ public sealed partial class AnnexFModelBridge
         return populations;
     }
 
-    private ParameterValue ReadValue(JsonElement element)
+    private ParameterValue ReadValue(JsonElement element, BridgeBudget budget, int depth)
     {
+        budget.CountValue(depth);
         var item = RequireObject(element, "value");
         return RequireString(item, "kind") switch
         {
@@ -290,10 +332,18 @@ public sealed partial class AnnexFModelBridge
             "cin" => ParameterValue.FromConstantEntity(new ConstantEntityName(RequireString(item, "name"))),
             "cvn" => ParameterValue.FromConstantValue(new ConstantValueName(RequireString(item, "name"))),
             "list" => ParameterValue.FromAggregate(
-                RequireArray(item, "values").EnumerateArray().Select(ReadValue)),
-            "uri" => ParameterValue.FromResource(new Part21Resource(RequireString(item, "value"))),
+                RequireArray(item, "values").EnumerateArray().Select(value =>
+                    ReadValue(value, budget, depth + 1))),
+            "uri" => ReadResource(item),
             var kind => throw new JsonException($"Unknown Annex F value kind '{kind}'."),
         };
+    }
+
+    private ParameterValue ReadResource(JsonElement item)
+    {
+        var value = RequireString(item, "value");
+        EnsureUri(value, _limits);
+        return ParameterValue.FromResource(new Part21Resource(value));
     }
 
     private ParameterValue ReadEntity(string name)
@@ -428,6 +478,31 @@ public sealed partial class AnnexFModelBridge
             JsonValueKind.String => property.GetString(),
             _ => throw new JsonException($"Annex F property '{propertyName}' must be a string or null."),
         };
+    }
+
+    private static void EnsureUri(string value, Part21ProcessingLimits limits)
+    {
+        if (value.Length > limits.MaximumUriCharacters)
+            throw new JsonException("The Annex F bridge URI-character limit was exceeded.");
+    }
+
+    private sealed class BridgeBudget(Part21ProcessingLimits limits)
+    {
+        private int _itemCount;
+
+        internal void CountItem()
+        {
+            if (_itemCount >= limits.MaximumItemCount)
+                throw new JsonException("The Annex F bridge item-count limit was exceeded.");
+            _itemCount++;
+        }
+
+        internal void CountValue(int depth)
+        {
+            if (depth > limits.MaximumNestingDepth)
+                throw new JsonException("The Annex F bridge nesting-depth limit was exceeded.");
+            CountItem();
+        }
     }
 
     [GeneratedRegex("^-?(?:0|[1-9][0-9]*)$", RegexOptions.CultureInvariant)]

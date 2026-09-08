@@ -17,16 +17,23 @@ internal static class Part21SignatureEngine
     internal static IReadOnlyList<Part21Signature> Evaluate(
         string source,
         IReadOnlyList<SignatureSectionSyntax> signatures,
-        Part21SignatureVerificationOptions? options)
+        Part21SignatureVerificationOptions? options,
+        Part21ProcessingLimits limits)
     {
         if (signatures.Count == 0)
             return Array.Empty<Part21Signature>();
+        if (signatures.Count > limits.MaximumSignatureCount)
+            throw Limit("signature count");
 
         using var verification = options is null ? null : new VerificationContext(options);
         var result = new List<Part21Signature>(signatures.Count);
+        long totalSignatureBytes = 0;
         for (var signatureIndex = 0; signatureIndex < signatures.Count; signatureIndex++)
         {
             var syntax = signatures[signatureIndex];
+            var maximumEncodedLength = ((long)limits.MaximumSignatureBytes + 2) / 3 * 4;
+            if (syntax.Content.Text.Length > maximumEncodedLength)
+                throw Limit("CMS byte");
             if (!TryDecodeCanonicalBase64(syntax.Content.Text, out var encodedCms))
             {
                 throw Malformed(
@@ -34,6 +41,12 @@ internal static class Part21SignatureEngine
                     "A signature section must contain canonical RFC 4648 Base64.",
                     syntax.Content.Span.Start);
             }
+            if (encodedCms.Length > limits.MaximumSignatureBytes
+                || encodedCms.Length > limits.MaximumTotalSignatureBytes - totalSignatureBytes)
+            {
+                throw Limit("CMS byte");
+            }
+            totalSignatureBytes += encodedCms.Length;
 
             byte[] content;
             try
@@ -77,6 +90,8 @@ internal static class Part21SignatureEngine
                     "A CMS signature section must contain at least one signer.",
                     syntax.Content.Span.Start);
             }
+            if (cms.SignerInfos.Count > limits.MaximumCmsSignerCount)
+                throw Limit("CMS signer count");
 
             var signerResults = options is null
                 ? CreateNotEvaluatedResults(cms)
@@ -176,6 +191,7 @@ internal static class Part21SignatureEngine
     internal static byte[] ValidateSignerOutput(
         ReadOnlyMemory<byte> encodedCms,
         ReadOnlyMemory<byte> content,
+        Part21ProcessingLimits limits,
         out string digestAlgorithm)
     {
         if (encodedCms.IsEmpty)
@@ -184,6 +200,8 @@ internal static class Part21SignatureEngine
                 "P21-CAP-SIGNATURE-SIGNER",
                 "A signature signer returned an empty CMS value.");
         }
+        if (encodedCms.Length > limits.MaximumSignatureBytes)
+            throw Limit("CMS byte");
 
         var copy = encodedCms.ToArray();
         var cms = new SignedCms(new ContentInfo(content.ToArray()), detached: true);
@@ -196,6 +214,8 @@ internal static class Part21SignatureEngine
             cms.Decode(copy);
             if (cms.SignerInfos.Count == 0)
                 throw new CryptographicException("CMS SignedData contains no signer.");
+            if (cms.SignerInfos.Count > limits.MaximumCmsSignerCount)
+                throw Limit("CMS signer count");
             cms.CheckSignature(verifySignatureOnly: true);
         }
         catch (Exception exception) when (exception is CryptographicException or AsnContentException)
@@ -210,6 +230,13 @@ internal static class Part21SignatureEngine
                 "A signature signer did not identify its first CMS digest algorithm.");
         return copy;
     }
+
+    private static ExchangeStructureCapabilityException Limit(string name) => new([
+        new Step21Diagnostic(
+            "P21-PROCESSING-LIMIT-SIGNATURE",
+            Step21DiagnosticSeverity.Error,
+            $"The configured {name} limit was exceeded."),
+    ]);
 
     private static bool HasEmbeddedContent(ReadOnlyMemory<byte> encodedCms)
     {

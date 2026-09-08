@@ -164,7 +164,9 @@ public sealed class ExchangeStructure
     {
         ArgumentNullException.ThrowIfNull(source);
         var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
-        return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors);
+        return ExchangeStructureReader.Read(
+            ExchangeStructureReader.ReadToEnd(source, Part21ProcessingLimits.Default),
+            descriptors);
     }
 
     /// <summary>
@@ -202,7 +204,10 @@ public sealed class ExchangeStructure
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(options);
         var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
-        return ExchangeStructureReader.Read(source.ReadToEnd(), descriptors, options);
+        return ExchangeStructureReader.Read(
+            ExchangeStructureReader.ReadToEnd(source, options.ProcessingLimits),
+            descriptors,
+            options);
     }
 
     /// <summary>Writes this complete structure as deterministic ISO 10303-21 clear text.</summary>
@@ -255,6 +260,21 @@ public sealed class ExchangeStructure
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(entity);
         ExchangeStructureWriter.WriteEntity(this, destination, entity);
+    }
+
+    /// <summary>Writes one registered entity-instance record with explicit shared processing limits.</summary>
+    /// <param name="destination">The destination that receives the complete canonical record.</param>
+    /// <param name="entity">The registered entity to write.</param>
+    /// <param name="processingLimits">The finite output limits applied before publication.</param>
+    public void WriteEntity(
+        TextWriter destination,
+        Entity entity,
+        Part21ProcessingLimits processingLimits)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(processingLimits);
+        ExchangeStructureWriter.WriteEntity(this, destination, entity, processingLimits);
     }
 
     /// <summary>

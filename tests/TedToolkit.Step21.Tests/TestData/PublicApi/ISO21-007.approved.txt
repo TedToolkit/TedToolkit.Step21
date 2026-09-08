@@ -1,0 +1,55 @@
+sealed class TedToolkit.Step21.ExchangeStructure : System.Object
+  constructor (TedToolkit.Step21.HeaderSection header)
+  constructor (TedToolkit.Step21.HeaderSection header, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Anchor> Anchors { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.DataSection> DataSections { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> Entities { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.SchemaPopulationDefinition> FilePopulations { get; }
+  property TedToolkit.Step21.HeaderSection Header { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.Part21Reference> References { get; }
+  property System.Collections.Generic.IList<TedToolkit.Step21.SchemaPopulationExternalFile> SchemaPopulation { get; }
+  property System.Collections.Generic.IEnumerable<TedToolkit.Step21.Entity> SchemaPopulationEntities { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21ResourceSignatureReport> SignatureReports { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Part21Signature> Signatures { get; }
+  method System.Void Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.EntityInstanceName name, TedToolkit.Step21.Entity entity)
+  method TedToolkit.Step21.EntityInstanceName Add(TedToolkit.Step21.DataSection dataSection, TedToolkit.Step21.Entity entity)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors)
+  static method TedToolkit.Step21.ExchangeStructure Read(System.IO.TextReader source, System.Collections.Generic.IReadOnlyCollection<TedToolkit.Step21.SchemaDescriptor> schemaDescriptors, TedToolkit.Step21.ExchangeStructureReadOptions options)
+  method System.Boolean Remove(TedToolkit.Step21.Entity entity)
+  method System.Boolean Remove(TedToolkit.Step21.EntityInstanceName name)
+  method TedToolkit.Step21.ValidationResult Validate()
+  method System.Void Write(System.IO.TextWriter destination)
+  method System.Void Write(System.IO.TextWriter destination, TedToolkit.Step21.ExchangeStructureWriteOptions options)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity)
+  method System.Void WriteEntity(System.IO.TextWriter destination, TedToolkit.Step21.Entity entity, TedToolkit.Step21.Part21ProcessingLimits processingLimits)
+sealed class TedToolkit.Step21.ExchangeStructureReadOptions : System.Object
+  constructor (System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+  property System.Uri? BaseUri { get; }
+  property TedToolkit.Step21.ISchemaDomainEquivalenceProvider? DomainEquivalenceProvider { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.SchemaDomainEquivalence> DomainEquivalences { get; }
+  property TedToolkit.Step21.Part21ProcessingLimits ProcessingLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceConverter? ResourceConverter { get; }
+  property TedToolkit.Step21.Part21ResourceLimits ResourceLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceProvider? ResourceProvider { get; }
+  property TedToolkit.Step21.Part21SignatureVerificationOptions? SignatureVerification { get; }
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithDomainEquivalenceProvider(TedToolkit.Step21.ISchemaDomainEquivalenceProvider domainEquivalenceProvider, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithProcessingLimits(TedToolkit.Step21.Part21ProcessingLimits processingLimits, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null, TedToolkit.Step21.ISchemaDomainEquivalenceProvider? domainEquivalenceProvider = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithSignatureVerification(TedToolkit.Step21.Part21SignatureVerificationOptions signatureVerification, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+sealed class TedToolkit.Step21.ExchangeStructureWriteOptions : System.Object
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.IPart21SignatureSigner> signers)
+  constructor (System.Collections.Generic.IEnumerable<TedToolkit.Step21.IPart21SignatureSigner> signers, TedToolkit.Step21.Part21ProcessingLimits processingLimits)
+  property TedToolkit.Step21.Part21ProcessingLimits ProcessingLimits { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.IPart21SignatureSigner> Signers { get; }
+sealed class TedToolkit.Step21.Part21ProcessingLimits : System.Object
+  constructor (System.Int32 maximumInputCharacters = 67108864, System.Int32 maximumOutputCharacters = 67108864, System.Int32 maximumUriCharacters = 8192, System.Int32 maximumSignatureCount = 64, System.Int32 maximumSignatureBytes = 16777216, System.Int32 maximumTotalSignatureBytes = 67108864, System.Int32 maximumCmsSignerCount = 64, System.Int32 maximumNestingDepth = 128, System.Int32 maximumItemCount = 1048576, System.Int64 maximumArchiveEntryBytes = 67108864)
+  property static TedToolkit.Step21.Part21ProcessingLimits Default { get; }
+  property System.Int64 MaximumArchiveEntryBytes { get; }
+  property System.Int32 MaximumCmsSignerCount { get; }
+  property System.Int32 MaximumInputCharacters { get; }
+  property System.Int32 MaximumItemCount { get; }
+  property System.Int32 MaximumNestingDepth { get; }
+  property System.Int32 MaximumOutputCharacters { get; }
+  property System.Int32 MaximumSignatureBytes { get; }
+  property System.Int32 MaximumSignatureCount { get; }
+  property System.Int32 MaximumTotalSignatureBytes { get; }
+  property System.Int32 MaximumUriCharacters { get; }

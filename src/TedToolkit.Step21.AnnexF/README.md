@@ -15,6 +15,10 @@ var state = bridge.ExportState();
 var source = AnnexFEcmaScriptModule.Source;
 ```
 
+The two-argument constructor reuses `Part21ProcessingLimits.Default`. Pass a third explicit limits argument to bound
+bridge input/output characters, URI length, nested values, and total anchors/tags/populations/values. Limit failures
+leave the authoritative structure unchanged.
+
 The script publishes a `P21` object. Construct `new P21.Model(host)` with a caller-owned object that provides:
 
 - `snapshot()` — returns the parsed bridge state;

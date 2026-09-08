@@ -1,0 +1,21 @@
+# Distributed processor security and atomicity
+
+`Part21ProcessingLimits` is the immutable shared quota policy for root input, canonical output, URI text,
+CMS sections/signers, one archive entry, and the optional Annex F bridge. `Part21ProcessingLimits.Default` is a
+single finite instance reused by ordinary reads, writes, and bridges. Existing graph-wide resource limits remain in
+`Part21ResourceLimits`; the two immutable objects are snapshotted by each operation and never grant I/O or trust.
+
+The machine-readable threat matrix and exact defaults are in
+[`distributed-processor-security.json`](distributed-processor-security.json). Library-controlled read failures return
+no model. Library-controlled write failures occur while output is privately staged and therefore produce zero
+destination characters. Annex F parses and validates a complete candidate before replacing any model collection.
+Exceptions raised by caller-owned readers, writers, providers, converters, or signers remain caller failures.
+
+URI resolution accepts caller-defined schemes because the runtime never dereferences them; only the explicitly
+supplied provider can acquire bytes. URI and archive-entry names are length-bounded before cache/path work. ZIP data
+is retained only in memory, with pre/post expansion checks and a per-entry ceiling in addition to graph-wide count,
+size, depth, and compression-ratio limits. Base64 length is rejected before allocating decoded CMS bytes.
+
+Standard clause-10.2 reference cycles are not security recursion and retain the required null result. Provider or
+converter re-entry, nested-archive recursion, and signer re-entry are capability failures because they cross a
+caller-owned callback or transport boundary.

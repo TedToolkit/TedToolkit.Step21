@@ -5,6 +5,8 @@ namespace TedToolkit.Step21;
 // Buffers every domain-controlled character before touching the caller's destination.
 internal static class ExchangeStructureWriter
 {
+    private static readonly AsyncLocal<SignerFrame?> ActiveSigners = new();
+
     internal static void Write(ExchangeStructure structure, TextWriter destination)
     {
         WriteCore(structure, destination, options: null);
@@ -24,6 +26,7 @@ internal static class ExchangeStructureWriter
         TextWriter destination,
         ExchangeStructureWriteOptions? options)
     {
+        var limits = options?.ProcessingLimits ?? Part21ProcessingLimits.Default;
         PreflightValidation(structure, additionalFailures: null);
         if (structure.Signatures.Count > 0 && (options is null || options.Signers.Count == 0))
         {
@@ -34,32 +37,54 @@ internal static class ExchangeStructureWriter
                     "Writing a previously signed structure requires an explicit signing capability."),
             ]);
         }
+        if (options is not null && options.Signers.Count > limits.MaximumSignatureCount)
+            ThrowSignatureLimit("signature count");
         var projected = Project(structure, registration: null);
         ThrowIfProjectedValuesAreInvalid(structure, projected);
         var builder = new StringBuilder();
         AppendHeader(builder, structure);
+        EnsureOutputLimit(builder, limits);
         AppendAnchors(builder, structure);
+        EnsureOutputLimit(builder, limits);
         AppendReferences(builder, structure);
+        EnsureOutputLimit(builder, limits);
         AppendDataSections(builder, structure, projected);
+        EnsureOutputLimit(builder, limits);
         _ = builder.Append("END-ISO-10303-21;");
-        AppendSignatures(builder, structure, options);
+        EnsureOutputLimit(builder, limits);
+        AppendSignatures(builder, structure, options, limits);
+        EnsureOutputLimit(builder, limits);
         destination.Write(builder.ToString());
     }
 
     private static void AppendSignatures(
         StringBuilder builder,
         ExchangeStructure structure,
-        ExchangeStructureWriteOptions? options)
+        ExchangeStructureWriteOptions? options,
+        Part21ProcessingLimits limits)
     {
         if (options is null)
             return;
 
+        long totalSignatureBytes = 0;
         for (var signerIndex = 0; signerIndex < options.Signers.Count; signerIndex++)
         {
             var signer = options.Signers[signerIndex];
+            if (ContainsSigner(ActiveSigners.Value, signer))
+            {
+                throw new ExchangeStructureCapabilityException([
+                    new Step21Diagnostic(
+                        "P21-SIGNATURE-SIGNER-REENTRY",
+                        Step21DiagnosticSeverity.Error,
+                        "A signature signer re-entered the same write operation."),
+                ]);
+            }
             _ = builder.Append('\n');
+            EnsureOutputLimit(builder, limits);
             var content = Part21SignatureEngine.EncodeCoveredCharacters(builder);
             ReadOnlyMemory<byte> supplied;
+            var previousSigners = ActiveSigners.Value;
+            ActiveSigners.Value = new SignerFrame(signer, previousSigners);
             try
             {
                 supplied = signer.Sign(content);
@@ -73,6 +98,14 @@ internal static class ExchangeStructureWriter
                         "A signature signer failed to produce CMS."),
                 ]);
             }
+            finally
+            {
+                ActiveSigners.Value = previousSigners;
+            }
+
+            if (supplied.Length > limits.MaximumTotalSignatureBytes - totalSignatureBytes)
+                ThrowSignatureLimit("total CMS byte");
+            totalSignatureBytes += supplied.Length;
 
             // The callback received array-backed memory and is therefore outside our trust boundary.
             // Re-create the canonical content from the private builder before validating its result.
@@ -80,14 +113,49 @@ internal static class ExchangeStructureWriter
             var encodedCms = Part21SignatureEngine.ValidateSignerOutput(
                 supplied,
                 verificationContent,
+                limits,
                 out var digestAlgorithm);
             if (signerIndex == 0)
                 ThrowIfPopulationDigestAlgorithmChanges(structure, digestAlgorithm);
             _ = builder.Append("SIGNATURE ")
                 .Append(Convert.ToBase64String(encodedCms))
                 .Append(" ENDSEC;");
+            EnsureOutputLimit(builder, limits);
         }
     }
+
+    private static bool ContainsSigner(SignerFrame? frame, IPart21SignatureSigner signer)
+    {
+        while (frame is not null)
+        {
+            if (ReferenceEquals(frame.Signer, signer))
+                return true;
+            frame = frame.Previous;
+        }
+        return false;
+    }
+
+    private static void EnsureOutputLimit(StringBuilder builder, Part21ProcessingLimits limits)
+    {
+        if (builder.Length > limits.MaximumOutputCharacters)
+            ThrowLimit("output-character");
+    }
+
+    private static void ThrowLimit(string name) => throw new ExchangeStructureCapabilityException([
+        new Step21Diagnostic(
+            "P21-PROCESSING-LIMIT-OUTPUT",
+            Step21DiagnosticSeverity.Error,
+            $"The configured {name} limit was exceeded."),
+    ]);
+
+    private static void ThrowSignatureLimit(string name) => throw new ExchangeStructureCapabilityException([
+        new Step21Diagnostic(
+            "P21-PROCESSING-LIMIT-SIGNATURE",
+            Step21DiagnosticSeverity.Error,
+            $"The configured {name} limit was exceeded."),
+    ]);
+
+    private sealed record SignerFrame(IPart21SignatureSigner Signer, SignerFrame? Previous);
 
     private static void ThrowIfPopulationDigestAlgorithmChanges(
         ExchangeStructure structure,
@@ -122,6 +190,15 @@ internal static class ExchangeStructureWriter
 
     internal static void WriteEntity(ExchangeStructure structure, TextWriter destination, Entity entity)
     {
+        WriteEntity(structure, destination, entity, Part21ProcessingLimits.Default);
+    }
+
+    internal static void WriteEntity(
+        ExchangeStructure structure,
+        TextWriter destination,
+        Entity entity,
+        Part21ProcessingLimits limits)
+    {
         var registration = structure.Registrations.SingleOrDefault(candidate => ReferenceEquals(candidate.Entity, entity));
         var additionalFailures = registration is null
             ? new ValidationFailure[]
@@ -140,7 +217,10 @@ internal static class ExchangeStructureWriter
 
         var projected = Project(structure, registration);
         ThrowIfProjectedValuesAreInvalid(structure, projected);
-        destination.Write(FormatEntity(structure, registration, projected[registration]));
+        var output = FormatEntity(structure, registration, projected[registration]);
+        if (output.Length > limits.MaximumOutputCharacters)
+            ThrowLimit("output-character");
+        destination.Write(output);
     }
 
     private static void PreflightValidation(

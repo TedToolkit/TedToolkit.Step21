@@ -5,7 +5,9 @@ static class TedToolkit.Step21.AnnexF.AnnexFEcmaScriptModule
   property System.String SourceSha256
 sealed class TedToolkit.Step21.AnnexF.AnnexFModelBridge
   constructor (TedToolkit.Step21.ExchangeStructure,TedToolkit.Step21.Part21Resource)
+  constructor (TedToolkit.Step21.ExchangeStructure,TedToolkit.Step21.Part21Resource,TedToolkit.Step21.Part21ProcessingLimits)
   method System.String ExportState()
   method System.Void ApplyState(System.String)
   property TedToolkit.Step21.ExchangeStructure Structure
+  property TedToolkit.Step21.Part21ProcessingLimits ProcessingLimits
   property TedToolkit.Step21.Part21Resource Uri

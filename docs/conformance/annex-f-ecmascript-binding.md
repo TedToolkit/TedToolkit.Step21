@@ -16,6 +16,8 @@ required by the Annex F materialization boundary. Resource bytes and schema-popu
 remain explicit host capabilities; the module performs no implicit file, network, certificate, or time access.
 Host application must return the canonical committed snapshot and throw on failure; attached setters retain their
 prior observable state when application fails. Population URI or timestamp changes invalidate digest verification.
+The bridge reuses the finite `Part21ProcessingLimits.Default` policy unless the caller supplies a stricter instance;
+state/output characters, URI length, nested values, and total projected items are checked before model mutation.
 
 The Annex F text assigns the identical `$value` spelling to both the required anchor value and a legal tag named
 `value`. The binding resolves this otherwise unrepresentable collision explicitly: the `$value` collision object
