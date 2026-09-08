@@ -62,6 +62,28 @@
 Record candidate revision, package/module/API identity, engine/version prerequisite, Annex-F row and assertion counts,
 commands, dependency graph, AOT result and supplied isolation contract.
 
+## Completion evidence
+
+- Candidate: `2543facef1878c6df760c3af9273164687201403`, reviewed against baseline
+  `080e6f77d42d4c160e68ba7fb6aec8f85c330154`; independent implementation review concluded `Ready to merge`
+  with no blocking or important findings.
+- Identity: package `TedToolkit.Step21.AnnexF` version `1.0.0`, bridge format `1`, embedded/packed
+  `AnnexF.js` SHA-256 `132759A4A580B6DB36203729A75AF47D20E944E964E1534C082E51CC25E47017`, public API snapshot
+  SHA-256 `80DE549D91FC895091A83533D11EB969C9030191F5390AF71FEA83F8FB97AF15`.
+- Engine proof: Node.js `v24.14.1`; focused Release suite passed 4/4 with 89 actual-engine assertions and exact
+  22/22 manifest-ID coverage. It covers every F.2-F.4 mapping/method, all wrapper method results, URI null,
+  transactional rejection, canonical write-back, name collisions, population verification lifecycle, package contents,
+  dependency isolation and API/source identity.
+- Compatibility proof: solution Release build passed with 0 warnings and 0 errors; anchor 15/15,
+  schema-population 28/28 and core public validation-contract 16/16 suites passed. Full integration passed 19/20 with
+  0 failures and one explicitly environment-gated external-network corpus test skipped.
+- Dependency graph: `TedToolkit.Step21.AnnexF -> TedToolkit.Step21`; the core project/package has no reverse adapter or
+  ECMAScript-engine dependency. The adapter exposes no general script evaluator and targets ECMAScript 5.1 or later.
+- Native AOT: `build/verify-native-aot.ps1` passed with `NATIVE_AOT_PACKAGE_PROOF_OK`; the real `win-x64` core package
+  consumer executable was 6,742,016 bytes using compiler package `10.0.11`.
+- Supplied contract: ISO21-007/008 may rely on a caller-owned, explicit transactional host boundary, deterministic
+  LF-pinned module bytes, no implicit I/O or dynamic-code dependency in core, and full Annex-F row traceability.
+
 ## Risks and implementation notes
 
 The test engine is boundary evidence, not permission to make it a transitive runtime dependency or to expose general script execution.
