@@ -1285,7 +1285,7 @@ internal sealed class ExpressReachableRulePlan
                             var operation = qualifier.ChildRules().Single();
                             if (operation.Role == "indexQualifier")
                             {
-                                return !operation.ChildRules("index2").Any();
+                                return true;
                             }
 
                             if (operation.Role == "groupQualifier")
@@ -1337,6 +1337,11 @@ internal sealed class ExpressReachableRulePlan
             foreach (var operation in operations)
             {
                 if (!ValidateProcedureScalarArguments(operation))
+                {
+                    valid = false;
+                }
+
+                if (!ValidateAssignmentRanges(operation))
                 {
                     valid = false;
                 }
@@ -1436,6 +1441,42 @@ internal sealed class ExpressReachableRulePlan
             }
 
             return valid;
+        }
+
+        private bool ValidateAssignmentRanges(ExpressSemanticRule operation)
+        {
+            if (operation.Role != "assignmentStmt")
+            {
+                return true;
+            }
+
+            var ranges = operation.ChildRules("qualifier")
+                .SelectMany(qualifier => qualifier.ChildRules("indexQualifier"))
+                .Where(index => index.ChildRules("index2").Any())
+                .ToArray();
+            if (ranges.Length == 0)
+            {
+                return true;
+            }
+
+            var targetSyntax = operation.RequiredChild("generalRef");
+            var targetType = _schema.NameReferences
+                .Where(reference => SameStart(reference.Span, targetSyntax.Span))
+                .Select(reference => reference.Target.Type)
+                .SingleOrDefault(type => type is not null);
+            if (ranges.Length == 1
+                && operation.ChildRules("qualifier").Count() == 1
+                && targetType is ExpressBoundScalarType
+                { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, })
+            {
+                return true;
+            }
+
+            AddFailure(
+                ranges[0].Span,
+                "A range-qualified assignment requires a STRING or BINARY carrier "
+                    + "and shall be the final qualifier.");
+            return false;
         }
 
         private bool ValidateProcedureScalarArguments(ExpressSemanticRule operation)
@@ -1717,8 +1758,7 @@ internal sealed class ExpressReachableRulePlan
                     .All(assignment => assignment.ChildRules("qualifier").All(qualifier =>
                     {
                         var qualifierOperation = qualifier.ChildRules().Single();
-                        return qualifierOperation.Role == "indexQualifier"
-                            && !qualifierOperation.ChildRules("index2").Any();
+                        return qualifierOperation.Role == "indexQualifier";
                     }))
                 && operations.Where(operation => operation.Role == "repeatStmt")
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control

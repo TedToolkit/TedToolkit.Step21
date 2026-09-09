@@ -1836,6 +1836,52 @@ internal static class ExpressReachableRuleEmitter
             ExpressBoundAttribute? assignedAttribute = null;
             var assignedMemberSuffix = "";
             var assignedAggregateDepth = 0;
+            string? rangeSourceCode = null;
+            string? rangeLowerCode = null;
+            string? rangeUpperCode = null;
+            ExpressScalarKind? rangeKind = null;
+
+            string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
+            {
+                var index = plan.GetExpression(indexSyntax.RequiredChild("index")
+                    .RequiredChild("numericExpression"));
+                var emittedIndex = ExpressExpressionEmitter.Emit(
+                    index,
+                    CreateContext(
+                        plan,
+                        selfExpression: null,
+                        "entities",
+                        lexicalNames,
+                        safeIndices,
+                        allocateTemporaryName,
+                        selectNarrowings,
+                        pathNarrowings,
+                        determinateLexicals,
+                        safeIndexPaths,
+                        scalarNarrowings));
+                if (index.Type.Kind == ExpressExpressionTypeKind.Number)
+                {
+                    var presentNumber = allocateTemporaryName("__expressAssignmentIndexNumber");
+                    var integerNumber = allocateTemporaryName("__expressAssignmentIndexInteger");
+                    return $"(({emittedIndex.Code}) is {{ }} {presentNumber} "
+                        + $"&& {presentNumber}.TryGetInteger(out var {integerNumber}) ? "
+                        + $"checked((int){integerNumber}) : "
+                        + "throw new global::System.InvalidOperationException("
+                        + "\"An EXPRESS assignment index did not evaluate to an INTEGER.\"))";
+                }
+
+                if (index.Type.CanBeIndeterminate)
+                {
+                    var presentInteger = allocateTemporaryName("__expressAssignmentIndexInteger");
+                    return $"(({emittedIndex.Code}) is {{ }} {presentInteger} ? "
+                        + $"checked((int){presentInteger}) : "
+                        + "throw new global::System.InvalidOperationException("
+                        + "\"An EXPRESS assignment index was indeterminate.\"))";
+                }
+
+                return $"checked((int)({emittedIndex.Code}))";
+            }
+
             foreach (var qualifier in operation.ChildRules("qualifier"))
             {
                 if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } groupSyntax)
@@ -1879,47 +1925,21 @@ internal static class ExpressReachableRuleEmitter
                     continue;
                 }
 
-                var indexSyntax = qualifier.RequiredChild("indexQualifier")
-                    .RequiredChild("index1")
-                    .RequiredChild("index")
-                    .RequiredChild("numericExpression");
-                var index = plan.GetExpression(indexSyntax);
-                var emittedIndex = ExpressExpressionEmitter.Emit(
-                    index,
-                    CreateContext(
-                        plan,
-                        selfExpression: null,
-                        "entities",
-                        lexicalNames,
-                        safeIndices,
-                        allocateTemporaryName,
-                        selectNarrowings,
-                        pathNarrowings,
-                        determinateLexicals,
-                        safeIndexPaths,
-                        scalarNarrowings));
-                string indexCode;
-                if (index.Type.Kind == ExpressExpressionTypeKind.Number)
+                var indexQualifier = qualifier.RequiredChild("indexQualifier");
+                var indexCode = EmitAssignmentIndex(indexQualifier.RequiredChild("index1"));
+                if (indexQualifier.ChildRules("index2").SingleOrDefault() is { } upperIndex)
                 {
-                    var presentNumber = allocateTemporaryName("__expressAssignmentIndexNumber");
-                    var integerNumber = allocateTemporaryName("__expressAssignmentIndexInteger");
-                    indexCode = $"(({emittedIndex.Code}) is {{ }} {presentNumber} "
-                        + $"&& {presentNumber}.TryGetInteger(out var {integerNumber}) ? "
-                        + $"checked((int){integerNumber}) : "
-                        + "throw new global::System.InvalidOperationException("
-                        + "\"An EXPRESS assignment index did not evaluate to an INTEGER.\"))";
-                }
-                else if (index.Type.CanBeIndeterminate)
-                {
-                    var presentInteger = allocateTemporaryName("__expressAssignmentIndexInteger");
-                    indexCode = $"(({emittedIndex.Code}) is {{ }} {presentInteger} ? "
-                        + $"checked((int){presentInteger}) : "
-                        + "throw new global::System.InvalidOperationException("
-                        + "\"An EXPRESS assignment index was indeterminate.\"))";
-                }
-                else
-                {
-                    indexCode = $"checked((int)({emittedIndex.Code}))";
+                    var scalar = ResolveDefinedValueType(plan, targetType) as ExpressBoundScalarType
+                        ?? throw new InvalidOperationException(
+                            "An EXPRESS range assignment passed validation without a scalar carrier.");
+                    rangeSourceCode = targetCode;
+                    rangeLowerCode = indexCode;
+                    rangeUpperCode = EmitAssignmentIndex(upperIndex);
+                    rangeKind = scalar.Kind;
+                    targetType = scalar;
+                    targetIsOptional = false;
+                    optionalUnsetCode = null;
+                    continue;
                 }
 
                 var aggregate = (ExpressBoundAggregateType)targetType;
@@ -1939,6 +1959,32 @@ internal static class ExpressReachableRuleEmitter
                 optionalUnsetCode = aggregate.Kind == ExpressAggregateKind.Array && aggregate.IsOptional
                     ? $"{aggregateCode}.Unset({indexCode})"
                     : null;
+            }
+
+            string AdaptRangeAssignment(string replacement)
+            {
+                if (rangeKind is null)
+                {
+                    return replacement;
+                }
+
+                var source = allocateTemporaryName("__expressRangeSource");
+                var lower = allocateTemporaryName("__expressRangeLower");
+                var upper = allocateTemporaryName("__expressRangeUpper");
+                var length = $"{source}.Length";
+                var inserted = rangeKind == ExpressScalarKind.Binary ? $"({replacement}).ToString()" : replacement;
+                var rebuilt = $"global::System.String.Concat({source}.ToString().Substring(0, {lower} - 1), "
+                    + $"{inserted}, {source}.ToString().Substring({upper}))";
+                if (rangeKind == ExpressScalarKind.Binary)
+                {
+                    rebuilt = $"new global::TedToolkit.Step21.BinaryValue({rebuilt})";
+                }
+
+                return $"(({rangeSourceCode}, {rangeLowerCode}, {rangeUpperCode}) switch {{ "
+                    + $"var ({source}, {lower}, {upper}) when {lower} >= 1 "
+                    + $"&& {lower} <= {upper} && {upper} <= {length} => {rebuilt}, "
+                    + "_ => throw new global::System.InvalidOperationException("
+                    + "\"An EXPRESS range assignment index was outside the carrier bounds.\") })";
             }
 
             var valueExpression = plan.GetExpression(operation.RequiredChild("expression"));
@@ -2601,7 +2647,7 @@ internal static class ExpressReachableRuleEmitter
                         .AddStatement(CreateAssignmentStatement(
                             plan,
                             targetCode,
-                            presentValue,
+                            AdaptRangeAssignment(presentValue),
                             assignedEntityCode,
                             assignedEntityType,
                             assignedAttribute,
@@ -2625,7 +2671,7 @@ internal static class ExpressReachableRuleEmitter
                         .AddStatement(CreateAssignmentStatement(
                             plan,
                             targetCode,
-                            presentValue,
+                            AdaptRangeAssignment(presentValue),
                             assignedEntityCode,
                             assignedEntityType,
                             assignedAttribute,
@@ -2649,7 +2695,7 @@ internal static class ExpressReachableRuleEmitter
             owner.AddStatement(CreateAssignmentStatement(
                 plan,
                 targetCode,
-                valueCode,
+                AdaptRangeAssignment(valueCode),
                 assignedEntityCode,
                 assignedEntityType,
                 assignedAttribute,

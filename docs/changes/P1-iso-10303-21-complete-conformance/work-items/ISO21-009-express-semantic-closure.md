@@ -164,6 +164,14 @@ implementation inventory is evidence about current behavior, not a substitute fo
   checker intentionally defers SELECT, defined-type and aggregate cases until their complete compatibility paths are
   proved; it does not classify them from incomplete evidence. The candidate passes 12/12
   `ISO21WorkItem=ISO21-009` tests and all 141 `ReachableRuleTests`.
+- Clause 13.3.2 explicitly permits range-qualified assignment only for STRING and BINARY, uses one-based inclusive
+  bounds, and permits the replacement length to change the carrier length. Direct STRING/BINARY locals now share one
+  generated reconstruction path that captures the carrier and both exact-integer indices once, checks
+  `1 <= lower <= upper <= length`, replaces the inclusive range and writes the complete value back. BINARY preserves
+  exact leading bits through `BinaryValue`; no runtime helper or mutable buffer is retained. LIST range assignment is
+  rejected at the range source location. Defined-type, SELECT and multi-qualifier range carriers remain explicitly
+  unsupported until their complete wrapper/dynamic write-back semantics are proved. The candidate passes 13/13
+  `ISO21WorkItem=ISO21-009` tests and all 142 `ReachableRuleTests`.
 
 Source identities:
 

@@ -12689,6 +12689,95 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies STRING and BINARY range-qualified assignments replace the selected one-based span.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_assign_string_and_binary_ranges()
+    {
+        const string schema = """
+            SCHEMA range_assignment_model;
+            FUNCTION replace_ranges(marker : BOOLEAN) : BOOLEAN;
+              LOCAL
+                text_value : STRING := 'abcd';
+                binary_value : BINARY := %1010;
+              END_LOCAL;
+              text_value[2:3] := 'XYZ';
+              binary_value[2:3] := %0;
+              RETURN((text_value = 'aXYZd') AND (binary_value = %100));
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              ranges_replace : replace_ranges(marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.RangeAssignmentModel;
+
+            internal static class RangeAssignmentConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["range assignment"], "3;1"),
+                            new FileName("range.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["range_assignment_model"])),
+                        [TedToolkit.Step21.Generated.RangeAssignmentModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("range_assignment_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidListSchema = """
+            SCHEMA list_range_assignment_model;
+            FUNCTION invalid_range(marker : BOOLEAN) : BOOLEAN;
+              LOCAL values : LIST [2:2] OF INTEGER := [1, 2]; END_LOCAL;
+              values[1:2] := [3];
+              RETURN(TRUE);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_range(marker); END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("schemas/range-assignment.exp", schema));
+        var invalidListResult = GeneratorHostTests.Run(
+            ("schemas/list-range-assignment.exp", invalidListSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("RangeAssignmentConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(invalidListResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains(
+                    "range-qualified assignment requires a STRING or BINARY carrier",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidListResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidListResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]
