@@ -291,6 +291,8 @@ internal static class ExpressSchemaBinder
 
     private sealed class Resolver
     {
+        private readonly Dictionary<ExpressBoundName, ExpressBoundName> _aliasTargets = [];
+
         private readonly IReadOnlyDictionary<string, SchemaDraft> _uniqueSchemas;
 
         private readonly Dictionary<string, IReadOnlyList<SchemaDraft>> _schemaGroups;
@@ -1036,6 +1038,13 @@ internal static class ExpressSchemaBinder
                             $"Constant '{assignmentTarget.Name}' cannot be assigned or modified through a qualifier.",
                             syntax.RequiredChild("generalRef").Span.Start);
                     }
+                    else if (assignmentTarget is not null && IsRepeatVariableOrAlias(assignmentTarget))
+                    {
+                        ReportRepeatVariableMutation(
+                            schema,
+                            assignmentTarget,
+                            syntax.RequiredChild("generalRef").Span.Start);
+                    }
 
                     foreach (var qualifier in syntax.ChildRules("qualifier"))
                     {
@@ -1067,9 +1076,14 @@ internal static class ExpressSchemaBinder
 
                 case "procedureCallStmt":
                     var procedure = syntax.ChildRules("procedureRef").SingleOrDefault();
+                    ExpressBoundName? procedureTarget = null;
                     if (procedure is not null)
                     {
-                        BindRestrictedName(schema, procedure, scope, ExpressBoundNameKind.Procedure);
+                        procedureTarget = BindRestrictedName(
+                            schema,
+                            procedure,
+                            scope,
+                            ExpressBoundNameKind.Procedure);
                     }
 
                     foreach (var parameters in syntax.ChildRules("actualParameterList"))
@@ -1088,6 +1102,31 @@ internal static class ExpressSchemaBinder
                                 "EXPRESS-BIND-CONSTANT-ASSIGNMENT",
                                 $"Constant '{mutableTarget.Name}' cannot be modified by a list procedure.",
                                 mutableName.Span.Start);
+                        }
+
+                        var actualParameters = parameters.ChildRules("parameter").ToArray();
+                        if (syntax.ChildRules("builtInProcedure").Any())
+                        {
+                            ReportRepeatVariableArgumentMutation(
+                                schema,
+                                actualParameters.FirstOrDefault(),
+                                scope);
+                        }
+                        else if (procedureTarget?.SchemaDeclaration is { } procedureSymbol
+                                 && FindSymbol(procedureSymbol) is { } procedureDraft)
+                        {
+                            var variableParameters = ProcedureVariableParameters(procedureDraft.Syntax);
+                            for (var index = 0; index < actualParameters.Length
+                                 && index < variableParameters.Count; index++)
+                            {
+                                if (variableParameters[index])
+                                {
+                                    ReportRepeatVariableArgumentMutation(
+                                        schema,
+                                        actualParameters[index],
+                                        scope);
+                                }
+                            }
                         }
                     }
 
@@ -1828,16 +1867,22 @@ internal static class ExpressSchemaBinder
             var scope = new NameScope(parentScope);
             var variable = syntax.RequiredChild("variableId");
             var token = variable.IdentifierToken();
+            var aliasName = new ExpressBoundName(
+                token.Text,
+                ExpressBoundNameKind.Alias,
+                aliasTarget?.Type,
+                schemaDeclaration: null,
+                variable.Span,
+                aliasTarget?.IsOptional == true);
             AddLexicalName(
                 schema,
                 scope,
-                new ExpressBoundName(
-                    token.Text,
-                    ExpressBoundNameKind.Alias,
-                    aliasTarget?.Type,
-                    schemaDeclaration: null,
-                    variable.Span,
-                    aliasTarget?.IsOptional == true));
+                aliasName);
+            if (aliasTarget is not null)
+            {
+                _aliasTargets.Add(aliasName, aliasTarget);
+            }
+
             foreach (var statement in syntax.ChildRules("stmt"))
             {
                 VisitNames(schema, statement, scope);
@@ -1876,6 +1921,82 @@ internal static class ExpressSchemaBinder
             {
                 VisitNames(schema, statement, scope);
             }
+        }
+
+        private bool IsRepeatVariableOrAlias(ExpressBoundName name)
+        {
+            var current = name;
+            while (current.Kind == ExpressBoundNameKind.Alias
+                   && _aliasTargets.TryGetValue(current, out var target))
+            {
+                current = target;
+            }
+
+            return current.Kind == ExpressBoundNameKind.RepeatVariable;
+        }
+
+        private void ReportRepeatVariableArgumentMutation(
+            SchemaDraft schema,
+            ExpressRuleSyntax? argument,
+            NameScope scope)
+        {
+            if (argument is null)
+            {
+                return;
+            }
+
+            var identifiers = argument.DescendantTokens()
+                .Where(token => token.TokenName == "SimpleId")
+                .ToArray();
+            if (identifiers.Length != 1
+                || !string.Equals(
+                    argument.TokenText(),
+                    identifiers[0].Text,
+                    StringComparison.OrdinalIgnoreCase)
+                || !scope.TryResolve(identifiers[0].Text, out var target)
+                || !IsRepeatVariableOrAlias(target))
+            {
+                return;
+            }
+
+            ReportRepeatVariableMutation(schema, target, identifiers[0].Span.Start);
+        }
+
+        private void ReportRepeatVariableMutation(
+            SchemaDraft schema,
+            ExpressBoundName target,
+            ExpressSourceLocation location)
+        {
+            schema.IsInvalid = true;
+            AddDiagnostic(
+                _diagnostics,
+                "EXPRESS-BIND-REPEAT-VARIABLE-MUTATION",
+                $"REPEAT control variable '{target.Name}' cannot be assigned or passed to a VAR parameter.",
+                location);
+        }
+
+        private static List<bool> ProcedureVariableParameters(ExpressRuleSyntax declaration)
+        {
+            var head = declaration.RequiredChild("procedureHead");
+            var result = new List<bool>();
+            var isVariable = false;
+            foreach (var child in head.Children)
+            {
+                if (child is ExpressTokenSyntax token
+                    && string.Equals(token.Text, "VAR", StringComparison.OrdinalIgnoreCase))
+                {
+                    isVariable = true;
+                    continue;
+                }
+
+                if (child is ExpressRuleSyntax { Production: "formalParameter", } formal)
+                {
+                    result.AddRange(formal.ChildRules("parameterId").Select(_ => isVariable));
+                    isVariable = false;
+                }
+            }
+
+            return result;
         }
 
         private void AddLexicalName(SchemaDraft schema, NameScope scope, ExpressBoundName name)

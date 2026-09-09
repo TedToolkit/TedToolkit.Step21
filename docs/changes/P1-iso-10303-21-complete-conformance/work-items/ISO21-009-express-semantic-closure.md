@@ -108,6 +108,14 @@ implementation inventory is evidence about current behavior, not a substitute fo
   enumeration fall-through neighbor. The candidate passes 4/4 `ISO21WorkItem=ISO21-009` tests and all 133
   `ReachableRuleTests`; the preceding ALIAS/null candidate also passed the full 711-test Release suite and the complete
   Release solution build with zero warnings or errors.
+- The same ISO 10303-11:2004 excerpt explicitly requires that a REPEAT body shall not modify its implicitly declared
+  NUMBER control variable (13.9.1(f)). The binder now rejects direct assignment, mutation through a procedure `VAR`
+  parameter, and mutation through an ALIAS of the control variable before source generation, using the stable
+  `EXPRESS-BIND-REPEAT-VARIABLE-MUTATION` reason. ALIAS origins are stored only for declared aliases and traversed
+  without per-check collections. The focused red test first demonstrated that all direct and `VAR` cases were
+  previously accepted; the corrected candidate passes 5/5 `ISO21WorkItem=ISO21-009` tests and all 134
+  `ReachableRuleTests`. The complete Release unit suite passes 713/713, including the checked-in AP203, AP214 and
+  AP242 binding and generated-surface baselines.
 
 Source identities:
 

@@ -11795,6 +11795,111 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies an EXPRESS REPEAT control variable cannot be modified directly or through a VAR parameter.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_reject_repeat_control_variable_mutation()
+    {
+        const string directlyMutatedSchema = """
+            SCHEMA direct_repeat_mutation_model;
+            FUNCTION invalid_repeat(upper : INTEGER) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              REPEAT index := 1 TO upper;
+                index := index + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              count : INTEGER;
+            WHERE
+              invalid : invalid_repeat(count) >= 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string indirectlyMutatedSchema = """
+            SCHEMA indirect_repeat_mutation_model;
+            PROCEDURE bump(VAR current : NUMBER);
+              current := current + 1;
+            END_PROCEDURE;
+            FUNCTION invalid_repeat(upper : INTEGER) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              REPEAT index := 1 TO upper;
+                bump(index);
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              count : INTEGER;
+            WHERE
+              invalid : invalid_repeat(count) >= 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string aliasMutatedSchema = """
+            SCHEMA alias_repeat_mutation_model;
+            FUNCTION invalid_repeat(upper : INTEGER) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              REPEAT index := 1 TO upper;
+                ALIAS loop_value FOR index;
+                  loop_value := loop_value + 1;
+                END_ALIAS;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              count : INTEGER;
+            WHERE
+              invalid : invalid_repeat(count) >= 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var directResult = GeneratorHostTests.Run(
+            ("schemas/direct-repeat-mutation.exp", directlyMutatedSchema));
+        var indirectResult = GeneratorHostTests.Run(
+            ("schemas/indirect-repeat-mutation.exp", indirectlyMutatedSchema));
+        var aliasResult = GeneratorHostTests.Run(
+            ("schemas/alias-repeat-mutation.exp", aliasMutatedSchema));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(directResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-REPEAT-VARIABLE-MUTATION",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    directResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(directResult.GeneratedSources).IsEmpty();
+            await Assert.That(indirectResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-REPEAT-VARIABLE-MUTATION",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    indirectResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(indirectResult.GeneratedSources).IsEmpty();
+            await Assert.That(aliasResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-REPEAT-VARIABLE-MUTATION",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    aliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(aliasResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]
