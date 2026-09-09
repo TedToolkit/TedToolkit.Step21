@@ -1,22 +1,23 @@
-# ISO21-005: 交付 EXPRESS mapping 与可达语义闭包
+# ISO21-005: 交付 Part 21 短名与物理映射输入
 
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-005 -->
 
-<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
+<!-- approval-source: user-approved-recommended-iso21-005-split-and-continue-2026-09-09 -->
 
 ## Outcome
 
-使 Analyzer 对 Part 21 clause 12 的每个 EXPRESS 映射家族和 schema conformance 可达的 ISO 10303-11:2004
-约束闭包完整生成、读取、验证、写出并重读，不跳过可达语义。
+使 schema 定义文档能够显式、确定地向 Analyzer 提供 Part 21 clause 12 的 entity、defined/select type 和
+enumeration-value 短名及物理映射元数据，并由生成代码完成长名/短名读取与 canonical 写出，不引入 AP 语义或
+依赖 Part 11 算法求值。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
 
-- Target delivery area or exact public/persisted contract: clause-12 generated mapping descriptors/emission、complete complex mapping、generated short-name and constant lookup metadata、reachable types/inheritance/redeclarations/functions/procedures/rules/statements and source-located unsupported diagnostics.
-- In scope: all simple/aggregate/defined/enumeration/select types、entity mapping、attributes/inverse/derived/local rules、schema/constant/rule mappings and every Part-11 semantic family reachable from validation, consuming ISO21-001's physical occurrence/name contract.
-- Non-goals: physical occurrence/anchor token semantics owned by ISO21-001、general-purpose EXPRESS invocation/interpreter、unreachable program execution、EXPRESS-X、AP/B-rep/PMI semantics or runtime schema reflection.
-- Likely touchpoints (non-binding): compiler bound IR、dependency closure、descriptor/emitter、complex mapping、conformance corpus and generated API baselines.
+- Target delivery area or exact public/persisted contract: schema-supplied short-name input、generated descriptor lookup、typed-parameter/entity/enumeration physical keyword selection and source-located collision diagnostics.
+- In scope: long-name/short-name bidirectional lookup for entity types, simple defined/enumeration types used by SELECT values, and enumeration values; case/collision/unknown-name validation; canonical writer selection controlled by explicit schema metadata.
+- Non-goals: inventing short names、parsing AP-specific annex prose、constant evaluation、QUERY/functions/procedures/rules、general-purpose EXPRESS execution、EXPRESS-X、AP/B-rep/PMI semantics or runtime reflection discovery.
+- Likely touchpoints (non-binding): Analyzer options/additional inputs、bound schema metadata、descriptor/emitter、typed-parameter/entity/enumeration codecs、focused generated mapping fixtures and API baselines.
 
 <!-- work-item: start-conditions -->
 ## Start conditions
@@ -24,45 +25,43 @@
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
 | ISO21-001 Verified | Stable physical occurrence/constant-name contract and generated constant-lookup seam | ISO21-001 completion evidence |
-| Authorized ISO 10303-11:2004 reference | Complete legal implementation reference for every validation-reachable Part-11 semantic family, available without copying its prose into the repository | User-supplied licensed text/path or another repository-approved authorized source identity |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
 
 | Parent contract | Responsibility | Contribution or supplied input |
 | --- | --- | --- |
-| AC-07 | Owns | Complete clause-12 and validation-reachable Part-11 mapping/execution closure |
-| AC-01, AC-02 | Supports | Supplies mapping rows and class/schema proof to final conformance closure |
+| AC-07 | Supports | Supplies the schema-defined physical-name/mapping metadata consumed by ISO21-009 |
+| AC-01, AC-02 | Supports | Supplies short-name rows and class/schema proof to final conformance closure |
 
 <!-- work-item: delivery-constraints -->
 ## Constraints
 
-- Every supported semantic family has a clause-bound positive and neighboring-invalid corpus partition; reachable unsupported behavior rejects generation rather than being skipped.
-- Keep generated code direct, deterministic and AOT-ready; no runtime interpreter, reflection discovery, AP branch or generated dependency on compiler packages.
-- Full schema baselines supplement but do not replace focused ISO clause fixtures.
-- The mapping inventory uses the public Part 21 clause 12 text plus an authorized ISO 10303-11:2004 reference; repository manifests store clause/family identifiers and independently authored fixtures, not standard prose.
+- Short names are accepted only from an explicit caller-owned schema-definition input; absence means long-name-only behavior and never heuristic abbreviation.
+- Reject duplicate, case-insensitive ambiguous, cross-category-invalid or long-name-colliding declarations before generation.
+- Keep generated code direct, shared across schemas, deterministic and AOT-ready; no runtime interpreter, reflection discovery, AP branch or generated dependency on compiler packages.
+- The mapping inventory records Part 21 clause identifiers and independently authored fixtures, not copied standard prose.
 
 <!-- work-item: proof-plan -->
 ## Proof
 
-<!-- primary-proof: AC-07 purpose=acceptance shape=contract -->
 | Contract or gate | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
-| AC-07 | Primary | Clause-manifest corpus covers every required mapping/reachable semantic family and all valid cases round-trip with zero skipped dependency | Run the focused compiler conformance corpus and generated-mapping contract suite in Release |
+| AC-07 supplied mapping input | Conditional | Explicit entity/type/enumeration short names read and write the same values as long names; absent/invalid/colliding metadata fails deterministically | Run the focused generated short-name mapping contract suite in Release |
 | Generator/AP compatibility | Conditional | Existing compiler baseline, public generated APIs and AP203/AP214/AP242 full baselines remain green | Run all `Express*`, AP schema baseline and reproducibility tests in Release |
 
 <!-- work-item: definition-of-done -->
 ## Done
 
-- AC-07 passes with a machine-readable mapping/semantic-family manifest and zero reachable unsupported row.
-- Generated/public compatibility and all three maintained schema packages pass; the manifest is supplied to ISO21-008.
+- The schema-supplied short-name contract and neighboring-invalid matrix pass without heuristic or AP-specific behavior.
+- Generated/public compatibility and all three maintained schema packages pass; verified mapping metadata is supplied to ISO21-009 and ISO21-008.
 
 <!-- work-item: completion-evidence -->
 ## Verification result requirements
 
-Record candidate revision, clause/Part-11 family counts, valid/invalid corpus counts, generated/API deltas, diagnostics,
-commands, AP baseline/reproducibility results and supplied manifest identity.
+Record candidate revision, supported short-name categories, valid/invalid corpus counts, generated/API deltas, diagnostics,
+commands, AP baseline/reproducibility results and the mapping metadata contract supplied to dependents.
 
 ## Risks and implementation notes
 
-This is the largest compiler item; additions must remain shared across schemas and preserve the prior memory/source-size reductions.
+The physical mapping layer must remain schema-neutral. Application-protocol packages may supply metadata, but the Analyzer and runtime must not encode AP-specific name tables or semantics.

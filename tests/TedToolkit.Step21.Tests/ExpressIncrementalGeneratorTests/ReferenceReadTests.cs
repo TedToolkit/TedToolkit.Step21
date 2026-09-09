@@ -124,7 +124,7 @@ public sealed class ReferenceReadTests
                 failure.Message.Contains("node", StringComparison.OrdinalIgnoreCase)))
                 .IsTrue();
             await Assert.That(failures.All(failure => failure.SourceLocation is
-                { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
+            { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
         }
     }
 
@@ -168,14 +168,14 @@ public sealed class ReferenceReadTests
             await Assert.That(external.All(failure => failure.Message.Contains("external", StringComparison.Ordinal)))
                 .IsTrue();
             await Assert.That(failures.All(failure => failure.SourceLocation is
-                { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
+            { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
         }
     }
 
     private static string CreateExchange(string referenceSection, string records) => $$"""
         ISO-10303-21;
         HEADER;
-        FILE_DESCRIPTION(('reference test'),'2;1');
+        FILE_DESCRIPTION(('reference test'),'4;2');
         FILE_NAME('references.p21','2026-08-22T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('reference_read'));
         ENDSEC;

@@ -10,8 +10,8 @@ internal sealed class ValidationTests
     {
         var descriptor = new CapturingDescriptor("TEST_SCHEMA");
         var structure = new ExchangeStructure(TestHeader.Create(), [descriptor]);
-        var firstSection = new DataSection(new SchemaName("TEST_SCHEMA"));
-        var secondSection = new DataSection(new SchemaName("TEST_SCHEMA"));
+        var firstSection = new DataSection(new SchemaName("TEST_SCHEMA"), "FIRST");
+        var secondSection = new DataSection(new SchemaName("TEST_SCHEMA"), "SECOND");
         structure.DataSections.Add(firstSection);
         structure.DataSections.Add(secondSection);
         var shared = new TestEntity();
@@ -47,8 +47,8 @@ internal sealed class ValidationTests
     {
         var descriptor = new CapturingDescriptor("TEST_SCHEMA", emitEntityFailures: false);
         var structure = new ExchangeStructure(TestHeader.Create(), [descriptor]);
-        var known = new DataSection(new SchemaName("TEST_SCHEMA"));
-        var missing = new DataSection(new SchemaName("MISSING_SCHEMA"));
+        var known = new DataSection(new SchemaName("TEST_SCHEMA"), "KNOWN");
+        var missing = new DataSection(new SchemaName("MISSING_SCHEMA"), "MISSING");
         structure.DataSections.Add(known);
         structure.DataSections.Add(known);
         structure.DataSections.Add(missing);
@@ -67,6 +67,7 @@ internal sealed class ValidationTests
         {
             await Assert.That(result.Failures.Select(failure => failure.Code).SequenceEqual(new[]
             {
+                "P21.STRUCTURE.DATA_SECTION.NAME.DUPLICATE",
                 "P21.STRUCTURE.DATA_SECTION.DUPLICATE",
                 "P21.STRUCTURE.SCHEMA_DESCRIPTOR",
                 "P21.STRUCTURE.DATA_SECTION.REQUIRED",
@@ -75,6 +76,7 @@ internal sealed class ValidationTests
             })).IsTrue();
             await Assert.That(result.Failures.Select(failure => failure.Path).SequenceEqual(new[]
             {
+                "DataSections[1].Name",
                 "DataSections[1]",
                 "DataSections[2].SchemaName",
                 "DataSections[3]",

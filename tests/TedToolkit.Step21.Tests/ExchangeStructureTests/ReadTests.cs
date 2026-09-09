@@ -23,7 +23,7 @@ internal sealed class ReadTests
     }
 
     /// <summary>
-    /// Verifies case-insensitive nominal matching and the numeric object-identifier suffix while retaining header text.
+    /// Verifies case-insensitive nominal matching while retaining model text and writing a canonical upper-case identifier.
     /// </summary>
     [Test]
     [Arguments("CONFIG_CONTROL_DESIGN")]
@@ -32,7 +32,7 @@ internal sealed class ReadTests
     [Arguments("CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }")]
     [Arguments("config_control_design {1 0 10303 203 1 1 1}")]
     [Arguments("CONFIG_CONTROL_DESIGN   { 1  0 10303 203 1 1 1 }")]
-    public async Task Should_bind_supported_identifier_variants_and_preserve_exact_file_schema_text(
+    public async Task Should_bind_supported_identifier_variants_and_canonicalize_written_file_schema_text(
         string identifier)
     {
         var descriptor = new TestSchemaDescriptor("config_control_design");
@@ -46,7 +46,7 @@ internal sealed class ReadTests
             await Assert.That(structure.Header.FileSchema.SchemaIdentifiers).HasSingleItem();
             await Assert.That(structure.Header.FileSchema.SchemaIdentifiers[0]).IsEqualTo(identifier);
             await Assert.That(structure.Validate().IsValid).IsTrue();
-            await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{identifier}'));\n");
+            await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{identifier.ToUpperInvariant()}'));\n");
         }
     }
 
@@ -88,10 +88,10 @@ internal sealed class ReadTests
     }
 
     /// <summary>
-    /// Verifies a named data section associates its nominal schema with an OID-qualified header without rewriting either.
+    /// Verifies a named data section retains its nominal schema in memory and writes the required upper-case spelling.
     /// </summary>
     [Test]
-    public async Task Should_associate_nominal_named_section_with_oid_header_and_retain_both_spellings()
+    public async Task Should_associate_nominal_named_section_with_oid_header_and_canonicalize_output()
     {
         const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
         const string sectionIdentifier = "CoNfIg_CoNtRoL_DeSiGn";
@@ -111,15 +111,15 @@ internal sealed class ReadTests
             await Assert.That(structure.Header.FileSchema.SchemaIdentifiers[0]).IsEqualTo(headerIdentifier);
             await Assert.That(structure.DataSections[0].SchemaName.Value).IsEqualTo(sectionIdentifier);
             await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{headerIdentifier}'));\n");
-            await Assert.That(destination.ToString()).Contains($"DATA('main',('{sectionIdentifier}'));\n");
+            await Assert.That(destination.ToString()).Contains($"DATA('main',('{sectionIdentifier.ToUpperInvariant()}'));\n");
         }
     }
 
     /// <summary>
-    /// Verifies FILE_POPULATION associates its nominal schema with an OID-qualified header without rewriting either.
+    /// Verifies FILE_POPULATION retains its nominal schema in memory and writes the required upper-case spelling.
     /// </summary>
     [Test]
-    public async Task Should_associate_nominal_file_population_with_oid_header_and_retain_both_spellings()
+    public async Task Should_associate_nominal_file_population_with_oid_header_and_canonicalize_output()
     {
         const string headerIdentifier = "CONFIG_CONTROL_DESIGN { 1 0 10303 203 1 1 1 }";
         const string populationIdentifier = "config_control_design";
@@ -137,7 +137,7 @@ internal sealed class ReadTests
             await Assert.That(structure.SchemaPopulations[0].SchemaName.Value).IsEqualTo(populationIdentifier);
             await Assert.That(destination.ToString()).Contains($"FILE_SCHEMA(('{headerIdentifier}'));\n");
             await Assert.That(destination.ToString()).Contains(
-                $"FILE_POPULATION('{populationIdentifier}','SECTION_BOUNDARY',$);\n");
+                $"FILE_POPULATION('{populationIdentifier.ToUpperInvariant()}','SECTION_BOUNDARY',$);\n");
         }
     }
 

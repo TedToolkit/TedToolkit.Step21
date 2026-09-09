@@ -18,7 +18,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('anchor conformance'),'4;3');
-            FILE_NAME('anchor.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('anchor.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('TEST_SCHEMA'));
             ENDSEC;
             ANCHOR;
@@ -72,7 +72,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('occurrence conformance'),'4;3');
-            FILE_NAME('occurrences.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('occurrences.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('occurrence_schema'));
             ENDSEC;
             ANCHOR;
@@ -129,7 +129,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('duplicate anchor'),'4;3');
-            FILE_NAME('duplicate.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('duplicate.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('TEST_SCHEMA'));
             ENDSEC;
             ANCHOR;
@@ -159,7 +159,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('overlap'),'4;3');
-            FILE_NAME('overlap.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('overlap.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('TEST_SCHEMA'));
             ENDSEC;
             REFERENCE;
@@ -186,7 +186,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('constant mismatch'),'4;3');
-            FILE_NAME('constant-mismatch.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('constant-mismatch.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('occurrence_schema'));
             ENDSEC;
             ANCHOR;
@@ -213,7 +213,7 @@ internal sealed class RoundTripTests
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('entity anchor'),'4;3');
-            FILE_NAME('entity-anchor.p21','2026-09-06T00:00:00+08:00',(),(),'tests','tests','');
+            FILE_NAME('entity-anchor.p21','2026-09-06T00:00:00+08:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('occurrence_schema'));
             ENDSEC;
             ANCHOR;
@@ -245,7 +245,7 @@ internal sealed class RoundTripTests
     public async Task Should_round_trip_boolean_and_logical_spellings_as_untyped_anchor_enumerations()
     {
         var descriptor = new ExchangeStructureTests.TestSchemaDescriptor("TEST_SCHEMA");
-        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create(), [descriptor]);
+        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create("4;1"), [descriptor]);
         structure.Anchors.Add(new Part21Anchor(
             new AnchorName("states"),
             ParameterValue.FromAggregate([
@@ -277,7 +277,7 @@ internal sealed class RoundTripTests
     public async Task Should_round_trip_uppercase_and_low_line_tags_created_by_public_editing()
     {
         var descriptor = new ExchangeStructureTests.TestSchemaDescriptor("TEST_SCHEMA");
-        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create(), [descriptor]);
+        var structure = new ExchangeStructure(ExchangeStructureTests.TestHeader.Create("4;1"), [descriptor]);
         structure.Anchors.Add(new Part21Anchor(
             new AnchorName("tags"),
             ParameterValue.Omitted,

@@ -272,7 +272,8 @@ public sealed class ResolutionTests
         var root = Exchange(
             "ANCHOR;<local>=#1;ENDSEC;",
             "REFERENCE;#90=<bad.p21#target>;ENDSEC;",
-            "#1=NODE('valid root',$);#2=HOLDER(#90);");
+            "#1=NODE('valid root',$);#2=HOLDER(#90);",
+            "4;2");
         var invalidAfterHydration = Exchange(
             "ANCHOR;<target>=#1;ENDSEC;",
             string.Empty,
@@ -324,7 +325,8 @@ public sealed class ResolutionTests
         var root = Exchange(
             "ANCHOR;<published>=<child.jt#target>;ENDSEC;",
             string.Empty,
-            "#1=NODE('root',$);");
+            "#1=NODE('root',$);",
+            "4;2");
         var convertedSource = Exchange(
             "ANCHOR;<target>=#1;ENDSEC;",
             string.Empty,
@@ -378,7 +380,7 @@ public sealed class ResolutionTests
         }
     }
 
-    /// <summary>Reads a ZIP root and subsidiary entirely from supplied memory.</summary>
+    /// <summary>Requires class 2 for a multi-file ZIP root without imposing the transport class on subsidiaries.</summary>
     [Test]
     public async Task Should_resolve_zip_root_and_subsidiary_in_memory()
     {
@@ -393,7 +395,7 @@ public sealed class ResolutionTests
                 "ANCHOR;<target>=#1;ENDSEC;",
                 string.Empty,
                 "#1=NODE('zip child',$);",
-                "4;2"),
+                "4;1"),
         });
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
         {
@@ -428,7 +430,8 @@ public sealed class ResolutionTests
         var root = Exchange(
             "ANCHOR;<published>=<parts/child.p21#target>;ENDSEC;",
             string.Empty,
-            "#1=NODE('root',$);");
+            "#1=NODE('root',$);",
+            "4;2");
         var directoryChild = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('inside directory',$);");
         var zipChild = Exchange("ANCHOR;<target>=#1;ENDSEC;", string.Empty, "#1=NODE('inside zip',$);");
         var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
@@ -1256,7 +1259,8 @@ public sealed class ResolutionTests
             ["ISO-10303.p21"] = Utf8(Exchange(
                 "ANCHOR;<target>=<nested.zip#target>;ENDSEC;",
                 string.Empty,
-                "#1=NODE('outer',$);")),
+                "#1=NODE('outer',$);",
+                "4;2")),
             ["nested.zip"] = nested,
         });
         var noRoot = CreateZip(new Dictionary<string, string> { ["child.p21"] = Exchange(string.Empty, string.Empty, "#1=NODE('x',$);") });

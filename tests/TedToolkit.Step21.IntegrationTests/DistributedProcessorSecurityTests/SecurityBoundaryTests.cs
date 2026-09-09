@@ -63,7 +63,7 @@ internal sealed class SecurityBoundaryTests
                 .IsEqualTo(resources.MaximumArchiveUncompressedBytes);
             await Assert.That(defaults.GetProperty("maximumCompressionRatio").GetDouble())
                 .IsEqualTo(resources.MaximumCompressionRatio);
-            await Assert.That(threats.Length).IsEqualTo(16);
+            await Assert.That(threats.Length).IsEqualTo(17);
             await Assert.That(threats.Select(item => item.GetProperty("id").GetString()).Distinct().Count())
                 .IsEqualTo(threats.Length);
             var executableTests = typeof(SecurityBoundaryTests)
@@ -491,12 +491,23 @@ internal sealed class SecurityBoundaryTests
                      ParameterValue.FromValueInstance(new ValueInstanceName(new string('7', 1024))),
                      ParameterValue.FromConstantEntity(new ConstantEntityName(new string('A', 1024))),
                      ParameterValue.FromConstantValue(new ConstantValueName(new string('B', 1024))),
-                     ParameterValue.FromResource(new Part21Resource("urn:" + new string('c', 1024))),
                  })
         {
             var payloadStructure = CreateStructure();
             var payloadEntity = new SecurityEntity(payload);
             payloadStructure.Add(payloadStructure.DataSections.Single(), payloadEntity);
+            if (payload.TryGetEntityInstance(out var entityName))
+            {
+                payloadStructure.References.Add(new Part21Reference(
+                    entityName,
+                    new Part21Resource("external.p21#entity")));
+            }
+            else if (payload.TryGetValueInstance(out var valueName))
+            {
+                payloadStructure.References.Add(new Part21Reference(
+                    valueName,
+                    new Part21Resource("external.p21#value")));
+            }
             var payloadDestination = new StringWriter();
             _ = Assert.Throws<ExchangeStructureCapabilityException>(() => payloadStructure.WriteEntity(
                 payloadDestination,
@@ -562,6 +573,57 @@ internal sealed class SecurityBoundaryTests
                 .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
             await Assert.That(bridgeUriFailure.Message).Contains("URI-character");
             await Assert.That(resourceUriFailure.Message).Contains("URI-character");
+        }
+    }
+
+    [Test]
+    public async Task Should_bound_physical_value_items_and_depth_before_publication()
+    {
+        var itemRead = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("ANCHOR;<items>=(1,2);ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            ExchangeStructureReadOptions.WithProcessingLimits(
+                new Part21ProcessingLimits(maximumItemCount: 1))));
+        var depthRead = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("ANCHOR;<nested>=((1));ENDSEC;")),
+            [SecuritySchemaDescriptor.Instance],
+            ExchangeStructureReadOptions.WithProcessingLimits(
+                new Part21ProcessingLimits(maximumNestingDepth: 1))));
+
+        var itemStructure = CreateStructure();
+        itemStructure.Anchors.Add(new Part21Anchor(
+            new AnchorName("items"),
+            ParameterValue.FromAggregate([
+                ParameterValue.FromInteger(1),
+                ParameterValue.FromInteger(2),
+            ])));
+        var itemDestination = new StringWriter();
+        var itemWrite = Assert.Throws<ExchangeStructureCapabilityException>(() => itemStructure.Write(
+            itemDestination,
+            new ExchangeStructureWriteOptions(
+                [],
+                new Part21ProcessingLimits(maximumItemCount: 1))));
+
+        var depthStructure = CreateStructure();
+        var depthEntity = new SecurityEntity(ParameterValue.FromTyped(
+            "OUTER",
+            ParameterValue.FromAggregate([ParameterValue.FromInteger(1)])));
+        depthStructure.Add(depthStructure.DataSections.Single(), depthEntity);
+        var depthDestination = new StringWriter();
+        var depthWrite = Assert.Throws<ExchangeStructureCapabilityException>(() => depthStructure.Write(
+            depthDestination,
+            new ExchangeStructureWriteOptions(
+                [],
+                new Part21ProcessingLimits(maximumNestingDepth: 1))));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(itemRead.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-ITEM");
+            await Assert.That(depthRead.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-NESTING");
+            await Assert.That(itemWrite.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-ITEM");
+            await Assert.That(depthWrite.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-NESTING");
+            await Assert.That(itemDestination.ToString()).IsEmpty();
+            await Assert.That(depthDestination.ToString()).IsEmpty();
         }
     }
 

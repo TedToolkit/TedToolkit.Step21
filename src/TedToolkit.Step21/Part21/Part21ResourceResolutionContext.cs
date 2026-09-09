@@ -792,7 +792,11 @@ internal sealed class Part21ResourceResolutionContext
         {
             entries = SnapshotDirectory(content.Entries);
         }
-        var container = new ResourceContainer(content.Identity, entries, containerArchiveDepth);
+        var container = new ResourceContainer(
+            content.Identity,
+            entries,
+            containerArchiveDepth,
+            content.Kind == Part21ResourceContentKind.ZipArchive && entries.Count > 1);
         if (!entries.TryGetValue(ArchiveRootName, out var root))
             ThrowCapability("P21-RESOURCE-ARCHIVE-ROOT", $"Resource '{content.Identity}' has no {ArchiveRootName} root.");
         return ReadRoot(content.Identity, root, container, ArchiveRootName, depth, aliases);
@@ -811,7 +815,13 @@ internal sealed class Part21ResourceResolutionContext
             aliases));
         try
         {
-            return ReadClearText(identity, bytes, container, entryPath, depth);
+            return ReadClearText(
+                identity,
+                bytes,
+                container,
+                entryPath,
+                depth,
+                container?.RequiresClass2ForMultiFileZip ?? false);
         }
         finally
         {
@@ -824,7 +834,8 @@ internal sealed class Part21ResourceResolutionContext
         ReadOnlyMemory<byte> bytes,
         ResourceContainer? container,
         string? entryPath,
-        int depth)
+        int depth,
+        bool requiresClass2ForMultiFileZip)
     {
         EnsureDepth(depth);
         string source;
@@ -840,7 +851,13 @@ internal sealed class Part21ResourceResolutionContext
         var key = GetDocumentKey(identity, container, entryPath);
         var baseUri = identity.IsAbsoluteUri ? identity : null;
         var address = new DocumentAddress(key, baseUri, container, entryPath);
-        _ = ExchangeStructureReader.Read(source, _descriptors, this, address, depth);
+        _ = ExchangeStructureReader.Read(
+            source,
+            _descriptors,
+            this,
+            address,
+            depth,
+            requiresClass2ForMultiFileZip);
         return _documents[key]
             ?? throw new InvalidOperationException("A completed resource read must retain its registered document.");
     }
@@ -962,7 +979,13 @@ internal sealed class Part21ResourceResolutionContext
         var clearTextAttempt = BeginCacheTransaction();
         try
         {
-            var loaded = ReadClearText(container.Identity, bytes, container, entryPath, depth);
+            var loaded = ReadClearText(
+                container.Identity,
+                bytes,
+                container,
+                entryPath,
+                depth,
+                requiresClass2ForMultiFileZip: false);
             CommitCacheTransaction(clearTextAttempt);
             return loaded;
         }
@@ -1727,7 +1750,8 @@ internal sealed class Part21ResourceResolutionContext
     internal sealed record ResourceContainer(
         Uri Identity,
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Entries,
-        int ArchiveDepth);
+        int ArchiveDepth,
+        bool RequiresClass2ForMultiFileZip);
 
     private sealed record LoadingDocumentAliases(
         string AddressKey,

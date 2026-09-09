@@ -1201,7 +1201,7 @@ public sealed class EntityHierarchyTests
                 internal static bool Exercise()
                 {
                     const string source = "ISO-10303-21;HEADER;FILE_DESCRIPTION(('test'),'3;1');"
-                        + "FILE_NAME('test.step','2026-09-02T00:00:00',(),(),'','','');"
+                        + "FILE_NAME('test.step','2026-09-02T00:00:00',(''),(''),'','','');"
                         + "FILE_SCHEMA(('named_aggregate_select_redeclaration'));ENDSEC;DATA;"
                         + "#1=SPECIALIZED();#2=CHILD((#1));ENDSEC;END-ISO-10303-21;";
                     var structure = ExchangeStructure.Read(

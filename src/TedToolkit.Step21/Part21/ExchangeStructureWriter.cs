@@ -27,6 +27,7 @@ internal static class ExchangeStructureWriter
         ExchangeStructureWriteOptions? options)
     {
         var limits = options?.ProcessingLimits ?? Part21ProcessingLimits.Default;
+        var stringEncoding = options?.StringEncoding ?? Part21StringEncoding.Canonical;
         PreflightValidation(structure, additionalFailures: null);
         if (structure.Signatures.Count > 0 && (options is null || options.Signers.Count == 0))
         {
@@ -40,12 +41,25 @@ internal static class ExchangeStructureWriter
         if (options is not null && options.Signers.Count > limits.MaximumSignatureCount)
             ThrowSignatureLimit("signature count");
         var projected = Project(structure, registration: null);
-        ThrowIfProjectedValuesAreInvalid(structure, projected);
+        var graphFeatures = Part21WriteLimitValidator.Validate(
+            structure,
+            projected.Count,
+            projected.Values.Select(entity => entity.Components),
+            limits,
+            detectsHighStrings: (structure.Header.FileDescription.ImplementationLevel is "3;1" or "2;1")
+                && stringEncoding == Part21StringEncoding.Utf8);
+        if (graphFeatures.ContainsInvalidParameterValue)
+            ThrowIfProjectedValuesAreInvalid(structure, projected);
+        Part21ImplementationLevelValidator.ValidateForWrite(
+            structure,
+            graphFeatures,
+            writesSignature: options is { Signers.Count: > 0 },
+            stringEncoding);
         var builder = CreateOutputBuilder(limits);
-        AppendHeader(builder, structure);
-        AppendAnchors(builder, structure);
+        AppendHeader(builder, structure, stringEncoding);
+        AppendAnchors(builder, structure, stringEncoding);
         AppendReferences(builder, structure);
-        AppendDataSections(builder, structure, projected);
+        AppendDataSections(builder, structure, projected, stringEncoding);
         builder.Append("END-ISO-10303-21;");
         AppendSignatures(builder, structure, options, limits);
         destination.Write(builder.ToString());
@@ -207,7 +221,12 @@ internal static class ExchangeStructureWriter
         }
 
         var projected = Project(structure, registration);
-        ThrowIfProjectedValuesAreInvalid(structure, projected);
+        var graphFeatures = Part21WriteLimitValidator.ValidateEntity(
+            structure,
+            projected.Values.Select(entity => entity.Components),
+            limits);
+        if (graphFeatures.ContainsInvalidParameterValue)
+            ThrowIfProjectedValuesAreInvalid(structure, projected);
         var output = CreateOutputBuilder(limits);
         AppendEntity(output, structure, registration, projected[registration]);
         destination.Write(output.ToString());
@@ -218,13 +237,19 @@ internal static class ExchangeStructureWriter
         IEnumerable<ValidationFailure>? additionalFailures)
     {
         var validation = structure.Validate();
-        var failures = validation.Failures.Concat(additionalFailures ?? []).ToArray();
-        if (failures.Length == 0)
+        if (additionalFailures is null)
         {
-            return;
+            if (validation.IsValid)
+                return;
+            throw new ExchangeStructureWriteValidationException(validation);
         }
 
-        throw new ExchangeStructureWriteValidationException(new ValidationResult(failures));
+        var additions = additionalFailures.ToArray();
+        if (validation.IsValid && additions.Length == 0)
+            return;
+
+        throw new ExchangeStructureWriteValidationException(new ValidationResult(
+            validation.Failures.Concat(additions)));
     }
 
     private static IReadOnlyDictionary<EntityRegistration, ProjectedEntity> Project(
@@ -254,8 +279,6 @@ internal static class ExchangeStructureWriter
 
         capabilityDiagnostics.AddRange(descriptors.SelectMany(descriptor =>
             descriptor.GetCapabilityDiagnostics(structure)));
-        if (registration is null)
-            CollectSectionCapabilityDiagnostics(structure, capabilityDiagnostics);
         if (capabilityDiagnostics.Count > 0)
             throw new ExchangeStructureCapabilityException(capabilityDiagnostics);
 
@@ -296,6 +319,21 @@ internal static class ExchangeStructureWriter
         IReadOnlyDictionary<EntityRegistration, ProjectedEntity> projected)
     {
         var failures = new List<ValidationFailure>();
+        Part21WriteOccurrenceIndex? occurrenceIndex = null;
+        for (var headerIndex = 0; headerIndex < structure.UserDefinedHeaderEntityEntries.Count; headerIndex++)
+        {
+            var header = structure.UserDefinedHeaderEntityEntries[headerIndex];
+            for (var parameterIndex = 0; parameterIndex < header.Parameters.Count; parameterIndex++)
+            {
+                CollectProjectedValueFailures(
+                    structure,
+                    header.Parameters[parameterIndex],
+                    $"UserDefinedHeaderEntities[{headerIndex}].Parameters[{parameterIndex}]",
+                    failures,
+                    ref occurrenceIndex);
+            }
+        }
+
         var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
         for (var index = 0; index < structure.DataSections.Count; index++)
         {
@@ -319,7 +357,8 @@ internal static class ExchangeStructureWriter
                         structure,
                         component.Value[parameterIndex],
                         $"{componentPath}.Parameters[{parameterIndex}]",
-                        failures);
+                        failures,
+                        ref occurrenceIndex);
                 }
             }
         }
@@ -334,7 +373,8 @@ internal static class ExchangeStructureWriter
         ExchangeStructure structure,
         ParameterValue? value,
         string path,
-        ICollection<ValidationFailure> failures)
+        ICollection<ValidationFailure> failures,
+        ref Part21WriteOccurrenceIndex? occurrenceIndex)
     {
         if (value is null)
         {
@@ -342,6 +382,15 @@ internal static class ExchangeStructureWriter
                 "P21.WRITE.PARAMETER.REQUIRED",
                 path,
                 "The projected parameter value is null."));
+            return;
+        }
+
+        if (value.Kind == ParameterValueKind.Resource)
+        {
+            failures.Add(new ValidationFailure(
+                "P21.WRITE.PARAMETER.KIND",
+                path,
+                "A DATA parameter cannot contain an anchor-only resource value."));
             return;
         }
 
@@ -358,6 +407,32 @@ internal static class ExchangeStructureWriter
             return;
         }
 
+        if (value.TryGetEntityInstance(out var entityName))
+        {
+            if (!(occurrenceIndex ??= new Part21WriteOccurrenceIndex(structure)).DefinesEntity(entityName))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.WRITE.REFERENCE.OCCURRENCE",
+                    path,
+                    $"Projected entity occurrence '{entityName}' is not defined in this exchange structure."));
+            }
+
+            return;
+        }
+
+        if (value.TryGetValueInstance(out var valueName))
+        {
+            if (!(occurrenceIndex ??= new Part21WriteOccurrenceIndex(structure)).DefinesValue(valueName))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.WRITE.REFERENCE.OCCURRENCE",
+                    path,
+                    $"Projected value occurrence '{valueName}' is not defined in the reference section."));
+            }
+
+            return;
+        }
+
         if (value.TryGetAggregate(out var aggregate))
         {
             for (var index = 0; index < aggregate.Count; index++)
@@ -366,7 +441,8 @@ internal static class ExchangeStructureWriter
                     structure,
                     aggregate[index],
                     $"{path}[{index}]",
-                    failures);
+                    failures,
+                    ref occurrenceIndex);
             }
 
             return;
@@ -374,51 +450,41 @@ internal static class ExchangeStructureWriter
 
         if (value.TryGetTyped(out _, out var inner))
         {
-            CollectProjectedValueFailures(structure, inner, path + ".Value", failures);
+            CollectProjectedValueFailures(
+                structure,
+                inner,
+                path + ".Value",
+                failures,
+                ref occurrenceIndex);
         }
     }
 
-    private static void CollectSectionCapabilityDiagnostics(
+    private static void AppendHeader(
+        Part21TextBuilder builder,
         ExchangeStructure structure,
-        ICollection<Step21Diagnostic> diagnostics)
-    {
-        var sections = structure.DataSections;
-        for (var index = 0; index < sections.Count; index++)
-        {
-            var section = sections[index];
-            if (section.Name is null && (sections.Count != 1 || structure.Header.FileSchema.SchemaIdentifiers.Count != 1))
-            {
-                diagnostics.Add(new Step21Diagnostic(
-                    "P21-CAP-DATA-SECTION",
-                    Step21DiagnosticSeverity.Error,
-                    $"DataSections[{index}] requires a name for canonical writing."));
-            }
-        }
-    }
-
-    private static void AppendHeader(Part21TextBuilder builder, ExchangeStructure structure)
+        Part21StringEncoding stringEncoding)
     {
         var header = structure.Header;
         builder.Append("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(");
-        AppendStringList(builder, header.FileDescription.Description);
+        AppendStringList(builder, header.FileDescription.Description, stringEncoding);
         builder.Append(',');
-        AppendString(builder, header.FileDescription.ImplementationLevel);
+        AppendString(builder, header.FileDescription.ImplementationLevel, stringEncoding);
         builder.Append(");\nFILE_NAME(");
-        AppendString(builder, header.FileName.Name);
+        AppendString(builder, header.FileName.Name, stringEncoding);
         builder.Append(',');
-        AppendString(builder, header.FileName.TimeStamp);
+        AppendString(builder, header.FileName.TimeStamp, stringEncoding);
         builder.Append(',');
-        AppendStringList(builder, header.FileName.Author);
+        AppendStringList(builder, header.FileName.Author, stringEncoding);
         builder.Append(',');
-        AppendStringList(builder, header.FileName.Organization);
+        AppendStringList(builder, header.FileName.Organization, stringEncoding);
         builder.Append(',');
-        AppendString(builder, header.FileName.PreprocessorVersion);
+        AppendString(builder, header.FileName.PreprocessorVersion, stringEncoding);
         builder.Append(',');
-        AppendString(builder, header.FileName.OriginatingSystem);
+        AppendString(builder, header.FileName.OriginatingSystem, stringEncoding);
         builder.Append(',');
-        AppendString(builder, header.FileName.Authorization);
+        AppendString(builder, header.FileName.Authorization, stringEncoding);
         builder.Append(");\nFILE_SCHEMA(");
-        AppendStringList(builder, header.FileSchema.SchemaIdentifiers);
+        AppendSchemaIdentifierList(builder, header.FileSchema.SchemaIdentifiers, stringEncoding);
         builder.Append(");\n");
         if (structure.SchemaPopulationExternalFiles.Count > 0)
         {
@@ -429,11 +495,11 @@ internal static class ExchangeStructureWriter
                     builder.Append(',');
                 var externalFile = structure.SchemaPopulationExternalFiles[index];
                 builder.Append('(');
-                AppendString(builder, externalFile.Location.OriginalString);
+                AppendString(builder, externalFile.Location.OriginalString, stringEncoding);
                 builder.Append(',');
-                AppendOptionalString(builder, externalFile.TimeStamp);
+                AppendOptionalString(builder, externalFile.TimeStamp, stringEncoding);
                 builder.Append(',');
-                AppendOptionalString(builder, externalFile.MessageDigest);
+                AppendOptionalString(builder, externalFile.MessageDigest, stringEncoding);
                 builder.Append(')');
             }
             builder.Append("));\n");
@@ -441,14 +507,45 @@ internal static class ExchangeStructureWriter
         foreach (var population in structure.SchemaPopulations)
         {
             builder.Append("FILE_POPULATION(");
-            AppendString(builder, population.SchemaName.Value);
+            AppendSchemaIdentifier(builder, population.SchemaName.Value, stringEncoding);
             builder.Append(',');
-            AppendString(builder, FormatDetermination(population.Determination));
+            AppendString(builder, FormatDetermination(population.Determination), stringEncoding);
             builder.Append(',');
             if (population.ExplicitSectionNames is null)
                 builder.Append('$');
             else
-                AppendStringList(builder, population.ExplicitSectionNames);
+                AppendStringList(builder, population.ExplicitSectionNames, stringEncoding);
+            builder.Append(");\n");
+        }
+        foreach (var declaration in structure.SectionLanguageEntries)
+        {
+            builder.Append("SECTION_LANGUAGE(");
+            AppendOptionalString(builder, declaration.SectionName, stringEncoding);
+            builder.Append(',');
+            AppendString(builder, declaration.LanguageCode, stringEncoding);
+            builder.Append(");\n");
+        }
+        foreach (var declaration in structure.SectionContextEntries)
+        {
+            builder.Append("SECTION_CONTEXT(");
+            AppendOptionalString(builder, declaration.SectionName, stringEncoding);
+            builder.Append(',');
+            AppendStringList(builder, declaration.ContextIdentifiers, stringEncoding);
+            builder.Append(");\n");
+        }
+        foreach (var entity in structure.UserDefinedHeaderEntityEntries)
+        {
+            builder.Append(entity.Keyword).Append('(');
+            for (var index = 0; index < entity.Parameters.Count; index++)
+            {
+                if (index > 0)
+                    builder.Append(',');
+                ParameterValueFormatter.Append(
+                    builder,
+                    entity.Parameters[index],
+                    referencedEntity => ResolveName(structure, referencedEntity),
+                    stringEncoding);
+            }
             builder.Append(");\n");
         }
 
@@ -458,7 +555,8 @@ internal static class ExchangeStructureWriter
     private static void AppendDataSections(
         Part21TextBuilder builder,
         ExchangeStructure structure,
-        IReadOnlyDictionary<EntityRegistration, ProjectedEntity> projected)
+        IReadOnlyDictionary<EntityRegistration, ProjectedEntity> projected,
+        Part21StringEncoding stringEncoding)
     {
         foreach (var section in structure.DataSections)
         {
@@ -469,15 +567,15 @@ internal static class ExchangeStructureWriter
             else
             {
                 builder.Append("DATA(");
-                AppendString(builder, section.Name);
+                AppendString(builder, section.Name, stringEncoding);
                 builder.Append(",(");
-                AppendString(builder, section.SchemaName.Value);
+                AppendSchemaIdentifier(builder, section.SchemaName.Value, stringEncoding);
                 builder.Append("));\n");
             }
 
             foreach (var registration in structure.Registrations.Where(item => ReferenceEquals(item.DataSection, section)))
             {
-                AppendEntity(builder, structure, registration, projected[registration]);
+                AppendEntity(builder, structure, registration, projected[registration], stringEncoding);
                 builder.Append('\n');
             }
 
@@ -485,7 +583,10 @@ internal static class ExchangeStructureWriter
         }
     }
 
-    private static void AppendAnchors(Part21TextBuilder builder, ExchangeStructure structure)
+    private static void AppendAnchors(
+        Part21TextBuilder builder,
+        ExchangeStructure structure,
+        Part21StringEncoding stringEncoding)
     {
         if (structure.AnchorEntries.Count == 0)
             return;
@@ -494,13 +595,21 @@ internal static class ExchangeStructureWriter
         foreach (var anchor in structure.AnchorEntries)
         {
             builder.Append('<').Append(anchor.Name.Value).Append(">=");
-            ParameterValueFormatter.Append(builder, anchor.Item, entity => ResolveName(structure, entity));
+            ParameterValueFormatter.Append(
+                builder,
+                anchor.Item,
+                entity => ResolveName(structure, entity),
+                stringEncoding);
             foreach (var tag in anchor.Tags)
             {
                 builder.Append('{')
                     .Append(tag.Name)
                     .Append(':');
-                ParameterValueFormatter.Append(builder, tag.Item, entity => ResolveName(structure, entity));
+                ParameterValueFormatter.Append(
+                    builder,
+                    tag.Item,
+                    entity => ResolveName(structure, entity),
+                    stringEncoding);
                 builder.Append('}');
             }
 
@@ -533,13 +642,14 @@ internal static class ExchangeStructureWriter
         Part21TextBuilder builder,
         ExchangeStructure structure,
         EntityRegistration registration,
-        ProjectedEntity projected)
+        ProjectedEntity projected,
+        Part21StringEncoding stringEncoding = Part21StringEncoding.Canonical)
     {
         builder.Append('#').Append(registration.Name.CanonicalDigits).Append('=');
         if (projected.Components.Count > 1)
             builder.Append('(');
         foreach (var component in projected.Components)
-            AppendComponent(builder, structure, component);
+            AppendComponent(builder, structure, component, stringEncoding);
         if (projected.Components.Count > 1)
             builder.Append(')');
         builder.Append(';');
@@ -548,14 +658,19 @@ internal static class ExchangeStructureWriter
     private static void AppendComponent(
         Part21TextBuilder builder,
         ExchangeStructure structure,
-        KeyValuePair<string, IReadOnlyList<ParameterValue>> component)
+        KeyValuePair<string, IReadOnlyList<ParameterValue>> component,
+        Part21StringEncoding stringEncoding)
     {
         builder.Append(component.Key).Append('(');
         for (var index = 0; index < component.Value.Count; index++)
         {
             if (index > 0)
                 builder.Append(',');
-            ParameterValueFormatter.Append(builder, component.Value[index], entity => ResolveName(structure, entity));
+            ParameterValueFormatter.Append(
+                builder,
+                component.Value[index],
+                entity => ResolveName(structure, entity),
+                stringEncoding);
         }
         builder.Append(')');
     }
@@ -567,18 +682,27 @@ internal static class ExchangeStructureWriter
             : throw new InvalidOperationException("A projected entity reference is not registered in this structure.");
     }
 
-    private static void AppendString(Part21TextBuilder builder, string value) =>
-        ParameterValueFormatter.Append(builder, ParameterValue.FromString(value), _ => default);
+    private static void AppendString(
+        Part21TextBuilder builder,
+        string value,
+        Part21StringEncoding stringEncoding) =>
+        ParameterValueFormatter.AppendString(builder, value, stringEncoding);
 
-    private static void AppendOptionalString(Part21TextBuilder builder, string? value)
+    private static void AppendOptionalString(
+        Part21TextBuilder builder,
+        string? value,
+        Part21StringEncoding stringEncoding)
     {
         if (value is null)
             builder.Append('$');
         else
-            AppendString(builder, value);
+            AppendString(builder, value, stringEncoding);
     }
 
-    private static void AppendStringList(Part21TextBuilder builder, IEnumerable<string> values)
+    private static void AppendStringList(
+        Part21TextBuilder builder,
+        IEnumerable<string> values,
+        Part21StringEncoding stringEncoding)
     {
         builder.Append('(');
         var first = true;
@@ -586,11 +710,32 @@ internal static class ExchangeStructureWriter
         {
             if (!first)
                 builder.Append(',');
-            AppendString(builder, value);
+            AppendString(builder, value, stringEncoding);
             first = false;
         }
         builder.Append(')');
     }
+
+    private static void AppendSchemaIdentifierList(
+        Part21TextBuilder builder,
+        IReadOnlyList<string> values,
+        Part21StringEncoding stringEncoding)
+    {
+        builder.Append('(');
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (index > 0)
+                builder.Append(',');
+            AppendSchemaIdentifier(builder, values[index], stringEncoding);
+        }
+        builder.Append(')');
+    }
+
+    private static void AppendSchemaIdentifier(
+        Part21TextBuilder builder,
+        string value,
+        Part21StringEncoding stringEncoding) =>
+        AppendString(builder, value.ToUpperInvariant(), stringEncoding);
 
     private static string FormatDetermination(SchemaPopulationDetermination determination) => determination switch
     {

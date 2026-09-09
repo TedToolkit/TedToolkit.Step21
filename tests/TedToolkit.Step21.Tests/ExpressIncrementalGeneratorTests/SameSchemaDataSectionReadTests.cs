@@ -103,7 +103,7 @@ public sealed class SameSchemaDataSectionReadTests
                     "DataSections[3] parameter 1 must be a list containing exactly one STRING schema name.",
                 ]);
             await Assert.That(exception.Diagnostics.All(diagnostic => diagnostic.SourceLocation is
-                { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
+            { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
         }
     }
 
@@ -172,7 +172,7 @@ public sealed class SameSchemaDataSectionReadTests
     private static string CreateExchange(string sections) => $$"""
         ISO-10303-21;
         HEADER;
-        FILE_DESCRIPTION(('section test'),'2;1');
+        FILE_DESCRIPTION(('section test'),'3;1');
         FILE_NAME('sections.p21','2026-08-22T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('section_read'));
         ENDSEC;

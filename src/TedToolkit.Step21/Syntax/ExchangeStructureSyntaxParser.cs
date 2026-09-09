@@ -12,6 +12,18 @@ internal static class ExchangeStructureSyntaxParser
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(filePath);
 
+        if (Part21StringTokenLimits.TryGetInvalidUnicodeScalarIndex(source, out var invalidIndex))
+        {
+            var (line, column) = GetLineAndColumn(source, invalidIndex);
+            throw new ExchangeStructureSyntaxException([
+                new Step21Diagnostic(
+                    "P21-SYNTAX-UNICODE-SCALAR",
+                    Step21DiagnosticSeverity.Error,
+                    "The exchange structure contains an unpaired UTF-16 surrogate outside the UCS codespace.",
+                    new SourceLocation(filePath, line, column)),
+            ]);
+        }
+
         var diagnostics = new List<Step21Diagnostic>();
         var input = new AntlrInputStream(source);
         var lexer = new STEPLexer(input);
@@ -24,6 +36,9 @@ internal static class ExchangeStructureSyntaxParser
         parser.AddErrorListener(new Part21SyntaxErrorListener<IToken>(filePath, "P21-SYNTAX-PARSER", diagnostics));
         var tree = parser.exchangeFile();
 
+        if (diagnostics.Count == 0)
+            ValidatePrintControlPlacement(tree, tokens, filePath, diagnostics);
+
         if (diagnostics.Count > 0)
         {
             ReclassifySignatureDiagnostics(tokens, diagnostics);
@@ -35,6 +50,110 @@ internal static class ExchangeStructureSyntaxParser
         }
 
         return new ExchangeStructureSyntaxVisitor(filePath).Create(tree);
+    }
+
+    private static void ValidatePrintControlPlacement(
+        STEPParser.ExchangeFileContext tree,
+        CommonTokenStream tokens,
+        string filePath,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        tokens.Fill();
+        ValidatePrintControlPlacement(tree.anchorSection(), tokens, filePath, diagnostics);
+        ValidatePrintControlPlacement(tree.referenceSection(), tokens, filePath, diagnostics);
+    }
+
+    private static void ValidatePrintControlPlacement(
+        ParserRuleContext? section,
+        CommonTokenStream tokens,
+        string filePath,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        if (section is null)
+            return;
+
+        for (var index = section.Start.TokenIndex; index <= section.Stop.TokenIndex; index++)
+        {
+            var token = tokens.Get(index);
+            if (token.Type != STEPLexer.PrintControl && !ContainsPrintControlDirective(token))
+                continue;
+
+            diagnostics.Add(new Step21Diagnostic(
+                "P21-SYNTAX-PRINT-CONTROL-CONTEXT",
+                Step21DiagnosticSeverity.Error,
+                "Print control directives are forbidden within ANCHOR and REFERENCE sections.",
+                new SourceLocation(filePath, Math.Max(1, token.Line), Math.Max(1, token.Column + 1))));
+        }
+    }
+
+    private static bool ContainsPrintControlDirective(IToken token)
+    {
+        if (token.Type is not (STEPLexer.String or STEPLexer.Binary))
+            return false;
+
+        var text = token.Text ?? string.Empty;
+        var end = Math.Max(1, text.Length - 1);
+        var stringToken = token.Type == STEPLexer.String;
+        for (var index = 1; index < end; index++)
+        {
+            var character = text[index];
+            if (IsIgnoredControl(character))
+                continue;
+
+            if (stringToken && character == '\'')
+            {
+                var next = NextSignificant(text, index + 1, end);
+                if (next < end && text[next] == '\'')
+                    index = next;
+                continue;
+            }
+
+            if (character != '\\')
+                continue;
+            var directive = NextSignificant(text, index + 1, end);
+            if (directive >= end)
+                continue;
+            if (stringToken && text[directive] == '\\')
+            {
+                index = directive;
+                continue;
+            }
+            if (text[directive] is not ('N' or 'F'))
+                continue;
+            var closing = NextSignificant(text, directive + 1, end);
+            if (closing < end && text[closing] == '\\')
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int NextSignificant(string text, int index, int end)
+    {
+        while (index < end && IsIgnoredControl(text[index]))
+            index++;
+        return index;
+    }
+
+    private static bool IsIgnoredControl(char character) => character <= '\u001F' || character == '\u007F';
+
+    private static (int Line, int Column) GetLineAndColumn(string source, int index)
+    {
+        var line = 1;
+        var column = 1;
+        for (var position = 0; position < index; position++)
+        {
+            if (source[position] == '\n')
+            {
+                line++;
+                column = 1;
+            }
+            else
+            {
+                column++;
+            }
+        }
+        return (line, column);
     }
 
     private static void ReclassifySignatureDiagnostics(

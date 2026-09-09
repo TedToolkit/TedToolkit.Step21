@@ -33,6 +33,7 @@ internal sealed class PublicContractTests
                 "Write(TextWriter) -> Void",
                 "Write(TextWriter, ExchangeStructureWriteOptions) -> Void",
                 "WriteEntity(TextWriter, Entity) -> Void",
+                "WriteEntity(TextWriter, Entity, Part21ProcessingLimits) -> Void",
             ]);
             await Assert.That(type.GetMethod("Replace")).IsNull();
         }
@@ -74,7 +75,7 @@ internal sealed class PublicContractTests
     {
         var structure = new ExchangeStructure(new HeaderSection(
             new FileDescription(["entities"], "3;1"),
-            new FileName("entities.p21", "2026-08-22T00:00:00", [], [], "Pre", "System", "Auth"),
+            new FileName("entities.p21", "2026-08-22T00:00:00", [string.Empty], [string.Empty], "Pre", "System", "Auth"),
             new FileSchema(["model"])));
         var section = new DataSection(new SchemaName("model"));
         structure.DataSections.Add(section);

@@ -155,7 +155,7 @@ Scenario: 不受信任的 distributed exchange structure 被有界处理
 
 <!-- change-prerequisite: none -->
 
-None. Ready from committed baseline `63b2757`; Active AP-004 and the approved corrected work-item map are present. The complete legally usable ISO 10303-11:2004 reference remains an external start condition only for ISO21-005.
+None. Ready from committed baseline `63b2757`; Active AP-004 and the approved parent contract are present. An independently authored, AI-usable ISO 10303-11:2004 semantic profile remains an external start condition only for the Part 11 semantic-closure item.
 
 <!-- section: delivery-brief -->
 ## Delivery disposition

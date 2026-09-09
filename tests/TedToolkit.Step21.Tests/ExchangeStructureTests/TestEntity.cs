@@ -32,8 +32,8 @@ internal sealed class TestSchemaDescriptor(string name) : SchemaDescriptor
 
 internal static class TestHeader
 {
-    internal static HeaderSection Create() => new(
-        new FileDescription(["test"], "3;1"),
-        new FileName("test.step", "2026-08-21T00:00:00+08:00", [], [], "tests", "tests", string.Empty),
+    internal static HeaderSection Create(string implementationLevel = "3;1") => new(
+        new FileDescription(["test"], implementationLevel),
+        new FileName("test.step", "2026-08-21T00:00:00+08:00", [string.Empty], [string.Empty], "tests", "tests", string.Empty),
         new FileSchema(["TEST_SCHEMA"]));
 }

@@ -44,7 +44,8 @@ internal static class ExchangeStructureReader
             resolutionContext: null,
             address: null,
             depth: 0,
-            Part21ProcessingLimits.Default);
+            Part21ProcessingLimits.Default,
+            requiresClass2ForMultiFileZip: false);
 
     internal static ExchangeStructure Read(
         string source,
@@ -52,7 +53,14 @@ internal static class ExchangeStructureReader
         ExchangeStructureReadOptions options)
     {
         var context = new Part21ResourceResolutionContext(descriptors, options);
-        return ReadCore(source, descriptors, context, context.RootAddress, depth: 0, options.ProcessingLimits);
+        return ReadCore(
+            source,
+            descriptors,
+            context,
+            context.RootAddress,
+            depth: 0,
+            options.ProcessingLimits,
+            requiresClass2ForMultiFileZip: false);
     }
 
     internal static ExchangeStructure Read(
@@ -60,13 +68,15 @@ internal static class ExchangeStructureReader
         IReadOnlyCollection<SchemaDescriptor> descriptors,
         Part21ResourceResolutionContext resolutionContext,
         Part21ResourceResolutionContext.DocumentAddress address,
-        int depth) => ReadCore(
+        int depth,
+        bool requiresClass2ForMultiFileZip) => ReadCore(
             source,
             descriptors,
             resolutionContext,
             address,
             depth,
-            resolutionContext.ProcessingLimits);
+            resolutionContext.ProcessingLimits,
+            requiresClass2ForMultiFileZip);
 
     internal static string ReadToEnd(TextReader source, Part21ProcessingLimits limits)
     {
@@ -107,11 +117,19 @@ internal static class ExchangeStructureReader
         Part21ResourceResolutionContext? resolutionContext,
         Part21ResourceResolutionContext.DocumentAddress? address,
         int depth,
-        Part21ProcessingLimits processingLimits)
+        Part21ProcessingLimits processingLimits,
+        bool requiresClass2ForMultiFileZip)
     {
         if (source.Length > processingLimits.MaximumInputCharacters)
             ThrowInputLimit();
         var syntax = ExchangeStructureSyntaxParser.Parse(source, address?.Key ?? SOURCE_NAME);
+        var graphFeatures = Part21SyntaxLimitValidator.Validate(
+            syntax,
+            processingLimits,
+            Part21ImplementationLevelValidator.GetReadFeatureScan(syntax));
+        Part21ImplementationLevelValidator.ValidateForRead(syntax, graphFeatures);
+        if (requiresClass2ForMultiFileZip)
+            Part21ImplementationLevelValidator.ValidateForMultiFileZip(syntax);
         syntax.ThrowIfUnsupportedOperationsRequired(retainExternalReferenceEvidence: true);
         ThrowIfReadCapabilityIsExceeded(syntax, allowValueInstanceParameters: resolutionContext is not null);
         var signatures = syntax.SignatureSections.Count == 0
@@ -156,6 +174,15 @@ internal static class ExchangeStructureReader
             syntax.Header.AdditionalEntities,
             header.FileSchema.SchemaIdentifiers,
             bindingDiagnostics));
+        var boundDataSections = structure.DataSections.ToArray();
+        structure.SetSectionLanguages(BindSectionLanguages(
+            syntax.Header.AdditionalEntities,
+            boundDataSections,
+            bindingDiagnostics));
+        structure.SetSectionContexts(BindSectionContexts(
+            syntax.Header.AdditionalEntities,
+            boundDataSections,
+            bindingDiagnostics));
         var occurrenceNames = new HashSet<EntityInstanceName>();
         var allocations = sectionBindings.SelectMany(binding => AllocateEntities(
                 binding.Syntax,
@@ -192,6 +219,12 @@ internal static class ExchangeStructureReader
         _ = structure.TryGetSchemaDescriptor(
             new SchemaName(header.FileSchema.SchemaIdentifiers[0]),
             out var firstSchemaDescriptor);
+        structure.SetUserDefinedHeaderEntities(BindUserDefinedHeaderEntities(
+            syntax.Header.AdditionalEntities,
+            entitiesByName,
+            externalNames,
+            firstSchemaDescriptor,
+            bindingDiagnostics));
         BindAnchors(
             syntax.Anchor,
             structure,
@@ -387,11 +420,17 @@ internal static class ExchangeStructureReader
             if (string.Equals(additionalHeader.Name, "SCHEMA_POPULATION", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            diagnostics.Add(new Step21Diagnostic(
-                "P21-CAP-HEADER-ENTITY",
-                Step21DiagnosticSeverity.Error,
-                $"Operational retention of additional header entity '{additionalHeader.Name}' is not implemented.",
-                additionalHeader.Span.Start));
+            if (string.Equals(additionalHeader.Name, "SECTION_LANGUAGE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(additionalHeader.Name, "SECTION_CONTEXT", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (additionalHeader.Name.StartsWith('!'))
+                continue;
+
+            // Clause 8.3 requires application-defined header keywords to begin with '!'.
+            // Unknown ordinary keywords are invalid input, not an unsupported processor capability.
         }
 
         foreach (var headerValue in new[]
@@ -731,6 +770,166 @@ internal static class ExchangeStructureReader
         return definitions.AsReadOnly();
     }
 
+    private static IReadOnlyList<SectionLanguage> BindSectionLanguages(
+        IReadOnlyList<HeaderEntitySyntax> additionalEntities,
+        IReadOnlyList<DataSection> dataSections,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var declarations = new List<SectionLanguage>();
+        var declaredSections = new HashSet<string?>(StringComparer.Ordinal);
+        foreach (var syntax in additionalEntities.Where(entity => string.Equals(
+                     entity.Name,
+                     "SECTION_LANGUAGE",
+                     StringComparison.OrdinalIgnoreCase)))
+        {
+            if (syntax.Parameters.Count != 2)
+            {
+                diagnostics.Add(SectionHeaderDiagnostic(
+                    syntax,
+                    $"SECTION_LANGUAGE requires 2 parameters, but received {syntax.Parameters.Count.ToString(CultureInfo.InvariantCulture)}."));
+                continue;
+            }
+
+            var valid = TryBindSectionHeaderTarget(syntax, dataSections, declaredSections, diagnostics, out var sectionName);
+            var languageCode = BindSectionHeaderString(syntax, 1, diagnostics);
+            if (languageCode is null)
+            {
+                valid = false;
+            }
+            else if (!Iso639Part2BibliographicCodes.Contains(languageCode))
+            {
+                diagnostics.Add(SectionHeaderDiagnostic(
+                    syntax.Parameters[1],
+                    $"SECTION_LANGUAGE code '{languageCode}' is not an ISO 639-2 Alpha-3 bibliographic code."));
+                valid = false;
+            }
+
+            if (valid)
+                declarations.Add(new SectionLanguage(sectionName, languageCode!));
+        }
+
+        return declarations.AsReadOnly();
+    }
+
+    private static IReadOnlyList<SectionContext> BindSectionContexts(
+        IReadOnlyList<HeaderEntitySyntax> additionalEntities,
+        IReadOnlyList<DataSection> dataSections,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var declarations = new List<SectionContext>();
+        var declaredSections = new HashSet<string?>(StringComparer.Ordinal);
+        foreach (var syntax in additionalEntities.Where(entity => string.Equals(
+                     entity.Name,
+                     "SECTION_CONTEXT",
+                     StringComparison.OrdinalIgnoreCase)))
+        {
+            if (syntax.Parameters.Count != 2)
+            {
+                diagnostics.Add(SectionHeaderDiagnostic(
+                    syntax,
+                    $"SECTION_CONTEXT requires 2 parameters, but received {syntax.Parameters.Count.ToString(CultureInfo.InvariantCulture)}."));
+                continue;
+            }
+
+            var valid = TryBindSectionHeaderTarget(syntax, dataSections, declaredSections, diagnostics, out var sectionName);
+            var list = syntax.Parameters[1];
+            if (list.Kind != Part21ValueKind.List || list.Values.Count == 0)
+            {
+                diagnostics.Add(SectionHeaderDiagnostic(
+                    list,
+                    "SECTION_CONTEXT parameter 1 must be a non-empty list of STRING context identifiers."));
+                valid = false;
+            }
+
+            var identifiers = new List<string>(list.Values.Count);
+            foreach (var value in list.Values)
+            {
+                if (value.Kind != Part21ValueKind.String || !TryDecodeString(value, out var identifier))
+                {
+                    diagnostics.Add(SectionHeaderDiagnostic(
+                        value,
+                        "SECTION_CONTEXT parameter 1 must contain only valid STRING context identifiers."));
+                    valid = false;
+                    continue;
+                }
+
+                identifiers.Add(identifier);
+            }
+
+            if (valid)
+                declarations.Add(new SectionContext(sectionName, identifiers));
+        }
+
+        return declarations.AsReadOnly();
+    }
+
+    private static bool TryBindSectionHeaderTarget(
+        HeaderEntitySyntax syntax,
+        IReadOnlyList<DataSection> dataSections,
+        ISet<string?> declaredSections,
+        ICollection<Step21Diagnostic> diagnostics,
+        out string? sectionName)
+    {
+        var parameter = syntax.Parameters[0];
+        if (parameter.Kind == Part21ValueKind.Omitted)
+        {
+            sectionName = null;
+        }
+        else if (parameter.Kind == Part21ValueKind.String && TryDecodeString(parameter, out var decoded))
+        {
+            sectionName = decoded;
+        }
+        else
+        {
+            diagnostics.Add(SectionHeaderDiagnostic(
+                parameter,
+                $"{syntax.Name} parameter 0 must be $ or a valid STRING data-section name."));
+            sectionName = null;
+            return false;
+        }
+
+        var valid = true;
+        if (!declaredSections.Add(sectionName))
+        {
+            diagnostics.Add(SectionHeaderDiagnostic(
+                parameter,
+                sectionName is null
+                    ? $"{syntax.Name} repeats the default declaration."
+                    : $"{syntax.Name} repeats data-section name '{sectionName}'."));
+            valid = false;
+        }
+
+        var targetSectionName = sectionName;
+        if (targetSectionName is not null
+            && !dataSections.Any(section => string.Equals(section.Name, targetSectionName, StringComparison.Ordinal)))
+        {
+            diagnostics.Add(SectionHeaderDiagnostic(
+                parameter,
+                $"{syntax.Name} names data section '{targetSectionName}', which does not occur in this exchange structure."));
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    private static string? BindSectionHeaderString(
+        HeaderEntitySyntax syntax,
+        int parameterIndex,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var parameter = syntax.Parameters[parameterIndex];
+        if (parameter.Kind == Part21ValueKind.String && TryDecodeString(parameter, out var decoded))
+            return decoded;
+
+        diagnostics.Add(SectionHeaderDiagnostic(
+            parameter,
+            $"{syntax.Name} parameter {parameterIndex.ToString(CultureInfo.InvariantCulture)} must be a valid STRING."));
+        return null;
+    }
+
+    private static Step21Diagnostic SectionHeaderDiagnostic(Part21SyntaxNode syntax, string message) =>
+        new("P21-BIND-SECTION-HEADER", Step21DiagnosticSeverity.Error, message, syntax.Span.Start);
+
     private static IReadOnlyList<SchemaPopulationExternalFile> BindSchemaPopulationExternalFiles(
         IReadOnlyList<HeaderEntitySyntax> additionalEntities,
         ICollection<Step21Diagnostic> diagnostics)
@@ -790,7 +989,8 @@ internal static class ExchangeStructureReader
                 continue;
             }
 
-            if (!Uri.TryCreate(locationText, UriKind.RelativeOrAbsolute, out var location)
+            if (!IsValidPopulationLocation(locationText)
+                || !Uri.TryCreate(locationText, UriKind.RelativeOrAbsolute, out var location)
                 || location.OriginalString.Length == 0)
             {
                 diagnostics.Add(PopulationDiagnostic(
@@ -817,6 +1017,19 @@ internal static class ExchangeStructureReader
         }
 
         return result.AsReadOnly();
+    }
+
+    private static bool IsValidPopulationLocation(string value)
+    {
+        try
+        {
+            Part21NameValidation.ValidateResource(value, nameof(value));
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static bool TryBindRequiredPopulationString(
@@ -947,7 +1160,7 @@ internal static class ExchangeStructureReader
             if (!valid)
                 continue;
 
-            var dataSection = new DataSection(new SchemaName(schemaName!), name);
+            var dataSection = new DataSection(new SchemaName(schemaName!), name!);
             structure.DataSections.Add(dataSection);
             _ = structure.TryGetSchemaDescriptor(dataSection.SchemaName, out var descriptor);
             bindings.Add(new DataSectionBinding(index, syntax, dataSection, descriptor));
@@ -1149,6 +1362,160 @@ internal static class ExchangeStructureReader
 
         return new ExternalOccurrenceNames(entityNames, valueNames);
     }
+
+    private static IReadOnlyList<UserDefinedHeaderEntity> BindUserDefinedHeaderEntities(
+        IReadOnlyList<HeaderEntitySyntax> additionalEntities,
+        IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
+        ExternalOccurrenceNames externalNames,
+        SchemaDescriptor? firstSchemaDescriptor,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        var entities = new List<UserDefinedHeaderEntity>();
+        var sawUserDefined = false;
+        foreach (var syntax in additionalEntities)
+        {
+            if (!syntax.Name.StartsWith('!'))
+            {
+                if (sawUserDefined && IsStandardAdditionalHeaderName(syntax.Name))
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-BIND-HEADER-ORDER",
+                        Step21DiagnosticSeverity.Error,
+                        $"Standard header entity '{syntax.Name}' occurs after a user-defined header entity.",
+                        syntax.Span.Start));
+                }
+                else if (!IsStandardAdditionalHeaderName(syntax.Name))
+                {
+                    diagnostics.Add(new Step21Diagnostic(
+                        "P21-BIND-HEADER-ENTITY",
+                        Step21DiagnosticSeverity.Error,
+                        $"Additional header entity '{syntax.Name}' is neither a standard header entity nor a user-defined keyword beginning with '!'.",
+                        syntax.Span.Start));
+                }
+                continue;
+            }
+
+            sawUserDefined = true;
+            var parameters = new List<ParameterValue>(syntax.Parameters.Count);
+            foreach (var parameter in syntax.Parameters)
+            {
+                parameters.Add(BindUserDefinedHeaderValue(
+                    parameter,
+                    entitiesByName,
+                    externalNames,
+                    firstSchemaDescriptor,
+                    diagnostics));
+            }
+
+            entities.Add(new UserDefinedHeaderEntity(syntax.Name, parameters));
+        }
+
+        return entities.AsReadOnly();
+    }
+
+    private static ParameterValue BindUserDefinedHeaderValue(
+        ValueSyntax value,
+        IReadOnlyDictionary<EntityInstanceName, Entity> entitiesByName,
+        ExternalOccurrenceNames externalNames,
+        SchemaDescriptor? firstSchemaDescriptor,
+        ICollection<Step21Diagnostic> diagnostics)
+    {
+        try
+        {
+            if (value.Kind == Part21ValueKind.List)
+            {
+                return ParameterValue.FromAggregate(value.Values.Select(child => BindUserDefinedHeaderValue(
+                    child,
+                    entitiesByName,
+                    externalNames,
+                    firstSchemaDescriptor,
+                    diagnostics)));
+            }
+
+            if (value.Kind == Part21ValueKind.Typed)
+            {
+                return ParameterValue.FromTyped(
+                    value.TypeName!,
+                    BindUserDefinedHeaderValue(
+                        value.Values[0],
+                        entitiesByName,
+                        externalNames,
+                        firstSchemaDescriptor,
+                        diagnostics));
+            }
+
+            if (value.Kind == Part21ValueKind.EntityInstanceName)
+            {
+                var name = new EntityInstanceName(value.Text[1..]);
+                if (entitiesByName.TryGetValue(name, out var entity))
+                    return ParameterValue.FromEntity(entity);
+                if (externalNames.Entities.ContainsKey(name))
+                    return ParameterValue.FromEntityInstance(name);
+
+                diagnostics.Add(UserDefinedHeaderValueDiagnostic(
+                    value,
+                    $"Entity occurrence '{name}' is not defined in this exchange structure."));
+                return ParameterValue.FromEntityInstance(name);
+            }
+
+            if (value.Kind == Part21ValueKind.ValueInstanceName)
+            {
+                var name = new ValueInstanceName(value.Text[1..]);
+                if (!externalNames.Values.ContainsKey(name))
+                {
+                    diagnostics.Add(UserDefinedHeaderValueDiagnostic(
+                        value,
+                        $"Value occurrence '{name}' is not defined in the reference section."));
+                }
+                return ParameterValue.FromValueInstance(name);
+            }
+
+            if (value.Kind == Part21ValueKind.ConstantEntityName)
+            {
+                var name = new ConstantEntityName(value.Text[1..]);
+                if (firstSchemaDescriptor is null || !firstSchemaDescriptor.ContainsConstantEntity(name.Value))
+                {
+                    diagnostics.Add(UserDefinedHeaderValueDiagnostic(
+                        value,
+                        $"Entity constant '{name}' is not defined by the first FILE_SCHEMA schema."));
+                }
+                return ParameterValue.FromConstantEntity(name);
+            }
+
+            if (value.Kind == Part21ValueKind.ConstantValueName)
+            {
+                var name = new ConstantValueName(value.Text[1..]);
+                if (firstSchemaDescriptor is null || !firstSchemaDescriptor.ContainsConstantValue(name.Value))
+                {
+                    diagnostics.Add(UserDefinedHeaderValueDiagnostic(
+                        value,
+                        $"Value constant '{name}' is not defined by the first FILE_SCHEMA schema."));
+                }
+                return ParameterValue.FromConstantValue(name);
+            }
+
+            return ConvertNonReferenceParameter(value);
+        }
+        catch (Exception exception) when (exception is FormatException
+            or ArgumentOutOfRangeException
+            or OverflowException
+            or InvalidOperationException)
+        {
+            diagnostics.Add(UserDefinedHeaderValueDiagnostic(
+                value,
+                "The user-defined header parameter does not denote a valid mapped Part 21 value."));
+            return ParameterValue.Omitted;
+        }
+    }
+
+    private static bool IsStandardAdditionalHeaderName(string name) =>
+        name.Equals("SCHEMA_POPULATION", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("FILE_POPULATION", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("SECTION_LANGUAGE", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("SECTION_CONTEXT", StringComparison.OrdinalIgnoreCase);
+
+    private static Step21Diagnostic UserDefinedHeaderValueDiagnostic(Part21SyntaxNode syntax, string message) =>
+        new("P21-BIND-USER-HEADER", Step21DiagnosticSeverity.Error, message, syntax.Span.Start);
 
     private static void BindAnchors(
         AnchorSectionSyntax? section,
@@ -1771,12 +2138,10 @@ internal static class Part21LexicalValueDecoder
             }
             else if (Matches(source, index, "\\N\\"))
             {
-                _ = result.Append('\n');
                 index += 3;
             }
             else if (Matches(source, index, "\\F\\"))
             {
-                _ = result.Append('\f');
                 index += 3;
             }
             else if (index + 3 < source.Length && source[index] == '\\' && source[index + 1] == 'P'
@@ -1811,7 +2176,10 @@ internal static class Part21LexicalValueDecoder
             }
         }
 
-        return result.ToString();
+        var decoded = result.ToString();
+        if (!Part21StringTokenLimits.ContainsOnlyUnicodeScalars(decoded))
+            throw new FormatException("A Part 21 STRING must contain only valid UCS scalar values.");
+        return decoded;
     }
 
     internal static BinaryValue DecodeBinary(string text)
@@ -1820,18 +2188,29 @@ internal static class Part21LexicalValueDecoder
             .Replace("\\N\\", string.Empty, StringComparison.Ordinal)
             .Replace("\\F\\", string.Empty, StringComparison.Ordinal);
         var unusedBits = normalized[0] - '0';
-        if (unusedBits > (normalized.Length - 1) * 4)
+        if (unusedBits is < 0 or > 3 || unusedBits > (normalized.Length - 1) * 4)
             throw new FormatException("The BINARY unused-bit count exceeds the encoded bit count.");
         var builder = new StringBuilder(Math.Max(0, (normalized.Length - 1) * 4 - unusedBits));
+        var encodedBitIndex = 0;
         foreach (var character in normalized.AsSpan(1))
         {
             var value = HexValue(character);
             for (var bit = 3; bit >= 0; bit--)
-                _ = builder.Append((value & 1 << bit) == 0 ? '0' : '1');
+            {
+                var isSet = (value & 1 << bit) != 0;
+                if (encodedBitIndex < unusedBits)
+                {
+                    if (isSet)
+                        throw new FormatException("The BINARY left-fill bits must be zero.");
+                }
+                else
+                {
+                    _ = builder.Append(isSet ? '1' : '0');
+                }
+                encodedBitIndex++;
+            }
         }
 
-        if (unusedBits > 0)
-            builder.Length -= unusedBits;
         return new BinaryValue(builder.ToString());
     }
 
@@ -1847,25 +2226,9 @@ internal static class Part21LexicalValueDecoder
             if (width == 4)
             {
                 var character = (char)codePoint;
-                if (char.IsHighSurrogate(character))
-                {
-                    var nextIndex = index + width;
-                    if (Matches(source, nextIndex, "\\X0\\"))
-                        throw new FormatException("An X2 high surrogate must be followed by a low surrogate.");
-                    var low = (char)ParseHex(source.Slice(nextIndex, width));
-                    if (!char.IsLowSurrogate(low))
-                        throw new FormatException("An X2 high surrogate must be followed by a low surrogate.");
-                    _ = result.Append(character).Append(low);
-                    index += width;
-                }
-                else if (char.IsLowSurrogate(character))
-                {
-                    throw new FormatException("An X2 low surrogate must follow a high surrogate.");
-                }
-                else
-                {
-                    _ = result.Append(character);
-                }
+                if (char.IsSurrogate(character))
+                    throw new FormatException("An X2 group must encode one BMP Unicode scalar value.");
+                _ = result.Append(character);
             }
             else
                 _ = result.Append(char.ConvertFromUtf32(codePoint));

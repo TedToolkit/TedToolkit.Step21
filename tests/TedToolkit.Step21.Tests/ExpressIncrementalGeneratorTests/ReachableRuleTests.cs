@@ -35,7 +35,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["rule_model"])),
                     [TedToolkit.Step21.Generated.RuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("rule_model"));
@@ -78,7 +78,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dependency_model"])),
                     [TedToolkit.Step21.Generated.DependencyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dependency_model"));
@@ -114,7 +114,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["type_rule_model"])),
                     [TedToolkit.Step21.Generated.TypeRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("type_rule_model"));
@@ -149,7 +149,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unique_rule_model"])),
                     [TedToolkit.Step21.Generated.UniqueRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unique_rule_model"));
@@ -213,7 +213,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["global_rule_model"])),
                     [TedToolkit.Step21.Generated.GlobalRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("global_rule_model"));
@@ -263,7 +263,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unqualified_enumeration_model"])),
                     [TedToolkit.Step21.Generated.UnqualifiedEnumerationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unqualified_enumeration_model"));
@@ -316,7 +316,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["scalar_generic_choose_model"])),
                     [TedToolkit.Step21.Generated.ScalarGenericChooseModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("scalar_generic_choose_model"));
@@ -372,7 +372,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_membership_model"])),
                     [TedToolkit.Step21.Generated.SelectMembershipModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_membership_model"));
@@ -468,7 +468,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_typeof_model"])),
                     [TedToolkit.Step21.Generated.SelectTypeofModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_typeof_model"));
@@ -565,7 +565,7 @@ public sealed class ReachableRuleTests
                     ISO-10303-21;
                     HEADER;
                     FILE_DESCRIPTION(('dimensional select'),'2;1');
-                    FILE_NAME('dimensional-select.step','2026-08-26T00:00:00',(),(),'tests','tests','');
+                    FILE_NAME('dimensional-select.step','2026-08-26T00:00:00',(''),(''),'tests','tests','');
                     FILE_SCHEMA(('DIMENSIONAL_SELECT_MODEL'));
                     ENDSEC;
                     DATA;
@@ -632,7 +632,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["aggregate_typeof_model"])),
                     [TedToolkit.Step21.Generated.AggregateTypeofModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("aggregate_typeof_model"));
@@ -690,7 +690,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["builtin_shadowing_model"])),
                     [TedToolkit.Step21.Generated.BuiltinShadowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("builtin_shadowing_model"));
@@ -848,7 +848,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["function_select_argument_model"])),
                     [TedToolkit.Step21.Generated.FunctionSelectArgumentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("function_select_argument_model"));
@@ -1267,7 +1267,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["dynamic applications"], "3;1"),
-                        new FileName("dynamic-applications.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("dynamic-applications.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dynamic_entity_application_model"])),
                     [TedToolkit.Step21.Generated.DynamicEntityApplicationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dynamic_entity_application_model"));
@@ -1383,7 +1383,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["set entity assignment"], "3;1"),
-                        new FileName("set-entity-assignment.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("set-entity-assignment.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["set_entity_assignment_model"])),
                     [TedToolkit.Step21.Generated.SetEntityAssignmentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("set_entity_assignment_model"));
@@ -1539,7 +1539,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_assignment_model"])),
                     [TedToolkit.Step21.Generated.SelectAssignmentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_assignment_model"));
@@ -1744,7 +1744,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_assignment_widening_model"])),
                     [TedToolkit.Step21.Generated.NumericAssignmentWideningModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_assignment_widening_model"));
@@ -1820,7 +1820,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_nvl_model"])),
                     [TedToolkit.Step21.Generated.NumericNvlModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_nvl_model"));
@@ -1956,7 +1956,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["nullable_aggregate_initializer_model"])),
                     [TedToolkit.Step21.Generated.NullableAggregateInitializerModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("nullable_aggregate_initializer_model"));
@@ -2100,7 +2100,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["defined_return_boundary_model"])),
                     [TedToolkit.Step21.Generated.DefinedReturnBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("defined_return_boundary_model"));
@@ -2140,7 +2140,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_application_widening_model"])),
                     [TedToolkit.Step21.Generated.NumericApplicationWideningModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_application_widening_model"));
@@ -2237,7 +2237,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["set_application_initializer_model"])),
                     [TedToolkit.Step21.Generated.SetApplicationInitializerModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("set_application_initializer_model"));
@@ -2328,7 +2328,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["optional_defined_value_model"])),
                     [TedToolkit.Step21.Generated.OptionalDefinedValueModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("optional_defined_value_model"));
@@ -2362,7 +2362,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_attribute_qualifier_model"])),
                     [TedToolkit.Step21.Generated.SelectAttributeQualifierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_attribute_qualifier_model"));
@@ -2455,7 +2455,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_lexical_narrowing_model"])),
                     [TedToolkit.Step21.Generated.SelectLexicalNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_lexical_narrowing_model"));
@@ -2582,7 +2582,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["qualified path narrowing"], "3;1"),
-                        new FileName("qualified-path.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("qualified-path.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_path_narrowing_model"])),
                     [TedToolkit.Step21.Generated.QualifiedPathNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_path_narrowing_model"));
@@ -2691,7 +2691,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["sizeof branch determinacy"], "3;1"),
-                        new FileName("sizeof-branch.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("sizeof-branch.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["sizeof_branch_determinacy_model"])),
                     [TedToolkit.Step21.Generated.SizeofBranchDeterminacyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("sizeof_branch_determinacy_model"));
@@ -2787,7 +2787,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["assigned local determinacy"], "3;1"),
-                        new FileName("assigned-local.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("assigned-local.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["assigned_local_determinacy_model"])),
                     [TedToolkit.Step21.Generated.AssignedLocalDeterminacyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("assigned_local_determinacy_model"));
@@ -2932,7 +2932,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_scalar_narrowing_model"])),
                     [TedToolkit.Step21.Generated.SelectScalarNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_scalar_narrowing_model"));
@@ -3043,7 +3043,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_group_qualifier_model"])),
                     [TedToolkit.Step21.Generated.SelectGroupQualifierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_group_qualifier_model"));
@@ -3172,7 +3172,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
                     [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
@@ -3192,7 +3192,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
                     [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
@@ -3206,7 +3206,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
                     [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
@@ -3252,7 +3252,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["string_concat_model"])),
                     [TedToolkit.Step21.Generated.StringConcatModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("string_concat_model"));
@@ -3358,7 +3358,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_value_equality_model"])),
                     [TedToolkit.Step21.Generated.SelectValueEqualityModel.SchemaDescriptor.Instance]);
                 section = new DataSection(new SchemaName("select_value_equality_model"));
@@ -3395,7 +3395,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_select_value_equality_model"])),
                     [TedToolkit.Step21.Generated.EntitySelectValueEqualityModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_select_value_equality_model"));
@@ -3498,7 +3498,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_instance_equality_model"])),
                     [TedToolkit.Step21.Generated.SelectInstanceEqualityModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_instance_equality_model"));
@@ -3594,7 +3594,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_usedin_carrier_model"])),
                     [TedToolkit.Step21.Generated.SelectUsedinCarrierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_usedin_carrier_model"));
@@ -3776,7 +3776,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_value_cycle_model"])),
                     [TedToolkit.Step21.Generated.EntityValueCycleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_value_cycle_model"));
@@ -3872,7 +3872,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_value_aggregate_model"])),
                     [TedToolkit.Step21.Generated.EntityValueAggregateModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_value_aggregate_model"));
@@ -3969,7 +3969,7 @@ public sealed class ReachableRuleTests
                     ISO-10303-21;
                     HEADER;
                     FILE_DESCRIPTION(('rules'),'3;1');
-                    FILE_NAME('rules.step','2026-08-24T00:00:00+08:00', (), (),'tests','tests','');
+                    FILE_NAME('rules.step','2026-08-24T00:00:00+08:00', (''), (''),'tests','tests','');
                     FILE_SCHEMA(('entity_value_complex_model'));
                     ENDSEC;
                     DATA;
@@ -4088,7 +4088,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unique_value_model"])),
                     [TedToolkit.Step21.Generated.UniqueValueModel.SchemaDescriptor.Instance]);
                 section = new DataSection(new SchemaName("unique_value_model"));
@@ -4140,7 +4140,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["algorithm"], "3;1"),
-                        new FileName("algorithm.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("algorithm.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unsupported_model"])),
                     [TedToolkit.Step21.Generated.UnsupportedModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unsupported_model"));
@@ -4241,7 +4241,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["indeterminate function"], "3;1"),
-                        new FileName("indeterminate-function.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("indeterminate-function.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["indeterminate_function_model"])),
                     [TedToolkit.Step21.Generated.IndeterminateFunctionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("indeterminate_function_model"));
@@ -4292,7 +4292,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["generic list"], "3;1"),
-                        new FileName("generic-list.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("generic-list.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["inferred_generic_list_model"])),
                     [TedToolkit.Step21.Generated.InferredGenericListModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("inferred_generic_list_model"));
@@ -4333,7 +4333,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["number index"], "3;1"),
-                        new FileName("number-index.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("number-index.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["number_index_model"])),
                     [TedToolkit.Step21.Generated.NumberIndexModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("number_index_model"));
@@ -4459,7 +4459,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["safe index controls"], "3;1"),
-                        new FileName("safe-index-controls.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("safe-index-controls.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["safe_index_control_model"])),
                     [TedToolkit.Step21.Generated.SafeIndexControlModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("safe_index_control_model"));
@@ -4513,7 +4513,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["qualified safe index"], "3;1"),
-                        new FileName("qualified-safe-index.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("qualified-safe-index.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_safe_index_model"])),
                     [TedToolkit.Step21.Generated.QualifiedSafeIndexModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_safe_index_model"));
@@ -4740,7 +4740,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["flow fact lifecycle"], "3;1"),
-                        new FileName("flow-fact.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("flow-fact.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["flow_fact_lifecycle_model"])),
                     [TedToolkit.Step21.Generated.FlowFactLifecycleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("flow_fact_lifecycle_model"));
@@ -4879,7 +4879,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["dynamic generic array"], "3;1"),
-                        new FileName("dynamic-generic-array.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("dynamic-generic-array.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dynamic_generic_array_model"])),
                     [TedToolkit.Step21.Generated.DynamicGenericArrayModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dynamic_generic_array_model"));
@@ -4991,7 +4991,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["expected generic bag"], "3;1"),
-                        new FileName("expected-generic-bag.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("expected-generic-bag.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expected_generic_bag_model"])),
                     [TedToolkit.Step21.Generated.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expected_generic_bag_model"));
@@ -5012,7 +5012,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["bag index controls"], "3;1"),
-                        new FileName("bag-index-controls.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("bag-index-controls.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expected_generic_bag_model"])),
                     [TedToolkit.Step21.Generated.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expected_generic_bag_model"));
@@ -5070,8 +5070,8 @@ public sealed class ReachableRuleTests
                         new FileName(
                             "derived-recursion.step",
                             "2026-08-28T00:00:00+08:00",
-                            [],
-                            [],
+                            [""],
+                            [""],
                             "tests",
                             "tests",
                             ""),
@@ -5165,8 +5165,8 @@ public sealed class ReachableRuleTests
                         new FileName(
                             "algorithm-control.step",
                             "2026-08-28T00:00:00+08:00",
-                            [],
-                            [],
+                            [""],
+                            [""],
                             "tests",
                             "tests",
                             ""),
@@ -5212,7 +5212,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["recursive"], "3;1"),
-                        new FileName("recursive.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("recursive.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["self_recursive_model"])),
                     [TedToolkit.Step21.Generated.SelfRecursiveModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("self_recursive_model"));
@@ -5257,7 +5257,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["mutual"], "3;1"),
-                        new FileName("mutual.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("mutual.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["mutually_recursive_model"])),
                     [TedToolkit.Step21.Generated.MutuallyRecursiveModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("mutually_recursive_model"));
@@ -5311,7 +5311,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["model context"], "3;1"),
-                        new FileName("model.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("model.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["model_context_model"])),
                     [TedToolkit.Step21.Generated.ModelContextModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("model_context_model"));
@@ -5446,7 +5446,7 @@ public sealed class ReachableRuleTests
                     ISO-10303-21;
                     HEADER;
                     FILE_DESCRIPTION(('singular inverse'),'3;1');
-                    FILE_NAME('singular.step','2026-08-27T00:00:00', (), (),'tests','tests','');
+                    FILE_NAME('singular.step','2026-08-27T00:00:00', (''), (''),'tests','tests','');
                     FILE_SCHEMA(('singular_inverse_model'));
                     ENDSEC;
                     DATA;
@@ -5498,7 +5498,7 @@ public sealed class ReachableRuleTests
                     ISO-10303-21;
                     HEADER;
                     FILE_DESCRIPTION(('singular inverse'),'3;1');
-                    FILE_NAME('singular.step','2026-08-27T00:00:00', (), (),'tests','tests','');
+                    FILE_NAME('singular.step','2026-08-27T00:00:00', (''), (''),'tests','tests','');
                     FILE_SCHEMA(('singular_inverse_model'));
                     ENDSEC;
                     DATA;
@@ -5568,7 +5568,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["singular inverse"], "3;1"),
-                        new FileName("singular.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("singular.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["singular_inverse_model"])),
                     [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
                 structure.DataSections.Add(new DataSection(new SchemaName("singular_inverse_model")));
@@ -5687,7 +5687,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["mixed order"], "3;1"),
-                        new FileName("mixed.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("mixed.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["singular_inverse_order_model"])),
                     [TedToolkit.Step21.Generated.SingularInverseOrderModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("singular_inverse_order_model"));
@@ -5755,7 +5755,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["symbolic_bound_model"])),
                     [TedToolkit.Step21.Generated.SymbolicBoundModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("symbolic_bound_model"));
@@ -5789,7 +5789,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expression_bound_model"])),
                     [TedToolkit.Step21.Generated.ExpressionBoundModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expression_bound_model"));
@@ -5835,7 +5835,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["rules"], "3;1"),
-                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["inherited_rule_model"])),
                     [TedToolkit.Step21.Generated.InheritedRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("inherited_rule_model"));
@@ -5910,7 +5910,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["complex constructor"], "3;1"),
-                        new FileName("complex-constructor.step", "2026-08-24T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("complex-constructor.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["complex_constructor_model"])),
                     [TedToolkit.Step21.Generated.ComplexConstructorModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("complex_constructor_model"));
@@ -6096,7 +6096,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["entity aggregate lub"], "3;1"),
-                        new FileName("entity-aggregate-lub.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("entity-aggregate-lub.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_aggregate_lub_model"])),
                     [TedToolkit.Step21.Generated.EntityAggregateLubModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_aggregate_lub_model"));
@@ -6224,7 +6224,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["aggregate select union"], "3;1"),
-                        new FileName("aggregate-select-union.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("aggregate-select-union.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["aggregate_select_union_model"])),
                     [TedToolkit.Step21.Generated.AggregateSelectUnionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("aggregate_select_union_model"));
@@ -6405,7 +6405,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["qualified assignment unknown"], "3;1"),
-                        new FileName("qualified-assignment-unknown.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("qualified-assignment-unknown.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_assignment_unknown_model"])),
                     [TedToolkit.Step21.Generated.QualifiedAssignmentUnknownModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_assignment_unknown_model"));
@@ -6476,7 +6476,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["assignment indeterminate function"], "3;1"),
-                        new FileName("assignment-indeterminate-function.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("assignment-indeterminate-function.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["assignment_indeterminate_function_model"])),
                     [TedToolkit.Step21.Generated.AssignmentIndeterminateFunctionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("assignment_indeterminate_function_model"));
@@ -6724,7 +6724,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["query result narrowing"], "3;1"),
-                        new FileName("query-result.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("query-result.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["query_result_narrowing_model"])),
                     [TedToolkit.Step21.Generated.QueryResultNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("query_result_narrowing_model"));
@@ -6853,7 +6853,7 @@ public sealed class ReachableRuleTests
                 var structure = new ExchangeStructure(
                     new HeaderSection(
                         new FileDescription(["exhaustive select query"], "3;1"),
-                        new FileName("exhaustive.step", "2026-08-25T00:00:00+08:00", [], [], "tests", "tests", ""),
+                        new FileName("exhaustive.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["exhaustive_select_query_model"])),
                     [TedToolkit.Step21.Generated.ExhaustiveSelectQueryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("exhaustive_select_query_model"));
@@ -12584,7 +12584,7 @@ public sealed class ReachableRuleTests
                     var structure = new ExchangeStructure(
                         new HeaderSection(
                             new FileDescription(["bounds"], "3;1"),
-                            new FileName("bounds.step", "2026-09-02T00:00:00+08:00", [], [], "tests", "tests", ""),
+                            new FileName("bounds.step", "2026-09-02T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["attribute_bound_model"])),
                         [TedToolkit.Step21.Generated.AttributeBoundModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("attribute_bound_model"));

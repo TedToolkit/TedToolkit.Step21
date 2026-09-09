@@ -136,11 +136,11 @@ TagName
     ;
 
 PrintControl
-    : PrintControlDirective -> skip
+    : PrintControlDirective -> channel(HIDDEN)
     ;
 
 Comment
-    : '/*' .*? '*/' -> skip
+    : '/' IgnoredControls '*' .*? '*' IgnoredControls '/' -> skip
     ;
 
 IgnoredControl
@@ -152,8 +152,8 @@ Space
     ;
 
 fragment StringCharacter
-    : Apostrophe Apostrophe
-    | ReverseSolidus ReverseSolidus
+    : Apostrophe IgnoredControls Apostrophe
+    | ReverseSolidus IgnoredControls ReverseSolidus
     | PrintControlDirective
     | PageDirective
     | AlphabetDirective
@@ -165,7 +165,7 @@ fragment StringCharacter
     ;
 
 fragment PrintControlDirective
-    : ReverseSolidus [NF] ReverseSolidus
+    : ReverseSolidus IgnoredControls [NF] IgnoredControls ReverseSolidus
     ;
 
 fragment IgnoredControls
@@ -177,28 +177,42 @@ fragment IgnoredControlChar
     ;
 
 fragment PageDirective
-    : ReverseSolidus 'S' ReverseSolidus LatinCodepoint
+    : ReverseSolidus IgnoredControls 'S' IgnoredControls ReverseSolidus
+      IgnoredControls LatinCodepoint
     ;
 
 fragment AlphabetDirective
-    : ReverseSolidus 'P' Upper ReverseSolidus
+    : ReverseSolidus IgnoredControls 'P' IgnoredControls Upper
+      IgnoredControls ReverseSolidus
     ;
 
 fragment Extended2Directive
-    : ReverseSolidus 'X2' ReverseSolidus Hex Hex Hex Hex (Hex Hex Hex Hex)* EndExtended
+    : ReverseSolidus IgnoredControls 'X' IgnoredControls '2' IgnoredControls ReverseSolidus
+      IgnoredControls Extended2Group+ EndExtended
     ;
 
 fragment Extended4Directive
-    : ReverseSolidus 'X4' ReverseSolidus Hex Hex Hex Hex Hex Hex Hex Hex
-      (Hex Hex Hex Hex Hex Hex Hex Hex)* EndExtended
+    : ReverseSolidus IgnoredControls 'X' IgnoredControls '4' IgnoredControls ReverseSolidus
+      IgnoredControls Extended4Group+ EndExtended
     ;
 
 fragment ArbitraryDirective
-    : ReverseSolidus 'X' ReverseSolidus Hex Hex
+    : ReverseSolidus IgnoredControls 'X' IgnoredControls ReverseSolidus
+      IgnoredControls Hex IgnoredControls Hex
     ;
 
 fragment EndExtended
-    : ReverseSolidus 'X0' ReverseSolidus
+    : ReverseSolidus IgnoredControls 'X' IgnoredControls '0'
+      IgnoredControls ReverseSolidus
+    ;
+
+fragment Extended2Group
+    : Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls
+    ;
+
+fragment Extended4Group
+    : Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls
+      Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls Hex IgnoredControls
     ;
 
 fragment LatinCodepoint
@@ -274,7 +288,7 @@ SignaturePrintControl
     ;
 
 SignatureComment
-    : '/*' .*? '*/' -> skip
+    : '/' IgnoredControls '*' .*? '*' IgnoredControls '/' -> skip
     ;
 
 SignatureIgnoredControl

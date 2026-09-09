@@ -42,10 +42,10 @@ public sealed class CanonicalSimpleWriterTests
             HEADER;
             FILE_DESCRIPTION(('O''Brien'),'3;1');
             FILE_NAME('writer.p21','2026-08-22T00:00:00',('Author'),('Org'),'Pre','System','Auth');
-            FILE_SCHEMA(('writer_model'));
+            FILE_SCHEMA(('WRITER_MODEL'));
             ENDSEC;
             DATA;
-            #0001=SAMPLE(18446744073709551616,1.25,-7,'original',"3F",.T.,.U.,.ACTIVE.,LABEL('typed'),$,(1,2));
+            #0001=SAMPLE(18446744073709551616,1.25,-7,'original',"31",.T.,.U.,.ACTIVE.,LABEL('typed'),$,(1,2));
             ENDSEC;
             END-ISO-10303-21;
             """), [descriptor]);
@@ -61,10 +61,10 @@ public sealed class CanonicalSimpleWriterTests
             HEADER;
             FILE_DESCRIPTION(('O''Brien'),'3;1');
             FILE_NAME('writer.p21','2026-08-22T00:00:00',('Author'),('Org'),'Pre','System','Auth');
-            FILE_SCHEMA(('writer_model'));
+            FILE_SCHEMA(('WRITER_MODEL'));
             ENDSEC;
             DATA;
-            #1=SAMPLE(18446744073709551616,125.E-2,-7,'edited \X2\03C0\X0\\X4\0001F600\X0\',"38",.T.,.U.,.ACTIVE.,LABEL('typed'),$,(1,2));
+            #1=SAMPLE(18446744073709551616,125.E-2,-7,'edited \X2\03C0\X0\\X4\0001F600\X0\',"31",.T.,.U.,.ACTIVE.,LABEL('typed'),$,(1,2));
             ENDSEC;
             END-ISO-10303-21;
             """;
@@ -154,12 +154,12 @@ public sealed class CanonicalSimpleWriterTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(output).Contains("FILE_SCHEMA(('first_schema','second_schema'));\n");
-            await Assert.That(output).Contains("FILE_POPULATION('first_schema','SECTION_BOUNDARY',$);\n");
+            await Assert.That(output).Contains("FILE_SCHEMA(('FIRST_SCHEMA','SECOND_SCHEMA'));\n");
+            await Assert.That(output).Contains("FILE_POPULATION('FIRST_SCHEMA','SECTION_BOUNDARY',$);\n");
             await Assert.That(output).Contains(
-                "FILE_POPULATION('second_schema','INCLUDE_REFERENCED',('second'));\n");
-            await Assert.That(output).Contains("DATA('first',('first_schema'));\n#1=FIRST();\nENDSEC;\n");
-            await Assert.That(output).Contains("DATA('second',('second_schema'));\n#2=SECOND();\nENDSEC;\n");
+                "FILE_POPULATION('SECOND_SCHEMA','INCLUDE_REFERENCED',('second'));\n");
+            await Assert.That(output).Contains("DATA('first',('FIRST_SCHEMA'));\n#1=FIRST();\nENDSEC;\n");
+            await Assert.That(output).Contains("DATA('second',('SECOND_SCHEMA'));\n#2=SECOND();\nENDSEC;\n");
             await Assert.That(parse.Errors).IsEmpty();
             await Assert.That(parse.ReachedEndOfFile).IsTrue();
         }
@@ -202,7 +202,7 @@ public sealed class CanonicalSimpleWriterTests
         unnamed.DataSections.Add(new DataSection(descriptor.Name));
         unnamed.DataSections.Add(new DataSection(descriptor.Name));
         var unnamedDestination = new ProbeTextWriter();
-        var sectionException = Assert.Throws<ExchangeStructureCapabilityException>(() =>
+        var sectionException = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
             unnamed.Write(unnamedDestination));
 
         var unbound = new ExchangeStructure(CreateHeader("absent_schema"));
@@ -231,8 +231,11 @@ public sealed class CanonicalSimpleWriterTests
             await Assert.That(projectionException.Diagnostics.Select(diagnostic => diagnostic.Code))
                 .IsEquivalentTo(["P21-CAP-COMPLEX-ENTITY"]);
             await Assert.That(unprojectableDestination.WriteCount).IsEqualTo(0);
-            await Assert.That(sectionException.Diagnostics.Select(diagnostic => diagnostic.Code))
-                .IsEquivalentTo(["P21-CAP-DATA-SECTION", "P21-CAP-DATA-SECTION"]);
+            await Assert.That(sectionException.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo([
+                    "P21.STRUCTURE.DATA_SECTION.NAME.REQUIRED",
+                    "P21.STRUCTURE.DATA_SECTION.NAME.REQUIRED",
+                ]);
             await Assert.That(unnamedDestination.WriteCount).IsEqualTo(0);
             await Assert.That(descriptorException.Diagnostics.Select(diagnostic => diagnostic.Code))
                 .IsEquivalentTo(["P21-CAP-SCHEMA-DESCRIPTOR"]);

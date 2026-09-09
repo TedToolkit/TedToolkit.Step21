@@ -184,6 +184,10 @@
         if (Number(this._value.charAt(0)) > (this._value.length - 1) * 4) {
             fail("P21.Binary unused-bit count exceeds the encoded bit count.");
         }
+        const unusedBits = Number(this._value.charAt(0));
+        if (unusedBits > 0 && Number.parseInt(this._value.charAt(1), 16) >> (4 - unusedBits) !== 0) {
+            fail("P21.Binary left-fill bits must be zero.");
+        }
     }
     inherit(Binary);
     Binary.prototype.valueOf = function () { return this._value; };

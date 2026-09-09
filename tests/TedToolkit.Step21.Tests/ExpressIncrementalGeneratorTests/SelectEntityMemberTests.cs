@@ -28,7 +28,7 @@ internal sealed class SelectEntityMemberTests
                     var structure = new ExchangeStructure(
                         new HeaderSection(
                             new FileDescription(["identity"], "3;1"),
-                            new FileName("identity.step", "2026-09-04T00:00:00+08:00", [], [], "tests", "tests", ""),
+                            new FileName("identity.step", "2026-09-04T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["member_identity"])),
                         [TedToolkit.Step21.Generated.MemberIdentity.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("member_identity"));

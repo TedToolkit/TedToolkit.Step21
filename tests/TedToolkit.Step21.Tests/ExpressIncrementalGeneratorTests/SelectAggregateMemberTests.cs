@@ -28,7 +28,7 @@ internal sealed class SelectAggregateMemberTests
                     var structure = new ExchangeStructure(
                         new HeaderSection(
                             new FileDescription(["aggregates"], "3;1"),
-                            new FileName("aggregates.step", "2026-09-04T00:00:00+08:00", [], [], "tests", "tests", ""),
+                            new FileName("aggregates.step", "2026-09-04T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["aggregate_member"])),
                         [TedToolkit.Step21.Generated.AggregateMember.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("aggregate_member"));

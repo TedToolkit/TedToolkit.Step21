@@ -67,7 +67,7 @@ public sealed class AtomicSimpleReadTests
             FILE_SCHEMA(('simple_read'));
             ENDSEC;
             DATA;
-            #0001=SAMPLE(18446744073709551616,1.25,-7,'O''Brien\X2\03C0\X0\\X4\0001F600\X0\\PB\\S\!\PA\\S\!\N\line\F\form\\slash\X\A7',"3F",.T.,.U.,.ACTIVE.,IDENTIFIER('typed'),BOOLEAN_ALIAS(.F.),LOGICAL_ALIAS(.U.),$,'present',(1,2,3),(.F.,.T.),(.U.,.F.));
+            #0001=SAMPLE(18446744073709551616,1.25,-7,'O''Brien\X2\03C0\X0\\X4\0001F600\X0\\PB\\S\!\PA\\S\!\N\line\F\form\\slash\X\A7',"31",.T.,.U.,.ACTIVE.,IDENTIFIER('typed'),BOOLEAN_ALIAS(.F.),LOGICAL_ALIAS(.U.),$,'present',(1,2,3),(.F.,.T.),(.U.,.F.));
             ENDSEC;
             END-ISO-10303-21;
             """;
@@ -93,7 +93,7 @@ public sealed class AtomicSimpleReadTests
             await Assert.That(projected[1].TryGetReal(out var real) && real == new RealValue(125, -2)).IsTrue();
             await Assert.That(projected[2].TryGetInteger(out var number) && number == -7).IsTrue();
             await Assert.That(projected[3].TryGetString(out var text)
-                && text == "O'Brienπ😀Ą¡\nline\fform\\slash§").IsTrue();
+                && text == "O'Brienπ😀Ą¡lineform\\slash§").IsTrue();
             await Assert.That(projected[4].TryGetBinary(out var binary) && binary.ToString() == "1").IsTrue();
             await Assert.That(projected[5].TryGetBoolean(out var boolean) && boolean).IsTrue();
             await Assert.That(projected[6].TryGetLogical(out var logical) && logical == LogicalValue.Unknown).IsTrue();
@@ -227,7 +227,7 @@ public sealed class AtomicSimpleReadTests
             await Assert.That(method?.ReturnType).IsEqualTo(typeof(ExchangeStructure));
             await Assert.That(assembly.GetExportedTypes().Where(type =>
                 type.Name.Contains("Reader", StringComparison.Ordinal)
-                || type.Name.Contains("Context", StringComparison.Ordinal)
+                || type.Name.Contains("Context", StringComparison.Ordinal) && type != typeof(SectionContext)
                 || type.Name.Contains("Syntax", StringComparison.Ordinal) && type != typeof(ExchangeStructureSyntaxException)))
                 .IsEmpty();
             await Assert.That(assembly.GetExportedTypes().SelectMany(type =>

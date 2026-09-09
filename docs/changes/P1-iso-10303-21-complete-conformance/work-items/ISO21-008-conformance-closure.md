@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-008 -->
 
-<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
+<!-- approval-source: user-approved-recommended-iso21-005-split-and-continue-2026-09-09 -->
 
 ## Outcome
 
@@ -23,7 +23,8 @@
 
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
-| ISO21-001 through ISO21-007 Verified | Every owned capability, mapping, binding and security boundary has exact candidate-bound proof and supplied manifests | Work-item completion evidence on the authoritative integration revision |
+| ISO21-001 through ISO21-004, ISO21-006 and ISO21-007 Verified | Every independently deliverable capability, binding and security boundary has exact candidate-bound proof and supplied manifests | Work-item completion evidence on the authoritative integration revision |
+| ISO21-005 and ISO21-009 Verified before final closure | Schema-supplied physical mappings and the complete Part 11 semantic profile replace every `blocked-source` PICS row before ISO21-008 may become Verified | ISO21-005 and ISO21-009 completion evidence on the authoritative integration revision |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
@@ -64,6 +65,26 @@
 
 Record authoritative candidate revision; clause/PICS total, implemented and N/A counts; class/compatibility fixture counts;
 all commands/results; API/SemVer/docs state; baseline/candidate allocation values; package graphs; AP regressions; and Native AOT publish/run identity.
+
+## In-progress evidence — 2026-09-09
+
+- Candidate is still an uncommitted working tree based on `6b811ca`; this is progress evidence, not an authoritative
+  completion revision.
+- The machine-readable trace contains 36 rows: 30 implemented, 2 processor-not-applicable and 4 explicitly
+  `blocked-source`. The short-name/mapping input is assigned to draft ISO21-005; class-3 constant evaluation and
+  validation-reachable Part 11 semantics are assigned to draft ISO21-009.
+- Clause 5.6 and clause 13 were tightened after direct normative review: ignored control octets work inside every
+  string directive and comment delimiter; print controls do not enter effective STRING values and are rejected
+  throughout ANCHOR/REFERENCE; multi-file ZIP class selection applies to the root without contaminating subsidiary
+  exchange-structure classification.
+- Latest Release unit run: 706 total, 704 passed, 2 failed only at the recorded unresolved Part 11 `QUERY`
+  aggregate-source semantics. Latest integration run: 36 total, 35 passed, 1 explicitly skipped external-download
+  corpus, 0 failed; AP203/AP214/AP242 package consumers all passed.
+- Latest full Release no-incremental solution build completed in 5:02.74 with 0 warnings and 0 errors. Latest packed
+  Native AOT proof ended `PACKED_AOT_OK` and `NATIVE_AOT_PACKAGE_PROOF_OK` for win-x64 with a 6,863,872-byte
+  executable and compiler package 10.0.11.
+- Final verification remains gated by ISO21-005 and ISO21-009, the separately approved class-1 allocation benchmark, the README
+  approval gate, final candidate-bound review, and a commit revision.
 
 ## Risks and implementation notes
 

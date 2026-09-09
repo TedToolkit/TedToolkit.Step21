@@ -103,6 +103,41 @@ internal sealed class ParseTests
         }
     }
 
+    [Test]
+    public async Task Should_ignore_raw_controls_inside_comment_delimiters()
+    {
+        var source = "ISO-10303-21;\n/\r*comment\tbody*\n/\n"
+            + "HEADER;FILE_DESCRIPTION(('comments'),'4;1');"
+            + "FILE_NAME('x','2026-09-09T00:00:00',('a'),('o'),'p','s','a');"
+            + "FILE_SCHEMA(('TEST_SCHEMA'));ENDSEC;DATA;ENDSEC;END-ISO-10303-21;"
+            + "SIGNATURE /\r*signature\tbody*\n/ QUJD ENDSEC;";
+
+        var syntax = ExchangeStructureSyntaxParser.Parse(source, "comments.p21");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(syntax.Header.FileDescription.Name).IsEqualTo("FILE_DESCRIPTION");
+            await Assert.That(syntax.DataSections).HasSingleItem();
+            await Assert.That(syntax.SignatureSections.Single().Content.Text).IsEqualTo("QUJD");
+        }
+    }
+
+    [Test]
+    public async Task Should_reject_non_scalar_source_text_before_lexing()
+    {
+        var failure = Assert.Throws<ExchangeStructureSyntaxException>(() =>
+            ExchangeStructureSyntaxParser.Parse("ISO-10303-21;\n/*\uD800*/", "invalid.p21"));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.Diagnostics).HasSingleItem();
+            await Assert.That(failure.Diagnostics[0].Code).IsEqualTo("P21-SYNTAX-UNICODE-SCALAR");
+            await Assert.That(failure.Diagnostics[0].SourceLocation!.FilePath).IsEqualTo("invalid.p21");
+            await Assert.That(failure.Diagnostics[0].SourceLocation!.Line).IsEqualTo(2);
+            await Assert.That(failure.Diagnostics[0].SourceLocation!.Column).IsEqualTo(3);
+        }
+    }
+
     /// <summary>
     /// Verifies that the Edition 3 zero-data and repeated-signature cardinalities survive the syntax handoff.
     /// </summary>

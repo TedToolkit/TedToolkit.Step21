@@ -164,6 +164,159 @@ public sealed class AtomicPrewriteValidationTests
         }
     }
 
+    /// <summary>Preserves structured zero-output validation when a physical projection contains null.</summary>
+    [Test]
+    public async Task Should_report_a_null_projected_parameter_before_either_writer_outputs()
+    {
+        var descriptor = new ProbeDescriptor("prewrite");
+        var structure = CreateStructure(descriptor);
+        var section = new DataSection(descriptor.Name);
+        structure.DataSections.Add(section);
+        var entity = new ProbeEntity("ITEM", "valid", [1], [null!]);
+        structure.Add(section, entity);
+        var completeDestination = new ProbeTextWriter();
+        var entityDestination = new ProbeTextWriter();
+
+        var complete = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.Write(completeDestination));
+        var record = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.WriteEntity(entityDestination, entity));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(complete.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(["P21.WRITE.PARAMETER.REQUIRED"]);
+            await Assert.That(record.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(["P21.WRITE.PARAMETER.REQUIRED"]);
+            await Assert.That(complete.ValidationResult.Failures.Single().Path)
+                .IsEqualTo("DataSections[0].#1.Parameters[2]");
+            await Assert.That(record.ValidationResult.Failures.Single().Path)
+                .IsEqualTo("DataSections[0].#1.Parameters[2]");
+            await Assert.That(completeDestination.WriteCount).IsEqualTo(0);
+            await Assert.That(entityDestination.WriteCount).IsEqualTo(0);
+        }
+    }
+
+    /// <summary>Rejects ANCHOR-only resource tokens when a schema projects them into DATA parameters.</summary>
+    [Test]
+    public async Task Should_reject_projected_resources_before_either_writer_outputs()
+    {
+        var descriptor = new ProbeDescriptor("prewrite");
+        var structure = CreateStructure(descriptor, "4;1");
+        var section = new DataSection(descriptor.Name);
+        structure.DataSections.Add(section);
+        var entity = new ProbeEntity(
+            "ITEM",
+            "valid",
+            [1],
+            [ParameterValue.FromAggregate([
+                ParameterValue.FromTyped(
+                    "WRAPPED",
+                    ParameterValue.FromResource(new Part21Resource("asset.p21"))),
+            ])]);
+        structure.Add(section, entity);
+        var completeDestination = new ProbeTextWriter();
+        var entityDestination = new ProbeTextWriter();
+
+        var complete = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.Write(completeDestination));
+        var record = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.WriteEntity(entityDestination, entity));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(complete.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(["P21.WRITE.PARAMETER.KIND"]);
+            await Assert.That(record.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo(["P21.WRITE.PARAMETER.KIND"]);
+            await Assert.That(complete.ValidationResult.Failures.Single().Path)
+                .IsEqualTo("DataSections[0].#1.Parameters[2][0].Value");
+            await Assert.That(record.ValidationResult.Failures.Single().Path)
+                .IsEqualTo("DataSections[0].#1.Parameters[2][0].Value");
+            await Assert.That(completeDestination.WriteCount).IsEqualTo(0);
+            await Assert.That(entityDestination.WriteCount).IsEqualTo(0);
+        }
+    }
+
+    /// <summary>Rejects projected occurrence names that have no local or REFERENCE definition.</summary>
+    [Test]
+    public async Task Should_report_undefined_projected_occurrences_before_output()
+    {
+        var descriptor = new ProbeDescriptor("prewrite");
+        var structure = CreateStructure(descriptor, "4;3");
+        var section = new DataSection(descriptor.Name);
+        structure.DataSections.Add(section);
+        var entity = new ProbeEntity(
+            "ITEM",
+            "valid",
+            [1],
+            [
+                ParameterValue.FromEntityInstance(new EntityInstanceName("98")),
+                ParameterValue.FromValueInstance(new ValueInstanceName("99")),
+            ]);
+        structure.Add(section, entity);
+        var completeDestination = new ProbeTextWriter();
+        var entityDestination = new ProbeTextWriter();
+
+        var complete = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.Write(completeDestination));
+        var record = Assert.Throws<ExchangeStructureWriteValidationException>(() =>
+            structure.WriteEntity(entityDestination, entity));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(complete.ValidationResult.Failures.Select(failure => failure.Code))
+                .IsEquivalentTo([
+                    "P21.WRITE.REFERENCE.OCCURRENCE",
+                    "P21.WRITE.REFERENCE.OCCURRENCE",
+                ]);
+            await Assert.That(record.ValidationResult.Failures.Select(failure => failure.Path).SequenceEqual([
+                "DataSections[0].#1.Parameters[2]",
+                "DataSections[0].#1.Parameters[3]",
+            ])).IsTrue();
+            await Assert.That(completeDestination.WriteCount).IsEqualTo(0);
+            await Assert.That(entityDestination.WriteCount).IsEqualTo(0);
+        }
+    }
+
+    /// <summary>Accepts projected occurrence names backed by the structure's REFERENCE definitions.</summary>
+    [Test]
+    public async Task Should_accept_defined_projected_occurrences()
+    {
+        var descriptor = new ProbeDescriptor("prewrite");
+        var structure = CreateStructure(descriptor, "4;3");
+        var section = new DataSection(descriptor.Name);
+        structure.DataSections.Add(section);
+        var entity = new ProbeEntity(
+            "ITEM",
+            "valid",
+            [1],
+            [
+                ParameterValue.FromEntityInstance(new EntityInstanceName("98")),
+                ParameterValue.FromValueInstance(new ValueInstanceName("99")),
+            ]);
+        structure.Add(section, entity);
+        structure.References.Add(new Part21Reference(
+            new EntityInstanceName("98"),
+            new Part21Resource("external.p21#entity")));
+        structure.References.Add(new Part21Reference(
+            new ValueInstanceName("99"),
+            new Part21Resource("external.p21#value")));
+        var completeDestination = new ProbeTextWriter();
+        var entityDestination = new ProbeTextWriter();
+
+        structure.Write(completeDestination);
+        structure.WriteEntity(entityDestination, entity);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(completeDestination.ToString()).Contains("#1=ITEM('valid',(1),#98,@99);");
+            await Assert.That(entityDestination.ToString()).IsEqualTo("#1=ITEM('valid',(1),#98,@99);");
+            await Assert.That(completeDestination.WriteCount).IsEqualTo(1);
+            await Assert.That(entityDestination.WriteCount).IsEqualTo(1);
+        }
+    }
+
     /// <summary>Returns complete capability evidence before either public writer touches its destination.</summary>
     [Test]
     public async Task Should_preflight_all_capability_diagnostics_for_both_writer_entry_points()
@@ -193,10 +346,12 @@ public sealed class AtomicPrewriteValidationTests
         }
     }
 
-    private static ExchangeStructure CreateStructure(SchemaDescriptor descriptor) => new(
+    private static ExchangeStructure CreateStructure(
+        SchemaDescriptor descriptor,
+        string implementationLevel = "3;1") => new(
         new HeaderSection(
-            new FileDescription(["prewrite"], "3;1"),
-            new FileName("prewrite.p21", "2026-08-22T00:00:00", [], [], "Pre", "System", "Auth"),
+            new FileDescription(["prewrite"], implementationLevel),
+            new FileName("prewrite.p21", "2026-08-22T00:00:00", [string.Empty], [string.Empty], "Pre", "System", "Auth"),
             new FileSchema([descriptor.Name.Value])),
         [descriptor]);
 

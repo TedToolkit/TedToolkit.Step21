@@ -20,7 +20,7 @@ internal static class Program
     private const string SOURCE = """
         ISO-10303-21;
         HEADER;
-        FILE_DESCRIPTION(('packed-aot'),'3;1');
+        FILE_DESCRIPTION(('packed-aot'),'4;1');
         FILE_NAME('packed.p21','2026-08-22T00:00:00',('Author'),('Org'),'Pre','System','Auth');
         FILE_SCHEMA(('catalog_core','catalog_model'));
         FILE_POPULATION('catalog_model','INCLUDE_REFERENCED',('model'));
@@ -195,6 +195,11 @@ internal static class Program
             return 16;
         }
 
+        if (!VerifyIso8859StringEncoding())
+        {
+            return 17;
+        }
+
         Console.WriteLine("PACKED_AOT_OK");
         return 0;
     }
@@ -323,7 +328,7 @@ internal static class Program
             ISO-10303-21;
             HEADER;
             FILE_DESCRIPTION(('singular inverse'),'3;1');
-            FILE_NAME('singular.step','2026-08-27T00:00:00',(),(),'tests','tests','');
+            FILE_NAME('singular.step','2026-08-27T00:00:00',(''),(''),'tests','tests','');
             FILE_SCHEMA(('catalog_model'));
             ENDSEC;
             DATA;
@@ -381,12 +386,30 @@ internal static class Program
             && reread.Signatures[0].Signers[0].TrustStatus == Part21SignatureTrustStatus.Trusted;
     }
 
+    private static bool VerifyIso8859StringEncoding()
+    {
+        var descriptor = TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance;
+        var structure = new ExchangeStructure(
+            new HeaderSection(
+                new FileDescription(["éĄ"], "4;1"),
+                new FileName("encoding.step", "2026-09-08T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                new FileSchema([descriptor.Name.Value])),
+            [descriptor]);
+        structure.DataSections.Add(new DataSection(descriptor.Name));
+        var output = new StringWriter();
+        structure.Write(output, new ExchangeStructureWriteOptions(Part21StringEncoding.Iso8859));
+        var text = output.ToString();
+        var reread = ExchangeStructure.Read(new StringReader(text), [descriptor]);
+        return text.Contains("'\\S\\i\\PB\\\\S\\!'", StringComparison.Ordinal)
+            && reread.Header.FileDescription.Description.SequenceEqual(["éĄ"]);
+    }
+
     private static ExchangeStructure CreateCatalogStructure()
     {
         var structure = new ExchangeStructure(
             new HeaderSection(
                 new FileDescription(["singular inverse"], "3;1"),
-                new FileName("singular.step", "2026-08-27T00:00:00+08:00", [], [], "tests", "tests", ""),
+                new FileName("singular.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                 new FileSchema(["catalog_model"])),
             [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance]);
         structure.DataSections.Add(new DataSection(new SchemaName("catalog_model")));

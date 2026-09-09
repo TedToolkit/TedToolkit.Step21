@@ -71,7 +71,7 @@ internal sealed class CanonicalFormatTests
                 "-7.E18446744073709551616",
                 "'O''Brien\\\\\\X4\\0001F600\\X0\\'",
                 "''",
-                "\"328\"",
+                "\"305\"",
                 "\"0\"",
                 ".F.",
                 ".T.",
@@ -90,6 +90,30 @@ internal sealed class CanonicalFormatTests
             await Assert.That(parse.Errors).IsEmpty();
             await Assert.That(parse.ReachedEndOfFile).IsTrue();
         }
+    }
+
+    [Test]
+    public async Task Should_apply_the_clause_6_4_6_left_fill_examples()
+    {
+        var examples = new[]
+        {
+            (Bits: string.Empty, Encoded: "\"0\""),
+            (Bits: "0", Encoded: "\"30\""),
+            (Bits: "1", Encoded: "\"31\""),
+            (Bits: "111011", Encoded: "\"23B\""),
+            (Bits: "100100101010", Encoded: "\"092A\""),
+        };
+
+        foreach (var example in examples)
+        {
+            var value = ParameterValue.FromBinary(new BinaryValue(example.Bits));
+            await Assert.That(ParameterValueFormatter.Format(value, _ => default)).IsEqualTo(example.Encoded);
+            await Assert.That(Part21LexicalValueDecoder.DecodeBinary(example.Encoded))
+                .IsEqualTo(new BinaryValue(example.Bits));
+        }
+
+        await Assert.That(() => Part21LexicalValueDecoder.DecodeBinary("\"3F\""))
+            .Throws<FormatException>();
     }
 
     private sealed class TestEntity : Entity

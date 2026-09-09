@@ -90,8 +90,8 @@ public sealed class SignatureTests
 
         const string expected = "ISO-10303-21;HEADER;"
             + "FILE_DESCRIPTION(('CMS signature test'),'4;3');"
-            + "FILE_NAME('signature.p21','2026-09-07T12:00:00Z',('\\X2\\4F5C\\X0\\\\X2\\8005\\X0\\'),('Org'),'Pre','System','Auth');"
-            + "FILE_SCHEMA(('empty_schema'));ENDSEC;END-ISO-10303-21;";
+            + "FILE_NAME('signature.p21','2026-09-07T12:00:00Z',('\\X2\\4F5C8005\\X0\\'),('Org'),'Pre','System','Auth');"
+            + "FILE_SCHEMA(('EMPTY_SCHEMA'));ENDSEC;END-ISO-10303-21;";
         using (Assert.Multiple())
         {
             await Assert.That(Encoding.UTF8.GetString(signer.Content!)).IsEqualTo(expected);

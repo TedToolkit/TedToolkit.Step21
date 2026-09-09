@@ -287,11 +287,15 @@ public sealed partial class AnnexFModelBridge
             throw new InvalidOperationException("An Annex F binary has no retained value.");
         var unusedBits = (4 - binary.Length % 4) % 4;
         writer.Append((char)('0' + unusedBits));
-        for (var index = 0; index < binary.Length; index += 4)
+        var encodedLength = binary.Length + unusedBits;
+        for (var encodedIndex = 0; encodedIndex < encodedLength; encodedIndex += 4)
         {
             var nibble = 0;
             for (var bit = 0; bit < 4; bit++)
-                nibble = nibble << 1 | (index + bit < binary.Length && binary[index + bit] ? 1 : 0);
+            {
+                var sourceIndex = encodedIndex + bit - unusedBits;
+                nibble = nibble << 1 | (sourceIndex >= 0 && binary[sourceIndex] ? 1 : 0);
+            }
             writer.Append("0123456789ABCDEF"[nibble]);
         }
     }
@@ -438,14 +442,25 @@ public sealed partial class AnnexFModelBridge
         if (unusedBits > (value.Length - 1) * 4)
             throw new JsonException("The Annex F binary unused-bit count exceeds the encoded bit count.");
         var bits = new StringBuilder(Math.Max(0, (value.Length - 1) * 4 - unusedBits));
+        var encodedBitIndex = 0;
         foreach (var character in value.AsSpan(1))
         {
             var nibble = character is >= '0' and <= '9' ? character - '0' : character - 'A' + 10;
             for (var bit = 3; bit >= 0; bit--)
-                _ = bits.Append((nibble & 1 << bit) == 0 ? '0' : '1');
+            {
+                var isSet = (nibble & 1 << bit) != 0;
+                if (encodedBitIndex < unusedBits)
+                {
+                    if (isSet)
+                        throw new JsonException("The Annex F binary left-fill bits must be zero.");
+                }
+                else
+                {
+                    _ = bits.Append(isSet ? '1' : '0');
+                }
+                encodedBitIndex++;
+            }
         }
-        if (unusedBits > 0)
-            bits.Length -= unusedBits;
         return new BinaryValue(bits.ToString());
     }
 

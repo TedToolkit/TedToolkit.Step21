@@ -54,6 +54,17 @@ public sealed class SchemaPopulationExternalFile
         ArgumentNullException.ThrowIfNull(location);
         if (location.OriginalString.Length == 0)
             throw new ArgumentException("An external schema-population URI cannot be empty.", nameof(location));
+        try
+        {
+            Part21NameValidation.ValidateResource(location.OriginalString, nameof(location));
+        }
+        catch (FormatException exception)
+        {
+            throw new ArgumentException(
+                "The external schema-population location must satisfy the Part 21 URI-reference syntax.",
+                nameof(location),
+                exception);
+        }
         if (timeStamp is not null && !Part21LexicalForms.TryParseTimeStamp(timeStamp, out _))
             throw new ArgumentException("The timestamp must use the ISO extended date-and-time form.", nameof(timeStamp));
         if (messageDigest is not null && !Part21LexicalForms.IsCanonicalBase64(messageDigest))

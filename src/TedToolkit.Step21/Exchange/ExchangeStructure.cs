@@ -35,6 +35,9 @@ public sealed class ExchangeStructure
     private ISchemaDomainEquivalenceProvider? _domainEquivalenceProvider;
     private List<Part21Anchor>? _anchors;
     private List<Part21Reference>? _references;
+    private List<SectionLanguage>? _sectionLanguages;
+    private List<SectionContext>? _sectionContexts;
+    private List<UserDefinedHeaderEntity>? _userDefinedHeaderEntities;
 
     /// <summary>Initializes a temporarily unbound exchange structure.</summary>
     /// <param name="header">The required ISO header.</param>
@@ -94,6 +97,15 @@ public sealed class ExchangeStructure
 
     /// <summary>Gets the mutable <c>FILE_POPULATION</c> declarations in physical order.</summary>
     public IList<SchemaPopulationDefinition> FilePopulations => _schemaPopulations ??= [];
+
+    /// <summary>Gets the mutable <c>SECTION_LANGUAGE</c> declarations in physical order.</summary>
+    public IList<SectionLanguage> SectionLanguages => _sectionLanguages ??= [];
+
+    /// <summary>Gets the mutable <c>SECTION_CONTEXT</c> declarations in physical order.</summary>
+    public IList<SectionContext> SectionContexts => _sectionContexts ??= [];
+
+    /// <summary>Gets the mutable user-defined header entity collection in physical order.</summary>
+    public IList<UserDefinedHeaderEntity> UserDefinedHeaderEntities => _userDefinedHeaderEntities ??= [];
 
     /// <summary>
     /// Gets the mutable ISO data-section collection. Editing this list performs no validation or registration repair.
@@ -348,7 +360,7 @@ public sealed class ExchangeStructure
     /// </remarks>
     public ValidationResult Validate()
     {
-        var failures = new List<ValidationFailure>();
+        var failures = new List<ValidationFailure>(Part21HeaderValidator.Validate(Header));
         IReadOnlySet<string> externalEntityNames = EmptyOccurrenceNames;
         IReadOnlySet<string> externalValueNames = EmptyOccurrenceNames;
         List<ValidationFailure>? referenceFailures = null;
@@ -363,11 +375,14 @@ public sealed class ExchangeStructure
         }
 
         ValidateAnchors(failures, externalEntityNames, externalValueNames);
+        ValidateUserDefinedHeaderEntities(failures, externalEntityNames, externalValueNames);
         if (referenceFailures is not null)
             failures.AddRange(referenceFailures);
         var schemaPopulations = ValidatePopulationDeclarations(failures);
         var relationshipFailures = new List<ValidationFailure>();
         var dataSections = DataSections.ToArray();
+        ValidateDataSectionNames(failures, dataSections);
+        ValidateSectionHeaderDeclarations(failures, dataSections);
         var sectionFailures = new ValidationFailure?[dataSections.Length];
         var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
         var descriptorsBySection = new Dictionary<DataSection, SchemaDescriptor>(ReferenceEqualityComparer.Instance);
@@ -469,6 +484,38 @@ public sealed class ExchangeStructure
         return new ValidationResult(failures);
     }
 
+    private void ValidateDataSectionNames(
+        ICollection<ValidationFailure> failures,
+        IReadOnlyList<DataSection?> dataSections)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < dataSections.Count; index++)
+        {
+            var section = dataSections[index];
+            if (section is null)
+                continue;
+
+            var path = $"DataSections[{index.ToString(CultureInfo.InvariantCulture)}].Name";
+            if (section.Name is null)
+            {
+                if (dataSections.Count != 1 || Header.FileSchema.SchemaIdentifiers.Count != 1)
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.STRUCTURE.DATA_SECTION.NAME.REQUIRED",
+                        path,
+                        "An unnamed data section requires exactly one data section and one FILE_SCHEMA identifier."));
+                }
+            }
+            else if (!names.Add(section.Name))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.DATA_SECTION.NAME.DUPLICATE",
+                    path,
+                    $"Data-section name '{section.Name}' occurs more than once."));
+            }
+        }
+    }
+
     private IReadOnlyList<SchemaPopulationDefinition> ValidatePopulationDeclarations(
         ICollection<ValidationFailure> failures)
     {
@@ -524,6 +571,97 @@ public sealed class ExchangeStructure
         }
 
         return valid;
+    }
+
+    private void ValidateSectionHeaderDeclarations(
+        ICollection<ValidationFailure> failures,
+        IReadOnlyList<DataSection?> dataSections)
+    {
+        if (_sectionLanguages is not null)
+        {
+            var sections = new HashSet<string?>(StringComparer.Ordinal);
+            for (var index = 0; index < _sectionLanguages.Count; index++)
+            {
+                var declaration = _sectionLanguages[index];
+                var path = $"SectionLanguages[{index.ToString(CultureInfo.InvariantCulture)}]";
+                if (declaration is null)
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.STRUCTURE.SECTION_LANGUAGE.REQUIRED",
+                        path,
+                        "The section-language declaration is null."));
+                    continue;
+                }
+
+                ValidateSectionHeaderTarget(
+                    declaration.SectionName,
+                    path,
+                    "SECTION_LANGUAGE",
+                    "P21.STRUCTURE.SECTION_LANGUAGE",
+                    sections,
+                    dataSections,
+                    failures);
+            }
+        }
+
+        if (_sectionContexts is not null)
+        {
+            var sections = new HashSet<string?>(StringComparer.Ordinal);
+            for (var index = 0; index < _sectionContexts.Count; index++)
+            {
+                var declaration = _sectionContexts[index];
+                var path = $"SectionContexts[{index.ToString(CultureInfo.InvariantCulture)}]";
+                if (declaration is null)
+                {
+                    failures.Add(new ValidationFailure(
+                        "P21.STRUCTURE.SECTION_CONTEXT.REQUIRED",
+                        path,
+                        "The section-context declaration is null."));
+                    continue;
+                }
+
+                ValidateSectionHeaderTarget(
+                    declaration.SectionName,
+                    path,
+                    "SECTION_CONTEXT",
+                    "P21.STRUCTURE.SECTION_CONTEXT",
+                    sections,
+                    dataSections,
+                    failures);
+            }
+        }
+    }
+
+    private static void ValidateSectionHeaderTarget(
+        string? sectionName,
+        string path,
+        string entityName,
+        string diagnosticPrefix,
+        ISet<string?> declaredSections,
+        IReadOnlyList<DataSection?> dataSections,
+        ICollection<ValidationFailure> failures)
+    {
+        if (!declaredSections.Add(sectionName))
+        {
+            failures.Add(new ValidationFailure(
+                $"{diagnosticPrefix}.DUPLICATE",
+                $"{path}.SectionName",
+                sectionName is null
+                    ? $"{entityName} has more than one default declaration."
+                    : $"{entityName} has more than one declaration for data section '{sectionName}'."));
+        }
+
+        if (sectionName is not null
+            && !dataSections.Any(section => section is not null && string.Equals(
+                section.Name,
+                sectionName,
+                StringComparison.Ordinal)))
+        {
+            failures.Add(new ValidationFailure(
+                $"{diagnosticPrefix}.SECTION",
+                $"{path}.SectionName",
+                $"{entityName} names data section '{sectionName}', which does not occur in this exchange structure."));
+        }
     }
 
     private void ValidateAnchors(
@@ -661,6 +799,142 @@ public sealed class ExchangeStructure
         }
     }
 
+    private void ValidateUserDefinedHeaderEntities(
+        ICollection<ValidationFailure> failures,
+        IReadOnlySet<string> externalEntityNames,
+        IReadOnlySet<string> externalValueNames)
+    {
+        if (_userDefinedHeaderEntities is null)
+            return;
+
+        var firstDescriptor = Header.FileSchema.SchemaIdentifiers.Count == 0
+            ? null
+            : _schemaDescriptorsByName.GetValueOrDefault(new SchemaName(Header.FileSchema.SchemaIdentifiers[0]));
+        for (var index = 0; index < _userDefinedHeaderEntities.Count; index++)
+        {
+            var entity = _userDefinedHeaderEntities[index];
+            var path = $"UserDefinedHeaderEntities[{index.ToString(CultureInfo.InvariantCulture)}]";
+            if (entity is null)
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.USER_HEADER.REQUIRED",
+                    path,
+                    "The user-defined header entity is null."));
+                continue;
+            }
+
+            for (var parameterIndex = 0; parameterIndex < entity.Parameters.Count; parameterIndex++)
+            {
+                ValidateUserDefinedHeaderValue(
+                    entity.Parameters[parameterIndex],
+                    $"{path}.Parameters[{parameterIndex.ToString(CultureInfo.InvariantCulture)}]",
+                    failures,
+                    externalEntityNames,
+                    externalValueNames,
+                    firstDescriptor);
+            }
+        }
+    }
+
+    private void ValidateUserDefinedHeaderValue(
+        ParameterValue value,
+        string path,
+        ICollection<ValidationFailure> failures,
+        IReadOnlySet<string> externalEntityNames,
+        IReadOnlySet<string> externalValueNames,
+        SchemaDescriptor? firstDescriptor)
+    {
+        if (value.Kind == ParameterValueKind.Resource)
+        {
+            failures.Add(new ValidationFailure(
+                "P21.STRUCTURE.USER_HEADER.PARAMETER_KIND",
+                path,
+                "A user-defined header parameter cannot contain an anchor-only resource value."));
+            return;
+        }
+
+        if (value.TryGetEntity(out var entity))
+        {
+            if (!TryGetName(entity, out _))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.USER_HEADER.ENTITY_REGISTRATION",
+                    path,
+                    "The referenced entity is not registered in this exchange structure."));
+            }
+            return;
+        }
+
+        if (value.TryGetEntityInstance(out var entityName))
+        {
+            if (!_registrationsByName.ContainsKey(entityName)
+                && !externalEntityNames.Contains(entityName.CanonicalDigits))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.USER_HEADER.ENTITY_OCCURRENCE",
+                    path,
+                    $"Entity occurrence '{entityName}' is not defined."));
+            }
+            return;
+        }
+
+        if (value.TryGetValueInstance(out var valueName))
+        {
+            if (!externalValueNames.Contains(valueName.CanonicalDigits))
+            {
+                failures.Add(new ValidationFailure(
+                    "P21.STRUCTURE.USER_HEADER.VALUE_OCCURRENCE",
+                    path,
+                    $"Value occurrence '{valueName}' is not defined in the reference section."));
+            }
+            return;
+        }
+
+        if (value.TryGetConstantEntity(out var entityConstant)
+            && (firstDescriptor is null || !firstDescriptor.ContainsConstantEntity(entityConstant.Value)))
+        {
+            failures.Add(new ValidationFailure(
+                "P21.STRUCTURE.USER_HEADER.ENTITY_CONSTANT",
+                path,
+                $"Entity constant '{entityConstant}' is not defined by the first FILE_SCHEMA schema."));
+            return;
+        }
+
+        if (value.TryGetConstantValue(out var valueConstant)
+            && (firstDescriptor is null || !firstDescriptor.ContainsConstantValue(valueConstant.Value)))
+        {
+            failures.Add(new ValidationFailure(
+                "P21.STRUCTURE.USER_HEADER.VALUE_CONSTANT",
+                path,
+                $"Value constant '{valueConstant}' is not defined by the first FILE_SCHEMA schema."));
+            return;
+        }
+
+        if (value.TryGetAggregate(out var values))
+        {
+            for (var index = 0; index < values.Count; index++)
+            {
+                ValidateUserDefinedHeaderValue(
+                    values[index],
+                    $"{path}[{index.ToString(CultureInfo.InvariantCulture)}]",
+                    failures,
+                    externalEntityNames,
+                    externalValueNames,
+                    firstDescriptor);
+            }
+        }
+        else if (value.TryGetTyped(out _, out var inner))
+        {
+            ValidateUserDefinedHeaderValue(
+                inner,
+                path + ".Value",
+                failures,
+                externalEntityNames,
+                externalValueNames,
+                firstDescriptor);
+        }
+    }
+
     private void ValidateReferences(
         ICollection<ValidationFailure> failures,
         ISet<string> externalEntityNames,
@@ -748,6 +1022,16 @@ public sealed class ExchangeStructure
         _schemaPopulationExternalFiles
         ?? (IReadOnlyList<SchemaPopulationExternalFile>)Array.Empty<SchemaPopulationExternalFile>();
 
+    internal IReadOnlyList<SectionLanguage> SectionLanguageEntries =>
+        _sectionLanguages ?? (IReadOnlyList<SectionLanguage>)Array.Empty<SectionLanguage>();
+
+    internal IReadOnlyList<SectionContext> SectionContextEntries =>
+        _sectionContexts ?? (IReadOnlyList<SectionContext>)Array.Empty<SectionContext>();
+
+    internal IReadOnlyList<UserDefinedHeaderEntity> UserDefinedHeaderEntityEntries =>
+        _userDefinedHeaderEntities
+        ?? (IReadOnlyList<UserDefinedHeaderEntity>)Array.Empty<UserDefinedHeaderEntity>();
+
     internal IReadOnlyList<EntityRegistration> Registrations => _registrationView;
 
     internal bool TryGetSchemaDescriptor(SchemaName name, out SchemaDescriptor? descriptor) =>
@@ -763,6 +1047,24 @@ public sealed class ExchangeStructure
     {
         ArgumentNullException.ThrowIfNull(externalFiles);
         _schemaPopulationExternalFiles = [.. externalFiles];
+    }
+
+    internal void SetSectionLanguages(IReadOnlyList<SectionLanguage> declarations)
+    {
+        ArgumentNullException.ThrowIfNull(declarations);
+        _sectionLanguages = [.. declarations];
+    }
+
+    internal void SetSectionContexts(IReadOnlyList<SectionContext> declarations)
+    {
+        ArgumentNullException.ThrowIfNull(declarations);
+        _sectionContexts = [.. declarations];
+    }
+
+    internal void SetUserDefinedHeaderEntities(IReadOnlyList<UserDefinedHeaderEntity> entities)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+        _userDefinedHeaderEntities = [.. entities];
     }
 
     internal void SetIncludedPopulationStructures(IReadOnlyList<ExchangeStructure> structures)
@@ -1444,7 +1746,9 @@ public sealed class ExchangeStructure
         {
             if (detachedSections.ContainsKey(section))
                 continue;
-            var clone = new DataSection(section.SchemaName, section.Name);
+            var clone = section.Name is { } sectionName
+                ? new DataSection(section.SchemaName, sectionName)
+                : new DataSection(section.SchemaName);
             detached.DataSections.Add(clone);
             detachedSections.Add(section, clone);
         }
@@ -1550,7 +1854,9 @@ public sealed class ExchangeStructure
         {
             if (!projectedSections.TryGetValue(entry.DataSection, out var section))
             {
-                section = new DataSection(governingDescriptor.Name, entry.DataSection.Name);
+                section = entry.DataSection.Name is { } sectionName
+                    ? new DataSection(governingDescriptor.Name, sectionName)
+                    : new DataSection(governingDescriptor.Name);
                 projected.DataSections.Add(section);
                 projectedSections.Add(entry.DataSection, section);
             }

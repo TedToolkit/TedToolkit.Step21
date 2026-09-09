@@ -119,6 +119,28 @@ public interface IPart21SignatureSigner
     ReadOnlyMemory<byte> Sign(ReadOnlyMemory<byte> content);
 }
 
+/// <summary>Selects the standard physical encoding used for non-ASCII characters in written STRING tokens.</summary>
+public enum Part21StringEncoding
+{
+    /// <summary>Uses X2 for BMP characters and X4 for supplementary characters.</summary>
+    Canonical = 0,
+
+    /// <summary>Writes ISO 10646 characters directly for an enclosing UTF-8 stream.</summary>
+    Utf8 = 1,
+
+    /// <summary>Uses the two-hex-digit X directive and rejects characters above U+00FF.</summary>
+    X = 2,
+
+    /// <summary>Uses P and S directives for ISO 8859 pages 1 through 9.</summary>
+    Iso8859 = 3,
+
+    /// <summary>Uses X2 UTF-16 code units for every non-ASCII character.</summary>
+    X2 = 4,
+
+    /// <summary>Uses X4 Unicode scalar values for every non-ASCII character.</summary>
+    X4 = 5,
+}
+
 /// <summary>Creates detached CMS SignedData with one caller-owned X.509 private key.</summary>
 public sealed class Part21CmsSigner : IPart21SignatureSigner
 {
@@ -154,14 +176,28 @@ public sealed class Part21CmsSigner : IPart21SignatureSigner
     }
 }
 
-/// <summary>Supplies explicit signing capabilities for one atomic write.</summary>
+/// <summary>Supplies explicit encoding, limits, and optional signing capabilities for one atomic write.</summary>
 public sealed class ExchangeStructureWriteOptions
 {
-    private readonly ReadOnlyCollection<IPart21SignatureSigner> _signers;
+    private readonly IReadOnlyList<IPart21SignatureSigner> _signers;
+
+    /// <summary>Creates unsigned write options with the selected standard string encoding.</summary>
+    public ExchangeStructureWriteOptions(Part21StringEncoding stringEncoding)
+        : this([], Part21ProcessingLimits.Default, stringEncoding)
+    {
+    }
+
+    /// <summary>Creates unsigned write options with explicit limits and standard string encoding.</summary>
+    public ExchangeStructureWriteOptions(
+        Part21ProcessingLimits processingLimits,
+        Part21StringEncoding stringEncoding)
+        : this([], processingLimits, stringEncoding)
+    {
+    }
 
     /// <summary>Creates an immutable signer snapshot in signature-section order.</summary>
     public ExchangeStructureWriteOptions(IEnumerable<IPart21SignatureSigner> signers)
-        : this(signers, Part21ProcessingLimits.Default)
+        : this(signers, Part21ProcessingLimits.Default, Part21StringEncoding.Canonical)
     {
     }
 
@@ -169,14 +205,28 @@ public sealed class ExchangeStructureWriteOptions
     public ExchangeStructureWriteOptions(
         IEnumerable<IPart21SignatureSigner> signers,
         Part21ProcessingLimits processingLimits)
+        : this(signers, processingLimits, Part21StringEncoding.Canonical)
+    {
+    }
+
+    /// <summary>Creates an immutable signer snapshot with explicit limits and standard string encoding.</summary>
+    public ExchangeStructureWriteOptions(
+        IEnumerable<IPart21SignatureSigner> signers,
+        Part21ProcessingLimits processingLimits,
+        Part21StringEncoding stringEncoding)
     {
         ArgumentNullException.ThrowIfNull(signers);
         ArgumentNullException.ThrowIfNull(processingLimits);
+        if (!Enum.IsDefined(stringEncoding))
+            throw new ArgumentOutOfRangeException(nameof(stringEncoding));
         var result = signers.ToArray();
         if (result.Any(static signer => signer is null))
             throw new ArgumentException("Signer collections cannot contain null values.", nameof(signers));
-        _signers = Array.AsReadOnly(result);
+        _signers = result.Length == 0
+            ? Array.Empty<IPart21SignatureSigner>()
+            : Array.AsReadOnly(result);
         ProcessingLimits = processingLimits;
+        StringEncoding = stringEncoding;
     }
 
     /// <summary>Gets signing capabilities in signature-section order.</summary>
@@ -184,4 +234,7 @@ public sealed class ExchangeStructureWriteOptions
 
     /// <summary>Gets the shared output, callback, and CMS limits.</summary>
     public Part21ProcessingLimits ProcessingLimits { get; }
+
+    /// <summary>Gets the standard STRING encoding selected for this write.</summary>
+    public Part21StringEncoding StringEncoding { get; }
 }

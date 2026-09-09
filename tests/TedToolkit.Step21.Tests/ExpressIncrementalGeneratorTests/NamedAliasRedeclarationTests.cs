@@ -36,7 +36,7 @@ internal sealed class NamedAliasRedeclarationTests
                     if (root.Codes.Count != 2 || root.Codes[1].Value != "second") return false;
                     var structure = new ExchangeStructure(
                         new HeaderSection(new FileDescription(["alias"], "3;1"),
-                            new FileName("alias", "2026-09-04T00:00:00", [], [], "tests", "tests", ""),
+                            new FileName("alias", "2026-09-04T00:00:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["alias_redeclaration"])),
                         [TedToolkit.Step21.Generated.AliasRedeclaration.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("alias_redeclaration"));

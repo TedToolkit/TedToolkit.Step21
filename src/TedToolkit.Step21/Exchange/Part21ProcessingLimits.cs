@@ -63,10 +63,10 @@ public sealed class Part21ProcessingLimits
     /// <summary>Gets the maximum CMS signer records in one signature section.</summary>
     public int MaximumCmsSignerCount { get; }
 
-    /// <summary>Gets the maximum nested value depth at a language-binding boundary.</summary>
+    /// <summary>Gets the maximum nested Part 21 value depth accepted at read, write, or language-binding boundaries.</summary>
     public int MaximumNestingDepth { get; }
 
-    /// <summary>Gets the maximum values, anchors, tags, or populations at a language-binding boundary.</summary>
+    /// <summary>Gets the maximum values, occurrences, anchors, tags, or populations at a bounded processing boundary.</summary>
     public int MaximumItemCount { get; }
 
     /// <summary>Gets the maximum uncompressed bytes retained for one archive or directory entry.</summary>

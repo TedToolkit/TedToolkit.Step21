@@ -1,0 +1,87 @@
+{
+  "standard": "ISO 10303-21:2016",
+  "edition": 3,
+  "normativeSource": "https://www.steptools.com/stds/step/IS_final_p21e3.html",
+  "formatVersion": 1,
+  "claimStatus": "blocked",
+  "claimBoundary": "Part 21 processor conformance is not claimed until every blocked-source row is implemented and proven against a legally usable complete ISO 10303-11:2004 source.",
+  "pics": {
+    "D.2": {
+      "class1": { "read": true, "write": true },
+      "class2": { "read": true, "write": true },
+      "class3": { "read": false, "write": false }
+    },
+    "D.3.1": {
+      "entityInstanceNames": { "read": true, "write": true },
+      "valueInstanceNames": { "read": true, "write": true },
+      "expressConstantNames": { "read": false, "write": false }
+    },
+    "D.3.2": {
+      "entityShortNames": { "read": false, "write": false },
+      "selectShortNames": { "read": false, "write": false },
+      "enumerationShortNames": { "read": false, "write": false }
+    },
+    "D.3.3": {
+      "x": { "read": true, "write": true, "representation": "System.String Unicode scalar values" },
+      "iso8859Page": { "read": true, "write": true, "representation": "System.String Unicode scalar values" },
+      "x2": { "read": true, "write": true, "representation": "System.String Unicode scalar values" },
+      "x4": { "read": true, "write": true, "representation": "System.String Unicode scalar values" },
+      "utf8": { "read": true, "write": true, "representation": "System.String Unicode scalar values" }
+    },
+    "D.3.4": {
+      "uriReferences": { "anchors": true, "references": true, "clearText": true, "compressedArchives": true },
+      "explicitSchemaPopulation": { "withoutTimestamps": true, "withTimestamps": true, "withoutSignatures": true, "withSignatures": true }
+    }
+  },
+  "implementationLimits": {
+    "maximumSchemas": 1048576,
+    "maximumDataSections": 1048576,
+    "maximumInstanceNames": 1048576,
+    "integerRepresentation": "arbitrary-precision signed System.Numerics.BigInteger, bounded by the operation input/output and item limits",
+    "realRepresentation": "exact finite decimal with arbitrary-precision significand and exponent, bounded by the operation input/output and item limits",
+    "maximumStoredStringOctets": 32769,
+    "binaryLimit": "no independent bit cap; bounded by maximumInputCharacters and maximumOutputCharacters",
+    "maximumAggregateElements": 1048576,
+    "maximumAggregateNestingDepth": 128,
+    "maximumInputCharacters": 67108864,
+    "maximumOutputCharacters": 67108864
+  },
+  "requirements": [
+    { "id": "4.3-classification", "source": "4.3", "applicability": "applicable", "status": "blocked-source", "implementation": "Part21ImplementationLevelValidator; Part21ResourceResolutionContext multi-file ZIP classification", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_round_trip_the_distinguishing_class_2_and_class_3_facilities" }, "blocker": "Full class 3 also requires operational EXPRESS constants; the required ISO 10303-11:2004 semantic source is not available in the approved source set." },
+    { "id": "5-formal-syntax", "source": "5.1-5.5; Annex B", "applicability": "applicable", "status": "implemented", "implementation": "src/grammar/STEPLexer.g4; src/grammar/STEPParser.g4; ExchangeStructureSyntaxParser", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExchangeStructureSyntaxTests/ParseTests.cs", "member": "Should_preserve_every_syntax_family_when_complete_exchange_file_is_parsed" } },
+    { "id": "5.6-token-separators", "source": "5.6", "applicability": "applicable", "status": "implemented", "implementation": "src/grammar/STEPLexer.g4 ignored-control-aware token and comment productions", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExchangeStructureSyntaxTests/ParseTests.cs", "member": "Should_ignore_raw_controls_inside_comment_delimiters" } },
+    { "id": "6.1-6.3-token-keywords", "source": "6.1-6.3", "applicability": "applicable", "status": "implemented", "implementation": "src/grammar/STEPLexer.g4; ExchangeStructureSyntaxVisitor", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExchangeStructureSyntaxTests/ParseTests.cs", "member": "Should_normalize_ignored_controls_when_source_positions_are_preserved" } },
+    { "id": "6.4.1-6.4.2-numbers", "source": "6.4.1-6.4.2", "applicability": "applicable", "status": "implemented", "implementation": "NumberValue; RealValue; Part21LexicalValueDecoder; ParameterValueFormatter", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/CanonicalSimpleWriterTests.cs", "member": "Should_write_and_reread_generated_simple_values" } },
+    { "id": "6.4.3.1-6.4.3.4-string-encodings", "source": "6.4.3.1-6.4.3.4; Table 4", "applicability": "applicable", "status": "implemented", "implementation": "Part21LexicalValueDecoder; ParameterValueFormatter", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_write_and_reread_every_declared_string_encoding" } },
+    { "id": "6.4.3.5-string-limit", "source": "6.4.3.5", "applicability": "applicable", "status": "implemented", "implementation": "Part21StringTokenLimits; Part21SyntaxLimitValidator; ParameterValueFormatter", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_enforce_the_stored_string_octet_limit_atomically" } },
+    { "id": "6.4.4-local-occurrences", "source": "6.4.4.3-6.4.4.4", "applicability": "applicable", "status": "implemented", "implementation": "EntityInstanceName; ValueInstanceName; ExchangeStructureReader; ExchangeStructureWriter", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_round_trip_all_occurrence_categories_without_resolving_resources" } },
+    { "id": "6.4.4-express-constants", "source": "6.4.4.1-6.4.4.2; 12.4", "applicability": "applicable", "status": "blocked-source", "implementation": "Syntax, schema-name lookup, anchor/header values and formatting exist; typed DATA hydration is withheld", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_reject_wrong_or_unknown_constant_categories_atomically" }, "blocker": "Resolving schema constants into typed DATA values requires the complete ISO 10303-11:2004 constant evaluation contract." },
+    { "id": "6.4.5-enumeration", "source": "6.4.5", "applicability": "applicable", "status": "implemented", "implementation": "EnumerationValue; Part21LexicalValueDecoder; ParameterValueFormatter", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/CanonicalSimpleWriterTests.cs", "member": "Should_write_and_reread_generated_simple_values" } },
+    { "id": "6.4.6-binary", "source": "6.4.6", "applicability": "applicable", "status": "implemented", "implementation": "BinaryValue; Part21LexicalValueDecoder; ParameterValueFormatter", "proof": { "file": "tests/TedToolkit.Step21.Tests/ParameterValueTests/CanonicalFormatTests.cs", "member": "Should_apply_the_clause_6_4_6_left_fill_examples" } },
+    { "id": "6.5.1-6.5.5-resource-encodings", "source": "6.5.1-6.5.5", "applicability": "applicable", "status": "implemented", "implementation": "Part21Resource; AnchorName; Part21Uri; grammar URI token rules", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_round_trip_local_anchor_values_tags_and_uuid_identity" } },
+    { "id": "6.5.6-base64", "source": "6.5.6; RFC 4648", "applicability": "applicable", "status": "implemented", "implementation": "signature grammar token rules; Part21LexicalForms; Part21SignatureEngine", "proof": { "file": "tests/TedToolkit.Step21.Tests/CmsSignatureConformanceTests/SignatureTests.cs", "member": "Should_reject_noncanonical_base64" } },
+    { "id": "7-structured-values", "source": "7.1-7.2", "applicability": "applicable", "status": "implemented", "implementation": "ParameterValue aggregate/typed values; syntax and bounded graph walkers", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_round_trip_local_anchor_values_tags_and_uuid_identity" } },
+    { "id": "8.1-8.2.4-required-header", "source": "8.1-8.2.4", "applicability": "applicable", "status": "implemented", "implementation": "HeaderSection; Part21HeaderValidator; ExchangeStructureReader; ExchangeStructureWriter", "proof": { "file": "tests/TedToolkit.Step21.Tests/HeaderSectionTests/ValidationTests.cs", "member": "Should_report_every_invalid_required_header_constraint" } },
+    { "id": "8.2.5-8.2.6-populations", "source": "8.2.5-8.2.6", "applicability": "applicable", "status": "implemented", "implementation": "SchemaPopulationExternalFile; SchemaPopulationDefinition; resource resolution context", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_read_edit_write_and_reread_population_declarations" } },
+    { "id": "8.2.7-section-language", "source": "8.2.7; ISO 639-2", "applicability": "applicable", "status": "implemented", "implementation": "SectionLanguage; Iso639Part2BibliographicCodes", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_enforce_language_codes_and_snapshot_context_identifiers" } },
+    { "id": "8.2.8-section-context", "source": "8.2.8", "applicability": "applicable", "status": "implemented", "implementation": "SectionContext", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_read_write_and_reread_section_language_and_context_declarations" } },
+    { "id": "8.3-user-header", "source": "8.3", "applicability": "applicable", "status": "implemented", "implementation": "UserDefinedHeaderEntity; ExchangeStructureReader; ExchangeStructureWriter", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_read_write_and_reread_user_defined_header_entities" } },
+    { "id": "9-anchor", "source": "9.1-9.2.8", "applicability": "applicable", "status": "implemented", "implementation": "Part21Anchor; ExchangeStructureReader; ExchangeStructureWriter", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_round_trip_local_anchor_values_tags_and_uuid_identity" } },
+    { "id": "10-reference", "source": "10.1-10.2.7", "applicability": "applicable", "status": "implemented", "implementation": "Part21Reference; Part21ResourceResolutionContext", "proof": { "file": "tests/TedToolkit.Step21.Tests/DistributedResourceResolutionTests/ResolutionTests.cs", "member": "Should_resolve_local_external_entity_and_value_identity_with_one_shared_fetch" } },
+    { "id": "11.1-11.2-data-sections", "source": "11.1-11.2", "applicability": "applicable", "status": "implemented", "implementation": "DataSection; schema descriptors; physical allocation/hydration", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_create_named_data_sections_through_the_public_model" } },
+    { "id": "11.3-user-defined-data", "source": "11.3", "applicability": "applicable", "status": "implemented", "implementation": "Public SchemaDescriptor agreement seam; physical user-defined keyword binding and projection", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_round_trip_user_defined_data_entities_through_an_agreed_descriptor" } },
+    { "id": "12.1-value-mapping", "source": "12.1.1-12.1.8", "applicability": "applicable", "status": "blocked-source", "implementation": "Generated descriptors cover simple, aggregate, defined, enumeration and select mappings; short-name metadata is withheld", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/CanonicalSimpleWriterTests.cs", "member": "Should_write_and_reread_generated_simple_values" }, "blocker": "Entity, select and enumeration short-name sources and complete EXPRESS semantics must be derived from an approved ISO 10303-11:2004 baseline, not guessed." },
+    { "id": "12.2-entity-mapping", "source": "12.2.1-12.2.11", "applicability": "applicable", "status": "implemented", "implementation": "ExpressSchemaDescriptorEmitter; generated entity hierarchy/projection/validation", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/CanonicalSimpleWriterTests.cs", "member": "Should_write_one_registered_entity_with_independent_structure_identity" } },
+    { "id": "12.3-12.6-schema-constant-rule", "source": "12.3-12.6", "applicability": "applicable", "status": "blocked-source", "implementation": "Schema dispatch and reachable RULE execution exist; DATA constant resolution remains withheld", "proof": { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/GeneratedFidelityTests.cs", "member": "Should_generate_pinned_ap203_surface_from_checked_in_schema" }, "blocker": "Completion depends on ISO21-005 and a legally usable complete ISO 10303-11:2004 semantic source." },
+    { "id": "13-print-control-semantics", "source": "13; Table 6", "applicability": "applicable", "status": "implemented", "implementation": "lexer ignored-control and print-control channels; Part21LexicalValueDecoder; canonical writer", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_ignore_print_and_raw_control_characters_inside_string_tokens" } },
+    { "id": "13-print-control-placement", "source": "13", "applicability": "applicable", "status": "implemented", "implementation": "ExchangeStructureSyntaxParser contextual token validation", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ImplementationLevelTests.cs", "member": "Should_reject_print_controls_anywhere_in_anchor_or_reference_sections" } },
+    { "id": "14-signatures", "source": "14.1", "applicability": "applicable", "status": "implemented", "implementation": "Part21SignatureEngine; Part21CmsSigner; Part21SignatureVerificationOptions", "proof": { "file": "tests/TedToolkit.Step21.Tests/CmsSignatureConformanceTests/SignatureTests.cs", "member": "Should_verify_multiple_signatures_over_every_preceding_standard_character" } },
+    { "id": "A.1-A.3-legacy-media", "source": "Annex A.1-A.3", "applicability": "not-applicable", "status": "not-applicable", "implementation": "none", "rationale": "The managed library consumes and produces character streams; physical tape, diskette, record blocking and multi-volume media operations are outside its public API." },
+    { "id": "A.4-A.5-archive-directory", "source": "Annex A.4-A.5", "applicability": "applicable", "status": "implemented", "implementation": "Part21ResourceContent archive/directory kinds; Part21ResourceResolutionContext", "proof": { "file": "tests/TedToolkit.Step21.Tests/DistributedResourceResolutionTests/ResolutionTests.cs", "member": "Should_convert_directory_and_zip_subsidiaries_with_the_explicit_converter" } },
+    { "id": "C-registration", "source": "Annex C.1-C.2", "applicability": "not-applicable", "status": "not-applicable", "implementation": "none", "rationale": "Annex C assigns ISO information-object identifiers; it imposes no runtime processor operation on this library." },
+    { "id": "D-pics", "source": "Annex D.1-D.4", "applicability": "applicable", "status": "implemented", "implementation": "this manifest and ConformanceManifestTests", "proof": { "file": "tests/TedToolkit.Step21.Tests/ConformanceClassTests/ConformanceManifestTests.cs", "member": "Should_publish_a_complete_and_self_consistent_pics" } },
+    { "id": "E-multiple-schemas", "source": "Annex E.1-E.2.3", "applicability": "applicable", "status": "implemented", "implementation": "SchemaPopulationDefinition; domain projection; population fixed-point validation", "proof": { "file": "tests/TedToolkit.Step21.Tests/SchemaPopulationConformanceTests/HeaderModelTests.cs", "member": "Should_hydrate_and_validate_the_annex_e_domain_equivalence_example" } },
+    { "id": "F-ecmascript", "source": "Annex F.1-F.4.6", "applicability": "applicable", "status": "implemented", "implementation": "src/TedToolkit.Step21.AnnexF; annex-f-ecmascript-binding.json", "proof": { "file": "tests/TedToolkit.Step21.IntegrationTests/AnnexFEcmaScriptBindingTests/AnnexFEcmaScriptBindingTests.cs", "member": "Should_execute_every_annex_f_mapping_and_apply_mutations_with_node" } },
+    { "id": "G-uuid-anchor", "source": "Annex G.1-G.2", "applicability": "applicable", "status": "implemented", "implementation": "AnchorName UUID identity", "proof": { "file": "tests/TedToolkit.Step21.Tests/AnchorOccurrenceConformanceTests/RoundTripTests.cs", "member": "Should_round_trip_local_anchor_values_tags_and_uuid_identity" } }
+  ]
+}

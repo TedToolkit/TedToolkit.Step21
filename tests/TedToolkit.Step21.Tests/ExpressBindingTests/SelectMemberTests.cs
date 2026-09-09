@@ -110,7 +110,7 @@ internal sealed class SelectMemberTests
                     var structure = new ExchangeStructure(
                         new HeaderSection(
                             new FileDescription(["intervals"], "3;1"),
-                            new FileName("intervals.step", "2026-09-04T00:00:00+08:00", [], [], "tests", "tests", ""),
+                            new FileName("intervals.step", "2026-09-04T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["intervals"])),
                         [TedToolkit.Step21.Generated.Intervals.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("intervals"));

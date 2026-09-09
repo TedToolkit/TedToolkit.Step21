@@ -159,9 +159,305 @@ public sealed class HeaderModelTests
         {
             await Assert.That(output).Contains(
                 "SCHEMA_POPULATION((('child.p21','2026-09-07T01:00:00Z',$),('https://example.test/other.p21',$,$)));\n");
-            await Assert.That(output).Contains("FILE_POPULATION('population_model','INCLUDE_REFERENCED',$);\n");
+            await Assert.That(output).Contains("FILE_POPULATION('POPULATION_MODEL','INCLUDE_REFERENCED',$);\n");
             await Assert.That(reread.SchemaPopulation.Count).IsEqualTo(2);
             await Assert.That(reread.FilePopulations.Count).IsEqualTo(2);
+        }
+    }
+
+    /// <summary>Retains default and section-specific language and context declarations through canonical writing.</summary>
+    [Test]
+    public async Task Should_read_write_and_reread_section_language_and_context_declarations()
+    {
+        var descriptor = CreateDescriptor();
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange("""
+                SECTION_LANGUAGE($,'eng');
+                SECTION_LANGUAGE('main','fre');
+                SECTION_CONTEXT($,('design','manufacturing'));
+                SECTION_CONTEXT('main',('released'));
+                """)),
+            [descriptor]);
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+        var output = destination.ToString();
+        var reread = ExchangeStructure.Read(new StringReader(output), [descriptor]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.SectionLanguages.Select(item => (item.SectionName, item.LanguageCode)))
+                .IsEquivalentTo([(null, "eng"), ("main", "fre")]);
+            await Assert.That(structure.SectionContexts[0].ContextIdentifiers)
+                .IsEquivalentTo(["design", "manufacturing"]);
+            await Assert.That(output).Contains("SECTION_LANGUAGE($,'eng');\n");
+            await Assert.That(output).Contains("SECTION_LANGUAGE('main','fre');\n");
+            await Assert.That(output).Contains("SECTION_CONTEXT($,('design','manufacturing'));\n");
+            await Assert.That(reread.SectionLanguages.Count).IsEqualTo(2);
+            await Assert.That(reread.SectionContexts.Count).IsEqualTo(2);
+        }
+    }
+
+    /// <summary>Uses the ISO 639-2 bibliographic set and snapshots public context identifiers.</summary>
+    [Test]
+    public async Task Should_enforce_language_codes_and_snapshot_context_identifiers()
+    {
+        var identifiers = new List<string> { "design" };
+        var context = new SectionContext(null, identifiers);
+        identifiers.Add("mutated");
+
+        _ = new SectionLanguage(null, "eng");
+        _ = new SectionLanguage(null, "ger");
+        _ = new SectionLanguage(null, "qaa");
+        _ = new SectionLanguage(null, "qtz");
+        var terminologic = Assert.Throws<ArgumentException>(() => _ = new SectionLanguage(null, "deu"));
+        var unknown = Assert.Throws<ArgumentException>(() => _ = new SectionLanguage(null, "zzz"));
+        var emptyContext = Assert.Throws<ArgumentException>(() => _ = new SectionContext(null, []));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(context.ContextIdentifiers).IsEquivalentTo(["design"]);
+            await Assert.That(terminologic.ParamName).IsEqualTo("languageCode");
+            await Assert.That(unknown.ParamName).IsEqualTo("languageCode");
+            await Assert.That(emptyContext.ParamName).IsEqualTo("contextIdentifiers");
+        }
+    }
+
+    /// <summary>Aggregates malformed section declarations with source locations before model publication.</summary>
+    [Test]
+    public async Task Should_reject_malformed_section_headers_atomically()
+    {
+        var failure = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("""
+                SECTION_LANGUAGE('missing','eng');
+                SECTION_LANGUAGE($,'deu');
+                SECTION_CONTEXT(1,('design'));
+                SECTION_CONTEXT($,());
+                """)),
+            [CreateDescriptor()]));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.Diagnostics).Count().IsEqualTo(4);
+            await Assert.That(failure.Diagnostics.All(item => item.Code == "P21-BIND-SECTION-HEADER")).IsTrue();
+            await Assert.That(failure.Diagnostics.All(item => item.SourceLocation is
+                { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
+            await Assert.That(failure.Diagnostics.Select(item => item.Message))
+                .Contains(message => message.Contains("does not occur", StringComparison.Ordinal));
+            await Assert.That(failure.Diagnostics.Select(item => item.Message))
+                .Contains(message => message.Contains("bibliographic", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>Rejects duplicate, missing-target, and null public declarations without touching the destination.</summary>
+    [Test]
+    public async Task Should_validate_edited_section_headers_atomically()
+    {
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange("SECTION_LANGUAGE($,'eng');\nSECTION_CONTEXT($,('design'));")),
+            [CreateDescriptor()]);
+        structure.SectionLanguages.Add(new SectionLanguage(null, "fre"));
+        structure.SectionLanguages.Add(new SectionLanguage("missing", "eng"));
+        structure.SectionLanguages.Add(null!);
+        structure.SectionContexts.Add(new SectionContext(null, ["manufacturing"]));
+        structure.SectionContexts.Add(new SectionContext("missing", ["released"]));
+        structure.SectionContexts.Add(null!);
+        var destination = new StringWriter();
+
+        var failure = Assert.Throws<ExchangeStructureWriteValidationException>(() => structure.Write(destination));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code)).IsEquivalentTo([
+                "P21.STRUCTURE.SECTION_LANGUAGE.DUPLICATE",
+                "P21.STRUCTURE.SECTION_LANGUAGE.SECTION",
+                "P21.STRUCTURE.SECTION_LANGUAGE.REQUIRED",
+                "P21.STRUCTURE.SECTION_CONTEXT.DUPLICATE",
+                "P21.STRUCTURE.SECTION_CONTEXT.SECTION",
+                "P21.STRUCTURE.SECTION_CONTEXT.REQUIRED",
+            ]);
+            await Assert.That(destination.ToString()).IsEmpty();
+        }
+    }
+
+    /// <summary>Applies selected string encoding and item limits to section-context header values.</summary>
+    [Test]
+    public async Task Should_encode_and_bound_section_context_values_atomically()
+    {
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange(string.Empty)),
+            [CreateDescriptor()]);
+        structure.SectionContexts.Add(new SectionContext(null, ["设计", "manufacturing"]));
+        var encoded = new StringWriter();
+        structure.Write(encoded, new ExchangeStructureWriteOptions(Part21StringEncoding.X4));
+        var limited = new StringWriter();
+
+        var failure = Assert.Throws<ExchangeStructureCapabilityException>(() => structure.Write(
+            limited,
+            new ExchangeStructureWriteOptions(
+                new Part21ProcessingLimits(maximumItemCount: 1),
+                Part21StringEncoding.Canonical)));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(encoded.ToString()).Contains(
+                "SECTION_CONTEXT($,('\\X4\\00008BBE00008BA1\\X0\\','manufacturing'));\n");
+            await Assert.That(failure.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-ITEM");
+            await Assert.That(limited.ToString()).IsEmpty();
+        }
+    }
+
+    /// <summary>Retains user-defined header values and writes them after every standard header declaration.</summary>
+    [Test]
+    public async Task Should_read_write_and_reread_user_defined_header_entities()
+    {
+        var descriptor = CreateDescriptor();
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange("""
+                SECTION_CONTEXT($,('design'));
+                !A_SPECIAL_ENTITY(#1,'ABC',123,WRAPPED((1,$,*)));
+                """)),
+            [descriptor]);
+        var destination = new StringWriter();
+
+        structure.Write(destination);
+        var output = destination.ToString();
+        var reread = ExchangeStructure.Read(new StringReader(output), [descriptor]);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(structure.UserDefinedHeaderEntities).HasSingleItem();
+            await Assert.That(structure.UserDefinedHeaderEntities[0].Keyword).IsEqualTo("!A_SPECIAL_ENTITY");
+            await Assert.That(structure.UserDefinedHeaderEntities[0].Parameters[0].TryGetEntity(out _)).IsTrue();
+            await Assert.That(output).Contains("!A_SPECIAL_ENTITY(#1,'ABC',123,WRAPPED((1,$,*)));\n");
+            await Assert.That(output.IndexOf("SECTION_CONTEXT", StringComparison.Ordinal))
+                .IsLessThan(output.IndexOf("!A_SPECIAL_ENTITY", StringComparison.Ordinal));
+            await Assert.That(reread.UserDefinedHeaderEntities).HasSingleItem();
+        }
+    }
+
+    /// <summary>Requires all standard headers before user-defined entities and resolves their occurrence values.</summary>
+    [Test]
+    public async Task Should_reject_invalid_user_defined_header_order_and_occurrences_atomically()
+    {
+        var order = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("!CUSTOM('x');\nSECTION_CONTEXT($,('design'));")),
+            [CreateDescriptor()]));
+        var occurrence = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("!CUSTOM(#99);")),
+            [CreateDescriptor()]));
+        var ordinaryKeyword = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange("CUSTOM('x');")),
+            [CreateDescriptor()]));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(order.Diagnostics.Single().Code).IsEqualTo("P21-BIND-HEADER-ORDER");
+            await Assert.That(occurrence.Diagnostics.Single().Code).IsEqualTo("P21-BIND-USER-HEADER");
+            await Assert.That(ordinaryKeyword.Diagnostics.Single().Code).IsEqualTo("P21-BIND-HEADER-ENTITY");
+            await Assert.That(order.Diagnostics.Single().SourceLocation).IsNotNull();
+            await Assert.That(occurrence.Diagnostics.Single().SourceLocation).IsNotNull();
+            await Assert.That(ordinaryKeyword.Diagnostics.Single().SourceLocation).IsNotNull();
+        }
+    }
+
+    /// <summary>Ignores mapped control characters embedded in a user-defined header keyword.</summary>
+    [Test]
+    public async Task Should_normalize_ignored_controls_in_user_defined_header_keywords()
+    {
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange("!CUS\u0001TOM('x');")),
+            [CreateDescriptor()]);
+
+        await Assert.That(structure.UserDefinedHeaderEntities.Single().Keyword).IsEqualTo("!CUSTOM");
+    }
+
+    /// <summary>Snapshots public custom parameters and rejects invalid edits before output publication.</summary>
+    [Test]
+    public async Task Should_validate_public_user_defined_header_entities_atomically()
+    {
+        var parameters = new List<ParameterValue> { ParameterValue.FromString("retained") };
+        var retained = new UserDefinedHeaderEntity("!CUSTOM_1", parameters);
+        parameters.Add(ParameterValue.FromInteger(2));
+        var badKeyword = Assert.Throws<ArgumentException>(() => _ = new UserDefinedHeaderEntity("CUSTOM", []));
+        var structure = ExchangeStructure.Read(
+            new StringReader(Exchange(string.Empty)),
+            [CreateDescriptor()]);
+        structure.UserDefinedHeaderEntities.Add(retained);
+        structure.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!BROKEN",
+            [ParameterValue.FromEntity(new DetachedHeaderEntity())]));
+        structure.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!RESOURCE",
+            [ParameterValue.FromTyped(
+                "WRAPPED",
+                ParameterValue.FromResource(new Part21Resource("asset.p21")))]));
+        structure.UserDefinedHeaderEntities.Add(null!);
+        var destination = new StringWriter();
+
+        var failure = Assert.Throws<ExchangeStructureWriteValidationException>(() => structure.Write(destination));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(retained.Parameters).HasSingleItem();
+            await Assert.That(badKeyword.ParamName).IsEqualTo("keyword");
+            await Assert.That(failure.ValidationResult.Failures.Select(item => item.Code)).IsEquivalentTo([
+                "P21.STRUCTURE.USER_HEADER.ENTITY_REGISTRATION",
+                "P21.STRUCTURE.USER_HEADER.PARAMETER_KIND",
+                "P21.STRUCTURE.USER_HEADER.REQUIRED",
+            ]);
+            await Assert.That(destination.ToString()).IsEmpty();
+        }
+    }
+
+    /// <summary>Enforces the normative 32769-octet stored STRING ceiling on read and every write encoding.</summary>
+    [Test]
+    public async Task Should_enforce_the_stored_string_octet_limit_atomically()
+    {
+        var descriptor = CreateDescriptor();
+        var accepted = ExchangeStructure.Read(new StringReader(Exchange(string.Empty)), [descriptor]);
+        accepted.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!BOUNDARY",
+            [ParameterValue.FromString(new string('A', 32767))]));
+        var acceptedOutput = new StringWriter();
+        accepted.Write(acceptedOutput);
+
+        var over = ExchangeStructure.Read(new StringReader(Exchange(string.Empty)), [descriptor]);
+        over.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!BOUNDARY",
+            [ParameterValue.FromString(new string('A', 32768))]));
+        var overOutput = new StringWriter();
+        var writeFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => over.Write(overOutput));
+        var encoded = ExchangeStructure.Read(new StringReader(Exchange(string.Empty)), [descriptor]);
+        encoded.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!BOUNDARY",
+            [ParameterValue.FromString(string.Concat(Enumerable.Repeat("😀", 4094)))]));
+        var encodedOutput = new StringWriter();
+        encoded.Write(
+            encodedOutput,
+            new ExchangeStructureWriteOptions(Part21StringEncoding.X4));
+        var encodedOver = ExchangeStructure.Read(new StringReader(Exchange(string.Empty)), [descriptor]);
+        encodedOver.UserDefinedHeaderEntities.Add(new UserDefinedHeaderEntity(
+            "!BOUNDARY",
+            [ParameterValue.FromString(string.Concat(Enumerable.Repeat("😀", 4095)))]));
+        var encodedOverOutput = new StringWriter();
+        var encodedFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => encodedOver.Write(
+            encodedOverOutput,
+            new ExchangeStructureWriteOptions(Part21StringEncoding.X4)));
+        var readFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => ExchangeStructure.Read(
+            new StringReader(Exchange($"!BOUNDARY('{new string('A', 32768)}');")),
+            [descriptor]));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(acceptedOutput.ToString()).Contains("!BOUNDARY('AAAAAAAA");
+            await Assert.That(writeFailure.Diagnostics.Single().Code).IsEqualTo("P21-STRING-STORED-LENGTH");
+            await Assert.That(encodedFailure.Diagnostics.Single().Code).IsEqualTo("P21-STRING-STORED-LENGTH");
+            await Assert.That(readFailure.Diagnostics.Single().Code).IsEqualTo("P21-STRING-STORED-LENGTH");
+            await Assert.That(readFailure.Diagnostics.Single().SourceLocation).IsNotNull();
+            await Assert.That(overOutput.ToString()).IsEmpty();
+            await Assert.That(encodedOutput.ToString()).Contains("!BOUNDARY('\\X4\\0001F6000001F600");
+            await Assert.That(encodedOverOutput.ToString()).IsEmpty();
         }
     }
 
@@ -188,7 +484,7 @@ public sealed class HeaderModelTests
         var descriptor = CreateDescriptor();
         var failure = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
             new StringReader(Exchange("""
-                SCHEMA_POPULATION((('child.p21','not-a-time',$),('other.p21',$,'not base64')));
+                SCHEMA_POPULATION((('child.p21','not-a-time',$),('other.p21',$,'not base64'),('bad%GG',$,$)));
                 SCHEMA_POPULATION((('duplicate.p21',$,$)));
                 FILE_POPULATION('population_model','SECTION_BOUNDARY',());
                 """)),
@@ -198,7 +494,7 @@ public sealed class HeaderModelTests
         {
             await Assert.That(failure.Diagnostics.Count(diagnostic =>
                     diagnostic.Code == "P21-BIND-SCHEMA-POPULATION"))
-                .IsEqualTo(4);
+                .IsEqualTo(5);
             await Assert.That(failure.Diagnostics.All(diagnostic => diagnostic.SourceLocation is
             { FilePath: "<reader>", Line: > 0, Column: > 0, })).IsTrue();
         }
@@ -227,6 +523,8 @@ public sealed class HeaderModelTests
             _ = new SchemaPopulationExternalFile(location, messageDigest: "AQ ID"));
         var nonCanonicalDigest = Assert.Throws<ArgumentException>(() =>
             _ = new SchemaPopulationExternalFile(location, messageDigest: "AB=="));
+        var invalidLocation = Assert.Throws<ArgumentException>(() =>
+            _ = new SchemaPopulationExternalFile(new Uri("bad%GG", UriKind.Relative)));
 
         using (Assert.Multiple())
         {
@@ -237,6 +535,7 @@ public sealed class HeaderModelTests
             await Assert.That(invalidEndOfDay.ParamName).IsEqualTo("timeStamp");
             await Assert.That(whitespaceDigest.ParamName).IsEqualTo("messageDigest");
             await Assert.That(nonCanonicalDigest.ParamName).IsEqualTo("messageDigest");
+            await Assert.That(invalidLocation.ParamName).IsEqualTo("location");
         }
     }
 
@@ -1530,6 +1829,11 @@ public sealed class HeaderModelTests
         return descriptorTypeNames.Select(typeName => (SchemaDescriptor)assembly.GetType(
             typeName,
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!).ToArray();
+    }
+
+    private sealed class DetachedHeaderEntity : Entity
+    {
+        public override IEnumerable<Entity> DirectReferences => [];
     }
 
     private sealed class DictionaryProvider(IReadOnlyDictionary<string, Part21ResourceContent> resources)
