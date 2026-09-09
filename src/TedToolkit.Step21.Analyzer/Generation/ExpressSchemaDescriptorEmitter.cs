@@ -25,6 +25,8 @@ internal static class ExpressSchemaDescriptorEmitter
 
     private const int SELECT_HYDRATION_METHODS_PER_SHARD = 16;
 
+    private const int SELECT_PROJECTION_METHODS_PER_SHARD = 16;
+
     /// <summary>
     /// Emits one path-independent sealed schema descriptor through RoslynHelper.
     /// </summary>
@@ -125,7 +127,13 @@ internal static class ExpressSchemaDescriptorEmitter
         }
 
         descriptor.AddMember(CreateCapabilityMethod());
-        descriptor.AddMember(CreateProjectMethod(entities, complexEntities, resolver, physicalNames));
+        descriptor.AddMember(CreateProjectMethod(
+            schema.Identity,
+            entities,
+            complexEntities,
+            resolver,
+            shards,
+            physicalNames));
         descriptor.AddMember(CreateReferenceCompatibilityMethod(schema));
         var entityConstantNames = GetConstantNames(schema, entityConstants: true);
         if (entityConstantNames.Length > 0)
@@ -388,23 +396,38 @@ internal static class ExpressSchemaDescriptorEmitter
     }
 
     private static Method CreateProjectMethod(
+        ExpressBoundSchemaIdentity currentSchema,
         IReadOnlyList<ExpressEntityProjection> entities,
         IReadOnlyList<ExpressComplexEntityProjection> complexEntities,
         ExpressGeneratedTypeResolver resolver,
+        ExpressDescriptorShards shards,
         ExpressPhysicalNameMap physicalNames)
     {
         var componentType = new DataType(
             "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::System.Collections.Generic.IReadOnlyList<global::TedToolkit.Step21.ParameterValue>>>");
         var method = CreateOverrideMethod("ProjectEntityCore", componentType);
         method.AddParameter(SourceComposer.Parameter(new DataType("global::TedToolkit.Step21.Entity"), "value"));
+        var selectProjectionHelpers = new SelectProjectionHelpers(
+            currentSchema,
+            resolver,
+            shards,
+            physicalNames);
         foreach (var entity in entities.Where(entity => CanMapEntity(entity, resolver)))
         {
-            method.AddStatement(CreateProjectEntityBranch(entity, resolver, physicalNames));
+            method.AddStatement(CreateProjectEntityBranch(
+                entity,
+                resolver,
+                selectProjectionHelpers,
+                physicalNames));
         }
 
         foreach (var entity in complexEntities)
         {
-            method.AddStatement(CreateProjectComplexEntityBranch(entity, resolver, physicalNames));
+            method.AddStatement(CreateProjectComplexEntityBranch(
+                entity,
+                resolver,
+                selectProjectionHelpers,
+                physicalNames));
         }
 
         method.AddStatement(new CustomExpression("[]").Return);
@@ -700,6 +723,7 @@ internal static class ExpressSchemaDescriptorEmitter
     private static IfStatement CreateProjectEntityBranch(
         ExpressEntityProjection entity,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames)
     {
         var typedName = $"typed{entity.Name}";
@@ -711,6 +735,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 entity.EffectiveAttributes,
                 typedName,
                 resolver,
+                selectProjectionHelpers,
                 physicalNames),
         ];
         var expression = $"[{string.Join(", ", components)}]";
@@ -721,6 +746,7 @@ internal static class ExpressSchemaDescriptorEmitter
     private static IfStatement CreateProjectComplexEntityBranch(
         ExpressComplexEntityProjection entity,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames)
     {
         var typedName = $"typed{entity.Name}";
@@ -736,6 +762,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 attributes,
                 typedName,
                 resolver,
+                selectProjectionHelpers,
                 physicalNames,
                 indexOffset,
                 entity));
@@ -752,6 +779,7 @@ internal static class ExpressSchemaDescriptorEmitter
         IReadOnlyList<ExpressEntityAttributeProjection> attributes,
         string typedName,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames,
         int indexOffset = 0,
         ExpressComplexEntityProjection? complexEntity = null)
@@ -762,6 +790,7 @@ internal static class ExpressSchemaDescriptorEmitter
             typedName,
             indexOffset + index,
             resolver,
+            selectProjectionHelpers,
             physicalNames,
             complexEntity?.IsDerivedRedeclared(attribute) == true,
             useInterfaceContract: complexEntity is not null));
@@ -850,6 +879,7 @@ internal static class ExpressSchemaDescriptorEmitter
         string typedName,
         int index,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames,
         bool isDerivedRedeclared = false,
         bool useInterfaceContract = false)
@@ -885,6 +915,7 @@ internal static class ExpressSchemaDescriptorEmitter
             physicalValue,
             index,
             resolver,
+            selectProjectionHelpers,
             physicalNames);
         return attribute.Attribute.IsOptional
             ? $"{value} is null ? global::TedToolkit.Step21.ParameterValue.Omitted : {mapped}"
@@ -997,11 +1028,19 @@ internal static class ExpressSchemaDescriptorEmitter
         string value,
         int index,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames)
     {
         if (type is ExpressBoundAggregateType aggregate)
         {
-            return CreateProjectedAggregate(currentSchema, aggregate, value, index, resolver, physicalNames);
+            return CreateProjectedAggregate(
+                currentSchema,
+                aggregate,
+                value,
+                index,
+                resolver,
+                selectProjectionHelpers,
+                physicalNames);
         }
 
         if (type is ExpressBoundNamedType named)
@@ -1019,19 +1058,17 @@ internal static class ExpressSchemaDescriptorEmitter
                     "global::TedToolkit.Step21.ParameterValue.FromEnumeration("
                     + CreateEnumerationProjection(named.Declaration, $"{value}.Value", resolver, physicalNames)
                     + ")",
-                ExpressBoundSelectType select => CreateProjectedSelect(
-                    currentSchema,
+                ExpressBoundSelectType select => selectProjectionHelpers.CreateCall(
+                    named,
                     select,
-                    value,
-                    index,
-                    resolver,
-                    physicalNames),
+                    value),
                 _ => CreateProjectedValue(
                     currentSchema,
                     declaration.UnderlyingType,
                     $"{value}.Value",
                     index,
                     resolver,
+                    selectProjectionHelpers,
                     physicalNames),
             };
         }
@@ -1207,6 +1244,7 @@ internal static class ExpressSchemaDescriptorEmitter
         string value,
         int index,
         ExpressGeneratedTypeResolver resolver,
+        SelectProjectionHelpers selectProjectionHelpers,
         ExpressPhysicalNameMap physicalNames)
     {
         if (!ExpressDescriptorTypeSupport.TryGetAggregateBounds(
@@ -1228,6 +1266,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 item,
                 (index * 100) + 1,
                 resolver,
+                selectProjectionHelpers,
                 physicalNames);
             var count = checked(upperBound!.Value - lowerBound + 1);
             return "global::TedToolkit.Step21.ParameterValue.FromAggregate("
@@ -1240,7 +1279,14 @@ internal static class ExpressSchemaDescriptorEmitter
 
         return "global::TedToolkit.Step21.ParameterValue.FromAggregate("
             + $"global::System.Linq.Enumerable.Select({value}, {item} => "
-            + $"{CreateProjectedValue(currentSchema, aggregate.ElementType, item, (index * 100) + 1, resolver, physicalNames)}))";
+            + $"{CreateProjectedValue(
+                currentSchema,
+                aggregate.ElementType,
+                item,
+                (index * 100) + 1,
+                resolver,
+                selectProjectionHelpers,
+                physicalNames)}))";
     }
 
     private static string CreateAggregateCandidate(
@@ -1584,52 +1630,6 @@ internal static class ExpressSchemaDescriptorEmitter
                 physicalNames);
     }
 
-    private static string CreateProjectedSelect(
-        ExpressBoundSchemaIdentity currentSchema,
-        ExpressBoundSelectType select,
-        string value,
-        int index,
-        ExpressGeneratedTypeResolver resolver,
-        ExpressPhysicalNameMap physicalNames)
-    {
-        var alternatives = resolver.GetSelectAlternatives(select)
-            .Select((alternative, alternativeIndex) =>
-            {
-                var alternativeName = ExpressEntityProjection.ToPascalCase(alternative.Name);
-                var selectedName = $"selected{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
-                    + alternativeIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var alternativeType = CreateNamedType(alternative);
-                var underlying = alternative.Kind == ExpressDeclarationKind.Entity
-                    ? null
-                    : resolver.GetDefinedType(alternative).UnderlyingType;
-                var projected = underlying is ExpressBoundSelectType nested
-                    ? CreateProjectedSelect(
-                        currentSchema,
-                        nested,
-                        selectedName,
-                        checked(((index + 1) * 100) + alternativeIndex),
-                        resolver,
-                        physicalNames)
-                    : CreateProjectedValue(
-                        currentSchema,
-                        alternativeType,
-                        selectedName,
-                        (index * 100) + alternativeIndex,
-                        resolver,
-                        physicalNames);
-                if (alternative.Kind != ExpressDeclarationKind.Entity
-                    && underlying is not ExpressBoundSelectType)
-                {
-                    projected = "global::TedToolkit.Step21.ParameterValue.FromTyped("
-                        + $"\"{physicalNames.TypeName(alternative)}\", {projected})";
-                }
-
-                return $"{value}.TryGet{alternativeName}(out var {selectedName}) ? {projected} : ";
-            });
-        return string.Concat(alternatives)
-            + "throw new global::System.InvalidOperationException()";
-    }
-
     private static List<SelectReadBranch> CreateSelectReadBranches(
         ExpressBoundSchemaIdentity currentSchema,
         ExpressBoundNamedType namedSelect,
@@ -1839,6 +1839,114 @@ internal static class ExpressSchemaDescriptorEmitter
     private static ExpressBoundNamedType CreateNamedType(ExpressBoundSymbol symbol)
     {
         return new(symbol, symbol.Span);
+    }
+
+    /// <summary>
+    /// Owns one shared parameter projection method per named SELECT used by descriptor serialization.
+    /// </summary>
+    private sealed class SelectProjectionHelpers
+    {
+        private readonly ExpressBoundSchemaIdentity _currentSchema;
+
+        private readonly ExpressGeneratedTypeResolver _resolver;
+
+        private readonly ExpressDescriptorShards _shards;
+
+        private readonly ExpressPhysicalNameMap _physicalNames;
+
+        private readonly Dictionary<ExpressBoundSymbol, string> _calls = [];
+
+        /// <summary>
+        /// Initializes shared SELECT projectors for one generated descriptor.
+        /// </summary>
+        /// <param name="currentSchema">The schema owning generated use sites.</param>
+        /// <param name="resolver">The generated value-type resolver.</param>
+        /// <param name="shards">The structural descriptor partitions.</param>
+        /// <param name="physicalNames">The explicit Part 21 physical-name inventory.</param>
+        internal SelectProjectionHelpers(
+            ExpressBoundSchemaIdentity currentSchema,
+            ExpressGeneratedTypeResolver resolver,
+            ExpressDescriptorShards shards,
+            ExpressPhysicalNameMap physicalNames)
+        {
+            _currentSchema = currentSchema;
+            _resolver = resolver;
+            _shards = shards;
+            _physicalNames = physicalNames;
+        }
+
+        /// <summary>
+        /// Creates a call to the shared projector for one named SELECT.
+        /// </summary>
+        /// <param name="namedSelect">The named SELECT type.</param>
+        /// <param name="select">The resolved SELECT domain.</param>
+        /// <param name="value">The generated SELECT value expression.</param>
+        /// <returns>The generated projector call.</returns>
+        internal string CreateCall(
+            ExpressBoundNamedType namedSelect,
+            ExpressBoundSelectType select,
+            string value)
+        {
+            if (!_calls.TryGetValue(namedSelect.Declaration, out var callName))
+            {
+                var ordinal = _calls.Count;
+                var suffix = ExpressEntityProjection.ToPascalCase(namedSelect.Declaration.Name)
+                    + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var methodName = "__ExpressProjectSelect" + suffix;
+                var shardName = "__ExpressSelectProjectionShard"
+                    + (ordinal / SELECT_PROJECTION_METHODS_PER_SHARD)
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture);
+                callName = _shards.Qualify(methodName, shardName);
+                _calls.Add(namedSelect.Declaration, callName);
+
+                var method = SourceComposer<ExpressIncrementalGenerator>.Method(
+                    methodName,
+                    SourceComposer.ReturnType(new DataType("global::TedToolkit.Step21.ParameterValue")));
+                method.Accessibility = TedToolkit.RoslynHelper.Accessibility.PRIVATE;
+                method.IsStatic = true;
+                var selectType = GetGeneratedTypeName(_currentSchema, namedSelect.Declaration);
+                method.AddParameter(SourceComposer.Parameter(new DataType(selectType), "value"));
+
+                var alternativeIndex = 0;
+                foreach (var alternative in _resolver.GetSelectAlternatives(select))
+                {
+                    var alternativeName = ExpressEntityProjection.ToPascalCase(alternative.Name);
+                    var selectedName = "projectedSelect"
+                        + ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + alternativeIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var alternativeType = CreateNamedType(alternative);
+                    var underlying = alternative.Kind == ExpressDeclarationKind.Entity
+                        ? null
+                        : _resolver.GetDefinedType(alternative).UnderlyingType;
+                    var projected = CreateProjectedValue(
+                        _currentSchema,
+                        alternativeType,
+                        selectedName,
+                        checked((ordinal * 1000) + alternativeIndex),
+                        _resolver,
+                        this,
+                        _physicalNames);
+                    if (alternative.Kind != ExpressDeclarationKind.Entity
+                        && underlying is not ExpressBoundSelectType)
+                    {
+                        projected = "global::TedToolkit.Step21.ParameterValue.FromTyped("
+                            + $"\"{_physicalNames.TypeName(alternative)}\", {projected})";
+                    }
+
+                    method.AddStatement(new IfStatement(new CustomExpression(
+                            $"value.TryGet{alternativeName}(out var {selectedName})"))
+                        .AddStatement(new CustomExpression(projected).Return));
+                    alternativeIndex++;
+                }
+
+                method.AddStatement(new CustomExpression(
+                    "throw new global::System.InvalidOperationException()"));
+                AddSummary(method, "Projects one named SELECT value to its physical parameter representation.");
+                _shards.Add(method, shardName);
+            }
+
+            return $"{callName}({value})";
+        }
     }
 
     /// <summary>

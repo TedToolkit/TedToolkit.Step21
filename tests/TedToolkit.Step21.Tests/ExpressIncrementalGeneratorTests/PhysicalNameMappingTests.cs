@@ -30,6 +30,9 @@ public sealed class PhysicalNameMappingTests
           selected : payload;
           status : state;
         END_ENTITY;
+        ENTITY marker_two;
+          selected : payload;
+        END_ENTITY;
         END_SCHEMA;
         """;
 
@@ -111,6 +114,7 @@ public sealed class PhysicalNameMappingTests
             await Assert.That(descriptor).Contains("FromTyped(\"STA\"");
             await Assert.That(descriptor).Contains("\"ACTIVE\" or \"ACT\"");
             await Assert.That(descriptor).Contains("\"ACTIVE\" => \"ACT\"");
+            await Assert.That(descriptor.Split("__ExpressProjectSelectPayload0(").Length - 1).IsEqualTo(3);
         }
 
         using var stream = new MemoryStream();
