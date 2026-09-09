@@ -1321,8 +1321,9 @@ internal static class ExpressExpressionEmitter
             ?? context.ResolveAggregateType?.Invoke(sourceCarrierType)
             ?? context.ResolveAggregateType?.Invoke(sourceExpression.Type.DeclaredType!)
             ?? resultAggregate;
-        if (context.ResolveDefinedValueType?.Invoke(sourceCarrierType)
-            is not ExpressBoundAggregateType)
+        var resolvedSourceCarrier = context.ResolveDefinedValueType?.Invoke(sourceCarrierType);
+        if (resolvedSourceCarrier is not null
+            && resolvedSourceCarrier is not ExpressBoundAggregateType)
         {
             source = context.ResolveAggregateSource?.Invoke(
                 sourceCarrierType,
