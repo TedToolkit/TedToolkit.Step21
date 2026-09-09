@@ -198,6 +198,14 @@ implementation inventory is evidence about current behavior, not a substitute fo
   descriptor-source hash; and the complete Release unit suite passes 724/724 with zero skips. Compatibility between
   unlike aggregate declarations remains pending with clause 12.11 rather than being inferred from this value-copy
   implementation.
+- A line-by-line recheck of clause 13.3.2 found that element and range assignment constrain the declared carrier
+  type, so candidate `b7ca3cc` had incorrectly treated defined STRING/BINARY wrappers as direct carriers. Corrective
+  candidate `052455c` removes that inferred behavior, validates the carrier at every qualified path segment, and
+  rejects defined scalar, SET and BAG element carriers plus LIST and defined-scalar range carriers with source-located
+  STEP21EXP006 diagnostics. Direct STRING/BINARY element and range replacement still executes successfully;
+  `ISO21WorkItem=ISO21-009` passes 15/15 and all 143 `ReachableRuleTests` pass. SELECT carriers are explicitly admitted
+  by the source but remain withheld with a deterministic diagnostic until their runtime alternative and copy-back
+  semantics are generated.
 
 Source identities:
 
