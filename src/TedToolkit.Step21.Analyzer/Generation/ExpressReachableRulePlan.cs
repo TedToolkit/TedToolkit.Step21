@@ -1277,7 +1277,12 @@ internal sealed class ExpressReachableRulePlan
                     || HasValidLoopTransfers(declarationRule, false))
                 && operations.Where(operation => operation.Role == "aliasStmt")
                     .All(alias => alias.ChildRules("qualifier").All(qualifier =>
-                        qualifier.ChildRules().Single().Role is "attributeQualifier" or "groupQualifier"))
+                    {
+                        var operation = qualifier.ChildRules().Single();
+                        return operation.Role is "attributeQualifier" or "groupQualifier"
+                            || (operation.Role == "indexQualifier"
+                                && !operation.ChildRules("index2").Any());
+                    }))
                 && operations.Where(operation => operation.Role == "assignmentStmt")
                     .All(assignment =>
                     {
@@ -1879,7 +1884,12 @@ internal sealed class ExpressReachableRulePlan
                 && !operations.Any(operation => operation.Role == "returnStmt")
                 && operations.Where(operation => operation.Role == "aliasStmt")
                     .All(alias => alias.ChildRules("qualifier").All(qualifier =>
-                        qualifier.ChildRules().Single().Role is "attributeQualifier" or "groupQualifier"))
+                    {
+                        var operation = qualifier.ChildRules().Single();
+                        return operation.Role is "attributeQualifier" or "groupQualifier"
+                            || (operation.Role == "indexQualifier"
+                                && !operation.ChildRules("index2").Any());
+                    }))
                 && operations.Where(operation => operation.Role == "assignmentStmt")
                     .All(assignment => assignment.ChildRules("qualifier").All(qualifier =>
                     {

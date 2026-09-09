@@ -11631,7 +11631,7 @@ public sealed class ReachableRuleTests
             END_ENTITY;
             END_SCHEMA;
             """;
-        const string unsupportedIndexedAliasSchema = """
+        const string indexedAliasSchema = """
             SCHEMA indexed_alias_model;
             FUNCTION indexed_alias(input : LIST [1:?] OF INTEGER) : INTEGER;
               ALIAS first_item FOR input[1];
@@ -11641,9 +11641,31 @@ public sealed class ReachableRuleTests
             ENTITY sample;
               items : LIST [1:?] OF INTEGER;
             WHERE
-              invalid : indexed_alias(items) > 0;
+              indexed : indexed_alias(items) = 7;
             END_ENTITY;
             END_SCHEMA;
+            """;
+        const string indexedAliasConsumer = """
+            using System.Numerics;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.IndexedAliasModel;
+
+            internal static class IndexedAliasConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["indexed alias"], "3;1"),
+                            new FileName("indexed-alias.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["indexed_alias_model"])),
+                        [TedToolkit.Step21.Generated.IndexedAliasModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("indexed_alias_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(1) { 7 }));
+                    return structure.Validate();
+                }
+            }
             """;
         var result = GeneratorHostTests.Run(
             consumer,
@@ -11652,8 +11674,9 @@ public sealed class ReachableRuleTests
             ("schemas/invalid-alias-source.exp", invalidSchema));
         var leakedAliasResult = GeneratorHostTests.Run(
             ("schemas/leaked-alias-scope.exp", leakedAliasSchema));
-        var unsupportedIndexedAliasResult = GeneratorHostTests.Run(
-            ("schemas/unsupported-indexed-alias.exp", unsupportedIndexedAliasSchema));
+        var indexedAliasResult = GeneratorHostTests.Run(
+            indexedAliasConsumer,
+            ("schemas/indexed-alias.exp", indexedAliasSchema));
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
@@ -11690,12 +11713,22 @@ public sealed class ReachableRuleTests
                     Environment.NewLine,
                     leakedAliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
             await Assert.That(leakedAliasResult.GeneratedSources).IsEmpty();
-            await Assert.That(unsupportedIndexedAliasResult.Diagnostics.Any(diagnostic =>
-                diagnostic.Id == "STEP21EXP006")).IsTrue()
+            await Assert.That(indexedAliasResult.Diagnostics
+                .Concat(indexedAliasResult.OutputCompilation.GetDiagnostics())
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
                 .Because(string.Join(
                     Environment.NewLine,
-                    unsupportedIndexedAliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
-            await Assert.That(unsupportedIndexedAliasResult.GeneratedSources).IsEmpty();
+                    indexedAliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            var indexedAssembly = Emit(indexedAliasResult.OutputCompilation);
+            var validateIndexed = indexedAssembly.GetType("IndexedAliasConsumer", throwOnError: true)!.GetMethod(
+                "Validate",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            var indexedValidation = (ValidationResult)validateIndexed.Invoke(null, null)!;
+            await Assert.That(indexedValidation.IsValid).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    indexedValidation.Failures.Select(failure => failure.Message)));
         }
     }
 

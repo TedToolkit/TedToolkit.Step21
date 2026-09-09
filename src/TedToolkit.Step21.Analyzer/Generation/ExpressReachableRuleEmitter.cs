@@ -1696,6 +1696,35 @@ internal static class ExpressReachableRuleEmitter
                     continue;
                 }
 
+                if (qualifier.ChildRules("indexQualifier").SingleOrDefault() is { } indexSyntax
+                    && targetType is ExpressBoundAggregateType
+                    { Kind: ExpressAggregateKind.Array or ExpressAggregateKind.List, } aggregate)
+                {
+                    var index = plan.GetExpression(indexSyntax.RequiredChild("index1")
+                        .RequiredChild("index")
+                        .RequiredChild("numericExpression"));
+                    var emittedIndex = ExpressExpressionEmitter.Emit(
+                        index,
+                        CreateContext(
+                            plan,
+                            selfExpression: null,
+                            "entities",
+                            lexicalNames,
+                            safeIndices,
+                            allocateTemporaryName,
+                            selectNarrowings,
+                            pathNarrowings,
+                            determinateLexicals,
+                            safeIndexPaths,
+                            scalarNarrowings));
+                    var position = $"checked((int)({emittedIndex.Code}))";
+                    targetCode += aggregate.Kind == ExpressAggregateKind.Array
+                        ? $"[{position}]"
+                        : $"[{position} - 1]";
+                    targetType = aggregate.ElementType;
+                    continue;
+                }
+
                 throw new InvalidOperationException(
                     "An EXPRESS ALIAS qualifier passed shape validation without a static generator.");
             }
