@@ -147,6 +147,16 @@ implementation inventory is evidence about current behavior, not a substitute fo
   positive, negative and zero increments, mismatched directions, once-only capture, all three indeterminate positions
   and all three non-numeric positions. The candidate passes 9/9 `ISO21WorkItem=ISO21-009` tests and all 138
   `ReachableRuleTests`.
+- Clause 13.9.1(g) also establishes a local scope for the implicit NUMBER loop variable: it hides a surrounding name
+  and is unavailable after END_REPEAT. A focused valid/invalid pair proves the existing binder and static emitter
+  already preserve both boundaries, so no duplicate runtime or generated representation was introduced.
+- Clause 13.3.2 requires an element-qualified assignment index to evaluate to an integer. Assignment indexing through
+  a NUMBER no longer truncates its REAL branch: generated code evaluates the index once, requires a present INTEGER
+  alternative through `TryGetInteger`, and otherwise produces a deterministic execution error. Statically REAL,
+  STRING and indeterminate indices now fail before emission with source-located STEP21EXP006 diagnostics. The test
+  deliberately isolates this rule from a neighboring INTEGER-to-NUMBER parameter/initializer adaptation gap, which
+  remains queued under assignment compatibility rather than being hidden by the test. Together these additions pass
+  11/11 `ISO21WorkItem=ISO21-009` tests and all 140 `ReachableRuleTests`.
 
 Source identities:
 

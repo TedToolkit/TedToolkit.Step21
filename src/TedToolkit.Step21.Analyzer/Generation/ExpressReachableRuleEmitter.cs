@@ -1898,9 +1898,30 @@ internal static class ExpressReachableRuleEmitter
                         determinateLexicals,
                         safeIndexPaths,
                         scalarNarrowings));
-                var indexCode = index.Type.Kind == ExpressExpressionTypeKind.Number
-                    ? $"checked((int)({emittedIndex.Code}).ToIntegerTruncated())"
-                    : $"checked((int)({emittedIndex.Code}))";
+                string indexCode;
+                if (index.Type.Kind == ExpressExpressionTypeKind.Number)
+                {
+                    var presentNumber = allocateTemporaryName("__expressAssignmentIndexNumber");
+                    var integerNumber = allocateTemporaryName("__expressAssignmentIndexInteger");
+                    indexCode = $"(({emittedIndex.Code}) is {{ }} {presentNumber} "
+                        + $"&& {presentNumber}.TryGetInteger(out var {integerNumber}) ? "
+                        + $"checked((int){integerNumber}) : "
+                        + "throw new global::System.InvalidOperationException("
+                        + "\"An EXPRESS assignment index did not evaluate to an INTEGER.\"))";
+                }
+                else if (index.Type.CanBeIndeterminate)
+                {
+                    var presentInteger = allocateTemporaryName("__expressAssignmentIndexInteger");
+                    indexCode = $"(({emittedIndex.Code}) is {{ }} {presentInteger} ? "
+                        + $"checked((int){presentInteger}) : "
+                        + "throw new global::System.InvalidOperationException("
+                        + "\"An EXPRESS assignment index was indeterminate.\"))";
+                }
+                else
+                {
+                    indexCode = $"checked((int)({emittedIndex.Code}))";
+                }
+
                 var aggregate = (ExpressBoundAggregateType)targetType;
                 var aggregateCode = targetCode;
                 var indexSuffix = aggregate.Kind == ExpressAggregateKind.Array

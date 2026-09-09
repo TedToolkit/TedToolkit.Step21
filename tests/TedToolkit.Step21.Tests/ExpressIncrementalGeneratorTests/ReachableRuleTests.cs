@@ -12378,6 +12378,224 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies a finite REPEAT variable hides an outer declaration and is unavailable after the loop.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_scope_finite_repeat_variables()
+    {
+        const string schema = """
+            SCHEMA repeat_scope_model;
+            FUNCTION preserve_outer(marker : BOOLEAN) : INTEGER;
+              LOCAL
+                index : INTEGER := 7;
+                iterations : INTEGER := 0;
+              END_LOCAL;
+              REPEAT index := 1 TO 2;
+                iterations := iterations + 1;
+              END_REPEAT;
+              RETURN(index + iterations);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              loop_hides_outer : preserve_outer(marker) = 9;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.RepeatScopeModel;
+
+            internal static class RepeatScopeConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["repeat scope"], "3;1"),
+                            new FileName("repeat-scope.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["repeat_scope_model"])),
+                        [TedToolkit.Step21.Generated.RepeatScopeModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("repeat_scope_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string leakedSchema = """
+            SCHEMA leaked_repeat_scope_model;
+            FUNCTION invalid_scope(marker : BOOLEAN) : NUMBER;
+              REPEAT index := 1 TO 1;
+                ;
+              END_REPEAT;
+              RETURN(index);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              invalid : invalid_scope(marker) = 1;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("schemas/repeat-scope.exp", schema));
+        var leakedResult = GeneratorHostTests.Run(("schemas/leaked-repeat-scope.exp", leakedSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("RepeatScopeConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(leakedResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-UNRESOLVED-NAME",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    leakedResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(leakedResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies assignment element qualifiers accept integer-valued NUMBER indices without truncating other values.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_require_integer_assignment_indices()
+    {
+        const string schema = """
+            SCHEMA assignment_index_model;
+            FUNCTION replace_at(marker : BOOLEAN) : BOOLEAN;
+              LOCAL
+                position : NUMBER;
+                values : LIST [2:2] OF INTEGER := [1, 2];
+              END_LOCAL;
+              position := 2;
+              values[position] := 9;
+              RETURN(values[2] = 9);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              integer_number_index : replace_at(marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.AssignmentIndexModel;
+
+            internal static class AssignmentIndexConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["assignment index"], "3;1"),
+                            new FileName("assignment-index.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["assignment_index_model"])),
+                        [TedToolkit.Step21.Generated.AssignmentIndexModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("assignment_index_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidRealSchema = """
+            SCHEMA real_assignment_index_model;
+            FUNCTION invalid_index(marker : BOOLEAN) : INTEGER;
+              LOCAL values : LIST [1:1] OF INTEGER := [1]; END_LOCAL;
+              values[1.5] := 2;
+              RETURN(values[1]);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_index(marker) = 2; END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string invalidStringSchema = """
+            SCHEMA string_assignment_index_model;
+            FUNCTION invalid_index(marker : BOOLEAN) : INTEGER;
+              LOCAL values : LIST [1:1] OF INTEGER := [1]; END_LOCAL;
+              values['first'] := 2;
+              RETURN(values[1]);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_index(marker) = 2; END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string invalidIndeterminateSchema = """
+            SCHEMA indeterminate_assignment_index_model;
+            FUNCTION invalid_index(marker : BOOLEAN) : INTEGER;
+              LOCAL values : LIST [1:1] OF INTEGER := [1]; END_LOCAL;
+              values[?] := 2;
+              RETURN(values[1]);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_index(marker) = 2; END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("schemas/assignment-index.exp", schema));
+        var invalidRealResult = GeneratorHostTests.Run(("schemas/real-assignment-index.exp", invalidRealSchema));
+        var invalidStringResult = GeneratorHostTests.Run(("schemas/string-assignment-index.exp", invalidStringSchema));
+        var invalidIndeterminateResult = GeneratorHostTests.Run(
+            ("schemas/indeterminate-assignment-index.exp", invalidIndeterminateSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("AssignmentIndexConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(source => source.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(generated).Contains(".TryGetInteger(out var ");
+            await Assert.That(generated).DoesNotContain(".ToIntegerTruncated()");
+            foreach (var invalidResult in new[]
+                     {
+                         invalidRealResult,
+                         invalidStringResult,
+                         invalidIndeterminateResult,
+                     })
+            {
+                await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
+                    diagnostic.Id == "STEP21EXP006"
+                    && diagnostic.GetMessage().Contains(
+                        "assignment index requires an integer value",
+                        StringComparison.OrdinalIgnoreCase))).IsTrue()
+                    .Because(string.Join(
+                        Environment.NewLine,
+                        invalidResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+                await Assert.That(invalidResult.GeneratedSources).IsEmpty();
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

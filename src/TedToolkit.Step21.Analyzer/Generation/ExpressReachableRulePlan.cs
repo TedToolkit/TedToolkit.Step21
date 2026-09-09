@@ -1241,7 +1241,7 @@ internal sealed class ExpressReachableRulePlan
             var statements = declarationRule.ChildRules("stmt").ToArray();
             var operations = AlgorithmOperations(declarationRule).ToArray();
             var isProcedure = declaration.Kind == ExpressDeclarationKind.Procedure;
-            if (!ValidateControlTypes(operations))
+            if (!ValidateControlAndIndexTypes(operations))
             {
                 return;
             }
@@ -1331,11 +1331,39 @@ internal sealed class ExpressReachableRulePlan
                     + "algorithm statement shape that has no static generator."));
         }
 
-        private bool ValidateControlTypes(IReadOnlyList<ExpressSemanticRule> operations)
+        private bool ValidateControlAndIndexTypes(IReadOnlyList<ExpressSemanticRule> operations)
         {
             var valid = true;
             foreach (var operation in operations)
             {
+                foreach (var qualifier in operation.Role == "assignmentStmt"
+                             ? operation.ChildRules("qualifier")
+                             : [])
+                {
+                    if (qualifier.ChildRules("indexQualifier").SingleOrDefault() is not { } indexQualifier)
+                    {
+                        continue;
+                    }
+
+                    foreach (var indexSyntax in indexQualifier.ChildRules()
+                                 .Where(index => index.Role is "index1" or "index2"))
+                    {
+                        var expression = GetExpression(indexSyntax.RequiredChild("index")
+                            .RequiredChild("numericExpression"));
+                        if (expression.Type.Kind is ExpressExpressionTypeKind.Integer
+                            or ExpressExpressionTypeKind.Number)
+                        {
+                            continue;
+                        }
+
+                        AddFailure(
+                            expression.Span,
+                            "Assignment index requires an integer value; received "
+                                + $"{expression.Type.Kind.ToString()}.");
+                        valid = false;
+                    }
+                }
+
                 IEnumerable<(string Name, ExpressSemanticRule Control)> controls = operation.Role switch
                 {
                     "ifStmt" => [("IF", operation.RequiredChild("logicalExpression")),],
@@ -1577,7 +1605,7 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var operations = AlgorithmOperations(declarationRule).ToArray();
-            if (!ValidateControlTypes(operations))
+            if (!ValidateControlAndIndexTypes(operations))
             {
                 return;
             }
