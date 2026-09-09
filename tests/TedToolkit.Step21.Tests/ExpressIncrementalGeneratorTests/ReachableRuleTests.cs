@@ -12926,7 +12926,10 @@ public sealed class ReachableRuleTests
             TYPE list_value = LIST [1:?] OF INTEGER; END_TYPE;
             TYPE array_value = ARRAY [2:3] OF INTEGER; END_TYPE;
             TYPE matrix_value = LIST [1:?] OF LIST [1:?] OF INTEGER; END_TYPE;
-            ENTITY base_point; code : INTEGER; END_ENTITY;
+            ENTITY base_point;
+              code : INTEGER;
+              values : LIST [1:?] OF INTEGER;
+            END_ENTITY;
             ENTITY point SUBTYPE OF (base_point); END_ENTITY;
             TYPE point_list = LIST [1:?] OF base_point; END_TYPE;
             TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
@@ -12961,6 +12964,10 @@ public sealed class ReachableRuleTests
               selected[1]\base_point.code := 10;
               RETURN(selected[1]\base_point.code = 10);
             END_FUNCTION;
+            FUNCTION replace_selected_attribute_element(selected : point_list_choice) : BOOLEAN;
+              selected[1].values[2] := 11;
+              RETURN(selected[1].values[2] = 11);
+            END_FUNCTION;
             ENTITY sample;
               text_item : scalar_choice;
               bits_item : scalar_choice;
@@ -12979,6 +12986,7 @@ public sealed class ReachableRuleTests
             WHERE
               attribute_replaced : replace_selected_attribute(point_item);
               group_attribute_replaced : replace_selected_group_attribute(point_item);
+              attribute_element_replaced : replace_selected_attribute_element(point_item);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -13020,7 +13028,7 @@ public sealed class ReachableRuleTests
 
                 internal static bool ValidateAttribute()
                 {
-                    var point = new Point(1);
+                    var point = new Point(1, new ExpressList<BigInteger>(1) { 1, 2 });
                     var selected = PointListChoice.FromPointList(
                         new PointList(new ExpressList<IBasePoint>(1) { point }));
                     var descriptor = typeof(
@@ -13040,7 +13048,17 @@ public sealed class ReachableRuleTests
                         "__ExpressFunction_ReplaceSelectedGroupAttribute",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
-                    return groupMethod.Invoke(null, [selected, entities]) is true && point.Code == 10;
+                    if (groupMethod.Invoke(null, [selected, entities]) is not true || point.Code != 10)
+                    {
+                        return false;
+                    }
+
+                    var elementMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceSelectedAttributeElement",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    return elementMethod.Invoke(null, [selected, entities]) is true && point.Values[1] == 11;
                 }
             }
             """;

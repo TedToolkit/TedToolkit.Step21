@@ -1537,9 +1537,18 @@ internal sealed class ExpressReachableRulePlan
                         tailIndex++;
                     }
 
-                    if (tailIndex == tail.Length
-                        || (tailIndex == tail.Length - 1
-                            && tail[tailIndex].ChildRules("attributeQualifier").Count() == 1))
+                    if (tailIndex < tail.Length
+                        && tail[tailIndex].ChildRules("attributeQualifier").Count() == 1)
+                    {
+                        tailIndex++;
+                        while (tailIndex < tail.Length
+                               && tail[tailIndex].ChildRules("indexQualifier").Count() == 1)
+                        {
+                            tailIndex++;
+                        }
+                    }
+
+                    if (tailIndex == tail.Length)
                     {
                         return true;
                     }

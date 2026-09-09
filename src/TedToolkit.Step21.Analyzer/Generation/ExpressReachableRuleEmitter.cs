@@ -1852,6 +1852,7 @@ internal static class ExpressReachableRuleEmitter
             List<(string Lower, string? Upper)>? selectedAssignmentIndices = null;
             ExpressBoundNamedType? selectedAssignmentGroup = null;
             ExpressBoundAttribute? selectedAssignmentAttribute = null;
+            int? selectedAssignmentAttributeLevel = null;
 
             string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
             {
@@ -1974,6 +1975,7 @@ internal static class ExpressReachableRuleEmitter
 
                         selectedAssignmentAttribute = plan.GetReferencedAttribute(
                             tailQualifier.RequiredChild("attributeQualifier"));
+                        selectedAssignmentAttributeLevel = selectedAssignmentIndices.Count;
                     }
 
                     targetIsOptional = false;
@@ -2034,6 +2036,7 @@ internal static class ExpressReachableRuleEmitter
                         selectedAssignmentIndices!,
                         selectedAssignmentGroup,
                         selectedAssignmentAttribute,
+                        selectedAssignmentAttributeLevel,
                         valueExpression,
                         replacement);
                 }
@@ -6538,6 +6541,7 @@ internal static class ExpressReachableRuleEmitter
         List<(string Lower, string? Upper)> indices,
         ExpressBoundNamedType? selectedGroup,
         ExpressBoundAttribute? selectedAttribute,
+        int? selectedAttributeLevel,
         ExpressBoundExpression valueExpression,
         string replacement)
     {
@@ -6561,7 +6565,8 @@ internal static class ExpressReachableRuleEmitter
             IReadOnlyList<ExpressBoundNamedType> wrappers,
             int level)
         {
-            if (level != indices.Count - 1)
+            if (level != indices.Count - 1
+                || (selectedAttributeLevel.HasValue && level < selectedAttributeLevel.Value))
             {
                 return InvalidAlternative(declaredType);
             }
@@ -6625,7 +6630,12 @@ internal static class ExpressReachableRuleEmitter
                 + "\"An EXPRESS SELECT scalar assignment index was outside the carrier bounds.\") })";
         }
 
-        string TransformEntityAttribute(ExpressBoundType declaredType, string entity, int depth)
+        string TransformEntityAttribute(
+            ExpressBoundType declaredType,
+            string entity,
+            int level,
+            int depth,
+            HashSet<ExpressBoundSymbol> visited)
         {
             if (declaredType is not ExpressBoundNamedType
                 { Declaration.Kind: ExpressDeclarationKind.Entity, } declaredEntity
@@ -6676,12 +6686,6 @@ internal static class ExpressReachableRuleEmitter
                 .GroupBy(target => target.Type, StringComparer.Ordinal)
                 .Select(group => group.First())
                 .ToArray();
-            var adaptedReplacement = ResolveAggregateElementValue(
-                plan,
-                valueExpression,
-                replacement,
-                selectedAttribute.Type,
-                sourceIsDeterminate: true);
             var entityType = ExpressExpressionEmitter.BoundTypeName(declaredEntity);
             var entityVariable = "__expressSelectedAssignmentEntity_" + suffix + "_" + depth;
             var code = "((global::System.Func<"
@@ -6701,14 +6705,28 @@ internal static class ExpressReachableRuleEmitter
                     + depth
                     + "_"
                     + targetIndex.ToString(CultureInfo.InvariantCulture);
+                var targetMember = target
+                    + "."
+                    + targets[targetIndex].Attribute.StorageMemberName;
+                var adaptedReplacement = level < indices.Count
+                    ? TransformValue(
+                        selectedAttribute.Type,
+                        targetMember,
+                        level,
+                        depth + 1,
+                        new HashSet<ExpressBoundSymbol>(visited))
+                    : ResolveAggregateElementValue(
+                        plan,
+                        valueExpression,
+                        replacement,
+                        selectedAttribute.Type,
+                        sourceIsDeterminate: true);
                 code += "case "
                     + targets[targetIndex].Type
                     + " "
                     + target
                     + ": "
-                    + target
-                    + "."
-                    + targets[targetIndex].Attribute.StorageMemberName
+                    + targetMember
                     + " = "
                     + adaptedReplacement
                     + "; break; ";
@@ -6797,7 +6815,16 @@ internal static class ExpressReachableRuleEmitter
                 ? $"{values}[{position}]"
                 : $"{values}[{position} - 1]";
             string adaptedReplacement;
-            if (level < indices.Count - 1)
+            if (selectedAttributeLevel == level + 1)
+            {
+                adaptedReplacement = TransformEntityAttribute(
+                    aggregate.ElementType,
+                    indexed,
+                    level + 1,
+                    depth + 1,
+                    new HashSet<ExpressBoundSymbol>(visited));
+            }
+            else if (level < indices.Count - 1)
             {
                 adaptedReplacement = TransformValue(
                     aggregate.ElementType,
@@ -6805,10 +6832,6 @@ internal static class ExpressReachableRuleEmitter
                     level + 1,
                     depth + 1,
                     new HashSet<ExpressBoundSymbol>(visited));
-            }
-            else if (selectedAttribute is not null)
-            {
-                adaptedReplacement = TransformEntityAttribute(aggregate.ElementType, indexed, depth + 1);
             }
             else
             {
@@ -6827,7 +6850,7 @@ internal static class ExpressReachableRuleEmitter
                 ? $"{position} >= {values}.LowerIndex && {position} <= {values}.UpperIndex"
                 : $"{position} >= 1 && {position} <= {values}.Count";
             if (aggregate.Kind == ExpressAggregateKind.Array
-                && (level < indices.Count - 1 || selectedAttribute is not null))
+                && (level < indices.Count - 1 || selectedAttributeLevel == level + 1))
             {
                 bounds += $" && {values}.IsSet({position})";
             }
