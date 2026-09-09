@@ -3,16 +3,26 @@
   "edition": 2,
   "profileFormatVersion": 1,
   "claimStatus": "blocked",
-  "claimBoundary": "Validation-reachable EXPRESS conformance is not claimed until every partial and pending-source row is closed from an authorized Edition 2 source.",
-  "sourcePolicy": "Record non-verbatim derived semantics only. Missing Edition 2 normative text remains pending-source and is neither inferred nor skipped.",
+  "claimBoundary": "Validation-reachable EXPRESS conformance is not claimed until every behavior described by the authorized Edition 2 files is implemented and proved. Source-excluded behavior is not claimed.",
+  "sourcePolicy": "Record non-verbatim derived semantics only. Implement behavior described by the authorized Edition 2 files; record behavior absent from those files as source-excluded and omit it without inference.",
+  "authorizedSources": [
+    {
+      "identity": "ISO-10303-11-2004-1.pdf",
+      "sha256": "8701F9D80C107AF81DDDE4924FFCC046FE04497E38370B9A3EB312D1329DD800"
+    },
+    {
+      "identity": "ISO-10303-11-2004-2.pdf",
+      "sha256": "E167DAA3DB99892104E124B01739355D428B2182F5E6E84E1E8BADEE8465F06F"
+    }
+  ],
   "families": [
     {
       "id": "clauses-5-12-validation-semantics",
       "source": "5-12",
-      "sourceStatus": "pending-source",
-      "implementationStatus": "pending-source",
-      "boundary": "Types, declarations, expressions, type compatibility and function calls outside the bounded excerpts.",
-      "blocker": "The authorized source set does not contain the complete Edition 2 normative bodies for clauses 5 through 12, including 12.8 and 12.11."
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "Types, declarations, expressions, type compatibility and function calls outside the bounded excerpts are not claimed.",
+      "exclusion": "The authorized Edition 2 files do not contain the normative bodies for clauses 5 through 12."
     },
     {
       "id": "13.1-null-statement",
@@ -26,9 +36,8 @@
       "id": "13.2-alias-statement",
       "source": "13.2",
       "sourceStatus": "exact-edition2-excerpt",
-      "implementationStatus": "partial",
-      "boundary": "Direct, entity-group and explicit-attribute aliases are statically lowered with lexical scope.",
-      "blocker": "Indexed aliases require qualifier semantics not fully present in the bounded source set.",
+      "implementationStatus": "implemented",
+      "boundary": "Direct, entity-group, explicit-attribute and single-element ARRAY/LIST aliases are statically lowered with lexical scope. Range-alias behavior is absent from the authorized file and source-excluded.",
       "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_reachable_alias_and_null_statements" }]
     },
     {
@@ -36,22 +45,22 @@
       "source": "13.3.1-13.3.2",
       "sourceStatus": "exact-edition2-excerpt",
       "implementationStatus": "partial",
-      "boundary": "Local/parameter assignment, aggregate value copying, qualified aggregate elements, exact integer indices, direct STRING/BINARY replacement, and recursively index-qualified SELECT alternatives using ARRAY/BINARY/LIST/STRING, including final entity attribute/group writes, are generated statically.",
-      "blocker": "Qualification continuing after a SELECT-selected entity attribute and the complete assignment-compatibility matrix remain open; defined scalar carriers are excluded by the declared-type restriction.",
+      "boundary": "Local/parameter assignment, sourced type compatibility, aggregate value copying, qualified aggregate elements, exact integer indices, direct STRING/BINARY replacement, and recursively qualified SELECT alternatives using ARRAY/BINARY/LIST/STRING or entity attributes/groups are generated statically.",
+      "blocker": "Terminal group-value replacement, assignment-time declaration constraints, and invalid partial-complex rejection remain open; defined scalar qualifier carriers are excluded by the declared-type restriction.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_require_integer_assignment_indices" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_copy_array_values_on_assignment" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_string_and_binary_ranges" },
-        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_select_qualified_values" }
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_select_qualified_values" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_enforce_the_assignment_compatibility_matrix" }
       ]
     },
     {
       "id": "13.4-case-statement",
       "source": "13.4",
       "sourceStatus": "exact-edition2-excerpt",
-      "implementationStatus": "partial",
-      "boundary": "First TRUE label, UNKNOWN/non-value non-selection, OTHERWISE and no-match fall-through are generated.",
-      "blocker": "The complete Edition 2 type-compatibility body needed for all selector/label pairs is pending-source.",
+      "implementationStatus": "implemented",
+      "boundary": "First TRUE compatible label, UNKNOWN/non-value non-selection, OTHERWISE and no-match fall-through are generated. Compatibility detail absent from the authorized files is source-excluded.",
       "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_case_indeterminate_and_first_match_semantics" }]
     },
     {
@@ -83,8 +92,8 @@
       "source": "13.8; 13.3.2",
       "sourceStatus": "exact-edition2-excerpt",
       "implementationStatus": "partial",
-      "boundary": "Arity, order, direct scalar promotions and direct scalar incompatibility are checked at the shared call boundary.",
-      "blocker": "SELECT, defined-type, aggregate and VAR copy-back compatibility require additional source-backed closure.",
+      "boundary": "Arity, order, scalar promotions, defined simple types, SELECT targets, aggregate initializers and entity specialization are checked and adapted at the shared call boundary.",
+      "blocker": "Qualified VAR copy-back and invalid partial-complex arguments require additional source-backed closure.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_reject_procedure_argument_count_mismatches" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_apply_procedure_scalar_assignment_compatibility" }
@@ -113,26 +122,26 @@
     {
       "id": "13.9.3-until-control",
       "source": "13.9.3",
-      "sourceStatus": "partial-edition2-excerpt",
-      "implementationStatus": "pending-source",
-      "boundary": "The available Edition 2 excerpt contains only the opening paragraph.",
-      "blocker": "The rules/restrictions and complete UNKNOWN/indeterminate behavior are not present in the authorized Edition 2 excerpt."
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "UNTIL is evaluated after each body execution; TRUE stops and FALSE or UNKNOWN continues. Indeterminate behavior is absent from the authorized file and source-excluded.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_repeat_until_after_the_body" }]
     },
     {
       "id": "13.10-13.11-return-skip",
       "source": "13.10-13.11",
-      "sourceStatus": "pending-source",
-      "implementationStatus": "pending-source",
-      "boundary": "RETURN and SKIP are implemented in the generator but not yet claimed by this Edition 2 profile.",
-      "blocker": "Only Edition 1 supporting text is available; the bounded Edition 2 excerpt ends before page 131."
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "RETURN and SKIP behavior is not claimed by this Edition 2 profile.",
+      "exclusion": "The authorized Edition 2 file ends before page 131 and contains no normative body for these clauses."
     },
     {
       "id": "clauses-14-and-later-validation-semantics",
       "source": "14 and later validation-reachable clauses",
-      "sourceStatus": "pending-source",
-      "implementationStatus": "pending-source",
-      "boundary": "Built-in constants, functions, procedures and remaining validation-reachable semantics.",
-      "blocker": "The authorized source set does not contain these Edition 2 normative bodies."
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "Built-in constants, functions, procedures and remaining validation-reachable semantics are not claimed.",
+      "exclusion": "The authorized Edition 2 files do not contain these normative bodies."
     }
   ]
 }

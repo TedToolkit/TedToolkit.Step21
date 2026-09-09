@@ -10,7 +10,8 @@
 依据用户提供且有权授权 AI 使用的 ISO 10303-11:2004 文档或相关条款摘录，生成不复制标准原文的
 条款—语义—测试追踪表，并使 Analyzer 对 Part 21 映射和 schema conformance 可达的 types、inheritance、
 redeclarations、constants、functions、procedures、rules 与 algorithm statements 完整绑定、静态生成和执行，
-不跳过任何可达语义家族；独立审查负责验证追踪表覆盖和实现/测试充分性。
+不跳过授权 ISO 文件中已描述的任何可达语义家族；文件未描述的行为明确记录为 source-excluded，
+不推断、不实现且不阻塞本工作项。独立审查负责验证追踪表覆盖和实现/测试充分性。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
@@ -27,7 +28,7 @@ redeclarations、constants、functions、procedures、rules 与 algorithm statem
 | --- | --- | --- |
 | ISO21-001 Verified | Stable physical occurrence/constant-name contract and generated lookup seam | ISO21-001 completion evidence |
 | ISO21-005 Verified | Stable schema-supplied short-name and Part 21 physical-mapping metadata | ISO21-005 completion evidence |
-| Authorized ISO source | User-supplied ISO 10303-11:2004 document or relevant excerpts that the user is entitled to authorize for AI use; the supplied scope is sufficient to determine every validation-reachable Part 11 family | User-supplied local path plus explicit AI-use authorization |
+| Authorized ISO source | User-authorized ISO 10303-11:2004 document or relevant excerpts; only behavior described by that file enters the implementation contract | Source identity/digest plus explicit AI-use authorization |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
@@ -41,7 +42,7 @@ redeclarations、constants、functions、procedures、rules 与 algorithm statem
 ## Constraints
 
 - Derive a non-verbatim profile that records, for every validation-reachable semantic family, its clause ID, valid result, UNKNOWN/error/boundary behavior, result type/category/bounds and neighboring-invalid examples; do not commit copyrighted standard prose or the supplied licensed source unless the user separately authorizes redistribution.
-- Every semantic family in the derived profile has a clause-bound positive and neighboring-invalid corpus partition; reachable unsupported behavior rejects generation rather than being skipped.
+- Every semantic family described by the authorized file has a clause-bound positive and neighboring-invalid corpus partition; reachable unsupported behavior rejects generation rather than being skipped. A behavior absent from that file is recorded as source-excluded and omitted without inference.
 - Preserve EXPRESS three-valued logic, result types, aggregate category/bounds/order/uniqueness, evaluation order, scoping and source-located diagnostics exactly as established from the authorized source.
 - Keep generated code direct, shared, deterministic and AOT-ready; no runtime interpreter, reflection discovery, AP branch or generated dependency on compiler packages.
 - Full AP schemas supplement but never replace focused semantic-family fixtures; no AP/B-rep/PMI behavior may enter the implementation contract.
@@ -60,7 +61,7 @@ redeclarations、constants、functions、procedures、rules 与 algorithm statem
 <!-- work-item: definition-of-done -->
 ## Done
 
-- AC-07 passes with a machine-readable semantic-family manifest, independent source-coverage review and zero derived-profile row skipped or unsupported.
+- AC-07 passes with a machine-readable semantic-family manifest, independent source-coverage review and zero source-described row skipped or unsupported; source-excluded rows are not conformance claims.
 - Generated/public compatibility, all maintained schema packages and Native AOT pass; the verified manifest is supplied to ISO21-008.
 
 <!-- work-item: completion-evidence -->
@@ -73,8 +74,8 @@ and the manifest supplied to ISO21-008.
 
 ## Risks and implementation notes
 
-This remains the largest compiler boundary. Missing or ambiguous authorized-source material blocks only the affected
-semantic family; it must not be guessed, silently skipped or represented as full ISO conformance. The existing
+This remains the largest compiler boundary. Missing or ambiguous authorized-source material excludes only the affected
+behavior from this delivery; it must not be guessed or represented as an ISO conformance claim. The existing
 implementation inventory is evidence about current behavior, not a substitute for the authorized normative source.
 
 ## Partial delivery evidence — 2026-09-09
@@ -213,8 +214,22 @@ implementation inventory is evidence about current behavior, not a substitute fo
   covers all four permitted shapes; `ISO21WorkItem=ISO21-009` passes 16/16 and all 144 `ReachableRuleTests` pass. The
   compiler-baseline test itself passes unchanged. The wrapper script cannot certify its pinned toolchain on this host
   because it requires SDK 10.0.400 while the available SDK is 10.0.401; candidate `0bd1eb5` separately repairs the
-  baseline manifest SHA-256 that had not been synchronized with the earlier AP203 ARRAY hash update. SELECT-qualified
-  paths with a qualifier after the selected element remain explicitly withheld.
+  baseline manifest SHA-256 that had not been synchronized with the earlier AP203 ARRAY hash update. At this candidate,
+  SELECT-qualified paths with a qualifier after the selected element were still explicitly withheld and are closed by
+  the later candidates recorded below.
+- Authorized Edition 2 source files are now identified without redistribution by SHA-256
+  `8701F9D80C107AF81DDDE4924FFCC046FE04497E38370B9A3EB312D1329DD800` (front matter) and
+  `E167DAA3DB99892104E124B01739355D428B2182F5E6E84E1E8BADEE8465F06F` (pages 121–130). Per the
+  user-approved source rule, behavior absent from those files is recorded as `source-excluded`, not inferred and not
+  treated as a conformance claim.
+- Candidates `4e0a28a`, `cbfe5bc`, `5541ae9` and `50b444f` extend source-described 13.3.2 qualification through nested
+  SELECT indices, selected entity attributes, attribute aggregate elements, and direct SELECT attribute/group paths.
+  Candidate `3a06872` replaces the previous indexed-ALIAS rejection with static ARRAY/LIST element alias evaluation.
+- Candidate `5819a4d` applies one shared assignment-compatibility classifier to direct assignments and procedure
+  arguments, adapts defined simple, SELECT and aggregate-initializer values, preserves existing atomic entity/SET
+  runtime narrowing, and rejects five neighboring incompatible type families before C# generation. It also proves the
+  sourced UNTIL ordering and TRUE/FALSE/UNKNOWN behavior. The Release build has zero warnings and errors;
+  `ISO21WorkItem=ISO21-009` passes 18/18 and all 146 `ReachableRuleTests` pass.
 
 Source identities:
 

@@ -172,7 +172,7 @@ internal sealed class ConformanceManifestTests
             await Assert.That(ids.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(ids.Length);
             await Assert.That(families).IsNotEmpty();
             await Assert.That(families.Any(family =>
-                family.GetProperty("implementationStatus").GetString() == "pending-source")).IsTrue();
+                family.GetProperty("implementationStatus").GetString() == "source-excluded")).IsTrue();
         }
 
         foreach (var family in families)
@@ -181,11 +181,11 @@ internal sealed class ConformanceManifestTests
             await Assert.That(family.GetProperty("source").GetString()).IsNotEmpty();
             await Assert.That(family.GetProperty("sourceStatus").GetString()).IsNotEmpty();
             await Assert.That(family.GetProperty("boundary").GetString()).IsNotEmpty();
-            await Assert.That(status).IsIn("implemented", "partial", "pending-source");
+            await Assert.That(status).IsIn("implemented", "partial", "source-excluded");
 
-            if (status == "pending-source")
+            if (status == "source-excluded")
             {
-                await Assert.That(family.GetProperty("blocker").GetString()).IsNotEmpty();
+                await Assert.That(family.GetProperty("exclusion").GetString()).IsNotEmpty();
                 continue;
             }
 
