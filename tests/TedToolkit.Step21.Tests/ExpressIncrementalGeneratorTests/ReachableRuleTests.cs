@@ -12596,6 +12596,99 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies procedure actual parameters use assignment-compatible scalar promotions.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_apply_procedure_scalar_assignment_compatibility()
+    {
+        const string schema = """
+            SCHEMA procedure_scalar_compatibility_model;
+            PROCEDURE accept_number(input_value : NUMBER); ; END_PROCEDURE;
+            PROCEDURE accept_real(input_value : REAL); ; END_PROCEDURE;
+            PROCEDURE accept_logical(input_value : LOGICAL); ; END_PROCEDURE;
+            FUNCTION compatible_calls(marker : BOOLEAN) : BOOLEAN;
+              accept_number(2);
+              accept_real(2);
+              accept_logical(marker);
+              RETURN(TRUE);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              compatible : compatible_calls(marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.ProcedureScalarCompatibilityModel;
+
+            internal static class ProcedureScalarCompatibilityConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["procedure compatibility"], "3;1"),
+                            new FileName("procedure.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["procedure_scalar_compatibility_model"])),
+                        [TedToolkit.Step21.Generated.ProcedureScalarCompatibilityModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("procedure_scalar_compatibility_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string incompatibleSchema = """
+            SCHEMA incompatible_procedure_scalar_model;
+            PROCEDURE accept_integer(input_value : INTEGER); ; END_PROCEDURE;
+            FUNCTION incompatible_call(marker : BOOLEAN) : BOOLEAN;
+              accept_integer('not an integer');
+              RETURN(TRUE);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : incompatible_call(marker); END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/procedure-scalar-compatibility.exp", schema));
+        var incompatibleResult = GeneratorHostTests.Run(
+            ("schemas/incompatible-procedure-scalar.exp", incompatibleSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(compilationDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilationDiagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("ProcedureScalarCompatibilityConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(incompatibleResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains(
+                    "is not assignment-compatible",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    incompatibleResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(incompatibleResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

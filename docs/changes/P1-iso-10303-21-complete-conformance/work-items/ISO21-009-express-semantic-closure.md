@@ -157,6 +157,13 @@ implementation inventory is evidence about current behavior, not a substitute fo
   deliberately isolates this rule from a neighboring INTEGER-to-NUMBER parameter/initializer adaptation gap, which
   remains queued under assignment compatibility rather than being hidden by the test. Together these additions pass
   11/11 `ISO21WorkItem=ISO21-009` tests and all 140 `ReachableRuleTests`.
+- Clauses 13.8 and 13.3.2 require procedure actual parameters to be assignment-compatible with their formals. The
+  shared procedure-call boundary now applies the explicitly compatible direct-scalar promotions INTEGER-to-NUMBER,
+  REAL-to-NUMBER, INTEGER-to-REAL and BOOLEAN-to-LOGICAL without approximation or an interpreter. Direct scalar pairs
+  that are statically incompatible, such as STRING-to-INTEGER, fail at the actual argument with STEP21EXP006. The
+  checker intentionally defers SELECT, defined-type and aggregate cases until their complete compatibility paths are
+  proved; it does not classify them from incomplete evidence. The candidate passes 12/12
+  `ISO21WorkItem=ISO21-009` tests and all 141 `ReachableRuleTests`.
 
 Source identities:
 

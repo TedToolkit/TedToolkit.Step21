@@ -4535,7 +4535,45 @@ internal static class ExpressReachableRuleEmitter
 
             var argumentCanBeIndeterminate = argument.Type.CanBeIndeterminate
                 && context.IsKnownDeterminate?.Invoke(argument) != true;
-            if (parameter.Name.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, }
+            if (parameter.Name.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Number, }
+                && argument.Type.Kind is ExpressExpressionTypeKind.Integer or ExpressExpressionTypeKind.Real)
+            {
+                var factory = argument.Type.Kind == ExpressExpressionTypeKind.Integer
+                    ? "global::TedToolkit.Step21.NumberValue.FromInteger"
+                    : "global::TedToolkit.Step21.NumberValue.FromReal";
+                if (argumentCanBeIndeterminate)
+                {
+                    var presentNumeric = context.AllocateTemporaryName("__expressProcedureNumeric");
+                    code = $"(({code}) is {{ }} {presentNumeric} ? {factory}({presentNumeric}) : "
+                        + "(global::TedToolkit.Step21.NumberValue?)null)";
+                }
+                else
+                {
+                    code = $"{factory}({code})";
+                }
+            }
+            else if (parameter.Name.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Real, }
+                     && argument.Type.Kind == ExpressExpressionTypeKind.Integer)
+            {
+                if (argumentCanBeIndeterminate)
+                {
+                    var presentInteger = context.AllocateTemporaryName("__expressProcedureInteger");
+                    code = $"(({code}) is {{ }} {presentInteger} ? "
+                        + ExpressExpressionEmitter.PromoteNumeric(
+                            argument,
+                            presentInteger,
+                            ExpressExpressionTypeKind.Real)
+                        + " : (global::TedToolkit.Step21.RealValue?)null)";
+                }
+                else
+                {
+                    code = ExpressExpressionEmitter.PromoteNumeric(
+                        argument,
+                        code,
+                        ExpressExpressionTypeKind.Real);
+                }
+            }
+            else if (parameter.Name.Type is ExpressBoundScalarType { Kind: ExpressScalarKind.Logical, }
                 && argument.Type.Kind == ExpressExpressionTypeKind.Boolean)
             {
                 code = ExpressExpressionEmitter.AsLogical(argument, code);

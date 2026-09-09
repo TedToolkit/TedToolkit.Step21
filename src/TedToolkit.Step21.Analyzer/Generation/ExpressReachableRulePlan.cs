@@ -1336,6 +1336,11 @@ internal sealed class ExpressReachableRulePlan
             var valid = true;
             foreach (var operation in operations)
             {
+                if (!ValidateProcedureScalarArguments(operation))
+                {
+                    valid = false;
+                }
+
                 foreach (var qualifier in operation.Role == "assignmentStmt"
                              ? operation.ChildRules("qualifier")
                              : [])
@@ -1431,6 +1436,93 @@ internal sealed class ExpressReachableRulePlan
             }
 
             return valid;
+        }
+
+        private bool ValidateProcedureScalarArguments(ExpressSemanticRule operation)
+        {
+            if (operation.Role != "procedureCallStmt"
+                || operation.ChildRules("procedureRef").SingleOrDefault() is not { } procedureReference)
+            {
+                return true;
+            }
+
+            var procedure = _schema.NameReferences
+                .Where(reference => SameStart(reference.Span, procedureReference.Span))
+                .Select(reference => reference.Target.SchemaDeclaration)
+                .OfType<ExpressBoundSymbol>()
+                .Distinct()
+                .SingleOrDefault();
+            if (procedure is null
+                || !_declarations.TryGetValue(procedure, out var declaration)
+                || declaration.Kind != ExpressDeclarationKind.Procedure)
+            {
+                return true;
+            }
+
+            var parameterSyntax = _analysis.GetDeclaration(declaration).RequiredChild("procedureHead")
+                .ChildRules("formalParameter")
+                .SelectMany(formal => formal.ChildRules("parameterId"))
+                .ToArray();
+            var arguments = operation.ChildRules("actualParameterList")
+                .SelectMany(parameters => parameters.ChildRules("parameter"))
+                .Select(parameter => GetExpression(parameter.RequiredChild("expression")))
+                .ToArray();
+            if (parameterSyntax.Length != arguments.Length)
+            {
+                return true;
+            }
+
+            var valid = true;
+            for (var index = 0; index < arguments.Length; index++)
+            {
+                var parameter = _schema.LexicalNames
+                    .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
+                        && SameStart(candidate.Span, parameterSyntax[index].Span))
+                    .Distinct()
+                    .Single();
+                if (parameter.Type is not ExpressBoundScalarType formal
+                    || IsScalarAssignmentCompatible(formal.Kind, arguments[index].Type.Kind))
+                {
+                    continue;
+                }
+
+                AddFailure(
+                    arguments[index].Span,
+                    "Procedure argument "
+                        + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + $" of '{procedure.Name}' is not assignment-compatible: "
+                        + $"{arguments[index].Type.Kind.ToString()} cannot be assigned to {formal.Kind.ToString()}.");
+                valid = false;
+            }
+
+            return valid;
+        }
+
+        private static bool IsScalarAssignmentCompatible(
+            ExpressScalarKind formal,
+            ExpressExpressionTypeKind actual)
+        {
+            return actual is ExpressExpressionTypeKind.Indeterminate
+                    or ExpressExpressionTypeKind.Select
+                    or ExpressExpressionTypeKind.Generic
+                    or ExpressExpressionTypeKind.Defined
+                    or ExpressExpressionTypeKind.Unresolved
+                || formal switch
+                {
+                    ExpressScalarKind.Binary => actual == ExpressExpressionTypeKind.Binary,
+                    ExpressScalarKind.Boolean => actual is ExpressExpressionTypeKind.Boolean
+                        or ExpressExpressionTypeKind.Logical,
+                    ExpressScalarKind.Integer => actual == ExpressExpressionTypeKind.Integer,
+                    ExpressScalarKind.Logical => actual is ExpressExpressionTypeKind.Boolean
+                        or ExpressExpressionTypeKind.Logical,
+                    ExpressScalarKind.Number => actual is ExpressExpressionTypeKind.Integer
+                        or ExpressExpressionTypeKind.Real
+                        or ExpressExpressionTypeKind.Number,
+                    ExpressScalarKind.Real => actual is ExpressExpressionTypeKind.Integer
+                        or ExpressExpressionTypeKind.Real,
+                    ExpressScalarKind.String => actual == ExpressExpressionTypeKind.String,
+                    _ => true,
+                };
         }
 
         private static IEnumerable<ExpressSemanticRule> AlgorithmOperations(ExpressSemanticRule rule)
