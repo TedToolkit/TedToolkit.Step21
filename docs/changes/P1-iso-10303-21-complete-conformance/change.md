@@ -11,7 +11,7 @@
 Approved
 
 - Priority: P1
-<!-- approval-source: user-explicit-approve-and-continue-2026-09-06 -->
+<!-- approval-source: user-approved-authorized-iso-source-derived-profile-revision-2026-09-09 -->
 <!-- candidate-binding: none -->
 
 ## Route
@@ -155,7 +155,7 @@ Scenario: 不受信任的 distributed exchange structure 被有界处理
 
 <!-- change-prerequisite: none -->
 
-None. Ready from committed baseline `63b2757`; Active AP-004 and the approved parent contract are present. An independently authored, AI-usable ISO 10303-11:2004 semantic profile remains an external start condition only for the Part 11 semantic-closure item.
+None. Ready from committed baseline `63b2757`; Active AP-004 and the approved parent contract are present. A user-supplied ISO 10303-11:2004 source that the user is entitled to authorize for AI use remains an external start condition only for the Part 11 semantic-closure item. The implementation may derive the non-verbatim clause/semantic/test profile from that source, subject to independent coverage review.
 
 <!-- section: delivery-brief -->
 ## Delivery disposition

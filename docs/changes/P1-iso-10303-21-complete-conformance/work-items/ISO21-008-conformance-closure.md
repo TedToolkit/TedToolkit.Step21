@@ -24,7 +24,7 @@
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
 | ISO21-001 through ISO21-004, ISO21-006 and ISO21-007 Verified | Every independently deliverable capability, binding and security boundary has exact candidate-bound proof and supplied manifests | Work-item completion evidence on the authoritative integration revision |
-| ISO21-005 and ISO21-009 Verified before final closure | Schema-supplied physical mappings and the complete Part 11 semantic profile replace every `blocked-source` PICS row before ISO21-008 may become Verified | ISO21-005 and ISO21-009 completion evidence on the authoritative integration revision |
+| ISO21-005 and ISO21-009 Verified before final closure | Schema-supplied physical mappings and the independently reviewed Part 11 clause/semantic/test profile derived from the user-authorized ISO source replace every `blocked-source` PICS row before ISO21-008 may become Verified | ISO21-005 and ISO21-009 completion evidence on the authoritative integration revision |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
