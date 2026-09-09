@@ -1520,14 +1520,16 @@ internal sealed class ExpressReachableRulePlan
                 var isRange = index.ChildRules("index2").Any();
                 if (IsAssignmentSelectCarrier(targetType))
                 {
-                    if (qualifierIndex == qualifiers.Length - 1)
+                    if (qualifiers.Skip(qualifierIndex + 1).All(candidate =>
+                            candidate.ChildRules("indexQualifier").Count() == 1))
                     {
-                        continue;
+                        return true;
                     }
 
                     AddFailure(
                         index.Span,
-                        "A SELECT-qualified assignment followed by another qualifier has no static generator yet.");
+                        "A SELECT-qualified assignment followed by an attribute or group qualifier has no static "
+                            + "generator yet.");
                     return false;
                 }
 

@@ -1849,6 +1849,7 @@ internal static class ExpressReachableRuleEmitter
             var rangeRequiresSingleElement = false;
             ExpressBoundNamedType? selectedAssignmentCarrier = null;
             ExpressBoundSelectType? selectedAssignmentType = null;
+            List<(string Lower, string? Upper)>? selectedAssignmentIndices = null;
 
             string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
             {
@@ -1881,8 +1882,9 @@ internal static class ExpressReachableRuleEmitter
                 return $"checked((int)({emittedIndex.Code}))";
             }
 
-            foreach (var qualifier in assignmentQualifiers)
+            for (var qualifierIndex = 0; qualifierIndex < assignmentQualifiers.Length; qualifierIndex++)
             {
+                var qualifier = assignmentQualifiers[qualifierIndex];
                 if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } groupSyntax)
                 {
                     var groupReference = plan.Schema.NameReferences
@@ -1935,11 +1937,24 @@ internal static class ExpressReachableRuleEmitter
                     selectedAssignmentCarrier = selectCarrier;
                     selectedAssignmentType = selectType;
                     rangeSourceCode = targetCode;
-                    rangeLowerCode = indexCode;
-                    rangeUpperCode = upperIndex is null ? null : EmitAssignmentIndex(upperIndex);
+                    selectedAssignmentIndices =
+                    [
+                        (indexCode, upperIndex is null ? null : EmitAssignmentIndex(upperIndex)),
+                    ];
+                    for (var tailIndex = qualifierIndex + 1;
+                         tailIndex < assignmentQualifiers.Length;
+                         tailIndex++)
+                    {
+                        var tail = assignmentQualifiers[tailIndex].RequiredChild("indexQualifier");
+                        var tailUpper = tail.ChildRules("index2").SingleOrDefault();
+                        selectedAssignmentIndices.Add((
+                            EmitAssignmentIndex(tail.RequiredChild("index1")),
+                            tailUpper is null ? null : EmitAssignmentIndex(tailUpper)));
+                    }
+
                     targetIsOptional = false;
                     optionalUnsetCode = null;
-                    continue;
+                    break;
                 }
 
                 if (targetType is ExpressBoundScalarType
@@ -1992,8 +2007,7 @@ internal static class ExpressReachableRuleEmitter
                         selectedAssignmentCarrier,
                         selectedAssignmentType,
                         rangeSourceCode!,
-                        rangeLowerCode!,
-                        rangeUpperCode,
+                        selectedAssignmentIndices!,
                         valueExpression,
                         replacement);
                 }
@@ -6495,8 +6509,7 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundNamedType selectCarrier,
         ExpressBoundSelectType select,
         string source,
-        string lowerIndex,
-        string? upperIndex,
+        List<(string Lower, string? Upper)> indices,
         ExpressBoundExpression valueExpression,
         string replacement)
     {
@@ -6516,8 +6529,15 @@ internal static class ExpressReachableRuleEmitter
         string RebuildScalar(
             ExpressScalarKind kind,
             string scalarSource,
-            IReadOnlyList<ExpressBoundNamedType> wrappers)
+            ExpressBoundType declaredType,
+            IReadOnlyList<ExpressBoundNamedType> wrappers,
+            int level)
         {
+            if (level != indices.Count - 1)
+            {
+                return InvalidAlternative(declaredType);
+            }
+
             var replacementCode = replacement;
             ExpressBoundType? replacementType = valueExpression.Type.DeclaredType;
             while (replacementType is ExpressBoundNamedType replacementName
@@ -6541,14 +6561,15 @@ internal static class ExpressReachableRuleEmitter
             };
             if (!compatible)
             {
-                return InvalidAlternative(wrappers[0]);
+                return InvalidAlternative(declaredType);
             }
 
-            var lower = "__expressSelectAssignmentLower_" + suffix;
-            var upper = "__expressSelectAssignmentUpper_" + suffix;
-            var selectedValue = "__expressSelectAssignmentValue_" + suffix;
-            var replacementValue = "__expressSelectAssignmentReplacement_" + suffix;
-            var actualUpper = upperIndex ?? lowerIndex;
+            var lower = "__expressSelectAssignmentLower_" + suffix + "_" + level;
+            var upper = "__expressSelectAssignmentUpper_" + suffix + "_" + level;
+            var selectedValue = "__expressSelectAssignmentValue_" + suffix + "_" + level;
+            var replacementValue = "__expressSelectAssignmentReplacement_" + suffix + "_" + level;
+            var index = indices[level];
+            var actualUpper = index.Upper ?? index.Lower;
             var inserted = kind == ExpressScalarKind.Binary
                 ? $"{replacementValue}.ToString()"
                 : replacementValue;
@@ -6566,25 +6587,26 @@ internal static class ExpressReachableRuleEmitter
                     + $"({rebuilt})";
             }
 
-            var singleElementGuard = upperIndex is null
+            var singleElementGuard = index.Upper is null
                 ? $" && {replacementValue}.Length == 1"
                 : "";
-            return $"(({scalarSource}, {lowerIndex}, {actualUpper}, {replacementCode}) switch {{ "
+            return $"(({scalarSource}, {index.Lower}, {actualUpper}, {replacementCode}) switch {{ "
                 + $"var ({selectedValue}, {lower}, {upper}, {replacementValue}) when {lower} >= 1 "
                 + $"&& {lower} <= {upper} && {upper} <= {selectedValue}.Length{singleElementGuard} => {rebuilt}, "
                 + "_ => throw new global::System.InvalidOperationException("
                 + "\"An EXPRESS SELECT scalar assignment index was outside the carrier bounds.\") })";
         }
 
-        string TransformAlternative(
-            ExpressBoundSymbol alternative,
-            string selected,
+        string TransformValue(
+            ExpressBoundType declaredType,
+            string current,
+            int level,
             int depth,
             HashSet<ExpressBoundSymbol> visited)
         {
-            ExpressBoundType semantic = new ExpressBoundNamedType(alternative, select.Span);
+            var semantic = declaredType;
             var wrappers = new List<ExpressBoundNamedType>();
-            var unwrapped = selected;
+            var unwrapped = current;
             while (semantic is ExpressBoundNamedType named
                    && named.Declaration.Kind != ExpressDeclarationKind.Entity)
             {
@@ -6595,6 +6617,7 @@ internal static class ExpressReachableRuleEmitter
                         named,
                         nestedSelect,
                         unwrapped,
+                        level,
                         depth + 1,
                         new HashSet<ExpressBoundSymbol>(visited));
                     for (var wrapperIndex = wrappers.Count - 1; wrapperIndex >= 0; wrapperIndex--)
@@ -6615,32 +6638,49 @@ internal static class ExpressReachableRuleEmitter
             if (semantic is ExpressBoundScalarType
                 { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, } scalar)
             {
-                return RebuildScalar(scalar.Kind, unwrapped, wrappers);
+                return RebuildScalar(scalar.Kind, unwrapped, declaredType, wrappers, level);
             }
 
-            if (upperIndex is not null
+            if (level >= indices.Count
+                || indices[level].Upper is not null
                 || semantic is not ExpressBoundAggregateType
                 { Kind: ExpressAggregateKind.Array or ExpressAggregateKind.List, } aggregate)
             {
-                return InvalidAlternative(new ExpressBoundNamedType(alternative, select.Span));
+                return InvalidAlternative(declaredType);
             }
 
-            var adaptedReplacement = ResolveAggregateElementValue(
-                plan,
-                valueExpression,
-                replacement,
-                aggregate.ElementType,
-                sourceIsDeterminate: true);
+            var index = indices[level].Lower;
             var values = "__expressSelectedAssignmentValues_" + suffix + "_" + depth;
             var position = "__expressSelectedAssignmentIndex_" + suffix + "_" + depth;
+            var indexed = aggregate.Kind == ExpressAggregateKind.Array
+                ? $"{values}[{position}]"
+                : $"{values}[{position} - 1]";
+            var adaptedReplacement = level == indices.Count - 1
+                ? ResolveAggregateElementValue(
+                    plan,
+                    valueExpression,
+                    replacement,
+                    aggregate.ElementType,
+                    sourceIsDeterminate: true)
+                : TransformValue(
+                    aggregate.ElementType,
+                    indexed,
+                    level + 1,
+                    depth + 1,
+                    new HashSet<ExpressBoundSymbol>(visited));
             var assigned = aggregate.Kind == ExpressAggregateKind.Array
                 ? $"{values}[{position}] = {adaptedReplacement}"
                 : $"{values}[{position} - 1] = {adaptedReplacement}";
             var bounds = aggregate.Kind == ExpressAggregateKind.Array
                 ? $"{position} >= {values}.LowerIndex && {position} <= {values}.UpperIndex"
                 : $"{position} >= 1 && {position} <= {values}.Count";
-            return $"(({unwrapped}, {lowerIndex}) switch {{ "
-                + $"var ({values}, {position}) when {bounds} => (({assigned}), {selected}).Item2, "
+            if (aggregate.Kind == ExpressAggregateKind.Array && level < indices.Count - 1)
+            {
+                bounds += $" && {values}.IsSet({position})";
+            }
+
+            return $"(({unwrapped}, {index}) switch {{ "
+                + $"var ({values}, {position}) when {bounds} => (({assigned}), {current}).Item2, "
                 + "_ => throw new global::System.InvalidOperationException("
                 + "\"An EXPRESS SELECT aggregate assignment index was outside the carrier bounds.\") })";
         }
@@ -6649,6 +6689,7 @@ internal static class ExpressReachableRuleEmitter
             ExpressBoundNamedType carrier,
             ExpressBoundSelectType selectedType,
             string carrierSource,
+            int level,
             int depth,
             HashSet<ExpressBoundSymbol> visited)
         {
@@ -6665,9 +6706,10 @@ internal static class ExpressReachableRuleEmitter
                     + suffix
                     + "_"
                     + (selectedOrdinal++).ToString(CultureInfo.InvariantCulture);
-                var transformed = TransformAlternative(
-                    alternative,
+                var transformed = TransformValue(
+                    new ExpressBoundNamedType(alternative, selectedType.Span),
                     selected,
+                    level,
                     depth,
                     new HashSet<ExpressBoundSymbol>(visited));
                 branches.Add(selected + " => " + carrierName + ".From"
@@ -6678,7 +6720,7 @@ internal static class ExpressReachableRuleEmitter
             return $"({carrierSource}).Match<{carrierName}>({string.Join(", ", branches)})";
         }
 
-        return Dispatch(selectCarrier, select, source, 0, []);
+        return Dispatch(selectCarrier, select, source, 0, 0, []);
     }
 
     private static string? ResolveAggregateSource(

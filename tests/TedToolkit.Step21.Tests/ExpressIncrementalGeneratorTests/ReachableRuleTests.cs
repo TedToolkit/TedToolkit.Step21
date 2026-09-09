@@ -12925,8 +12925,10 @@ public sealed class ReachableRuleTests
             TYPE bits_value = BINARY; END_TYPE;
             TYPE list_value = LIST [1:?] OF INTEGER; END_TYPE;
             TYPE array_value = ARRAY [2:3] OF INTEGER; END_TYPE;
+            TYPE matrix_value = LIST [1:?] OF LIST [1:?] OF INTEGER; END_TYPE;
             TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
             TYPE aggregate_choice = SELECT (list_value, array_value); END_TYPE;
+            TYPE matrix_choice = SELECT (matrix_value); END_TYPE;
             FUNCTION replace_text(selected : scalar_choice) : BOOLEAN;
               selected[2:3] := 'X';
               RETURN(selected = 'aXd');
@@ -12943,16 +12945,22 @@ public sealed class ReachableRuleTests
               selected[3] := 4;
               RETURN(selected[3] = 4);
             END_FUNCTION;
+            FUNCTION replace_nested_element(selected : matrix_choice) : BOOLEAN;
+              selected[2][1] := 9;
+              RETURN(selected[2][1] = 9);
+            END_FUNCTION;
             ENTITY sample;
               text_item : scalar_choice;
               bits_item : scalar_choice;
               list_item : aggregate_choice;
               array_item : aggregate_choice;
+              matrix_item : matrix_choice;
             WHERE
               text_replaced : replace_text(text_item);
               bits_replaced : replace_bits(bits_item);
               list_replaced : replace_list_element(list_item);
               array_replaced : replace_array_element(array_item);
+              nested_replaced : replace_nested_element(matrix_item);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -12976,11 +12984,17 @@ public sealed class ReachableRuleTests
                     var array = new ExpressArray<BigInteger>(2, 3);
                     array[2] = 1;
                     array[3] = 2;
+                    var matrix = new ExpressList<ExpressList<BigInteger>>(1)
+                    {
+                        new(1) { 1, 2 },
+                        new(1) { 3, 4 },
+                    };
                     _ = structure.Add(section, new Sample(
                         ScalarChoice.FromTextValue(new TextValue("abcd")),
                         ScalarChoice.FromBitsValue(new BitsValue(new BinaryValue("1010"))),
                         AggregateChoice.FromListValue(new ListValue(new ExpressList<BigInteger>(1) { 1, 2 })),
-                        AggregateChoice.FromArrayValue(new ArrayValue(array))));
+                        AggregateChoice.FromArrayValue(new ArrayValue(array)),
+                        MatrixChoice.FromMatrixValue(new MatrixValue(matrix))));
                     return structure.Validate();
                 }
             }
