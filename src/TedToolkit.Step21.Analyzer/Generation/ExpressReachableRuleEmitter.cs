@@ -1862,22 +1862,12 @@ internal static class ExpressReachableRuleEmitter
                         scalarNarrowings));
                 if (index.Type.Kind == ExpressExpressionTypeKind.Number)
                 {
-                    var presentNumber = allocateTemporaryName("__expressAssignmentIndexNumber");
-                    var integerNumber = allocateTemporaryName("__expressAssignmentIndexInteger");
-                    return $"(({emittedIndex.Code}) is {{ }} {presentNumber} "
-                        + $"&& {presentNumber}.TryGetInteger(out var {integerNumber}) ? "
-                        + $"checked((int){integerNumber}) : "
-                        + "throw new global::System.InvalidOperationException("
-                        + "\"An EXPRESS assignment index did not evaluate to an INTEGER.\"))";
+                    return $"__ExpressNumberAssignmentIndex({emittedIndex.Code})";
                 }
 
                 if (index.Type.CanBeIndeterminate)
                 {
-                    var presentInteger = allocateTemporaryName("__expressAssignmentIndexInteger");
-                    return $"(({emittedIndex.Code}) is {{ }} {presentInteger} ? "
-                        + $"checked((int){presentInteger}) : "
-                        + "throw new global::System.InvalidOperationException("
-                        + "\"An EXPRESS assignment index was indeterminate.\"))";
+                    return $"__ExpressIntegerAssignmentIndex({emittedIndex.Code})";
                 }
 
                 return $"checked((int)({emittedIndex.Code}))";
@@ -5335,6 +5325,16 @@ internal static class ExpressReachableRuleEmitter
         yield return CreateUsesRoleMethod(plan, resolver, entities);
         yield return CreateUsedInMethod();
         yield return CreateGenericIndexMethod();
+        if (plan.RequiresNumberAssignmentIndex)
+        {
+            yield return CreateNumberAssignmentIndexMethod();
+        }
+
+        if (plan.RequiresIntegerAssignmentIndex)
+        {
+            yield return CreateIntegerAssignmentIndexMethod();
+        }
+
         yield return CreateGenericSizeMethod();
         yield return CreateRolesOfMethod(plan, entities);
         var aggregateInverses = plan.Schema.Declarations
@@ -5555,6 +5555,35 @@ internal static class ExpressReachableRuleEmitter
         loop.AddStatement(new CustomExpression("position++"));
         method.AddStatement(loop);
         method.AddStatement(new CustomExpression("return null"));
+        return method;
+    }
+
+    private static Method CreateNumberAssignmentIndexMethod()
+    {
+        var method = CreateMethod("__ExpressNumberAssignmentIndex", DataType.Int);
+        method.AddParameter(SourceComposer.Parameter(
+            new DataType("global::TedToolkit.Step21.NumberValue?"),
+            "candidate"));
+        method.AddStatement(new IfStatement(new CustomExpression(
+                "candidate is { } number && number.TryGetInteger(out var integer)"))
+            .AddStatement(new CustomExpression("return checked((int)integer)")));
+        method.AddStatement(new CustomExpression(
+            "throw new global::System.InvalidOperationException("
+            + "\"An EXPRESS assignment index did not evaluate to an INTEGER.\")"));
+        return method;
+    }
+
+    private static Method CreateIntegerAssignmentIndexMethod()
+    {
+        var method = CreateMethod("__ExpressIntegerAssignmentIndex", DataType.Int);
+        method.AddParameter(SourceComposer.Parameter(
+            new DataType("global::System.Numerics.BigInteger?"),
+            "candidate"));
+        method.AddStatement(new IfStatement(new CustomExpression("candidate is { } integer"))
+            .AddStatement(new CustomExpression("return checked((int)integer)")));
+        method.AddStatement(new CustomExpression(
+            "throw new global::System.InvalidOperationException("
+            + "\"An EXPRESS assignment index was indeterminate.\")"));
         return method;
     }
 

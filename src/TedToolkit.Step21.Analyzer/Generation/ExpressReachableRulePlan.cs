@@ -32,6 +32,8 @@ internal sealed class ExpressReachableRulePlan
         IEnumerable<ExpressBoundAttribute> reachableSingularInverseAttributes,
         IEnumerable<ExpressSemanticRule> reachableRules,
         bool requiresEntityValueEquality,
+        bool requiresNumberAssignmentIndex,
+        bool requiresIntegerAssignmentIndex,
         IEnumerable<ExpressEntityGenerationFailure> failures)
     {
         Schema = schema;
@@ -51,6 +53,8 @@ internal sealed class ExpressReachableRulePlan
             reachableSingularInverseAttributes.ToArray());
         ReachableRules = new ReadOnlyCollection<ExpressSemanticRule>(reachableRules.ToArray());
         RequiresEntityValueEquality = requiresEntityValueEquality;
+        RequiresNumberAssignmentIndex = requiresNumberAssignmentIndex;
+        RequiresIntegerAssignmentIndex = requiresIntegerAssignmentIndex;
         Failures = new ReadOnlyCollection<ExpressEntityGenerationFailure>(failures.ToArray());
     }
 
@@ -116,6 +120,16 @@ internal sealed class ExpressReachableRulePlan
     /// Gets a value indicating whether the reachable closure requires generated entity value equality.
     /// </summary>
     internal bool RequiresEntityValueEquality { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the reachable closure requires exact NUMBER assignment indices.
+    /// </summary>
+    internal bool RequiresNumberAssignmentIndex { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the reachable closure requires nullable INTEGER assignment indices.
+    /// </summary>
+    internal bool RequiresIntegerAssignmentIndex { get; }
 
     /// <summary>
     /// Gets source-located closure failures that make schema generation unsafe.
@@ -389,6 +403,10 @@ internal sealed class ExpressReachableRulePlan
 
         private bool _requiresEntityValueEquality;
 
+        private bool _requiresNumberAssignmentIndex;
+
+        private bool _requiresIntegerAssignmentIndex;
+
         internal Builder(
             ExpressBoundSchema schema,
             ExpressAnalyzedCompilation compilation,
@@ -470,6 +488,8 @@ internal sealed class ExpressReachableRulePlan
                 orderedSingularInverseAttributes,
                 orderedRules,
                 _requiresEntityValueEquality,
+                _requiresNumberAssignmentIndex,
+                _requiresIntegerAssignmentIndex,
                 _failures);
         }
 
@@ -1360,9 +1380,15 @@ internal sealed class ExpressReachableRulePlan
                     {
                         var expression = GetExpression(indexSyntax.RequiredChild("index")
                             .RequiredChild("numericExpression"));
-                        if (expression.Type.Kind is ExpressExpressionTypeKind.Integer
-                            or ExpressExpressionTypeKind.Number)
+                        if (expression.Type.Kind == ExpressExpressionTypeKind.Number)
                         {
+                            _requiresNumberAssignmentIndex = true;
+                            continue;
+                        }
+
+                        if (expression.Type.Kind == ExpressExpressionTypeKind.Integer)
+                        {
+                            _requiresIntegerAssignmentIndex |= expression.Type.CanBeIndeterminate;
                             continue;
                         }
 

@@ -12547,11 +12547,31 @@ public sealed class ReachableRuleTests
             ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_index(marker) = 2; END_ENTITY;
             END_SCHEMA;
             """;
+        const string polymorphicTargetSchema = """
+            SCHEMA polymorphic_assignment_index_model;
+            ENTITY base ABSTRACT SUPERTYPE OF (ONEOF(first, second));
+              values : LIST [2:2] OF INTEGER;
+            END_ENTITY;
+            ENTITY first SUBTYPE OF (base); END_ENTITY;
+            ENTITY second SUBTYPE OF (base); END_ENTITY;
+            FUNCTION replace_at(item : base; position : NUMBER) : BOOLEAN;
+              item.values[position] := 9;
+              RETURN(item.values[2] = 9);
+            END_FUNCTION;
+            ENTITY sample;
+              item : base;
+            WHERE
+              integer_number_index : replace_at(item, 2);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
         var result = GeneratorHostTests.Run(consumer, ("schemas/assignment-index.exp", schema));
         var invalidRealResult = GeneratorHostTests.Run(("schemas/real-assignment-index.exp", invalidRealSchema));
         var invalidStringResult = GeneratorHostTests.Run(("schemas/string-assignment-index.exp", invalidStringSchema));
         var invalidIndeterminateResult = GeneratorHostTests.Run(
             ("schemas/indeterminate-assignment-index.exp", invalidIndeterminateSchema));
+        var polymorphicTargetResult = GeneratorHostTests.Run(
+            ("schemas/polymorphic-assignment-index.exp", polymorphicTargetSchema));
 
         await Assert.That(result.Diagnostics
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
@@ -12575,6 +12595,19 @@ public sealed class ReachableRuleTests
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
             await Assert.That(generated).Contains(".TryGetInteger(out var ");
             await Assert.That(generated).DoesNotContain(".ToIntegerTruncated()");
+            await Assert.That(polymorphicTargetResult.Diagnostics
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    polymorphicTargetResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(polymorphicTargetResult.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    polymorphicTargetResult.OutputCompilation.GetDiagnostics()
+                        .Select(diagnostic => diagnostic.ToString())));
             foreach (var invalidResult in new[]
                      {
                          invalidRealResult,
