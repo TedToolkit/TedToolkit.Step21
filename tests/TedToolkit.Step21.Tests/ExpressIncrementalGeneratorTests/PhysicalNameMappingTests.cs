@@ -51,11 +51,14 @@ public sealed class PhysicalNameMappingTests
         using TedToolkit.Step21.Generated.PhysicalNames;
         internal static class PhysicalNameConsumer
         {
-            internal static bool Check(bool shortInput)
+            internal static bool Check(bool shortInput, bool enumerationSelected)
             {
+                var selected = enumerationSelected
+                    ? shortInput ? "STA(.ACT.)" : "STATE(.ACTIVE.)"
+                    : shortInput ? "DST(1.0)" : "DISTANCE(1.0)";
                 var record = shortInput
-                    ? "#1=MRK(DST(1.0),.ACT.);"
-                    : "#1=MARKER(DISTANCE(1.0),.ACTIVE.);";
+                    ? "#1=MRK(" + selected + ",.ACT.);"
+                    : "#1=MARKER(" + selected + ",.ACTIVE.);";
                 var input = "ISO-10303-21;HEADER;FILE_DESCRIPTION(('physical names'),'3;1');" +
                     "FILE_NAME('physical','2026-09-09T00:00:00',('A'),('O'),'P','S','');" +
                     "FILE_SCHEMA(('physical_names'));ENDSEC;DATA;" + record +
@@ -68,7 +71,14 @@ public sealed class PhysicalNameMappingTests
                 var reread = ExchangeStructure.Read(new StringReader(output),
                     [TedToolkit.Step21.Generated.PhysicalNames.SchemaDescriptor.Instance]);
                 var marker = reread.Entities.OfType<Marker>().Single();
-                return output.Contains("=MRK(") && output.Contains("DST(") && output.Contains(".ACT.") &&
+                if (enumerationSelected)
+                {
+                    return output.Contains("=MRK(STA(.ACT.),.ACT.)") &&
+                        marker.Selected.TryGetState(out var state) && state.Value == "ACTIVE" &&
+                        marker.Status.Value == "ACTIVE";
+                }
+
+                return output.Contains("=MRK(DST(") && output.Contains("),.ACT.);") &&
                     marker.Selected.TryGetDistance(out var distance) && distance.Value == new RealValue(1, 0) &&
                     marker.Status.Value == "ACTIVE";
             }
@@ -97,6 +107,8 @@ public sealed class PhysicalNameMappingTests
             await Assert.That(descriptor).Contains("\"MRK\", [");
             await Assert.That(descriptor).Contains("Type is \"DISTANCE\" or \"DST\"");
             await Assert.That(descriptor).Contains("FromTyped(\"DST\"");
+            await Assert.That(descriptor).Contains("Type is \"STATE\" or \"STA\"");
+            await Assert.That(descriptor).Contains("FromTyped(\"STA\"");
             await Assert.That(descriptor).Contains("\"ACTIVE\" or \"ACT\"");
             await Assert.That(descriptor).Contains("\"ACTIVE\" => \"ACT\"");
         }
@@ -107,8 +119,10 @@ public sealed class PhysicalNameMappingTests
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         var check = assembly.GetType("PhysicalNameConsumer", throwOnError: true)!
             .GetMethod("Check", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
-        await Assert.That((bool)check.Invoke(null, [false])!).IsTrue();
-        await Assert.That((bool)check.Invoke(null, [true])!).IsTrue();
+        await Assert.That((bool)check.Invoke(null, [false, false])!).IsTrue();
+        await Assert.That((bool)check.Invoke(null, [true, false])!).IsTrue();
+        await Assert.That((bool)check.Invoke(null, [false, true])!).IsTrue();
+        await Assert.That((bool)check.Invoke(null, [true, true])!).IsTrue();
     }
 
     /// <summary>
@@ -138,30 +152,51 @@ public sealed class PhysicalNameMappingTests
     {
         var cases = new[]
         {
-            "SCHEMA absent\nENTITY marker m\nEND_SCHEMA",
-            "SCHEMA physical_names\nENTITY absent m\nEND_SCHEMA",
-            "SCHEMA physical_names\nENTITY marker distance\nEND_SCHEMA",
-            "SCHEMA physical_names\nENTITY marker m\nTYPE distance M\nEND_SCHEMA",
-            "SCHEMA physical_names\nENUMERATION distance active a\nEND_SCHEMA",
-            "SCHEMA physical_names\nTYPE payload pay\nEND_SCHEMA",
-            "SCHEMA physical_names\nTYPE distances dists\nEND_SCHEMA",
-            "SCHEMA physical_names\nENTITY marker 名称\nEND_SCHEMA",
-            "SCHEMA physical_names\nENTITY marker\nEND_SCHEMA",
+            (Map: "SCHEMA absent\nENTITY marker m\nEND_SCHEMA", Line: 1, Message: "not present"),
+            (Map: "SCHEMA physical_names\nENTITY absent m\nEND_SCHEMA", Line: 2, Message: "not declared"),
+            (Map: "SCHEMA physical_names\nENTITY marker distance\nEND_SCHEMA", Line: 2, Message: "collides"),
+            (Map: "SCHEMA physical_names\nENTITY marker m\nTYPE distance M\nEND_SCHEMA", Line: 3, Message: "collides"),
+            (Map: "SCHEMA physical_names\nENUMERATION distance active a\nEND_SCHEMA", Line: 2, Message: "not an enumeration"),
+            (Map: "SCHEMA physical_names\nENUMERATION state absent a\nEND_SCHEMA", Line: 2, Message: "not declared"),
+            (Map: "SCHEMA physical_names\nENUMERATION state active inactive\nEND_SCHEMA", Line: 2, Message: "ambiguous"),
+            (Map: "SCHEMA physical_names\nENUMERATION state active a\nENUMERATION state active b\nEND_SCHEMA", Line: 3, Message: "already has"),
+            (Map: "SCHEMA physical_names\nTYPE payload pay\nEND_SCHEMA", Line: 2, Message: "not a simple defined"),
+            (Map: "SCHEMA physical_names\nTYPE distances dists\nEND_SCHEMA", Line: 2, Message: "not a simple defined"),
+            (Map: "SCHEMA physical_names\nENTITY marker 名称\nEND_SCHEMA", Line: 2, Message: "Expected 'ENTITY"),
+            (Map: "SCHEMA physical_names\nENTITY marker\nEND_SCHEMA", Line: 2, Message: "Expected 'ENTITY"),
         };
 
-        foreach (var map in cases)
+        foreach (var item in cases)
         {
             var result = GeneratorHostTests.Run(
                 ("schemas/physical.exp", SCHEMA),
-                ("schemas/invalid.p21map", map));
+                ("schemas/invalid.p21map", item.Map));
             var diagnostic = result.Diagnostics.Single(item => item.Id == "STEP21EXP007");
+            var span = diagnostic.Location.GetLineSpan();
 
             using (Assert.Multiple())
             {
                 await Assert.That(diagnostic.Severity).IsEqualTo(DiagnosticSeverity.Error);
-                await Assert.That(diagnostic.Location.GetLineSpan().Path).IsEqualTo("schemas/invalid.p21map");
+                await Assert.That(span.Path).IsEqualTo("schemas/invalid.p21map");
+                await Assert.That(span.StartLinePosition.Line + 1).IsEqualTo(item.Line);
+                await Assert.That(span.StartLinePosition.Character + 1).IsEqualTo(1);
+                await Assert.That(diagnostic.GetMessage()).Contains(item.Message);
                 await Assert.That(result.GeneratedSources).IsEmpty();
             }
+        }
+
+        var ordered = GeneratorHostTests.Run(
+            ("schemas/physical.exp", SCHEMA),
+            ("schemas/ordered.p21map",
+                "SCHEMA physical_names\nENTITY absent m\nTYPE absent_type t\nEND_SCHEMA"));
+        var orderedDiagnostics = ordered.Diagnostics.Where(item => item.Id == "STEP21EXP007").ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(orderedDiagnostics).Count().IsEqualTo(2);
+            await Assert.That(orderedDiagnostics[0].Location.GetLineSpan().StartLinePosition.Line + 1).IsEqualTo(2);
+            await Assert.That(orderedDiagnostics[1].Location.GetLineSpan().StartLinePosition.Line + 1).IsEqualTo(3);
+            await Assert.That(ordered.GeneratedSources).IsEmpty();
         }
     }
 
