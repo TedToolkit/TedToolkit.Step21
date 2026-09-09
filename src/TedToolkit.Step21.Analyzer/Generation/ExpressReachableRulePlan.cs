@@ -1492,7 +1492,7 @@ internal sealed class ExpressReachableRulePlan
                 .SingleOrDefault(type => type is not null);
             if (ranges.Length == 1
                 && operation.ChildRules("qualifier").Count() == 1
-                && targetType is ExpressBoundScalarType
+                && ResolveAssignmentScalarCarrier(targetType) is
                 { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, })
             {
                 return true;
@@ -1503,6 +1503,19 @@ internal sealed class ExpressReachableRulePlan
                 "A range-qualified assignment requires a STRING or BINARY carrier "
                     + "and shall be the final qualifier.");
             return false;
+        }
+
+        private ExpressBoundScalarType? ResolveAssignmentScalarCarrier(ExpressBoundType? type)
+        {
+            var visited = new HashSet<ExpressBoundSymbol>();
+            while (type is ExpressBoundNamedType named
+                   && named.Declaration.Kind != ExpressDeclarationKind.Entity
+                   && visited.Add(named.Declaration))
+            {
+                type = _resolver.GetDefinedType(named.Declaration).UnderlyingType;
+            }
+
+            return type as ExpressBoundScalarType;
         }
 
         private bool ValidateProcedureScalarArguments(ExpressSemanticRule operation)

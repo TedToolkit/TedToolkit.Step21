@@ -12795,16 +12795,25 @@ public sealed class ReachableRuleTests
     {
         const string schema = """
             SCHEMA range_assignment_model;
+            TYPE text_value_type = STRING; END_TYPE;
+            TYPE binary_value_type = BINARY; END_TYPE;
             FUNCTION replace_ranges(marker : BOOLEAN) : BOOLEAN;
               LOCAL
                 text_value : STRING := 'abcd';
                 binary_value : BINARY := %1010;
+                defined_text_value : text_value_type := 'abcd';
+                defined_binary_value : binary_value_type := %1010;
               END_LOCAL;
               text_value[2:3] := 'XYZ';
               binary_value[2:3] := %0;
               text_value[2] := 'Q';
               binary_value[2] := %1;
-              RETURN((text_value = 'aQYZd') AND (binary_value = %110));
+              defined_text_value[2:3] := 'XYZ';
+              defined_binary_value[2:3] := %0;
+              defined_text_value[2] := 'Q';
+              defined_binary_value[2] := %1;
+              RETURN((text_value = 'aQYZd') AND (binary_value = %110)
+                AND (defined_text_value = 'aQYZd') AND (defined_binary_value = %110));
             END_FUNCTION;
             ENTITY sample;
               marker : BOOLEAN;
