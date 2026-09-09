@@ -3,7 +3,7 @@
 
 This file is the only mutable ISO21 work-item status source.
 
-<!-- approval-source: user-approved-recommended-iso21-005-split-and-continue-2026-09-09 -->
+<!-- approval-source: user-approved-revised-iso21-005-query-proof-and-continue-2026-09-09 -->
 
 | ID | Outcome | Contract ownership | Real prerequisites and supplied input | Status | Document |
 | --- | --- | --- | --- | --- | --- |

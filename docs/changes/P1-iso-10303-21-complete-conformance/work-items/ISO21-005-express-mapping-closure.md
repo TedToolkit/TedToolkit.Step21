@@ -3,7 +3,7 @@
 <!-- work-item-format: 2 -->
 <!-- work-item-id: ISO21-005 -->
 
-<!-- approval-source: user-approved-recommended-iso21-005-split-and-continue-2026-09-09 -->
+<!-- approval-source: user-approved-revised-iso21-005-query-proof-and-continue-2026-09-09 -->
 
 ## Outcome
 
@@ -48,20 +48,22 @@ enumeration-value 短名及物理映射元数据，并由生成代码完成长�
 | Contract or gate | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
 | AC-07 supplied mapping input | Conditional | Explicit entity/type/enumeration short names read and write the same values as long names; absent/invalid/colliding metadata fails deterministically | Run the focused generated short-name mapping contract suite in Release |
-| Generator/AP compatibility | Conditional | Existing compiler baseline, public generated APIs and AP203/AP214/AP242 full baselines remain green | Run all `Express*`, AP schema baseline and reproducibility tests in Release |
+| Generator/AP compatibility | Conditional | Existing compiler baseline, public generated APIs and AP203/AP214/AP242 full baselines have zero failures outside the two unchanged QUERY gaps owned by ISO21-009 | Tag exactly those two tests with `ISO21WorkItem=ISO21-009`; run `dotnet run --project tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --no-restore --disable-build-servers -- --treenode-filter "/*/*/*/*[ISO21WorkItem!=ISO21-009]" --minimum-expected-tests 708`, plus the three AP surface/reproducibility gates in Release |
 
 <!-- work-item: definition-of-done -->
 ## Done
 
 - The schema-supplied short-name contract and neighboring-invalid matrix pass without heuristic or AP-specific behavior.
-- Generated/public compatibility and all three maintained schema packages pass; verified mapping metadata is supplied to ISO21-009 and ISO21-008.
+- Generated/public compatibility and all three maintained schema packages have zero failures outside exactly two explicitly tagged,
+  unchanged QUERY gaps owned by ISO21-009; verified mapping metadata is supplied to ISO21-009 and ISO21-008.
 
 <!-- work-item: completion-evidence -->
 ## Verification result requirements
 
 Record candidate revision, supported short-name categories, valid/invalid corpus counts, generated/API deltas, diagnostics,
-commands, AP baseline/reproducibility results and the mapping metadata contract supplied to dependents.
+commands, the exact 708-test filtered result, evidence that exactly two ordinary tests carry the ISO21-009 ownership tag,
+AP baseline/reproducibility results and the mapping metadata contract supplied to dependents.
 
 ## Risks and implementation notes
 
-The physical mapping layer must remain schema-neutral. Application-protocol packages may supply metadata, but the Analyzer and runtime must not encode AP-specific name tables or semantics.
+The physical mapping layer must remain schema-neutral. Application-protocol packages may supply metadata, but the Analyzer and runtime must not encode AP-specific name tables or semantics. The ISO21-009 property makes ownership of two pre-existing QUERY gaps machine-verifiable; it is not a skip, disablement or conformance waiver.

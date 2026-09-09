@@ -487,6 +487,7 @@ internal sealed class GenerationTests
     /// Verifies references, navigation, aggregate construction, slicing, querying, and aggregate built-ins remain static.
     /// </summary>
     [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
     public async Task Should_execute_static_reference_aggregate_and_query_expressions()
     {
         var schema = ExpressSchemaCompiler.Compile(
@@ -1652,6 +1653,7 @@ internal sealed class GenerationTests
     /// Verifies QUERY preserves ARRAY positions and each variable-size aggregate result category.
     /// </summary>
     [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
     public async Task Should_preserve_query_result_category_bounds_and_array_positions()
     {
         var schema = ExpressSchemaCompiler.Compile(
