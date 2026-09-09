@@ -1485,11 +1485,6 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var qualifiers = operation.ChildRules("qualifier").ToArray();
-            if (qualifiers.Length == 0)
-            {
-                return true;
-            }
-
             var targetSyntax = operation.RequiredChild("generalRef");
             ExpressBoundType? targetType = _schema.NameReferences
                 .Where(reference => SameStart(reference.Span, targetSyntax.Span))
@@ -1599,7 +1594,16 @@ internal sealed class ExpressReachableRulePlan
                 return false;
             }
 
-            return true;
+            var value = GetExpression(operation.RequiredChild("expression"));
+            if (targetType is not null && IsAssignmentCompatible(targetType, value))
+            {
+                return true;
+            }
+
+            AddFailure(
+                value.Span,
+                $"Assignment value of type {value.Type.Kind.ToString()} is not assignment-compatible with its target.");
+            return false;
         }
 
         private bool IsAssignmentSelectCarrier(ExpressBoundType? type)
@@ -1652,8 +1656,8 @@ internal sealed class ExpressReachableRulePlan
                         && SameStart(candidate.Span, parameterSyntax[index].Span))
                     .Distinct()
                     .Single();
-                if (parameter.Type is not ExpressBoundScalarType formal
-                    || IsScalarAssignmentCompatible(formal.Kind, arguments[index].Type.Kind))
+                if (parameter.Type is null
+                    || IsAssignmentCompatible(parameter.Type, arguments[index]))
                 {
                     continue;
                 }
@@ -1663,11 +1667,169 @@ internal sealed class ExpressReachableRulePlan
                     "Procedure argument "
                         + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
                         + $" of '{procedure.Name}' is not assignment-compatible: "
-                        + $"{arguments[index].Type.Kind.ToString()} cannot be assigned to {formal.Kind.ToString()}.");
+                        + $"{arguments[index].Type.Kind.ToString()} cannot be assigned to the formal parameter.");
                 valid = false;
             }
 
             return valid;
+        }
+
+        private bool IsAssignmentCompatible(
+            ExpressBoundType target,
+            ExpressBoundExpression actual)
+        {
+            if (actual.Kind == ExpressExpressionKind.Indeterminate)
+            {
+                return true;
+            }
+
+            return actual.Type.DeclaredType is { } actualType
+                ? IsAssignmentCompatible(target, actualType, [], [], allowRuntimeGeneralization: true)
+                : TryGetScalarKind(actual.Type.Kind, out var actualScalar)
+                    && IsAssignmentCompatible(
+                        target,
+                        new ExpressBoundScalarType(
+                            actualScalar,
+                            constraintText: null,
+                            isFixed: false,
+                            actual.Span),
+                        [],
+                        [],
+                        allowRuntimeGeneralization: true);
+        }
+
+        private bool IsAssignmentCompatible(
+            ExpressBoundType target,
+            ExpressBoundType actual,
+            HashSet<ExpressBoundSymbol> visitedTargets,
+            HashSet<ExpressBoundSymbol> visitedActuals,
+            bool allowRuntimeGeneralization)
+        {
+            if (target is ExpressBoundGenericType || actual is ExpressBoundGenericType)
+            {
+                return true;
+            }
+
+            var forward = _resolver.ClassifySpecialization(target, actual);
+            var reverse = _resolver.ClassifySpecialization(actual, target);
+            var supportsRuntimeGeneralization = allowRuntimeGeneralization
+                && ((target is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, }
+                    && actual is ExpressBoundNamedType
+                    { Declaration.Kind: ExpressDeclarationKind.Entity, })
+                || (target is ExpressBoundAggregateType
+                { Kind: ExpressAggregateKind.Set, }
+                    && actual is ExpressBoundAggregateType
+                    { Kind: ExpressAggregateKind.Set, }));
+            if (ExpressGeneratedTypeResolver.AreEquivalent(target, actual)
+                || forward is ExpressRedeclarationClassification.Equivalent
+                    or ExpressRedeclarationClassification.Supported
+                || (supportsRuntimeGeneralization
+                    && (reverse is ExpressRedeclarationClassification.Equivalent
+                        or ExpressRedeclarationClassification.Supported)))
+            {
+                return true;
+            }
+
+            if (target is ExpressBoundNamedType targetName
+                && targetName.Declaration.Kind != ExpressDeclarationKind.Entity
+                && visitedTargets.Add(targetName.Declaration))
+            {
+                var targetUnderlying = _resolver.GetDefinedType(targetName.Declaration).UnderlyingType;
+                if (targetUnderlying is ExpressBoundSelectType targetSelect)
+                {
+                    return _resolver.GetSelectAlternatives(targetSelect).Any(alternative =>
+                        IsAssignmentCompatible(
+                            new ExpressBoundNamedType(alternative, target.Span),
+                            actual,
+                            new HashSet<ExpressBoundSymbol>(visitedTargets),
+                            new HashSet<ExpressBoundSymbol>(visitedActuals),
+                            allowRuntimeGeneralization));
+                }
+
+                return IsAssignmentCompatible(
+                    targetUnderlying,
+                    actual,
+                    visitedTargets,
+                    visitedActuals,
+                    allowRuntimeGeneralization);
+            }
+
+            if (actual is ExpressBoundNamedType actualName
+                && actualName.Declaration.Kind != ExpressDeclarationKind.Entity
+                && visitedActuals.Add(actualName.Declaration))
+            {
+                var actualUnderlying = _resolver.GetDefinedType(actualName.Declaration).UnderlyingType;
+                if (actualUnderlying is ExpressBoundSelectType actualSelect)
+                {
+                    return _resolver.GetSelectAlternatives(actualSelect).Any(alternative =>
+                        IsAssignmentCompatible(
+                            target,
+                            new ExpressBoundNamedType(alternative, actual.Span),
+                            new HashSet<ExpressBoundSymbol>(visitedTargets),
+                            new HashSet<ExpressBoundSymbol>(visitedActuals),
+                            allowRuntimeGeneralization));
+                }
+
+                return IsAssignmentCompatible(
+                    target,
+                    actualUnderlying,
+                    visitedTargets,
+                    visitedActuals,
+                    allowRuntimeGeneralization);
+            }
+
+            if (target is ExpressBoundScalarType targetScalar
+                && actual is ExpressBoundScalarType actualScalar)
+            {
+                return IsScalarAssignmentCompatible(
+                    targetScalar.Kind,
+                    actualScalar.Kind switch
+                    {
+                        ExpressScalarKind.Binary => ExpressExpressionTypeKind.Binary,
+                        ExpressScalarKind.Boolean => ExpressExpressionTypeKind.Boolean,
+                        ExpressScalarKind.Integer => ExpressExpressionTypeKind.Integer,
+                        ExpressScalarKind.Logical => ExpressExpressionTypeKind.Logical,
+                        ExpressScalarKind.Number => ExpressExpressionTypeKind.Number,
+                        ExpressScalarKind.Real => ExpressExpressionTypeKind.Real,
+                        ExpressScalarKind.String => ExpressExpressionTypeKind.String,
+                        _ => ExpressExpressionTypeKind.Unresolved,
+                    });
+            }
+
+            return target is ExpressBoundAggregateType targetAggregate
+                && actual is ExpressBoundAggregateType actualAggregate
+                && targetAggregate.Kind == actualAggregate.Kind
+                && IsAssignmentCompatible(
+                    targetAggregate.ElementType,
+                    actualAggregate.ElementType,
+                    visitedTargets,
+                    visitedActuals,
+                    allowRuntimeGeneralization: targetAggregate.Kind == ExpressAggregateKind.Set);
+        }
+
+        private static bool TryGetScalarKind(
+            ExpressExpressionTypeKind kind,
+            out ExpressScalarKind scalar)
+        {
+            scalar = kind switch
+            {
+                ExpressExpressionTypeKind.Binary => ExpressScalarKind.Binary,
+                ExpressExpressionTypeKind.Boolean => ExpressScalarKind.Boolean,
+                ExpressExpressionTypeKind.Integer => ExpressScalarKind.Integer,
+                ExpressExpressionTypeKind.Logical => ExpressScalarKind.Logical,
+                ExpressExpressionTypeKind.Number => ExpressScalarKind.Number,
+                ExpressExpressionTypeKind.Real => ExpressScalarKind.Real,
+                ExpressExpressionTypeKind.String => ExpressScalarKind.String,
+                _ => default,
+            };
+            return kind is ExpressExpressionTypeKind.Binary
+                or ExpressExpressionTypeKind.Boolean
+                or ExpressExpressionTypeKind.Integer
+                or ExpressExpressionTypeKind.Logical
+                or ExpressExpressionTypeKind.Number
+                or ExpressExpressionTypeKind.Real
+                or ExpressExpressionTypeKind.String;
         }
 
         private static bool IsScalarAssignmentCompatible(

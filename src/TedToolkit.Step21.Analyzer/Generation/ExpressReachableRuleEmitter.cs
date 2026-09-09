@@ -4769,6 +4769,89 @@ internal static class ExpressReachableRuleEmitter
                 }
             }
 
+            if (parameter.Name.Type is ExpressBoundNamedType
+                { Declaration.Kind: not ExpressDeclarationKind.Entity, } namedTarget)
+            {
+                var underlyingTarget = (ExpressBoundType)namedTarget;
+                var wrappers = ResolveTransparentDefinedWrappers(plan.Resolver, ref underlyingTarget);
+                if (underlyingTarget is ExpressBoundSelectType)
+                {
+                    string? selected = null;
+                    if (argument.Type.DeclaredType is ExpressBoundNamedType
+                        { Declaration.Kind: not ExpressDeclarationKind.Entity, } namedSource)
+                    {
+                        selected = plan.Resolver.GetDefinedType(namedSource.Declaration).UnderlyingType
+                                is ExpressBoundSelectType
+                            ? ResolveSelectToSelectValue(
+                                plan,
+                                namedTarget,
+                                namedSource,
+                                code,
+                                context.AllocateTemporaryName("__expressProcedureSelect"))
+                            : ResolveNamedExpressionToSelectValue(
+                                plan,
+                                namedTarget,
+                                namedSource,
+                                code,
+                                argumentCanBeIndeterminate,
+                                context.AllocateTemporaryName("__expressProcedureSelect"));
+                    }
+                    else if (argument.Type.DeclaredType is null or ExpressBoundScalarType)
+                    {
+                        selected = ResolveScalarExpressionToSelectValue(
+                            plan,
+                            namedTarget,
+                            argument,
+                            code,
+                            argumentCanBeIndeterminate,
+                            context.AllocateTemporaryName("__expressProcedureSelect"));
+                    }
+
+                    if (selected is not null)
+                    {
+                        code = selected;
+                    }
+                }
+                else if (wrappers.Count > 0
+                         && argument.Type.DeclaredType is null or ExpressBoundScalarType
+                         && underlyingTarget is ExpressBoundScalarType targetScalar
+                         && CanProjectScalar(
+                             argument.Type.Kind switch
+                             {
+                                 ExpressExpressionTypeKind.Binary => ExpressScalarKind.Binary,
+                                 ExpressExpressionTypeKind.Boolean => ExpressScalarKind.Boolean,
+                                 ExpressExpressionTypeKind.Integer => ExpressScalarKind.Integer,
+                                 ExpressExpressionTypeKind.Logical => ExpressScalarKind.Logical,
+                                 ExpressExpressionTypeKind.Number => ExpressScalarKind.Number,
+                                 ExpressExpressionTypeKind.Real => ExpressScalarKind.Real,
+                                 ExpressExpressionTypeKind.String => ExpressScalarKind.String,
+                                 _ => targetScalar.Kind,
+                             },
+                             targetScalar.Kind))
+                {
+                    for (var wrapperIndex = wrappers.Count - 1; wrapperIndex >= 0; wrapperIndex--)
+                    {
+                        code = "new "
+                            + ExpressExpressionEmitter.BoundTypeName(wrappers[wrapperIndex])
+                            + $"({code})";
+                    }
+                }
+            }
+
+            if (plan.Resolver.GetAggregateType(parameter.Name.Type!) is { } aggregateTarget
+                && ResolveExpressionAggregateType(plan, argument, aggregateTarget) is { } aggregateSource
+                && ResolveAggregateValueToTarget(
+                    plan,
+                    aggregateSource,
+                    aggregateTarget,
+                    code,
+                    context.AllocateTemporaryName("__expressProcedureAggregate"),
+                    argumentCanBeIndeterminate,
+                    materializeEquivalent: true) is { } aggregateValue)
+            {
+                code = aggregateValue;
+            }
+
             if (argumentCanBeIndeterminate)
             {
                 var present = context.AllocateTemporaryName("__expressProcedureArgument");
@@ -11020,6 +11103,32 @@ internal static class ExpressReachableRuleEmitter
             return sourceCanBeIndeterminate
                 ? $"(({source}) is {{ }} {input} ? ({targetName})[..{input}] : ({targetName}?)null)"
                 : $"({targetName})[..({source})]";
+        }
+
+        if (sourceType.ElementType is ExpressBoundScalarType sourceScalar
+            && targetType.ElementType is ExpressBoundScalarType targetScalar
+            && CanProjectScalar(sourceScalar.Kind, targetScalar.Kind))
+        {
+            var input = variablePrefix + "Input";
+            var scalarElement = variablePrefix + "ScalarElement";
+            var scalarAdapted = (sourceScalar.Kind, targetScalar.Kind) switch
+            {
+                (ExpressScalarKind.Integer, ExpressScalarKind.Real) =>
+                    $"new global::TedToolkit.Step21.RealValue({scalarElement}, "
+                        + "global::System.Numerics.BigInteger.Zero)",
+                (ExpressScalarKind.Integer, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromInteger({scalarElement})",
+                (ExpressScalarKind.Real, ExpressScalarKind.Number) =>
+                    $"global::TedToolkit.Step21.NumberValue.FromReal({scalarElement})",
+                _ when sourceScalar.Kind == targetScalar.Kind => scalarElement,
+                _ => throw new InvalidOperationException("Unsupported scalar aggregate assignment projection."),
+            };
+            var scalarProjected = $"({targetName})[..global::System.Linq.Enumerable.Select("
+                + (sourceCanBeIndeterminate ? input : $"({source})")
+                + $", {scalarElement} => {scalarAdapted})]";
+            return sourceCanBeIndeterminate
+                ? $"(({source}) is {{ }} {input} ? {scalarProjected} : ({targetName}?)null)"
+                : scalarProjected;
         }
 
         if (targetType.ElementType is not ExpressBoundNamedType targetElement)

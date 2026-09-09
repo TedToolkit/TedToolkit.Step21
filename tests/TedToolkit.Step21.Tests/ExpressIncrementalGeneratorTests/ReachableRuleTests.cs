@@ -8214,14 +8214,12 @@ public sealed class ReachableRuleTests
             .Because(string.Join(Environment.NewLine, diagnostics));
         using (Assert.Multiple())
         {
-            await Assert.That(controlDiagnostics.Any(diagnostic =>
-                diagnostic.GetMessage().Contains("ExpressBag", StringComparison.Ordinal))).IsTrue();
-            await Assert.That(controlDiagnostics.Any(diagnostic =>
-                diagnostic.GetMessage().Contains("ExpressList", StringComparison.Ordinal))).IsTrue();
-            await Assert.That(controlDiagnostics.Any(diagnostic =>
-                diagnostic.GetMessage().Contains("ExpressArray", StringComparison.Ordinal))).IsTrue();
-            await Assert.That(controlDiagnostics.Any(diagnostic =>
-                diagnostic.GetMessage().Contains("IUnrelated", StringComparison.Ordinal))).IsTrue();
+            await Assert.That(controlDiagnostics.Count(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains("is not assignment-compatible", StringComparison.Ordinal)))
+                .IsEqualTo(5)
+                .Because(string.Join(Environment.NewLine, controlDiagnostics));
+            await Assert.That(controls.GeneratedSources).IsEmpty();
         }
 
         var generated = string.Join(
@@ -12097,6 +12095,81 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies UNTIL is evaluated after the body, stops on TRUE, and continues on FALSE or UNKNOWN.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_repeat_until_after_the_body()
+    {
+        const string schema = """
+            SCHEMA repeat_until_model;
+            FUNCTION unknown_then_true(marker : BOOLEAN) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+                condition : LOGICAL := UNKNOWN;
+              END_LOCAL;
+              REPEAT UNTIL condition;
+                result_value := result_value + 1;
+                IF result_value = 2 THEN
+                  condition := TRUE;
+                END_IF;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION always_false(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := 1 TO 2 UNTIL FALSE;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              unknown_continues : unknown_then_true(marker) = 2;
+              false_continues : always_false(marker) = 2;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.RepeatUntilModel;
+
+            internal static class RepeatUntilConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["repeat until"], "3;1"),
+                            new FileName("repeat-until.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["repeat_until_model"])),
+                        [TedToolkit.Step21.Generated.RepeatUntilModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("repeat_until_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("schemas/repeat-until.exp", schema));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("RepeatUntilConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+    }
+
+    /// <summary>
     /// Verifies IF and WHILE use TRUE-only logical control and compound statements preserve their enclosing scope.
     /// </summary>
     [Test]
@@ -12816,6 +12889,139 @@ public sealed class ReachableRuleTests
                     Environment.NewLine,
                     incompatibleResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
             await Assert.That(incompatibleResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Verifies assignment compatibility covers defined, SELECT, aggregate, and entity-specialization domains.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_enforce_the_assignment_compatibility_matrix()
+    {
+        const string schema = """
+            SCHEMA assignment_compatibility_model;
+            TYPE integer_alias = INTEGER; END_TYPE;
+            TYPE text_alias = STRING; END_TYPE;
+            TYPE scalar_choice = SELECT (integer_alias, text_alias); END_TYPE;
+            ENTITY base_item; code : INTEGER; END_ENTITY;
+            ENTITY child_item SUBTYPE OF (base_item); END_ENTITY;
+            PROCEDURE accept_defined(input_value : integer_alias); ; END_PROCEDURE;
+            PROCEDURE accept_choice(input_value : scalar_choice); ; END_PROCEDURE;
+            PROCEDURE accept_base(input_value : base_item); ; END_PROCEDURE;
+            PROCEDURE accept_numbers(input_value : LIST [1:?] OF REAL); ; END_PROCEDURE;
+            FUNCTION compatible_assignments(item : child_item; marker : BOOLEAN) : BOOLEAN;
+              LOCAL
+                base_value : base_item;
+                defined_value : integer_alias;
+                selected_value : scalar_choice;
+                numbers : LIST [1:?] OF REAL;
+              END_LOCAL;
+              base_value := item;
+              defined_value := 2;
+              selected_value := defined_value;
+              numbers := [1, 2];
+              accept_defined(2);
+              accept_choice(defined_value);
+              accept_base(item);
+              accept_numbers([1, 2]);
+              RETURN((defined_value = 2) AND (SIZEOF(numbers) = 2));
+            END_FUNCTION;
+            ENTITY sample;
+              item : child_item;
+              marker : BOOLEAN;
+            WHERE
+              compatible : compatible_assignments(item, marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.AssignmentCompatibilityModel;
+
+            internal static class AssignmentCompatibilityConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["assignment compatibility"], "3;1"),
+                            new FileName("assignment-compatibility.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["assignment_compatibility_model"])),
+                        [TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("assignment_compatibility_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(new ChildItem(3), true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        static string InvalidSchema(string name, string declarations, string statement) => $$"""
+            SCHEMA {{name}};
+            {{declarations}}
+            FUNCTION invalid_assignment(marker : BOOLEAN) : BOOLEAN;
+              {{statement}}
+              RETURN(marker);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_assignment(marker); END_ENTITY;
+            END_SCHEMA;
+            """;
+        var invalidSchemas = new[]
+        {
+            InvalidSchema(
+                "invalid_direct_assignment_model",
+                "",
+                "LOCAL assigned_value : INTEGER := 0; END_LOCAL; assigned_value := 'text';"),
+            InvalidSchema(
+                "invalid_defined_assignment_model",
+                "TYPE integer_alias = INTEGER; END_TYPE; PROCEDURE accept_value(formal_value : integer_alias); ; END_PROCEDURE;",
+                "accept_value('text');"),
+            InvalidSchema(
+                "invalid_select_assignment_model",
+                "TYPE integer_alias = INTEGER; END_TYPE; TYPE text_alias = STRING; END_TYPE; TYPE scalar_choice = SELECT (integer_alias, text_alias); END_TYPE; PROCEDURE accept_value(formal_value : scalar_choice); ; END_PROCEDURE;",
+                "accept_value(TRUE);"),
+            InvalidSchema(
+                "invalid_entity_assignment_model",
+                "ENTITY expected; code : INTEGER; END_ENTITY; ENTITY unrelated; code : INTEGER; END_ENTITY; PROCEDURE accept_value(formal_value : expected); ; END_PROCEDURE;",
+                "LOCAL other : unrelated; END_LOCAL; accept_value(other);"),
+            InvalidSchema(
+                "invalid_aggregate_assignment_model",
+                "PROCEDURE accept_value(formal_value : LIST [1:?] OF REAL); ; END_PROCEDURE;",
+                "accept_value(['text']);"),
+        };
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/assignment-compatibility.exp", schema));
+        var invalidResults = invalidSchemas
+            .Select((text, index) => GeneratorHostTests.Run(($"schemas/invalid-assignment-{index}.exp", text)))
+            .ToArray();
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("AssignmentCompatibilityConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            foreach (var invalidResult in invalidResults)
+            {
+                await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
+                    diagnostic.Id == "STEP21EXP006"
+                    && diagnostic.GetMessage().Contains("is not assignment-compatible", StringComparison.Ordinal)))
+                    .IsTrue()
+                    .Because(string.Join(
+                        Environment.NewLine,
+                        invalidResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+                await Assert.That(invalidResult.GeneratedSources).IsEmpty();
+            }
         }
     }
 
