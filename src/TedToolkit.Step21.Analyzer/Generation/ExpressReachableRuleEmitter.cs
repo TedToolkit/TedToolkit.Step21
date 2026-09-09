@@ -3795,22 +3795,27 @@ internal static class ExpressReachableRuleEmitter
 
         var conditional = operation.RequiredChild("logicalExpression").RequiredChild("expression");
         var boundCondition = plan.GetExpression(conditional);
-        var condition = ExpressExpressionEmitter.Emit(
-            boundCondition,
-            CreateContext(
-                plan,
-                selfExpression: null,
-                "entities",
-                lexicalNames,
-                safeIndices,
-                allocateTemporaryName,
-                selectNarrowings,
-                pathNarrowings,
-                determinateLexicals,
-                safeIndexPaths,
-                scalarNarrowings));
-        var conditionCode = $"({ExpressExpressionEmitter.AsLogical(boundCondition, condition.Code)}) "
-            + "== global::TedToolkit.Step21.LogicalValue.True";
+        var conditionCode = "false";
+        if (boundCondition.Kind != ExpressExpressionKind.Indeterminate)
+        {
+            var condition = ExpressExpressionEmitter.Emit(
+                boundCondition,
+                CreateContext(
+                    plan,
+                    selfExpression: null,
+                    "entities",
+                    lexicalNames,
+                    safeIndices,
+                    allocateTemporaryName,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings));
+            conditionCode = $"({ExpressExpressionEmitter.AsLogical(boundCondition, condition.Code)}) "
+                + "== global::TedToolkit.Step21.LogicalValue.True";
+        }
+
         var thenStatements = operation.ThenStatements;
         var elseStatements = operation.ElseStatements;
 
@@ -4664,6 +4669,11 @@ internal static class ExpressReachableRuleEmitter
         ExpressExpressionEmissionContext context)
     {
         var condition = plan.GetExpression(control.RequiredChild("logicalExpression").RequiredChild("expression"));
+        if (condition.Kind == ExpressExpressionKind.Indeterminate)
+        {
+            return "false";
+        }
+
         var emitted = ExpressExpressionEmitter.Emit(condition, context);
         return $"({ExpressExpressionEmitter.AsLogical(condition, emitted.Code)}) "
             + "== global::TedToolkit.Step21.LogicalValue.True";

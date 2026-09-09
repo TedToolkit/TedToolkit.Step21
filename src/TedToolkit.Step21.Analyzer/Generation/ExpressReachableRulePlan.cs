@@ -1241,6 +1241,11 @@ internal sealed class ExpressReachableRulePlan
             var statements = declarationRule.ChildRules("stmt").ToArray();
             var operations = AlgorithmOperations(declarationRule).ToArray();
             var isProcedure = declaration.Kind == ExpressDeclarationKind.Procedure;
+            if (!ValidateLogicalControls(operations))
+            {
+                return;
+            }
+
             if (statements.Length > 0
                 && operations.All(operation =>
                     operation.Role is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt"
@@ -1324,6 +1329,43 @@ internal sealed class ExpressReachableRulePlan
                 declarationRule.Span.Start,
                 $"Reachable EXPRESS {(isProcedure ? "procedure" : "function")} '{declaration.Name}' uses an "
                     + "algorithm statement shape that has no static generator."));
+        }
+
+        private bool ValidateLogicalControls(IReadOnlyList<ExpressSemanticRule> operations)
+        {
+            var valid = true;
+            foreach (var operation in operations)
+            {
+                IEnumerable<(string Name, ExpressSemanticRule Control)> controls = operation.Role switch
+                {
+                    "ifStmt" => [("IF", operation.RequiredChild("logicalExpression")),],
+                    "repeatStmt" => operation.RequiredChild("repeatControl")
+                        .ChildRules()
+                        .Where(control => control.Role is "whileControl" or "untilControl")
+                        .Select(control => (
+                            control.Role == "whileControl" ? "WHILE" : "UNTIL",
+                            control.RequiredChild("logicalExpression"))),
+                    _ => [],
+                };
+                foreach (var (name, control) in controls)
+                {
+                    var expression = GetExpression(control.RequiredChild("expression"));
+                    if (expression.Type.Kind is ExpressExpressionTypeKind.Boolean
+                        or ExpressExpressionTypeKind.Logical
+                        or ExpressExpressionTypeKind.Indeterminate)
+                    {
+                        continue;
+                    }
+
+                    AddFailure(
+                        expression.Span,
+                        $"{name} control requires a BOOLEAN or LOGICAL value; received "
+                            + $"{expression.Type.Kind.ToString()}.");
+                    valid = false;
+                }
+            }
+
+            return valid;
         }
 
         private static IEnumerable<ExpressSemanticRule> AlgorithmOperations(ExpressSemanticRule rule)
@@ -1498,6 +1540,11 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var operations = AlgorithmOperations(declarationRule).ToArray();
+            if (!ValidateLogicalControls(operations))
+            {
+                return;
+            }
+
             if (operations.All(operation =>
                     operation.Role is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt"
                         or "repeatStmt" or "escapeStmt" or "skipStmt" or "aliasStmt" or "nullStmt"

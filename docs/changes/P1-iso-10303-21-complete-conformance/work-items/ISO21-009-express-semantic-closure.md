@@ -130,6 +130,14 @@ implementation inventory is evidence about current behavior, not a substitute fo
   execution resumes after the loop while the statement after ESCAPE inside the loop is unreachable. A neighboring
   ESCAPE outside REPEAT remains rejected. The candidate passes 7/7 `ISO21WorkItem=ISO21-009` tests and all 136
   `ReachableRuleTests`.
+- Clause 13.7 routes only TRUE through an IF `THEN`; FALSE, UNKNOWN and indeterminate route through ELSE or fall
+  through when ELSE is absent. Clause 13.9.2 likewise requires a logical WHILE value and re-evaluates it before each
+  iteration, terminating for every non-TRUE result. Explicit indeterminate controls are now lowered directly to a
+  false generated predicate rather than being sent to the context-dependent expression type emitter, which previously
+  crashed generation. Reachable IF/WHILE/UNTIL controls whose static type is neither BOOLEAN nor LOGICAL now receive
+  a source-located STEP21EXP006 failure before emission. The focused corpus also proves the clause-13.5 compound body
+  retains its enclosing scope. The candidate passes 8/8 `ISO21WorkItem=ISO21-009` tests and all 137
+  `ReachableRuleTests`.
 
 Source identities:
 

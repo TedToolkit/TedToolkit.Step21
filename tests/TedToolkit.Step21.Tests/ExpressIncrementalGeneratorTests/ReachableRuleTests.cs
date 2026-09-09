@@ -12064,6 +12064,163 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies IF and WHILE use TRUE-only logical control and compound statements preserve their enclosing scope.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_logical_controls_and_reject_numeric_controls()
+    {
+        const string schema = """
+            SCHEMA logical_control_model;
+            FUNCTION branch_value(condition : LOGICAL) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              IF condition THEN
+                result_value := 1;
+              ELSE
+                result_value := 2;
+              END_IF;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION indeterminate_branch(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              IF ? THEN
+                result_value := 1;
+              ELSE
+                result_value := 2;
+              END_IF;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION unknown_fallthrough(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 3; END_LOCAL;
+              IF UNKNOWN THEN
+                result_value := 99;
+              END_IF;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION compound_scope(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              BEGIN
+                result_value := 2;
+                result_value := result_value + 3;
+              END;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION false_while(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 4; END_LOCAL;
+              REPEAT index := 1 TO 1 WHILE UNKNOWN;
+                result_value := 99;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              true_uses_then : branch_value(TRUE) = 1;
+              false_uses_else : branch_value(FALSE) = 2;
+              unknown_uses_else : branch_value(UNKNOWN) = 2;
+              indeterminate_uses_else : indeterminate_branch(marker) = 2;
+              omitted_else_falls_through : unknown_fallthrough(marker) = 3;
+              compound_keeps_scope : compound_scope(marker) = 5;
+              unknown_while_stops : false_while(marker) = 4;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.LogicalControlModel;
+
+            internal static class LogicalControlConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["logical controls"], "3;1"),
+                            new FileName("logical.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["logical_control_model"])),
+                        [TedToolkit.Step21.Generated.LogicalControlModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("logical_control_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidIfSchema = """
+            SCHEMA numeric_if_control_model;
+            FUNCTION invalid_if(count : INTEGER) : INTEGER;
+              IF count THEN RETURN(1); END_IF;
+              RETURN(0);
+            END_FUNCTION;
+            ENTITY sample;
+              count : INTEGER;
+            WHERE
+              invalid : invalid_if(count) = 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string invalidWhileSchema = """
+            SCHEMA numeric_while_control_model;
+            FUNCTION invalid_while(count : INTEGER) : INTEGER;
+              REPEAT index := 1 TO 1 WHILE count;
+                RETURN(1);
+              END_REPEAT;
+              RETURN(0);
+            END_FUNCTION;
+            ENTITY sample;
+              count : INTEGER;
+            WHERE
+              invalid : invalid_while(count) = 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/logical-controls.exp", schema));
+        var invalidIfResult = GeneratorHostTests.Run(
+            ("schemas/numeric-if-control.exp", invalidIfSchema));
+        var invalidWhileResult = GeneratorHostTests.Run(
+            ("schemas/numeric-while-control.exp", invalidWhileSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("LogicalControlConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(invalidIfResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains(
+                    "requires a BOOLEAN or LOGICAL value",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidIfResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidIfResult.GeneratedSources).IsEmpty();
+            await Assert.That(invalidWhileResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains(
+                    "requires a BOOLEAN or LOGICAL value",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidWhileResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidWhileResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]
