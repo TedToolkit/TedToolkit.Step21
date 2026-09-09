@@ -123,6 +123,13 @@ implementation inventory is evidence about current behavior, not a substitute fo
   `ISO21WorkItem=ISO21-009` tests and all 135 `ReachableRuleTests`. Type compatibility remains pending because the
   located 2004 excerpts expose the 12.11 heading but not its normative body; the older JIS translation is used only as
   supporting evidence and is not assumed to cover Edition-2 SELECT changes.
+- Clauses 13.6 and 13.9 allow a REPEAT with no finite, WHILE or UNTIL control and define ESCAPE as the immediate
+  transfer to the statement following its enclosing REPEAT. The reachable-plan gate no longer rejects an empty
+  `repeat_control`; the renamed non-increment emitter reuses the existing static loop-transfer path and emits no
+  interpreter or runtime wrapper. The focused red test first captured the prior STEP21EXP006 rejection, then proves
+  execution resumes after the loop while the statement after ESCAPE inside the loop is unreachable. A neighboring
+  ESCAPE outside REPEAT remains rejected. The candidate passes 7/7 `ISO21WorkItem=ISO21-009` tests and all 136
+  `ReachableRuleTests`.
 
 Source identities:
 

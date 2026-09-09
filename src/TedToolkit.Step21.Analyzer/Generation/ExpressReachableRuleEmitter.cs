@@ -3024,7 +3024,7 @@ internal static class ExpressReachableRuleEmitter
             var increment = repeatControl.ChildRules("incrementControl").SingleOrDefault();
             if (increment is null)
             {
-                return EmitConditionalRepeat(
+                return EmitNonIncrementRepeat(
                     plan,
                     operation,
                     functionResultType,
@@ -4669,7 +4669,7 @@ internal static class ExpressReachableRuleEmitter
             + "== global::TedToolkit.Step21.LogicalValue.True";
     }
 
-    private static bool EmitConditionalRepeat(
+    private static bool EmitNonIncrementRepeat(
         ExpressReachableRulePlan plan,
         ExpressSemanticRule operation,
         ExpressBoundType? functionResultType,
@@ -4688,10 +4688,6 @@ internal static class ExpressReachableRuleEmitter
         var control = operation.RequiredChild("repeatControl");
         var whileControl = control.ChildRules("whileControl").SingleOrDefault();
         var untilControl = control.ChildRules("untilControl").SingleOrDefault();
-        if (whileControl is null && untilControl is null)
-        {
-            throw new InvalidOperationException("A conditional EXPRESS REPEAT requires WHILE or UNTIL control.");
-        }
 
         var incomingSafeIndices = safeIndices?.ToList() ?? [];
         var incomingAliases = sizeAliases?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];

@@ -11967,6 +11967,103 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies ESCAPE exits an otherwise-unbounded REPEAT and resumes at the following statement.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_an_uncontrolled_repeat_until_escape()
+    {
+        const string schema = """
+            SCHEMA uncontrolled_repeat_model;
+            FUNCTION escape_once(marker : BOOLEAN) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              REPEAT;
+                result_value := result_value + 1;
+                ESCAPE;
+                result_value := 99;
+              END_REPEAT;
+              result_value := result_value + 1;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              escape_resumes_after_repeat : escape_once(marker) = 2;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.UncontrolledRepeatModel;
+
+            internal static class UncontrolledRepeatConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["uncontrolled repeat"], "3;1"),
+                            new FileName("repeat.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["uncontrolled_repeat_model"])),
+                        [TedToolkit.Step21.Generated.UncontrolledRepeatModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("uncontrolled_repeat_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidSchema = """
+            SCHEMA escaped_scope_model;
+            FUNCTION invalid_escape(marker : BOOLEAN) : BOOLEAN;
+              ESCAPE;
+              RETURN(marker);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              invalid : invalid_escape(marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/uncontrolled-repeat.exp", schema));
+        var invalidResult = GeneratorHostTests.Run(
+            ("schemas/escaped-scope.exp", invalidSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("UncontrolledRepeatConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains(
+                    "algorithm statement shape",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

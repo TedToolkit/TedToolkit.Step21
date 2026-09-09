@@ -1302,8 +1302,7 @@ internal sealed class ExpressReachableRulePlan
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control
                         && control.ChildRules("incrementControl").Count() <= 1
                         && control.ChildRules("whileControl").Count() <= 1
-                        && control.ChildRules("untilControl").Count() <= 1
-                        && control.ChildRules().Any())
+                        && control.ChildRules("untilControl").Count() <= 1)
                 && operations.Where(operation => operation.Role == "caseStmt")
                     .All(caseStatement => caseStatement.ChildRules("caseAction")
                             .All(action => action.ChildRules("caseLabel").Any()
@@ -1521,8 +1520,7 @@ internal sealed class ExpressReachableRulePlan
                     .All(repeat => repeat.RequiredChild("repeatControl") is { } control
                         && control.ChildRules("incrementControl").Count() <= 1
                         && control.ChildRules("whileControl").Count() <= 1
-                        && control.ChildRules("untilControl").Count() <= 1
-                        && control.ChildRules().Any())
+                        && control.ChildRules("untilControl").Count() <= 1)
                 && operations.Where(operation => operation.Role == "caseStmt")
                     .All(caseStatement => caseStatement.ChildRules("caseAction")
                             .All(action => action.ChildRules("caseLabel").Any()
