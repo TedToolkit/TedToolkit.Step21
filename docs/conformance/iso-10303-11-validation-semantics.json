@@ -1,0 +1,136 @@
+{
+  "standard": "ISO 10303-11:2004",
+  "edition": 2,
+  "profileFormatVersion": 1,
+  "claimStatus": "blocked",
+  "claimBoundary": "Validation-reachable EXPRESS conformance is not claimed until every partial and pending-source row is closed from an authorized Edition 2 source.",
+  "sourcePolicy": "Record non-verbatim derived semantics only. Missing Edition 2 normative text remains pending-source and is neither inferred nor skipped.",
+  "families": [
+    {
+      "id": "clauses-5-12-validation-semantics",
+      "source": "5-12",
+      "sourceStatus": "pending-source",
+      "implementationStatus": "pending-source",
+      "boundary": "Types, declarations, expressions, type compatibility and function calls outside the bounded excerpts.",
+      "blocker": "The authorized source set does not contain the complete Edition 2 normative bodies for clauses 5 through 12, including 12.8 and 12.11."
+    },
+    {
+      "id": "13.1-null-statement",
+      "source": "13.1",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "A null statement performs no action.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_reachable_alias_and_null_statements" }]
+    },
+    {
+      "id": "13.2-alias-statement",
+      "source": "13.2",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "partial",
+      "boundary": "Direct, entity-group and explicit-attribute aliases are statically lowered with lexical scope.",
+      "blocker": "Indexed aliases require qualifier semantics not fully present in the bounded source set.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_reachable_alias_and_null_statements" }]
+    },
+    {
+      "id": "13.3-assignment",
+      "source": "13.3.1-13.3.2",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "partial",
+      "boundary": "Local/parameter assignment, aggregate value copying, qualified aggregate elements, exact integer indices and direct STRING/BINARY ranges are generated statically.",
+      "blocker": "Defined/SELECT range carriers and the complete assignment-compatibility matrix remain open.",
+      "proof": [
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_require_integer_assignment_indices" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_string_and_binary_ranges" }
+      ]
+    },
+    {
+      "id": "13.4-case-statement",
+      "source": "13.4",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "partial",
+      "boundary": "First TRUE label, UNKNOWN/non-value non-selection, OTHERWISE and no-match fall-through are generated.",
+      "blocker": "The complete Edition 2 type-compatibility body needed for all selector/label pairs is pending-source.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_case_indeterminate_and_first_match_semantics" }]
+    },
+    {
+      "id": "13.5-compound-statement",
+      "source": "13.5",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "A compound is one sequential statement and creates no scope.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_logical_controls_and_reject_numeric_controls" }]
+    },
+    {
+      "id": "13.6-escape-statement",
+      "source": "13.6",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "ESCAPE exits its enclosing REPEAT; use outside REPEAT is rejected.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_an_uncontrolled_repeat_until_escape" }]
+    },
+    {
+      "id": "13.7-if-statement",
+      "source": "13.7",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "Only TRUE executes THEN; FALSE, UNKNOWN and indeterminate execute ELSE or fall through.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_logical_controls_and_reject_numeric_controls" }]
+    },
+    {
+      "id": "13.8-procedure-call",
+      "source": "13.8; 13.3.2",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "partial",
+      "boundary": "Arity, order, direct scalar promotions and direct scalar incompatibility are checked at the shared call boundary.",
+      "blocker": "SELECT, defined-type, aggregate and VAR copy-back compatibility require additional source-backed closure.",
+      "proof": [
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_reject_procedure_argument_count_mismatches" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_apply_procedure_scalar_assignment_compatibility" }
+      ]
+    },
+    {
+      "id": "13.9.1-increment-control",
+      "source": "13.9.1",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "Numeric controls are captured once; direction, zero, indeterminate controls, immutable NUMBER variable and lexical scope are enforced.",
+      "proof": [
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_finite_repeat_boundaries_and_reject_non_numeric_controls" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_scope_finite_repeat_variables" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_reject_repeat_control_variable_mutation" }
+      ]
+    },
+    {
+      "id": "13.9.2-while-control",
+      "source": "13.9.2",
+      "sourceStatus": "exact-edition2-excerpt",
+      "implementationStatus": "implemented",
+      "boundary": "WHILE is evaluated before each iteration and only TRUE enters the body.",
+      "proof": [{ "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_execute_logical_controls_and_reject_numeric_controls" }]
+    },
+    {
+      "id": "13.9.3-until-control",
+      "source": "13.9.3",
+      "sourceStatus": "partial-edition2-excerpt",
+      "implementationStatus": "pending-source",
+      "boundary": "The available Edition 2 excerpt contains only the opening paragraph.",
+      "blocker": "The rules/restrictions and complete UNKNOWN/indeterminate behavior are not present in the authorized Edition 2 excerpt."
+    },
+    {
+      "id": "13.10-13.11-return-skip",
+      "source": "13.10-13.11",
+      "sourceStatus": "pending-source",
+      "implementationStatus": "pending-source",
+      "boundary": "RETURN and SKIP are implemented in the generator but not yet claimed by this Edition 2 profile.",
+      "blocker": "Only Edition 1 supporting text is available; the bounded Edition 2 excerpt ends before page 131."
+    },
+    {
+      "id": "clauses-14-and-later-validation-semantics",
+      "source": "14 and later validation-reachable clauses",
+      "sourceStatus": "pending-source",
+      "implementationStatus": "pending-source",
+      "boundary": "Built-in constants, functions, procedures and remaining validation-reachable semantics.",
+      "blocker": "The authorized source set does not contain these Edition 2 normative bodies."
+    }
+  ]
+}

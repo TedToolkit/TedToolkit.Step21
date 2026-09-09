@@ -155,6 +155,55 @@ internal sealed class ConformanceManifestTests
         }
     }
 
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_publish_a_source_gated_express_semantic_profile()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "docs", "conformance", "iso-10303-11-validation-semantics.json");
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        var manifest = document.RootElement;
+        var families = manifest.GetProperty("families").EnumerateArray().ToArray();
+        var ids = families.Select(family => family.GetProperty("id").GetString()!).ToArray();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(manifest.GetProperty("claimStatus").GetString()).IsEqualTo("blocked");
+            await Assert.That(ids.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(ids.Length);
+            await Assert.That(families).IsNotEmpty();
+            await Assert.That(families.Any(family =>
+                family.GetProperty("implementationStatus").GetString() == "pending-source")).IsTrue();
+        }
+
+        foreach (var family in families)
+        {
+            var status = family.GetProperty("implementationStatus").GetString();
+            await Assert.That(family.GetProperty("source").GetString()).IsNotEmpty();
+            await Assert.That(family.GetProperty("sourceStatus").GetString()).IsNotEmpty();
+            await Assert.That(family.GetProperty("boundary").GetString()).IsNotEmpty();
+            await Assert.That(status).IsIn("implemented", "partial", "pending-source");
+
+            if (status == "pending-source")
+            {
+                await Assert.That(family.GetProperty("blocker").GetString()).IsNotEmpty();
+                continue;
+            }
+
+            var proofs = family.GetProperty("proof").EnumerateArray().ToArray();
+            await Assert.That(proofs).IsNotEmpty();
+            foreach (var proof in proofs)
+            {
+                var proofPath = Path.Combine(root, proof.GetProperty("file").GetString()!);
+                var member = proof.GetProperty("member").GetString()!;
+                await Assert.That(File.Exists(proofPath)).IsTrue();
+                await Assert.That(await File.ReadAllTextAsync(proofPath)).Contains(member);
+            }
+
+            if (status == "partial")
+                await Assert.That(family.GetProperty("blocker").GetString()).IsNotEmpty();
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

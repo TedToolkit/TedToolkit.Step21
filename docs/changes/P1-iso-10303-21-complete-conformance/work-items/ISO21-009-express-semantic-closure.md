@@ -79,6 +79,10 @@ implementation inventory is evidence about current behavior, not a substitute fo
 
 ## Partial delivery evidence — 2026-09-09
 
+- `docs/conformance/iso-10303-11-validation-semantics.json` is the machine-readable, non-verbatim semantic-family
+  profile. It uses `implemented`, `partial` and `pending-source` rather than a skipped state, records a concrete blocker
+  for every incomplete row, and keeps the overall claim blocked. `ConformanceManifestTests` mechanically verifies
+  unique rows, allowed states, proof file/member existence and blocker presence.
 - Source search found the 255-page ISO 10303-11:2004 catalogue record and two lawful 13-page previews. The previews
   contain the contents, foreword and introduction, but not the normative text needed to derive constant evaluation or
   the remaining validation-reachable semantic families. Those families are therefore left pending: they are not
