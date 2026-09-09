@@ -116,6 +116,13 @@ implementation inventory is evidence about current behavior, not a substitute fo
   previously accepted; the corrected candidate passes 5/5 `ISO21WorkItem=ISO21-009` tests and all 134
   `ReachableRuleTests`. The complete Release unit suite passes 713/713, including the checked-in AP203, AP214 and
   AP242 binding and generated-surface baselines.
+- Clause 13.8 requires actual procedure parameters to agree with the declared formal count, order and assignment-
+  compatible types. The binder now rejects missing and excess actual parameters using
+  `EXPRESS-BIND-PROCEDURE-ARGUMENT-COUNT`, instead of allowing the reachable-plan fallback to classify the entire
+  algorithm as unsupported. The focused red test captured both prior fallbacks; the corrected candidate passes 6/6
+  `ISO21WorkItem=ISO21-009` tests and all 135 `ReachableRuleTests`. Type compatibility remains pending because the
+  located 2004 excerpts expose the 12.11 heading but not its normative body; the older JIS translation is used only as
+  supporting evidence and is not assumed to cover Edition-2 SELECT changes.
 
 Source identities:
 
@@ -126,3 +133,4 @@ Source identities:
 - <https://www.expresslang.org/docs/documents/express-pretty/document.html>
 - <https://kikakurui.com/b3/B3700-11-2002-01.html>
 - <https://www.elecenghub.com/NewSamples/ISO/174364973/ISO-10303-11-2004-2.pdf>
+- <https://www.elecenghub.com/NewSamples/ISO/174364973/ISO-10303-11-2004-1.pdf>

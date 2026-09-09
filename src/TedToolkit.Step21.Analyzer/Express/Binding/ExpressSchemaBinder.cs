@@ -1086,6 +1086,32 @@ internal static class ExpressSchemaBinder
                             ExpressBoundNameKind.Procedure);
                     }
 
+                    var procedureDraft = procedureTarget?.SchemaDeclaration is { } procedureSymbol
+                        ? FindSymbol(procedureSymbol)
+                        : null;
+                    if (procedureDraft is not null)
+                    {
+                        var expectedCount = procedureDraft.Syntax.RequiredChild("procedureHead")
+                            .ChildRules("formalParameter")
+                            .Sum(formal => formal.ChildRules("parameterId").Count());
+                        var actualCount = syntax.ChildRules("actualParameterList")
+                            .SelectMany(parameters => parameters.ChildRules("parameter"))
+                            .Count();
+                        if (expectedCount != actualCount)
+                        {
+                            schema.IsInvalid = true;
+                            AddDiagnostic(
+                                _diagnostics,
+                                "EXPRESS-BIND-PROCEDURE-ARGUMENT-COUNT",
+                                $"Procedure '{procedureTarget!.Name}' requires "
+                                    + expectedCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                    + " actual parameters but received "
+                                    + actualCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                    + ".",
+                                syntax.Span.Start);
+                        }
+                    }
+
                     foreach (var parameters in syntax.ChildRules("actualParameterList"))
                     {
                         VisitNames(schema, parameters, scope);
@@ -1112,8 +1138,7 @@ internal static class ExpressSchemaBinder
                                 actualParameters.FirstOrDefault(),
                                 scope);
                         }
-                        else if (procedureTarget?.SchemaDeclaration is { } procedureSymbol
-                                 && FindSymbol(procedureSymbol) is { } procedureDraft)
+                        else if (procedureDraft is not null)
                         {
                             var variableParameters = ProcedureVariableParameters(procedureDraft.Syntax);
                             for (var index = 0; index < actualParameters.Length

@@ -11900,6 +11900,73 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies an EXPRESS procedure call supplies exactly the declared number of actual parameters.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_reject_procedure_argument_count_mismatches()
+    {
+        const string missingArgumentSchema = """
+            SCHEMA missing_procedure_argument_model;
+            PROCEDURE consume(input_value : INTEGER);
+              ;
+            END_PROCEDURE;
+            FUNCTION invalid_call(input_value : INTEGER) : INTEGER;
+              consume;
+              RETURN(input_value);
+            END_FUNCTION;
+            ENTITY sample;
+              amount : INTEGER;
+            WHERE
+              invalid : invalid_call(amount) = amount;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string extraArgumentSchema = """
+            SCHEMA extra_procedure_argument_model;
+            PROCEDURE consume(input_value : INTEGER);
+              ;
+            END_PROCEDURE;
+            FUNCTION invalid_call(input_value : INTEGER) : INTEGER;
+              consume(input_value, input_value);
+              RETURN(input_value);
+            END_FUNCTION;
+            ENTITY sample;
+              amount : INTEGER;
+            WHERE
+              invalid : invalid_call(amount) = amount;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var missingResult = GeneratorHostTests.Run(
+            ("schemas/missing-procedure-argument.exp", missingArgumentSchema));
+        var extraResult = GeneratorHostTests.Run(
+            ("schemas/extra-procedure-argument.exp", extraArgumentSchema));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(missingResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-PROCEDURE-ARGUMENT-COUNT",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    missingResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(missingResult.GeneratedSources).IsEmpty();
+            await Assert.That(extraResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-PROCEDURE-ARGUMENT-COUNT",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    extraResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(extraResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]
