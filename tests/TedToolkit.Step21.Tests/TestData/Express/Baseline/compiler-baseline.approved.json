@@ -1842,6 +1842,14 @@
           "sha256": "2F49FAE01812BEB4D79A51179D377B1883D341D976FF513D18987E2FBF5B5453"
         },
         {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressSelectProjectionShard0.g.cs",
+          "sha256": "645D5015AE581878D8CB58402FED0935F1BB4FBDA02DE265CFE8EFEF08DFD325"
+        },
+        {
+          "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressSelectProjectionShard1.g.cs",
+          "sha256": "8C0BE98F6726C7E3B7A0D87D2C47BA49ACF325977BC5147456E586A61CBE617E"
+        },
+        {
           "hintName": "ExpressSchemaShard_CONFIG_CONTROL_DESIGN___ExpressSelectValueEqualityShard0.g.cs",
           "sha256": "4892B76503C0E8F012B0E40F43CB4E4B765EEEDAFB48AF3D43478D8C6057AB3A"
         },
@@ -3503,7 +3511,7 @@
         },
         {
           "hintName": "ExpressSchema_CONFIG_CONTROL_DESIGN.g.cs",
-          "sha256": "9D14D7C564EFB8D315A0CB34B9D2B5BA6E9C4476087C721F13354F9996EA1F05"
+          "sha256": "D3375C034EA945190758A9CB9B98CCBDCEB3CDE31E7B14C802576563466DDC51"
         },
         {
           "hintName": "ExpressValue_CONFIG_CONTROL_DESIGN_AHEAD_OR_BEHIND.g.cs",
