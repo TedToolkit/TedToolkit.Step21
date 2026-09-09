@@ -206,6 +206,15 @@ implementation inventory is evidence about current behavior, not a substitute fo
   `ISO21WorkItem=ISO21-009` passes 15/15 and all 143 `ReachableRuleTests` pass. SELECT carriers are explicitly admitted
   by the source but remain withheld with a deterministic diagnostic until their runtime alternative and copy-back
   semantics are generated.
+- Clause 13.3.2 also permits an element or range qualifier when the declared carrier is a SELECT using ARRAY, BINARY,
+  LIST or STRING. Candidate `1abdc07` dispatches through the generated SELECT `Match` API, reconstructs immutable
+  STRING/BINARY alternatives, updates bounded ARRAY/LIST alternatives, rebuilds the selected factory path, and throws
+  only when the runtime alternative is not one of the permitted carrier shapes. A multi-alternative runtime proof
+  covers all four permitted shapes; `ISO21WorkItem=ISO21-009` passes 16/16 and all 144 `ReachableRuleTests` pass. The
+  compiler-baseline test itself passes unchanged. The wrapper script cannot certify its pinned toolchain on this host
+  because it requires SDK 10.0.400 while the available SDK is 10.0.401; candidate `0bd1eb5` separately repairs the
+  baseline manifest SHA-256 that had not been synchronized with the earlier AP203 ARRAY hash update. SELECT-qualified
+  paths with a qualifier after the selected element remain explicitly withheld.
 
 Source identities:
 
