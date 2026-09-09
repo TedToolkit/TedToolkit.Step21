@@ -12913,6 +12913,104 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies final element and range assignment dispatch through SELECT alternatives allowed by clause 13.3.2.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_assign_select_qualified_values()
+    {
+        const string schema = """
+            SCHEMA select_qualified_assignment_model;
+            TYPE text_value = STRING; END_TYPE;
+            TYPE bits_value = BINARY; END_TYPE;
+            TYPE list_value = LIST [1:?] OF INTEGER; END_TYPE;
+            TYPE array_value = ARRAY [2:3] OF INTEGER; END_TYPE;
+            TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
+            TYPE aggregate_choice = SELECT (list_value, array_value); END_TYPE;
+            FUNCTION replace_text(selected : scalar_choice) : BOOLEAN;
+              selected[2:3] := 'X';
+              RETURN(selected = 'aXd');
+            END_FUNCTION;
+            FUNCTION replace_bits(selected : scalar_choice) : BOOLEAN;
+              selected[2:3] := %0;
+              RETURN(selected = %100);
+            END_FUNCTION;
+            FUNCTION replace_list_element(selected : aggregate_choice) : BOOLEAN;
+              selected[2] := 3;
+              RETURN(selected[2] = 3);
+            END_FUNCTION;
+            FUNCTION replace_array_element(selected : aggregate_choice) : BOOLEAN;
+              selected[3] := 4;
+              RETURN(selected[3] = 4);
+            END_FUNCTION;
+            ENTITY sample;
+              text_item : scalar_choice;
+              bits_item : scalar_choice;
+              list_item : aggregate_choice;
+              array_item : aggregate_choice;
+            WHERE
+              text_replaced : replace_text(text_item);
+              bits_replaced : replace_bits(bits_item);
+              list_replaced : replace_list_element(list_item);
+              array_replaced : replace_array_element(array_item);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using System.Numerics;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel;
+
+            internal static class SelectQualifiedAssignmentConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["select qualified assignment"], "3;1"),
+                            new FileName("select-qualified.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["select_qualified_assignment_model"])),
+                        [TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("select_qualified_assignment_model"));
+                    structure.DataSections.Add(section);
+                    var array = new ExpressArray<BigInteger>(2, 3);
+                    array[2] = 1;
+                    array[3] = 2;
+                    _ = structure.Add(section, new Sample(
+                        ScalarChoice.FromTextValue(new TextValue("abcd")),
+                        ScalarChoice.FromBitsValue(new BitsValue(new BinaryValue("1010"))),
+                        AggregateChoice.FromListValue(new ListValue(new ExpressList<BigInteger>(1) { 1, 2 })),
+                        AggregateChoice.FromArrayValue(new ArrayValue(array))));
+                    return structure.Validate();
+                }
+            }
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/select-qualified-assignment.exp", schema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var compilationDiagnostics = result.OutputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+        await Assert.That(compilationDiagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, compilationDiagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType(
+            "SelectQualifiedAssignmentConsumer",
+            throwOnError: true)!.GetMethod(
+                "Validate",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

@@ -1488,8 +1488,9 @@ internal sealed class ExpressReachableRulePlan
                 .Select(reference => reference.Target.Type)
                 .SingleOrDefault(type => type is not null);
 
-            foreach (var qualifier in qualifiers)
+            for (var qualifierIndex = 0; qualifierIndex < qualifiers.Length; qualifierIndex++)
             {
+                var qualifier = qualifiers[qualifierIndex];
                 if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } group)
                 {
                     targetType = _schema.NameReferences
@@ -1519,10 +1520,14 @@ internal sealed class ExpressReachableRulePlan
                 var isRange = index.ChildRules("index2").Any();
                 if (IsAssignmentSelectCarrier(targetType))
                 {
+                    if (qualifierIndex == qualifiers.Length - 1)
+                    {
+                        continue;
+                    }
+
                     AddFailure(
                         index.Span,
-                        $"A SELECT {(!isRange ? "element" : "range")}-qualified assignment is permitted by "
-                            + "ISO 10303-11:2004 but has no static generator yet.");
+                        "A SELECT-qualified assignment followed by another qualifier has no static generator yet.");
                     return false;
                 }
 
@@ -1565,15 +1570,10 @@ internal sealed class ExpressReachableRulePlan
 
         private bool IsAssignmentSelectCarrier(ExpressBoundType? type)
         {
-            var visited = new HashSet<ExpressBoundSymbol>();
-            while (type is ExpressBoundNamedType named
-                   && named.Declaration.Kind != ExpressDeclarationKind.Entity
-                   && visited.Add(named.Declaration))
-            {
-                type = _resolver.GetDefinedType(named.Declaration).UnderlyingType;
-            }
-
-            return type is ExpressBoundSelectType;
+            return type is ExpressBoundSelectType
+                || (type is ExpressBoundNamedType named
+                    && named.Declaration.Kind != ExpressDeclarationKind.Entity
+                    && _resolver.GetDefinedType(named.Declaration).UnderlyingType is ExpressBoundSelectType);
         }
 
         private bool ValidateProcedureScalarArguments(ExpressSemanticRule operation)
