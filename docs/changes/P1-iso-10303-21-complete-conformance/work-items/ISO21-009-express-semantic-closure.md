@@ -181,6 +181,14 @@ implementation inventory is evidence about current behavior, not a substitute fo
   additional replacement-length-of-one guard. Carrier, index and replacement are each captured once in the generated
   tuple pattern; the former scalar-to-aggregate cast and generator exception are eliminated without adding runtime
   state. The expanded range fixture remains green together with the source-gated manifest proof.
+- Full AP242 generation exposed a C# pattern-variable collision when one NUMBER-indexed entity-attribute assignment
+  was expanded across many concrete physical projections. Candidate `4ac96fc` replaces the copied inline conversion
+  with schema-private exact-index helpers and records their need in the reachable plan, so schemas without the
+  corresponding reachable index form emit no helper. A focused abstract-base/two-projection regression proves the
+  shared path. The final Release build has zero warnings and errors; `ISO21WorkItem=ISO21-009` passes 14/14; the
+  compiler baseline passes with only AP203's expected descriptor-source hash update; the approved AP242 surface gate
+  passes; and the complete Release unit suite passes 722/722 with zero skips. The 189.5 MB diagnostic-only generated
+  source directory was removed after inspection.
 
 Source identities:
 
