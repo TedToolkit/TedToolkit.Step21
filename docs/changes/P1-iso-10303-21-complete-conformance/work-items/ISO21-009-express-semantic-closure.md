@@ -76,3 +76,28 @@ and the manifest supplied to ISO21-008.
 This remains the largest compiler boundary. Missing or ambiguous authorized-source material blocks only the affected
 semantic family; it must not be guessed, silently skipped or represented as full ISO conformance. The existing
 implementation inventory is evidence about current behavior, not a substitute for the authorized normative source.
+
+## Partial delivery evidence — 2026-09-09
+
+- Source search found the 255-page ISO 10303-11:2004 catalogue record and two lawful 13-page previews. The previews
+  contain the contents, foreword and introduction, but not the normative text needed to derive constant evaluation or
+  the remaining validation-reachable semantic families. Those families are therefore left pending: they are not
+  implemented from inference, waived, or counted as conforming.
+- Public EXPRESS Language Foundation material identifies ISO 10303-11:2004 Edition 2, shows the four aggregate kinds,
+  and explicitly presents the `QUERY(variable <* source | predicate)` construct. This bounded source evidence permits
+  repair of the already-isolated direct aggregate-source defect, but does not substitute for the complete semantic
+  profile required by this work item's Done criteria.
+- Candidate `cc777b5` changes the private emitter so absence of the optional schema-aware defined-type resolver is not
+  misclassified as a non-aggregate carrier. Projection is still required when a present resolver positively identifies
+  a non-aggregate carrier; generated code remains direct, shared and AOT-ready.
+- Proof on the candidate: the two `ISO21WorkItem=ISO21-009` tests changed from 2/2 failed to 2/2 passed; the full Release
+  unit suite passed 710/710; the Release integration suite passed 35/36 with only the opt-in external-download test
+  skipped; `build/verify-native-aot.ps1` reported `PACKED_AOT_OK` and `NATIVE_AOT_PACKAGE_PROOF_OK` for `win-x64`.
+
+Source identities:
+
+- <https://www.iso.org/standard/38047.html>
+- <https://webstore.ansi.org/preview-pages/ISO/preview_ISO%2B10303-11-2004.pdf>
+- <https://www.ps-ent-2023.de/fileadmin/prod-preview/ISO_10303-11_2004_shortversion.pdf>
+- <https://www.expresslang.org/languages/express>
+- <https://www.expresslang.org/docs/documents/express-pretty/document.html>
