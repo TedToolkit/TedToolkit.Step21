@@ -3066,6 +3066,13 @@ internal static class ExpressReachableRuleEmitter
             var step = increment.ChildRules("increment").SingleOrDefault() is { } stepSyntax
                 ? plan.GetExpression(stepSyntax.RequiredChild("numericExpression"))
                 : null;
+            if (lower.Kind == ExpressExpressionKind.Indeterminate
+                || upper.Kind == ExpressExpressionKind.Indeterminate
+                || step?.Kind == ExpressExpressionKind.Indeterminate)
+            {
+                return true;
+            }
+
             var lowerValue = ExpressExpressionEmitter.Emit(
                 lower,
                 CreateContext(

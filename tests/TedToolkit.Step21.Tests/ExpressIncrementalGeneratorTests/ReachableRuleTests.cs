@@ -12221,6 +12221,163 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies finite REPEAT controls are captured once, honor increment direction, and reject non-numeric values.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_finite_repeat_boundaries_and_reject_non_numeric_controls()
+    {
+        const string schema = """
+            SCHEMA finite_repeat_model;
+            FUNCTION repeat_count(lower : INTEGER; upper : INTEGER; step : INTEGER) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := lower TO upper BY step;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION default_repeat_count(lower : INTEGER; upper : INTEGER) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := lower TO upper;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION captured_controls(marker : BOOLEAN) : INTEGER;
+              LOCAL
+                upper : INTEGER := 3;
+                step : INTEGER := 1;
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              REPEAT index := 1 TO upper BY step;
+                result_value := result_value + 1;
+                upper := 0;
+                step := 2;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION indeterminate_lower(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := ? TO 3;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION indeterminate_upper(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := 1 TO ?;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            FUNCTION indeterminate_step(marker : BOOLEAN) : INTEGER;
+              LOCAL result_value : INTEGER := 0; END_LOCAL;
+              REPEAT index := 1 TO 3 BY ?;
+                result_value := result_value + 1;
+              END_REPEAT;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              default_forward : default_repeat_count(1, 3) = 3;
+              reverse : repeat_count(3, 1, -1) = 3;
+              zero_increment : repeat_count(1, 3, 0) = 0;
+              wrong_forward_direction : repeat_count(3, 1, 1) = 0;
+              wrong_reverse_direction : repeat_count(1, 3, -1) = 0;
+              controls_are_captured_once : captured_controls(marker) = 3;
+              absent_lower_skips : indeterminate_lower(marker) = 0;
+              absent_upper_skips : indeterminate_upper(marker) = 0;
+              absent_step_skips : indeterminate_step(marker) = 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.FiniteRepeatModel;
+
+            internal static class FiniteRepeatConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["finite repeat"], "3;1"),
+                            new FileName("repeat.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["finite_repeat_model"])),
+                        [TedToolkit.Step21.Generated.FiniteRepeatModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("finite_repeat_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidLowerSchema = """
+            SCHEMA string_repeat_lower_model;
+            FUNCTION invalid_repeat(marker : BOOLEAN) : INTEGER;
+              REPEAT index := 'lower' TO 3; RETURN(1); END_REPEAT;
+              RETURN(0);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_repeat(marker) = 0; END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string invalidUpperSchema = """
+            SCHEMA string_repeat_upper_model;
+            FUNCTION invalid_repeat(marker : BOOLEAN) : INTEGER;
+              REPEAT index := 1 TO 'upper'; RETURN(1); END_REPEAT;
+              RETURN(0);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_repeat(marker) = 0; END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string invalidStepSchema = """
+            SCHEMA string_repeat_step_model;
+            FUNCTION invalid_repeat(marker : BOOLEAN) : INTEGER;
+              REPEAT index := 1 TO 3 BY 'step'; RETURN(1); END_REPEAT;
+              RETURN(0);
+            END_FUNCTION;
+            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_repeat(marker) = 0; END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(consumer, ("schemas/finite-repeat.exp", schema));
+        var invalidLowerResult = GeneratorHostTests.Run(("schemas/string-repeat-lower.exp", invalidLowerSchema));
+        var invalidUpperResult = GeneratorHostTests.Run(("schemas/string-repeat-upper.exp", invalidUpperSchema));
+        var invalidStepResult = GeneratorHostTests.Run(("schemas/string-repeat-step.exp", invalidStepSchema));
+
+        await Assert.That(result.Diagnostics
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+            .IsEmpty()
+            .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("FiniteRepeatConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty();
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            foreach (var invalidResult in new[] { invalidLowerResult, invalidUpperResult, invalidStepResult, })
+            {
+                await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
+                    diagnostic.Id == "STEP21EXP006"
+                    && diagnostic.GetMessage().Contains(
+                        "requires a numeric value",
+                        StringComparison.Ordinal))).IsTrue()
+                    .Because(string.Join(
+                        Environment.NewLine,
+                        invalidResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+                await Assert.That(invalidResult.GeneratedSources).IsEmpty();
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

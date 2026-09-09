@@ -138,6 +138,15 @@ implementation inventory is evidence about current behavior, not a substitute fo
   a source-located STEP21EXP006 failure before emission. The focused corpus also proves the clause-13.5 compound body
   retains its enclosing scope. The candidate passes 8/8 `ISO21WorkItem=ISO21-009` tests and all 137
   `ReachableRuleTests`.
+- Clause 13.9.1 defines finite REPEAT controls as numeric values captured on entry, with a default increment of one;
+  an indeterminate initial, final or increment value executes no body, and positive, negative and zero increments
+  determine the applicable direction or zero iterations. The emitter now removes a finite loop whose literal control
+  is indeterminate instead of passing it to the context-dependent type emitter, while all determinate controls remain
+  captured once in the generated `for` initializer. A pre-emission control-type check rejects non-numeric lower,
+  upper and increment expressions with source-located STEP21EXP006 diagnostics. The focused corpus covers default,
+  positive, negative and zero increments, mismatched directions, once-only capture, all three indeterminate positions
+  and all three non-numeric positions. The candidate passes 9/9 `ISO21WorkItem=ISO21-009` tests and all 138
+  `ReachableRuleTests`.
 
 Source identities:
 

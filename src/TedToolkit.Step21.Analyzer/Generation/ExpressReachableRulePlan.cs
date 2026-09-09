@@ -1241,7 +1241,7 @@ internal sealed class ExpressReachableRulePlan
             var statements = declarationRule.ChildRules("stmt").ToArray();
             var operations = AlgorithmOperations(declarationRule).ToArray();
             var isProcedure = declaration.Kind == ExpressDeclarationKind.Procedure;
-            if (!ValidateLogicalControls(operations))
+            if (!ValidateControlTypes(operations))
             {
                 return;
             }
@@ -1331,7 +1331,7 @@ internal sealed class ExpressReachableRulePlan
                     + "algorithm statement shape that has no static generator."));
         }
 
-        private bool ValidateLogicalControls(IReadOnlyList<ExpressSemanticRule> operations)
+        private bool ValidateControlTypes(IReadOnlyList<ExpressSemanticRule> operations)
         {
             var valid = true;
             foreach (var operation in operations)
@@ -1361,6 +1361,43 @@ internal sealed class ExpressReachableRulePlan
                         expression.Span,
                         $"{name} control requires a BOOLEAN or LOGICAL value; received "
                             + $"{expression.Type.Kind.ToString()}.");
+                    valid = false;
+                }
+
+                if (operation.Role != "repeatStmt"
+                    || operation.RequiredChild("repeatControl")
+                        .ChildRules("incrementControl")
+                        .SingleOrDefault() is not { } increment)
+                {
+                    continue;
+                }
+
+                IEnumerable<(string Name, ExpressSemanticRule Control)> numericControls =
+                new (string Name, ExpressSemanticRule Control)[]
+                {
+                    ("REPEAT lower bound", increment.RequiredChild("bound1").RequiredChild("numericExpression")),
+                    ("REPEAT upper bound", increment.RequiredChild("bound2").RequiredChild("numericExpression")),
+                };
+                if (increment.ChildRules("increment").SingleOrDefault() is { } step)
+                {
+                    numericControls = numericControls.Append(
+                        ("REPEAT increment", step.RequiredChild("numericExpression")));
+                }
+
+                foreach (var (name, control) in numericControls)
+                {
+                    var expression = GetExpression(control);
+                    if (expression.Type.Kind is ExpressExpressionTypeKind.Integer
+                        or ExpressExpressionTypeKind.Real
+                        or ExpressExpressionTypeKind.Number
+                        or ExpressExpressionTypeKind.Indeterminate)
+                    {
+                        continue;
+                    }
+
+                    AddFailure(
+                        expression.Span,
+                        $"{name} requires a numeric value; received {expression.Type.Kind.ToString()}.");
                     valid = false;
                 }
             }
@@ -1540,7 +1577,7 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var operations = AlgorithmOperations(declarationRule).ToArray();
-            if (!ValidateLogicalControls(operations))
+            if (!ValidateControlTypes(operations))
             {
                 return;
             }
