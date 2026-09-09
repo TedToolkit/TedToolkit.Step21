@@ -1299,10 +1299,9 @@ internal sealed class ExpressReachableRulePlan
                             {
                                 Declaration.Kind: ExpressDeclarationKind.Entity,
                             };
-                            var targetIsIndexedSelect = IsAssignmentSelectCarrier(target.Type)
-                                && qualifiers[0].ChildRules("indexQualifier").Count() == 1;
+                            var targetIsSelect = IsAssignmentSelectCarrier(target.Type);
                             if (target.Kind is not (ExpressBoundNameKind.Variable or ExpressBoundNameKind.Parameter)
-                                || (!targetIsEntity && !targetIsIndexedSelect))
+                                || (!targetIsEntity && !targetIsSelect))
                             {
                                 return false;
                             }

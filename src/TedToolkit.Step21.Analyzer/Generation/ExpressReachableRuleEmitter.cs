@@ -1917,6 +1917,55 @@ internal static class ExpressReachableRuleEmitter
             for (var qualifierIndex = 0; qualifierIndex < assignmentQualifiers.Length; qualifierIndex++)
             {
                 var qualifier = assignmentQualifiers[qualifierIndex];
+                if (targetType is ExpressBoundNamedType
+                    { Declaration.Kind: not ExpressDeclarationKind.Entity, } directSelectCarrier
+                    && plan.Resolver.GetDefinedType(directSelectCarrier.Declaration).UnderlyingType
+                        is ExpressBoundSelectType directSelectType
+                    && qualifier.ChildRules().Single().Role is "attributeQualifier" or "groupQualifier")
+                {
+                    selectedAssignmentCarrier = directSelectCarrier;
+                    selectedAssignmentType = directSelectType;
+                    rangeSourceCode = targetCode;
+                    selectedAssignmentIndices = [];
+                    for (var tailIndex = qualifierIndex;
+                         tailIndex < assignmentQualifiers.Length;
+                         tailIndex++)
+                    {
+                        var tailQualifier = assignmentQualifiers[tailIndex];
+                        if (tailQualifier.ChildRules("indexQualifier").SingleOrDefault() is { } tail)
+                        {
+                            var tailUpper = tail.ChildRules("index2").SingleOrDefault();
+                            selectedAssignmentIndices.Add((
+                                EmitAssignmentIndex(tail.RequiredChild("index1")),
+                                tailUpper is null ? null : EmitAssignmentIndex(tailUpper)));
+                            continue;
+                        }
+
+                        if (tailQualifier.ChildRules("groupQualifier").SingleOrDefault() is { } tailGroup)
+                        {
+                            var group = plan.Schema.NameReferences
+                                .Where(reference => SameStart(
+                                        reference.Span,
+                                        tailGroup.RequiredChild("entityRef").Span)
+                                    && reference.Target.Kind == ExpressBoundNameKind.Entity)
+                                .Select(reference => reference.Target.SchemaDeclaration)
+                                .OfType<ExpressBoundSymbol>()
+                                .Distinct()
+                                .Single();
+                            selectedAssignmentGroup = new(group, tailGroup.Span);
+                            continue;
+                        }
+
+                        selectedAssignmentAttribute = plan.GetReferencedAttribute(
+                            tailQualifier.RequiredChild("attributeQualifier"));
+                        selectedAssignmentAttributeLevel = selectedAssignmentIndices.Count;
+                    }
+
+                    targetIsOptional = false;
+                    optionalUnsetCode = null;
+                    break;
+                }
+
                 if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } groupSyntax)
                 {
                     var groupReference = plan.Schema.NameReferences
@@ -6774,7 +6823,10 @@ internal static class ExpressReachableRuleEmitter
             var targets = plan.EntityProjections
                 .Where(projection => projection.PhysicalComponents.Any(component => ReferenceEquals(
                     component.Symbol,
-                    storageEntity.Declaration)))
+                    storageEntity.Declaration))
+                    && projection.PhysicalComponents.Any(component => ReferenceEquals(
+                        component.Symbol,
+                        declaredEntity.Declaration)))
                 .Select(projection => (
                     Type: "global::TedToolkit.Step21.Generated."
                         + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
@@ -6786,7 +6838,10 @@ internal static class ExpressReachableRuleEmitter
                 .Concat(plan.ComplexEntityProjections
                     .Where(projection => projection.Components.Any(component => ReferenceEquals(
                         component.Entity.Symbol,
-                        storageEntity.Declaration)))
+                        storageEntity.Declaration))
+                        && projection.Components.Any(component => ReferenceEquals(
+                            component.Entity.Symbol,
+                            declaredEntity.Declaration)))
                     .Select(projection => (
                         Type: "global::TedToolkit.Step21.Generated."
                             + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
@@ -6860,6 +6915,19 @@ internal static class ExpressReachableRuleEmitter
             int depth,
             HashSet<ExpressBoundSymbol> visited)
         {
+            if (indices.Count == 0
+                && level == 0
+                && selectedAttributeLevel == 0
+                && selectedAttribute is not null)
+            {
+                return TransformEntityAttribute(
+                    declaredType,
+                    current,
+                    level,
+                    depth + 1,
+                    new HashSet<ExpressBoundSymbol>(visited));
+            }
+
             var semantic = declaredType;
             var wrappers = new List<ExpressBoundNamedType>();
             var unwrapped = current;

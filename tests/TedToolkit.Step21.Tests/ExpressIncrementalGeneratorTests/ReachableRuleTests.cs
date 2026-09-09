@@ -13171,6 +13171,7 @@ public sealed class ReachableRuleTests
             END_ENTITY;
             ENTITY point SUBTYPE OF (base_point); END_ENTITY;
             TYPE point_list = LIST [1:?] OF base_point; END_TYPE;
+            TYPE point_choice = SELECT (point); END_TYPE;
             TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
             TYPE aggregate_choice = SELECT (list_value, array_value); END_TYPE;
             TYPE matrix_choice = SELECT (matrix_value); END_TYPE;
@@ -13199,6 +13200,14 @@ public sealed class ReachableRuleTests
               selected[1].code := 9;
               RETURN(selected[1].code = 9);
             END_FUNCTION;
+            FUNCTION replace_direct_selected_attribute(selected : point_choice) : BOOLEAN;
+              selected.code := 12;
+              RETURN(selected.code = 12);
+            END_FUNCTION;
+            FUNCTION replace_direct_selected_group_attribute(selected : point_choice) : BOOLEAN;
+              selected\base_point.code := 13;
+              RETURN(selected\base_point.code = 13);
+            END_FUNCTION;
             FUNCTION replace_selected_group_attribute(selected : point_list_choice) : BOOLEAN;
               selected[1]\base_point.code := 10;
               RETURN(selected[1]\base_point.code = 10);
@@ -13222,10 +13231,13 @@ public sealed class ReachableRuleTests
             END_ENTITY;
             ENTITY attribute_sample;
               point_item : point_list_choice;
+              direct_item : point_choice;
             WHERE
               attribute_replaced : replace_selected_attribute(point_item);
               group_attribute_replaced : replace_selected_group_attribute(point_item);
               attribute_element_replaced : replace_selected_attribute_element(point_item);
+              direct_attribute_replaced : replace_direct_selected_attribute(direct_item);
+              direct_group_attribute_replaced : replace_direct_selected_group_attribute(direct_item);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -13270,6 +13282,7 @@ public sealed class ReachableRuleTests
                     var point = new Point(1, new ExpressList<BigInteger>(1) { 1, 2 });
                     var selected = PointListChoice.FromPointList(
                         new PointList(new ExpressList<IBasePoint>(1) { point }));
+                    var direct = PointChoice.FromPoint(point);
                     var descriptor = typeof(
                         TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedAttribute",
@@ -13288,6 +13301,26 @@ public sealed class ReachableRuleTests
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
                     if (groupMethod.Invoke(null, [selected, entities]) is not true || point.Code != 10)
+                    {
+                        return false;
+                    }
+
+                    var directMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceDirectSelectedAttribute",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    if (directMethod.Invoke(null, [direct, entities]) is not true || point.Code != 12)
+                    {
+                        return false;
+                    }
+
+                    var directGroupMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceDirectSelectedGroupAttribute",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    if (directGroupMethod.Invoke(null, [direct, entities]) is not true || point.Code != 13)
                     {
                         return false;
                     }
