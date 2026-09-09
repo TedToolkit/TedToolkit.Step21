@@ -189,6 +189,15 @@ implementation inventory is evidence about current behavior, not a substitute fo
   compiler baseline passes with only AP203's expected descriptor-source hash update; the approved AP242 surface gate
   passes; and the complete Release unit suite passes 722/722 with zero skips. The 189.5 MB diagnostic-only generated
   source directory was removed after inspection.
+- Clauses 13.3.1 and 13.3.2 establish aggregate value assignment, while the shared copy boundary previously excluded
+  ARRAY and therefore aliased its mutable slot storage. The focused test first compiled but returned FALSE after a
+  source-slot mutation also changed the assigned ARRAY. Candidate `12ff113` adds one shared `ExpressArray<T>` value-
+  copy constructor and routes ARRAY assignments through it, preserving the declared domain, OPTIONAL/UNIQUE metadata,
+  unset slots and an available concrete-source comparer. The runtime-copy test, public API snapshot, source-gated
+  manifest and `ISO21WorkItem=ISO21-009` suite (15/15) pass; the compiler baseline changes only AP203's expected
+  descriptor-source hash; and the complete Release unit suite passes 724/724 with zero skips. Compatibility between
+  unlike aggregate declarations remains pending with clause 12.11 rather than being inferred from this value-copy
+  implementation.
 
 Source identities:
 
