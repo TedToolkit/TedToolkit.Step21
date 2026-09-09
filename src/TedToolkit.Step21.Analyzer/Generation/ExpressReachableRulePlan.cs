@@ -1290,11 +1290,14 @@ internal sealed class ExpressReachableRulePlan
                                 .Where(reference => SameStart(reference.Span, targetSyntax.Span))
                                 .Select(reference => reference.Target)
                                 .Single();
+                            var targetIsEntity = target.Type is ExpressBoundNamedType
+                            {
+                                Declaration.Kind: ExpressDeclarationKind.Entity,
+                            };
+                            var targetIsIndexedSelect = IsAssignmentSelectCarrier(target.Type)
+                                && qualifiers[0].ChildRules("indexQualifier").Count() == 1;
                             if (target.Kind is not (ExpressBoundNameKind.Variable or ExpressBoundNameKind.Parameter)
-                                || target.Type is not ExpressBoundNamedType
-                                {
-                                    Declaration.Kind: ExpressDeclarationKind.Entity,
-                                })
+                                || (!targetIsEntity && !targetIsIndexedSelect))
                             {
                                 return false;
                             }
@@ -1520,8 +1523,23 @@ internal sealed class ExpressReachableRulePlan
                 var isRange = index.ChildRules("index2").Any();
                 if (IsAssignmentSelectCarrier(targetType))
                 {
-                    if (qualifiers.Skip(qualifierIndex + 1).All(candidate =>
-                            candidate.ChildRules("indexQualifier").Count() == 1))
+                    var tail = qualifiers.Skip(qualifierIndex + 1).ToArray();
+                    var tailIndex = 0;
+                    while (tailIndex < tail.Length
+                           && tail[tailIndex].ChildRules("indexQualifier").Count() == 1)
+                    {
+                        tailIndex++;
+                    }
+
+                    if (tailIndex < tail.Length
+                        && tail[tailIndex].ChildRules("groupQualifier").Count() == 1)
+                    {
+                        tailIndex++;
+                    }
+
+                    if (tailIndex == tail.Length
+                        || (tailIndex == tail.Length - 1
+                            && tail[tailIndex].ChildRules("attributeQualifier").Count() == 1))
                     {
                         return true;
                     }

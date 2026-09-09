@@ -12926,9 +12926,13 @@ public sealed class ReachableRuleTests
             TYPE list_value = LIST [1:?] OF INTEGER; END_TYPE;
             TYPE array_value = ARRAY [2:3] OF INTEGER; END_TYPE;
             TYPE matrix_value = LIST [1:?] OF LIST [1:?] OF INTEGER; END_TYPE;
+            ENTITY base_point; code : INTEGER; END_ENTITY;
+            ENTITY point SUBTYPE OF (base_point); END_ENTITY;
+            TYPE point_list = LIST [1:?] OF base_point; END_TYPE;
             TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
             TYPE aggregate_choice = SELECT (list_value, array_value); END_TYPE;
             TYPE matrix_choice = SELECT (matrix_value); END_TYPE;
+            TYPE point_list_choice = SELECT (point_list); END_TYPE;
             FUNCTION replace_text(selected : scalar_choice) : BOOLEAN;
               selected[2:3] := 'X';
               RETURN(selected = 'aXd');
@@ -12949,6 +12953,14 @@ public sealed class ReachableRuleTests
               selected[2][1] := 9;
               RETURN(selected[2][1] = 9);
             END_FUNCTION;
+            FUNCTION replace_selected_attribute(selected : point_list_choice) : BOOLEAN;
+              selected[1].code := 9;
+              RETURN(selected[1].code = 9);
+            END_FUNCTION;
+            FUNCTION replace_selected_group_attribute(selected : point_list_choice) : BOOLEAN;
+              selected[1]\base_point.code := 10;
+              RETURN(selected[1]\base_point.code = 10);
+            END_FUNCTION;
             ENTITY sample;
               text_item : scalar_choice;
               bits_item : scalar_choice;
@@ -12961,6 +12973,12 @@ public sealed class ReachableRuleTests
               list_replaced : replace_list_element(list_item);
               array_replaced : replace_array_element(array_item);
               nested_replaced : replace_nested_element(matrix_item);
+            END_ENTITY;
+            ENTITY attribute_sample;
+              point_item : point_list_choice;
+            WHERE
+              attribute_replaced : replace_selected_attribute(point_item);
+              group_attribute_replaced : replace_selected_group_attribute(point_item);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -12989,13 +13007,40 @@ public sealed class ReachableRuleTests
                         new(1) { 1, 2 },
                         new(1) { 3, 4 },
                     };
-                    _ = structure.Add(section, new Sample(
+                    var sample = new Sample(
                         ScalarChoice.FromTextValue(new TextValue("abcd")),
                         ScalarChoice.FromBitsValue(new BitsValue(new BinaryValue("1010"))),
                         AggregateChoice.FromListValue(new ListValue(new ExpressList<BigInteger>(1) { 1, 2 })),
                         AggregateChoice.FromArrayValue(new ArrayValue(array)),
-                        MatrixChoice.FromMatrixValue(new MatrixValue(matrix))));
+                        MatrixChoice.FromMatrixValue(new MatrixValue(matrix)));
+
+                    _ = structure.Add(section, sample);
                     return structure.Validate();
+                }
+
+                internal static bool ValidateAttribute()
+                {
+                    var point = new Point(1);
+                    var selected = PointListChoice.FromPointList(
+                        new PointList(new ExpressList<IBasePoint>(1) { point }));
+                    var descriptor = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceSelectedAttribute",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    var entities = global::System.Array.Empty<
+                        global::System.Collections.Generic.KeyValuePair<string, Entity>>();
+                    if (descriptor.Invoke(null, [selected, entities]) is not true || point.Code != 9)
+                    {
+                        return false;
+                    }
+
+                    var groupMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceSelectedGroupAttribute",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    return groupMethod.Invoke(null, [selected, entities]) is true && point.Code == 10;
                 }
             }
             """;
@@ -13019,9 +13064,19 @@ public sealed class ReachableRuleTests
                 "Validate",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var validation = (ValidationResult)validate.Invoke(null, null)!;
+        var validateAttribute = assembly.GetType(
+            "SelectQualifiedAssignmentConsumer",
+            throwOnError: true)!.GetMethod(
+                "ValidateAttribute",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var attributeValid = (bool)validateAttribute.Invoke(null, null)!;
 
-        await Assert.That(validation.IsValid).IsTrue()
-            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+        using (Assert.Multiple())
+        {
+            await Assert.That(validation.IsValid).IsTrue()
+                .Because(string.Join(Environment.NewLine, validation.Failures.Select(FailureEvidence)));
+            await Assert.That(attributeValid).IsTrue();
+        }
     }
 
     /// <summary>

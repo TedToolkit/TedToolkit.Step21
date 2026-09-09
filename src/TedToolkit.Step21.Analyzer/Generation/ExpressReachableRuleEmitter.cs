@@ -1850,6 +1850,8 @@ internal static class ExpressReachableRuleEmitter
             ExpressBoundNamedType? selectedAssignmentCarrier = null;
             ExpressBoundSelectType? selectedAssignmentType = null;
             List<(string Lower, string? Upper)>? selectedAssignmentIndices = null;
+            ExpressBoundNamedType? selectedAssignmentGroup = null;
+            ExpressBoundAttribute? selectedAssignmentAttribute = null;
 
             string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
             {
@@ -1945,11 +1947,33 @@ internal static class ExpressReachableRuleEmitter
                          tailIndex < assignmentQualifiers.Length;
                          tailIndex++)
                     {
-                        var tail = assignmentQualifiers[tailIndex].RequiredChild("indexQualifier");
-                        var tailUpper = tail.ChildRules("index2").SingleOrDefault();
-                        selectedAssignmentIndices.Add((
-                            EmitAssignmentIndex(tail.RequiredChild("index1")),
-                            tailUpper is null ? null : EmitAssignmentIndex(tailUpper)));
+                        var tailQualifier = assignmentQualifiers[tailIndex];
+                        if (tailQualifier.ChildRules("indexQualifier").SingleOrDefault() is { } tail)
+                        {
+                            var tailUpper = tail.ChildRules("index2").SingleOrDefault();
+                            selectedAssignmentIndices.Add((
+                                EmitAssignmentIndex(tail.RequiredChild("index1")),
+                                tailUpper is null ? null : EmitAssignmentIndex(tailUpper)));
+                            continue;
+                        }
+
+                        if (tailQualifier.ChildRules("groupQualifier").SingleOrDefault() is { } tailGroup)
+                        {
+                            var group = plan.Schema.NameReferences
+                                .Where(reference => SameStart(
+                                        reference.Span,
+                                        tailGroup.RequiredChild("entityRef").Span)
+                                    && reference.Target.Kind == ExpressBoundNameKind.Entity)
+                                .Select(reference => reference.Target.SchemaDeclaration)
+                                .OfType<ExpressBoundSymbol>()
+                                .Distinct()
+                                .Single();
+                            selectedAssignmentGroup = new(group, tailGroup.Span);
+                            continue;
+                        }
+
+                        selectedAssignmentAttribute = plan.GetReferencedAttribute(
+                            tailQualifier.RequiredChild("attributeQualifier"));
                     }
 
                     targetIsOptional = false;
@@ -2008,6 +2032,8 @@ internal static class ExpressReachableRuleEmitter
                         selectedAssignmentType,
                         rangeSourceCode!,
                         selectedAssignmentIndices!,
+                        selectedAssignmentGroup,
+                        selectedAssignmentAttribute,
                         valueExpression,
                         replacement);
                 }
@@ -6510,6 +6536,8 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundSelectType select,
         string source,
         List<(string Lower, string? Upper)> indices,
+        ExpressBoundNamedType? selectedGroup,
+        ExpressBoundAttribute? selectedAttribute,
         ExpressBoundExpression valueExpression,
         string replacement)
     {
@@ -6597,6 +6625,104 @@ internal static class ExpressReachableRuleEmitter
                 + "\"An EXPRESS SELECT scalar assignment index was outside the carrier bounds.\") })";
         }
 
+        string TransformEntityAttribute(ExpressBoundType declaredType, string entity, int depth)
+        {
+            if (declaredType is not ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } declaredEntity
+                || selectedAttribute is null)
+            {
+                return InvalidAlternative(declaredType);
+            }
+
+            var storageEntity = selectedGroup ?? declaredEntity;
+            var ownerProjection = plan.EntityProjections.Single(projection => ReferenceEquals(
+                projection.Entity.Symbol,
+                storageEntity.Declaration));
+            var ownerAttribute = ownerProjection.FlattenedAttributes.Single(attribute => ReferenceEquals(
+                attribute.Attribute,
+                selectedAttribute));
+            bool SameStorage(ExpressEntityAttributeProjection attribute)
+            {
+                return ReferenceEquals(attribute.StorageEntity.Symbol, ownerAttribute.StorageEntity.Symbol)
+                    && StringComparer.OrdinalIgnoreCase.Equals(
+                        attribute.StorageAttributeName,
+                        ownerAttribute.StorageAttributeName);
+            }
+
+            var targets = plan.EntityProjections
+                .Where(projection => projection.PhysicalComponents.Any(component => ReferenceEquals(
+                    component.Symbol,
+                    storageEntity.Declaration)))
+                .Select(projection => (
+                    Type: "global::TedToolkit.Step21.Generated."
+                        + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
+                        + "."
+                        + projection.Name,
+                    Attribute: projection.EffectiveAttributes.SingleOrDefault(SameStorage)))
+                .Where(target => target.Attribute is not null)
+                .Select(target => (target.Type, Attribute: target.Attribute!))
+                .Concat(plan.ComplexEntityProjections
+                    .Where(projection => projection.Components.Any(component => ReferenceEquals(
+                        component.Entity.Symbol,
+                        storageEntity.Declaration)))
+                    .Select(projection => (
+                        Type: "global::TedToolkit.Step21.Generated."
+                            + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
+                            + "."
+                            + projection.Name,
+                        Attribute: projection.Properties.SingleOrDefault(SameStorage)))
+                    .Where(target => target.Attribute is not null)
+                    .Select(target => (target.Type, Attribute: target.Attribute!)))
+                .GroupBy(target => target.Type, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToArray();
+            var adaptedReplacement = ResolveAggregateElementValue(
+                plan,
+                valueExpression,
+                replacement,
+                selectedAttribute.Type,
+                sourceIsDeterminate: true);
+            var entityType = ExpressExpressionEmitter.BoundTypeName(declaredEntity);
+            var entityVariable = "__expressSelectedAssignmentEntity_" + suffix + "_" + depth;
+            var code = "((global::System.Func<"
+                + entityType
+                + ", "
+                + entityType
+                + ">)("
+                + entityVariable
+                + " => { switch ("
+                + entityVariable
+                + ") { ";
+            for (var targetIndex = 0; targetIndex < targets.Length; targetIndex++)
+            {
+                var target = "__expressSelectedAssignmentTarget_"
+                    + suffix
+                    + "_"
+                    + depth
+                    + "_"
+                    + targetIndex.ToString(CultureInfo.InvariantCulture);
+                code += "case "
+                    + targets[targetIndex].Type
+                    + " "
+                    + target
+                    + ": "
+                    + target
+                    + "."
+                    + targets[targetIndex].Attribute.StorageMemberName
+                    + " = "
+                    + adaptedReplacement
+                    + "; break; ";
+            }
+
+            code += "default: throw new global::System.InvalidOperationException("
+                + "\"EXPRESS assignment target has no mutable generated entity projection.\"); } return "
+                + entityVariable
+                + "; }))("
+                + entity
+                + ")";
+            return code;
+        }
+
         string TransformValue(
             ExpressBoundType declaredType,
             string current,
@@ -6652,35 +6778,62 @@ internal static class ExpressReachableRuleEmitter
             var index = indices[level].Lower;
             var values = "__expressSelectedAssignmentValues_" + suffix + "_" + depth;
             var position = "__expressSelectedAssignmentIndex_" + suffix + "_" + depth;
+            var aggregateSource = unwrapped;
+            var rebuiltCarrier = current;
+            if (wrappers.Count == 1
+                && plan.Resolver.GetDefinedType(wrappers[0].Declaration).UnderlyingType
+                    is ExpressBoundAggregateType)
+            {
+                var aggregateName = ExpressExpressionEmitter.BoundTypeName(aggregate);
+                aggregateSource = aggregate.Kind == ExpressAggregateKind.Array
+                    ? $"new {aggregateName}(({current}).ReadOnlyValue)"
+                    : $"({aggregateName})[..({current}).ReadOnlyValue]";
+                rebuiltCarrier = "new "
+                    + ExpressExpressionEmitter.BoundTypeName(wrappers[0])
+                    + $"({values})";
+            }
+
             var indexed = aggregate.Kind == ExpressAggregateKind.Array
                 ? $"{values}[{position}]"
                 : $"{values}[{position} - 1]";
-            var adaptedReplacement = level == indices.Count - 1
-                ? ResolveAggregateElementValue(
-                    plan,
-                    valueExpression,
-                    replacement,
-                    aggregate.ElementType,
-                    sourceIsDeterminate: true)
-                : TransformValue(
+            string adaptedReplacement;
+            if (level < indices.Count - 1)
+            {
+                adaptedReplacement = TransformValue(
                     aggregate.ElementType,
                     indexed,
                     level + 1,
                     depth + 1,
                     new HashSet<ExpressBoundSymbol>(visited));
+            }
+            else if (selectedAttribute is not null)
+            {
+                adaptedReplacement = TransformEntityAttribute(aggregate.ElementType, indexed, depth + 1);
+            }
+            else
+            {
+                adaptedReplacement = ResolveAggregateElementValue(
+                    plan,
+                    valueExpression,
+                    replacement,
+                    aggregate.ElementType,
+                    sourceIsDeterminate: true);
+            }
+
             var assigned = aggregate.Kind == ExpressAggregateKind.Array
                 ? $"{values}[{position}] = {adaptedReplacement}"
                 : $"{values}[{position} - 1] = {adaptedReplacement}";
             var bounds = aggregate.Kind == ExpressAggregateKind.Array
                 ? $"{position} >= {values}.LowerIndex && {position} <= {values}.UpperIndex"
                 : $"{position} >= 1 && {position} <= {values}.Count";
-            if (aggregate.Kind == ExpressAggregateKind.Array && level < indices.Count - 1)
+            if (aggregate.Kind == ExpressAggregateKind.Array
+                && (level < indices.Count - 1 || selectedAttribute is not null))
             {
                 bounds += $" && {values}.IsSet({position})";
             }
 
-            return $"(({unwrapped}, {index}) switch {{ "
-                + $"var ({values}, {position}) when {bounds} => (({assigned}), {current}).Item2, "
+            return $"(({aggregateSource}, {index}) switch {{ "
+                + $"var ({values}, {position}) when {bounds} => (({assigned}), {rebuiltCarrier}).Item2, "
                 + "_ => throw new global::System.InvalidOperationException("
                 + "\"An EXPRESS SELECT aggregate assignment index was outside the carrier bounds.\") })";
         }
