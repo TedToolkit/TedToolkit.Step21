@@ -1845,8 +1845,6 @@ internal static class ExpressReachableRuleEmitter
             string? rangeLowerCode = null;
             string? rangeUpperCode = null;
             ExpressScalarKind? rangeKind = null;
-            List<ExpressBoundNamedType>? rangeWrappers = null;
-            ExpressBoundType? rangeTargetType = null;
             var rangeRequiresSingleElement = false;
 
             string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
@@ -1926,28 +1924,13 @@ internal static class ExpressReachableRuleEmitter
                 var indexQualifier = qualifier.RequiredChild("indexQualifier");
                 var indexCode = EmitAssignmentIndex(indexQualifier.RequiredChild("index1"));
                 var upperIndex = indexQualifier.ChildRules("index2").SingleOrDefault();
-                var rangeCarrierType = targetType;
-                var definedRangeWrappers = targetType is ExpressBoundNamedType
-                { Declaration.Kind: not ExpressDeclarationKind.Entity, }
-                        ? ResolveTransparentDefinedWrappers(plan.Resolver, ref rangeCarrierType)
-                        : null;
-                if (rangeCarrierType is ExpressBoundScalarType
+                if (targetType is ExpressBoundScalarType
                     { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, } scalar)
                 {
                     rangeSourceCode = targetCode;
-                    if (definedRangeWrappers is not null)
-                    {
-                        foreach (var _ in definedRangeWrappers)
-                        {
-                            rangeSourceCode = $"({rangeSourceCode}).Value";
-                        }
-                    }
-
                     rangeLowerCode = indexCode;
                     rangeUpperCode = upperIndex is null ? indexCode : EmitAssignmentIndex(upperIndex);
                     rangeKind = scalar.Kind;
-                    rangeWrappers = definedRangeWrappers;
-                    rangeTargetType = targetType;
                     rangeRequiresSingleElement = upperIndex is null;
                     targetType = scalar;
                     targetIsOptional = false;
@@ -2000,13 +1983,6 @@ internal static class ExpressReachableRuleEmitter
                 if (rangeKind == ExpressScalarKind.Binary)
                 {
                     rebuilt = $"new global::TedToolkit.Step21.BinaryValue({rebuilt})";
-                }
-
-                for (var index = (rangeWrappers?.Count ?? 0) - 1; index >= 0; index--)
-                {
-                    rebuilt = "new "
-                        + ExpressExpressionEmitter.BoundTypeName(rangeWrappers![index])
-                        + $"({rebuilt})";
                 }
 
                 var singleElementGuard = rangeRequiresSingleElement
@@ -2685,7 +2661,7 @@ internal static class ExpressReachableRuleEmitter
                             assignedAttribute,
                             assignedMemberSuffix,
                             assignedAggregateDepth,
-                            rangeTargetType ?? targetType));
+                            targetType));
                     presence.Else().AddStatement(new CustomExpression(optionalUnsetCode));
                     owner.AddStatement(presence);
                     return true;
@@ -2709,7 +2685,7 @@ internal static class ExpressReachableRuleEmitter
                             assignedAttribute,
                             assignedMemberSuffix,
                             assignedAggregateDepth,
-                            rangeTargetType ?? targetType));
+                            targetType));
                     presence.Else().AddStatement(new CustomExpression(unknownResult).Return);
                     owner.AddStatement(presence);
                     return true;
@@ -2733,7 +2709,7 @@ internal static class ExpressReachableRuleEmitter
                 assignedAttribute,
                 assignedMemberSuffix,
                 assignedAggregateDepth,
-                rangeTargetType ?? targetType));
+                targetType));
             return true;
         }
 

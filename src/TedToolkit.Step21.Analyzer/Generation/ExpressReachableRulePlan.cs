@@ -1361,7 +1361,7 @@ internal sealed class ExpressReachableRulePlan
                     valid = false;
                 }
 
-                if (!ValidateAssignmentRanges(operation))
+                if (!ValidateAssignmentQualifiers(operation))
                 {
                     valid = false;
                 }
@@ -1469,43 +1469,101 @@ internal sealed class ExpressReachableRulePlan
             return valid;
         }
 
-        private bool ValidateAssignmentRanges(ExpressSemanticRule operation)
+        private bool ValidateAssignmentQualifiers(ExpressSemanticRule operation)
         {
             if (operation.Role != "assignmentStmt")
             {
                 return true;
             }
 
-            var ranges = operation.ChildRules("qualifier")
-                .SelectMany(qualifier => qualifier.ChildRules("indexQualifier"))
-                .Where(index => index.ChildRules("index2").Any())
-                .ToArray();
-            if (ranges.Length == 0)
+            var qualifiers = operation.ChildRules("qualifier").ToArray();
+            if (qualifiers.Length == 0)
             {
                 return true;
             }
 
             var targetSyntax = operation.RequiredChild("generalRef");
-            var targetType = _schema.NameReferences
+            ExpressBoundType? targetType = _schema.NameReferences
                 .Where(reference => SameStart(reference.Span, targetSyntax.Span))
                 .Select(reference => reference.Target.Type)
                 .SingleOrDefault(type => type is not null);
-            if (ranges.Length == 1
-                && operation.ChildRules("qualifier").Count() == 1
-                && ResolveAssignmentScalarCarrier(targetType) is
-                { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, })
+
+            foreach (var qualifier in qualifiers)
             {
-                return true;
+                if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } group)
+                {
+                    targetType = _schema.NameReferences
+                        .Where(reference => SameStart(
+                                reference.Span,
+                                group.RequiredChild("entityRef").Span)
+                            && reference.Target.Kind == ExpressBoundNameKind.Entity)
+                        .Select(reference => reference.Target.SchemaDeclaration)
+                        .OfType<ExpressBoundSymbol>()
+                        .Select(symbol => (ExpressBoundType)new ExpressBoundNamedType(symbol, group.Span))
+                        .SingleOrDefault();
+                    continue;
+                }
+
+                if (qualifier.ChildRules("attributeQualifier").SingleOrDefault() is { } attribute)
+                {
+                    targetType = _schema.NameReferences
+                        .Where(reference => reference.Target.Attribute is not null
+                            && Contains(attribute.Span, reference.Span))
+                        .Select(reference => reference.Target.Attribute!.Type)
+                        .Distinct()
+                        .SingleOrDefault();
+                    continue;
+                }
+
+                var index = qualifier.RequiredChild("indexQualifier");
+                var isRange = index.ChildRules("index2").Any();
+                if (IsAssignmentSelectCarrier(targetType))
+                {
+                    AddFailure(
+                        index.Span,
+                        $"A SELECT {(!isRange ? "element" : "range")}-qualified assignment is permitted by "
+                            + "ISO 10303-11:2004 but has no static generator yet.");
+                    return false;
+                }
+
+                if (isRange)
+                {
+                    if (targetType is ExpressBoundScalarType
+                        { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, })
+                    {
+                        continue;
+                    }
+
+                    AddFailure(
+                        index.Span,
+                        "A range-qualified assignment requires a declared STRING, BINARY, or SELECT carrier.");
+                    return false;
+                }
+
+                if (targetType is ExpressBoundScalarType
+                    { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, })
+                {
+                    continue;
+                }
+
+                if (targetType is ExpressBoundAggregateType
+                    { Kind: ExpressAggregateKind.Array or ExpressAggregateKind.List, } aggregate)
+                {
+                    targetType = aggregate.ElementType;
+                    continue;
+                }
+
+                AddFailure(
+                    index.Span,
+                    "An element-qualified assignment requires a declared ARRAY, BINARY, LIST, STRING, "
+                        + "or SELECT carrier.");
+                return false;
             }
 
-            AddFailure(
-                ranges[0].Span,
-                "A range-qualified assignment requires a STRING or BINARY carrier "
-                    + "and shall be the final qualifier.");
-            return false;
+            return true;
         }
 
-        private ExpressBoundScalarType? ResolveAssignmentScalarCarrier(ExpressBoundType? type)
+        private bool IsAssignmentSelectCarrier(ExpressBoundType? type)
         {
             var visited = new HashSet<ExpressBoundSymbol>();
             while (type is ExpressBoundNamedType named
@@ -1515,7 +1573,7 @@ internal sealed class ExpressReachableRulePlan
                 type = _resolver.GetDefinedType(named.Declaration).UnderlyingType;
             }
 
-            return type as ExpressBoundScalarType;
+            return type is ExpressBoundSelectType;
         }
 
         private bool ValidateProcedureScalarArguments(ExpressSemanticRule operation)

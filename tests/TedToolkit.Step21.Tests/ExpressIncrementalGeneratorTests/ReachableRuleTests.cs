@@ -12795,25 +12795,16 @@ public sealed class ReachableRuleTests
     {
         const string schema = """
             SCHEMA range_assignment_model;
-            TYPE text_value_type = STRING; END_TYPE;
-            TYPE binary_value_type = BINARY; END_TYPE;
             FUNCTION replace_ranges(marker : BOOLEAN) : BOOLEAN;
               LOCAL
                 text_value : STRING := 'abcd';
                 binary_value : BINARY := %1010;
-                defined_text_value : text_value_type := 'abcd';
-                defined_binary_value : binary_value_type := %1010;
               END_LOCAL;
               text_value[2:3] := 'XYZ';
               binary_value[2:3] := %0;
               text_value[2] := 'Q';
               binary_value[2] := %1;
-              defined_text_value[2:3] := 'XYZ';
-              defined_binary_value[2:3] := %0;
-              defined_text_value[2] := 'Q';
-              defined_binary_value[2] := %1;
-              RETURN((text_value = 'aQYZd') AND (binary_value = %110)
-                AND (defined_text_value = 'aQYZd') AND (defined_binary_value = %110));
+              RETURN((text_value = 'aQYZd') AND (binary_value = %110));
             END_FUNCTION;
             ENTITY sample;
               marker : BOOLEAN;
@@ -12843,19 +12834,48 @@ public sealed class ReachableRuleTests
                 }
             }
             """;
-        const string invalidListSchema = """
-            SCHEMA list_range_assignment_model;
-            FUNCTION invalid_range(marker : BOOLEAN) : BOOLEAN;
+        const string invalidCarrierSchema = """
+            SCHEMA invalid_qualified_assignment_model;
+            TYPE text_value_type = STRING; END_TYPE;
+            FUNCTION invalid_list_range(marker : BOOLEAN) : BOOLEAN;
               LOCAL values : LIST [2:2] OF INTEGER := [1, 2]; END_LOCAL;
               values[1:2] := [3];
               RETURN(TRUE);
             END_FUNCTION;
-            ENTITY sample; marker : BOOLEAN; WHERE invalid : invalid_range(marker); END_ENTITY;
+            FUNCTION invalid_defined_range(marker : BOOLEAN) : BOOLEAN;
+              LOCAL text_value : text_value_type := 'abc'; END_LOCAL;
+              text_value[1:2] := 'x';
+              RETURN(TRUE);
+            END_FUNCTION;
+            FUNCTION invalid_defined_element(marker : BOOLEAN) : BOOLEAN;
+              LOCAL text_value : text_value_type := 'abc'; END_LOCAL;
+              text_value[1] := 'x';
+              RETURN(TRUE);
+            END_FUNCTION;
+            FUNCTION invalid_set_element(marker : BOOLEAN) : BOOLEAN;
+              LOCAL values : SET [1:2] OF INTEGER := [1, 2]; END_LOCAL;
+              values[1] := 3;
+              RETURN(TRUE);
+            END_FUNCTION;
+            FUNCTION invalid_bag_element(marker : BOOLEAN) : BOOLEAN;
+              LOCAL values : BAG [1:2] OF INTEGER := [1, 2]; END_LOCAL;
+              values[1] := 3;
+              RETURN(TRUE);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              list_range : invalid_list_range(marker);
+              defined_range : invalid_defined_range(marker);
+              defined_element : invalid_defined_element(marker);
+              set_element : invalid_set_element(marker);
+              bag_element : invalid_bag_element(marker);
+            END_ENTITY;
             END_SCHEMA;
             """;
         var result = GeneratorHostTests.Run(consumer, ("schemas/range-assignment.exp", schema));
-        var invalidListResult = GeneratorHostTests.Run(
-            ("schemas/list-range-assignment.exp", invalidListSchema));
+        var invalidCarrierResult = GeneratorHostTests.Run(
+            ("schemas/invalid-qualified-assignment.exp", invalidCarrierSchema));
 
         await Assert.That(result.Diagnostics
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
@@ -12874,15 +12894,21 @@ public sealed class ReachableRuleTests
                 .IsEmpty();
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
-            await Assert.That(invalidListResult.Diagnostics.Any(diagnostic =>
+            await Assert.That(invalidCarrierResult.Diagnostics.Count(diagnostic =>
                 diagnostic.Id == "STEP21EXP006"
-                && diagnostic.GetMessage().Contains(
-                    "range-qualified assignment requires a STRING or BINARY carrier",
-                    StringComparison.Ordinal))).IsTrue()
+                && diagnostic.GetMessage().Contains("range-qualified assignment requires", StringComparison.Ordinal)))
+                .IsEqualTo(2)
                 .Because(string.Join(
                     Environment.NewLine,
-                    invalidListResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
-            await Assert.That(invalidListResult.GeneratedSources).IsEmpty();
+                    invalidCarrierResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidCarrierResult.Diagnostics.Count(diagnostic =>
+                diagnostic.Id == "STEP21EXP006"
+                && diagnostic.GetMessage().Contains("element-qualified assignment requires", StringComparison.Ordinal)))
+                .IsEqualTo(3)
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidCarrierResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidCarrierResult.GeneratedSources).IsEmpty();
         }
     }
 
