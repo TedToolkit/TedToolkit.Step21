@@ -1245,10 +1245,14 @@ internal sealed class ExpressReachableRulePlan
                 && operations.All(operation =>
                     operation.Role is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt"
                         or "repeatStmt" or "returnStmt" or "escapeStmt" or "skipStmt"
+                        or "aliasStmt" or "nullStmt"
                     || (operation.Role == "procedureCallStmt"
                         && (IsSupportedListProcedure(operation) || IsSupportedProcedureCall(operation))))
                 && (!operations.Any(operation => operation.Role is "escapeStmt" or "skipStmt")
                     || HasValidLoopTransfers(declarationRule, false))
+                && operations.Where(operation => operation.Role == "aliasStmt")
+                    .All(alias => alias.ChildRules("qualifier").All(qualifier =>
+                        qualifier.ChildRules().Single().Role is "attributeQualifier" or "groupQualifier"))
                 && operations.Where(operation => operation.Role == "assignmentStmt")
                     .All(assignment =>
                     {
@@ -1497,12 +1501,15 @@ internal sealed class ExpressReachableRulePlan
             var operations = AlgorithmOperations(declarationRule).ToArray();
             if (operations.All(operation =>
                     operation.Role is "assignmentStmt" or "caseStmt" or "compoundStmt" or "ifStmt"
-                        or "repeatStmt" or "escapeStmt" or "skipStmt"
+                        or "repeatStmt" or "escapeStmt" or "skipStmt" or "aliasStmt" or "nullStmt"
                     || (operation.Role == "procedureCallStmt"
                         && (IsSupportedListProcedure(operation) || IsSupportedProcedureCall(operation))))
                 && (!operations.Any(operation => operation.Role is "escapeStmt" or "skipStmt")
                     || HasValidLoopTransfers(declarationRule, false))
                 && !operations.Any(operation => operation.Role == "returnStmt")
+                && operations.Where(operation => operation.Role == "aliasStmt")
+                    .All(alias => alias.ChildRules("qualifier").All(qualifier =>
+                        qualifier.ChildRules().Single().Role is "attributeQualifier" or "groupQualifier"))
                 && operations.Where(operation => operation.Role == "assignmentStmt")
                     .All(assignment => assignment.ChildRules("qualifier").All(qualifier =>
                     {

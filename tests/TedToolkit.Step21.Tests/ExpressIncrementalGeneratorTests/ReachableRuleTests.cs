@@ -11542,6 +11542,164 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies validation-reachable ALIAS and null statements execute with their scoped EXPRESS semantics.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_reachable_alias_and_null_statements()
+    {
+        const string schema = """
+            SCHEMA algorithm_statement_model;
+            ENTITY holder;
+              amount : INTEGER;
+            END_ENTITY;
+            FUNCTION aliased_amount(input : holder) : INTEGER;
+              ALIAS aliased_amount_value FOR input.amount;
+                ;
+                RETURN(aliased_amount_value);
+              END_ALIAS;
+            END_FUNCTION;
+            FUNCTION nested_aliased_amount(input : holder) : INTEGER;
+              ALIAS outer_amount_value FOR input.amount;
+                ALIAS inner_amount_value FOR outer_amount_value;
+                  RETURN(inner_amount_value);
+                END_ALIAS;
+              END_ALIAS;
+            END_FUNCTION;
+            ENTITY sample;
+              item : holder;
+            WHERE
+              positive : aliased_amount(item) > 0;
+              aliases_agree : aliased_amount(item) = nested_aliased_amount(item);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using System.Numerics;
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.AlgorithmStatementModel;
+
+            internal static class AlgorithmStatementConsumer
+            {
+                internal static ValidationResult Validate(BigInteger amount)
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["algorithm statements"], "3;1"),
+                            new FileName("algorithm.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["algorithm_statement_model"])),
+                        [TedToolkit.Step21.Generated.AlgorithmStatementModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("algorithm_statement_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(new Holder(amount)));
+                    return structure.Validate();
+                }
+            }
+            """;
+        const string invalidSchema = """
+            SCHEMA invalid_alias_source_model;
+            CONSTANT
+              fixed_amount : INTEGER := 1;
+            END_CONSTANT;
+            FUNCTION invalid_alias : INTEGER;
+              ALIAS aliased_amount_value FOR fixed_amount;
+                RETURN(aliased_amount_value);
+              END_ALIAS;
+            END_FUNCTION;
+            ENTITY sample;
+              amount : INTEGER;
+            WHERE
+              invalid : invalid_alias > amount;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string leakedAliasSchema = """
+            SCHEMA leaked_alias_scope_model;
+            ENTITY holder;
+              amount : INTEGER;
+            END_ENTITY;
+            FUNCTION leaked_alias(input : holder) : INTEGER;
+              ALIAS scoped_amount FOR input.amount;
+                ;
+              END_ALIAS;
+              RETURN(scoped_amount);
+            END_FUNCTION;
+            ENTITY sample;
+              item : holder;
+            WHERE
+              invalid : leaked_alias(item) > 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string unsupportedIndexedAliasSchema = """
+            SCHEMA indexed_alias_model;
+            FUNCTION indexed_alias(input : LIST [1:?] OF INTEGER) : INTEGER;
+              ALIAS first_item FOR input[1];
+                RETURN(first_item);
+              END_ALIAS;
+            END_FUNCTION;
+            ENTITY sample;
+              items : LIST [1:?] OF INTEGER;
+            WHERE
+              invalid : indexed_alias(items) > 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/algorithm-statements.exp", schema));
+        var invalidResult = GeneratorHostTests.Run(
+            ("schemas/invalid-alias-source.exp", invalidSchema));
+        var leakedAliasResult = GeneratorHostTests.Run(
+            ("schemas/leaked-alias-scope.exp", leakedAliasSchema));
+        var unsupportedIndexedAliasResult = GeneratorHostTests.Run(
+            ("schemas/unsupported-indexed-alias.exp", unsupportedIndexedAliasSchema));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("AlgorithmStatementConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var valid = (ValidationResult)validate.Invoke(null, [System.Numerics.BigInteger.One])!;
+        var invalid = (ValidationResult)validate.Invoke(null, [System.Numerics.BigInteger.MinusOne])!;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(valid.IsValid).IsTrue();
+            await Assert.That(invalid.Failures.Select(failure => failure.Code))
+                .Contains("ALGORITHM_STATEMENT_MODEL.SAMPLE.WHERE.POSITIVE");
+            await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-INVALID-ALIAS-SOURCE",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    invalidResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(invalidResult.GeneratedSources).IsEmpty();
+            await Assert.That(leakedAliasResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP002"
+                && diagnostic.GetMessage().Contains(
+                    "EXPRESS-BIND-UNRESOLVED-NAME",
+                    StringComparison.Ordinal))).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    leakedAliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(leakedAliasResult.GeneratedSources).IsEmpty();
+            await Assert.That(unsupportedIndexedAliasResult.Diagnostics.Any(diagnostic =>
+                diagnostic.Id == "STEP21EXP006")).IsTrue()
+                .Because(string.Join(
+                    Environment.NewLine,
+                    unsupportedIndexedAliasResult.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(unsupportedIndexedAliasResult.GeneratedSources).IsEmpty();
+        }
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]

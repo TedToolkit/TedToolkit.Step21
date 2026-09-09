@@ -93,6 +93,12 @@ implementation inventory is evidence about current behavior, not a substitute fo
 - Proof on the candidate: the two `ISO21WorkItem=ISO21-009` tests changed from 2/2 failed to 2/2 passed; the full Release
   unit suite passed 710/710; the Release integration suite passed 35/36 with only the opt-in external-download test
   skipped; `build/verify-native-aot.ps1` reported `PACKED_AOT_OK` and `NATIVE_AOT_PACKAGE_PROOF_OK` for `win-x64`.
+- A public JIS reproduction states that JIS B 3700-11-1996 translated ISO 10303-11:1994 without changing its technical
+  content or standard form. Its clauses 13.1 and 13.2 supply bounded semantics for null and ALIAS statements, and its
+  Annex A supplies their grammar. The current candidate therefore adds no-op null execution, scoped direct/entity/
+  attribute ALIAS lowering, inferred alias types, and deterministic rejection for constant sources, leaked names and
+  not-yet-implemented indexed aliases. This is partial Edition-1-derived evidence only; Edition-2 additions and the
+  remaining validation-reachable families stay pending.
 
 Source identities:
 
@@ -101,3 +107,4 @@ Source identities:
 - <https://www.ps-ent-2023.de/fileadmin/prod-preview/ISO_10303-11_2004_shortversion.pdf>
 - <https://www.expresslang.org/languages/express>
 - <https://www.expresslang.org/docs/documents/express-pretty/document.html>
+- <https://kikakurui.com/b3/B3700-11-2002-01.html>

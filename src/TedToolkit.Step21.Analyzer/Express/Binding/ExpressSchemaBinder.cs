@@ -1785,10 +1785,44 @@ internal static class ExpressSchemaBinder
             NameScope parentScope)
         {
             var source = syntax.RequiredChild("generalRef");
-            BindRestrictedName(schema, source, parentScope, expectedKind: null);
+            var aliasTarget = BindRestrictedName(schema, source, parentScope, expectedKind: null);
+            if (aliasTarget?.Kind is { } aliasTargetKind
+                && aliasTargetKind is not (ExpressBoundNameKind.Variable
+                    or ExpressBoundNameKind.Parameter
+                    or ExpressBoundNameKind.Alias
+                    or ExpressBoundNameKind.RepeatVariable))
+            {
+                schema.IsInvalid = true;
+                AddDiagnostic(
+                    _diagnostics,
+                    "EXPRESS-BIND-INVALID-ALIAS-SOURCE",
+                    $"ALIAS source '{aliasTarget.Name}' must resolve to a variable or parameter.",
+                    source.Span.Start);
+            }
+
             foreach (var qualifier in syntax.ChildRules("qualifier"))
             {
-                VisitNames(schema, qualifier, parentScope);
+                var child = qualifier.ChildRules().Single();
+                if (child.Production == "attributeQualifier")
+                {
+                    aliasTarget = BindMemberName(schema, child, aliasTarget);
+                }
+                else if (child.Production == "groupQualifier")
+                {
+                    aliasTarget = BindRestrictedName(
+                        schema,
+                        child.RequiredChild("entityRef"),
+                        parentScope,
+                        ExpressBoundNameKind.Entity);
+                }
+                else if (child.Production == "indexQualifier")
+                {
+                    aliasTarget = BindIndexedName(schema, child, parentScope, aliasTarget);
+                }
+                else
+                {
+                    VisitNames(schema, child, parentScope);
+                }
             }
 
             var scope = new NameScope(parentScope);
@@ -1800,9 +1834,10 @@ internal static class ExpressSchemaBinder
                 new ExpressBoundName(
                     token.Text,
                     ExpressBoundNameKind.Alias,
-                    type: null,
+                    aliasTarget?.Type,
                     schemaDeclaration: null,
-                    variable.Span));
+                    variable.Span,
+                    aliasTarget?.IsOptional == true));
             foreach (var statement in syntax.ChildRules("stmt"))
             {
                 VisitNames(schema, statement, scope);

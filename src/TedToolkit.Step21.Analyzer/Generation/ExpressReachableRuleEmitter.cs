@@ -1640,6 +1640,112 @@ internal static class ExpressReachableRuleEmitter
         var operation = statement.Role == "stmt"
             ? statement.ChildRules().Single()
             : statement;
+        if (operation.Role == "nullStmt")
+        {
+            return true;
+        }
+
+        if (operation.Role == "aliasStmt")
+        {
+            var sourceSyntax = operation.RequiredChild("generalRef");
+            var target = plan.Schema.NameReferences
+                .Where(reference => SameStart(reference.Span, sourceSyntax.Span))
+                .Select(reference => reference.Target)
+                .Single();
+            if (!lexicalNames.TryGetValue(target.Name, out var lexicalTarget)
+                || target.Type is null)
+            {
+                throw new InvalidOperationException("An EXPRESS ALIAS target has no generated lexical value.");
+            }
+
+            var targetCode = lexicalTarget.Code;
+            var targetType = target.Type;
+            foreach (var qualifier in operation.ChildRules("qualifier"))
+            {
+                if (qualifier.ChildRules("groupQualifier").SingleOrDefault() is { } groupSyntax)
+                {
+                    var groupReference = plan.Schema.NameReferences
+                        .Where(reference => SameStart(
+                                reference.Span,
+                                groupSyntax.RequiredChild("entityRef").Span)
+                            && reference.Target.Kind == ExpressBoundNameKind.Entity)
+                        .Select(reference => reference.Target.SchemaDeclaration)
+                        .OfType<ExpressBoundSymbol>()
+                        .Distinct()
+                        .Single();
+                    var groupType = new ExpressBoundNamedType(groupReference, groupSyntax.Span);
+                    targetCode = $"(({ExpressExpressionEmitter.BoundTypeName(groupType)})({targetCode}))";
+                    targetType = groupType;
+                    continue;
+                }
+
+                if (qualifier.ChildRules("attributeQualifier").SingleOrDefault() is { } attributeSyntax)
+                {
+                    var sourceEntity = targetType as ExpressBoundNamedType
+                        ?? throw new InvalidOperationException(
+                            "An EXPRESS ALIAS attribute target requires an entity carrier.");
+                    var attribute = plan.GetReferencedAttribute(attributeSyntax);
+                    targetCode = $"(({ExpressExpressionEmitter.BoundTypeName(sourceEntity)})({targetCode}))."
+                        + ExpressEntityProjection.ToPascalCase(attribute.Name);
+                    targetType = attribute.Type;
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    "An EXPRESS ALIAS qualifier passed shape validation without a static generator.");
+            }
+
+            var aliasSyntax = operation.RequiredChild("variableId");
+            var alias = plan.Schema.LexicalNames
+                .Where(candidate => candidate.Kind == ExpressBoundNameKind.Alias
+                    && SameStart(candidate.Span, aliasSyntax.Span))
+                .Distinct()
+                .Single();
+            var nestedNames = lexicalNames.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
+            nestedNames[alias.Name] = (targetCode, targetType);
+            var fallsThrough = true;
+            foreach (var nested in operation.ChildRules("stmt"))
+            {
+                if (!fallsThrough)
+                {
+                    break;
+                }
+
+                fallsThrough = EmitFunctionStatement(
+                    plan,
+                    nested,
+                    functionResultType,
+                    canReturnIndeterminate,
+                    owner,
+                    nestedNames,
+                    allocateTemporaryName,
+                    safeIndices,
+                    sizeAliases,
+                    selectNarrowings,
+                    pathNarrowings,
+                    determinateLexicals,
+                    safeIndexPaths,
+                    scalarNarrowings,
+                    loopTransfers);
+            }
+
+            if (fallsThrough)
+            {
+                safeIndices?.Clear();
+                sizeAliases?.Clear();
+                selectNarrowings?.Clear();
+                pathNarrowings?.Clear();
+                determinateLexicals?.Clear();
+                safeIndexPaths?.Clear();
+                scalarNarrowings?.Clear();
+            }
+
+            return fallsThrough;
+        }
+
         if (operation.Role is "escapeStmt" or "skipStmt")
         {
             if (loopTransfers is null)
