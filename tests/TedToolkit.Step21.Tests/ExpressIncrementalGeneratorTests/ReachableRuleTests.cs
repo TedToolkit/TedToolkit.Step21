@@ -12902,6 +12902,9 @@ public sealed class ReachableRuleTests
         const string schema = """
             SCHEMA assignment_compatibility_model;
             TYPE integer_alias = INTEGER; END_TYPE;
+            TYPE positive_integer = INTEGER;
+            WHERE positive : SELF > 0;
+            END_TYPE;
             TYPE text_alias = STRING; END_TYPE;
             TYPE scalar_choice = SELECT (integer_alias, text_alias); END_TYPE;
             ENTITY base_item; code : INTEGER; END_ENTITY;
@@ -12910,6 +12913,16 @@ public sealed class ReachableRuleTests
             PROCEDURE accept_choice(input_value : scalar_choice); ; END_PROCEDURE;
             PROCEDURE accept_base(input_value : base_item); ; END_PROCEDURE;
             PROCEDURE accept_numbers(input_value : LIST [1:?] OF REAL); ; END_PROCEDURE;
+            PROCEDURE accept_positive(input_value : positive_integer); ; END_PROCEDURE;
+            FUNCTION constrained_assignment(input_value : INTEGER) : BOOLEAN;
+              LOCAL result_value : positive_integer; END_LOCAL;
+              result_value := input_value;
+              RETURN(TRUE);
+            END_FUNCTION;
+            FUNCTION constrained_parameter(input_value : INTEGER) : BOOLEAN;
+              accept_positive(input_value);
+              RETURN(TRUE);
+            END_FUNCTION;
             FUNCTION compatible_assignments(item : child_item; marker : BOOLEAN) : BOOLEAN;
               LOCAL
                 base_value : base_item;
@@ -12930,8 +12943,11 @@ public sealed class ReachableRuleTests
             ENTITY sample;
               item : child_item;
               marker : BOOLEAN;
+              amount : INTEGER;
             WHERE
               compatible : compatible_assignments(item, marker);
+              constrained : constrained_assignment(amount);
+              constrained_actual : constrained_parameter(amount);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -12951,8 +12967,50 @@ public sealed class ReachableRuleTests
                         [TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("assignment_compatibility_model"));
                     structure.DataSections.Add(section);
-                    _ = structure.Add(section, new Sample(new ChildItem(3), true));
+                    _ = structure.Add(section, new Sample(new ChildItem(3), true, 2));
                     return structure.Validate();
+                }
+
+                internal static bool RejectConstraint()
+                {
+                    var method = typeof(
+                        TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ConstrainedAssignment",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    try
+                    {
+                        _ = method.Invoke(null, [
+                            new global::System.Numerics.BigInteger(-1),
+                            global::System.Array.Empty<
+                                global::System.Collections.Generic.KeyValuePair<string, Entity>>()]);
+                        return false;
+                    }
+                    catch (global::System.Reflection.TargetInvocationException exception)
+                    {
+                        return exception.InnerException is global::System.InvalidOperationException;
+                    }
+                }
+
+                internal static bool RejectProcedureConstraint()
+                {
+                    var method = typeof(
+                        TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ConstrainedParameter",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    try
+                    {
+                        _ = method.Invoke(null, [
+                            new global::System.Numerics.BigInteger(-1),
+                            global::System.Array.Empty<
+                                global::System.Collections.Generic.KeyValuePair<string, Entity>>()]);
+                        return false;
+                    }
+                    catch (global::System.Reflection.TargetInvocationException exception)
+                    {
+                        return exception.InnerException is global::System.InvalidOperationException;
+                    }
                 }
             }
             """;
@@ -13006,11 +13064,23 @@ public sealed class ReachableRuleTests
             "Validate",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var validation = (ValidationResult)validate.Invoke(null, null)!;
+        var rejectConstraint = assembly.GetType(
+            "AssignmentCompatibilityConsumer",
+            throwOnError: true)!.GetMethod(
+                "RejectConstraint",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var rejectProcedureConstraint = assembly.GetType(
+            "AssignmentCompatibilityConsumer",
+            throwOnError: true)!.GetMethod(
+                "RejectProcedureConstraint",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
 
         using (Assert.Multiple())
         {
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+            await Assert.That((bool)rejectConstraint.Invoke(null, null)!).IsTrue();
+            await Assert.That((bool)rejectProcedureConstraint.Invoke(null, null)!).IsTrue();
             foreach (var invalidResult in invalidResults)
             {
                 await Assert.That(invalidResult.Diagnostics.Any(diagnostic =>
@@ -13165,6 +13235,10 @@ public sealed class ReachableRuleTests
             TYPE list_value = LIST [1:?] OF INTEGER; END_TYPE;
             TYPE array_value = ARRAY [2:3] OF INTEGER; END_TYPE;
             TYPE matrix_value = LIST [1:?] OF LIST [1:?] OF INTEGER; END_TYPE;
+            TYPE positive_integer = INTEGER;
+            WHERE positive : SELF > 0;
+            END_TYPE;
+            TYPE positive_list = LIST [1:?] OF positive_integer; END_TYPE;
             ENTITY base_point;
               code : INTEGER;
               values : LIST [1:?] OF INTEGER;
@@ -13175,6 +13249,7 @@ public sealed class ReachableRuleTests
             TYPE scalar_choice = SELECT (text_value, bits_value); END_TYPE;
             TYPE aggregate_choice = SELECT (list_value, array_value); END_TYPE;
             TYPE matrix_choice = SELECT (matrix_value); END_TYPE;
+            TYPE positive_choice = SELECT (positive_list); END_TYPE;
             TYPE point_list_choice = SELECT (point_list); END_TYPE;
             FUNCTION replace_text(selected : scalar_choice) : BOOLEAN;
               selected[2:3] := 'X';
@@ -13196,6 +13271,10 @@ public sealed class ReachableRuleTests
               selected[2][1] := 9;
               RETURN(selected[2][1] = 9);
             END_FUNCTION;
+            FUNCTION replace_positive_element(selected : positive_choice; replacement : INTEGER) : BOOLEAN;
+              selected[1] := replacement;
+              RETURN(TRUE);
+            END_FUNCTION;
             FUNCTION replace_selected_attribute(selected : point_list_choice) : BOOLEAN;
               selected[1].code := 9;
               RETURN(selected[1].code = 9);
@@ -13207,6 +13286,15 @@ public sealed class ReachableRuleTests
             FUNCTION replace_direct_selected_group_attribute(selected : point_choice) : BOOLEAN;
               selected\base_point.code := 13;
               RETURN(selected\base_point.code = 13);
+            END_FUNCTION;
+            FUNCTION replace_group_value(selected : point; replacement : base_point) : BOOLEAN;
+              selected\base_point := replacement;
+              RETURN((selected.code = replacement.code) AND (selected.values[1] = replacement.values[1]));
+            END_FUNCTION;
+            FUNCTION replace_selected_group_value(selected : point_choice; replacement : base_point) : BOOLEAN;
+              selected\base_point := replacement;
+              RETURN((selected\base_point.code = replacement.code) AND
+                (selected\base_point.values[1] = replacement.values[1]));
             END_FUNCTION;
             FUNCTION replace_selected_group_attribute(selected : point_list_choice) : BOOLEAN;
               selected[1]\base_point.code := 10;
@@ -13222,22 +13310,28 @@ public sealed class ReachableRuleTests
               list_item : aggregate_choice;
               array_item : aggregate_choice;
               matrix_item : matrix_choice;
+              positive_item : positive_choice;
             WHERE
               text_replaced : replace_text(text_item);
               bits_replaced : replace_bits(bits_item);
               list_replaced : replace_list_element(list_item);
               array_replaced : replace_array_element(array_item);
               nested_replaced : replace_nested_element(matrix_item);
+              positive_replaced : replace_positive_element(positive_item, 2);
             END_ENTITY;
             ENTITY attribute_sample;
               point_item : point_list_choice;
               direct_item : point_choice;
+              point_value : point;
+              replacement : base_point;
             WHERE
               attribute_replaced : replace_selected_attribute(point_item);
               group_attribute_replaced : replace_selected_group_attribute(point_item);
               attribute_element_replaced : replace_selected_attribute_element(point_item);
               direct_attribute_replaced : replace_direct_selected_attribute(direct_item);
               direct_group_attribute_replaced : replace_direct_selected_group_attribute(direct_item);
+              group_value_replaced : replace_group_value(point_value, replacement);
+              selected_group_value_replaced : replace_selected_group_value(direct_item, replacement);
             END_ENTITY;
             END_SCHEMA;
             """;
@@ -13271,10 +13365,36 @@ public sealed class ReachableRuleTests
                         ScalarChoice.FromBitsValue(new BitsValue(new BinaryValue("1010"))),
                         AggregateChoice.FromListValue(new ListValue(new ExpressList<BigInteger>(1) { 1, 2 })),
                         AggregateChoice.FromArrayValue(new ArrayValue(array)),
-                        MatrixChoice.FromMatrixValue(new MatrixValue(matrix)));
+                        MatrixChoice.FromMatrixValue(new MatrixValue(matrix)),
+                        PositiveChoice.FromPositiveList(new PositiveList(
+                            new ExpressList<PositiveInteger>(1) { new(1) })));
 
                     _ = structure.Add(section, sample);
                     return structure.Validate();
+                }
+
+                internal static bool RejectQualifiedConstraint()
+                {
+                    var method = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplacePositiveElement",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    var selected = PositiveChoice.FromPositiveList(new PositiveList(
+                        new ExpressList<PositiveInteger>(1) { new(1) }));
+                    try
+                    {
+                        _ = method.Invoke(null, [
+                            selected,
+                            new BigInteger(-1),
+                            global::System.Array.Empty<
+                                global::System.Collections.Generic.KeyValuePair<string, Entity>>()]);
+                        return false;
+                    }
+                    catch (global::System.Reflection.TargetInvocationException exception)
+                    {
+                        return exception.InnerException is global::System.InvalidOperationException;
+                    }
                 }
 
                 internal static bool ValidateAttribute()
@@ -13325,6 +13445,45 @@ public sealed class ReachableRuleTests
                         return false;
                     }
 
+                    var replacementValues = new ExpressList<BigInteger>(1) { 31, 32 };
+                    var replacement = new BasePoint(21, replacementValues);
+                    var groupValueMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceGroupValue",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    if (groupValueMethod.Invoke(null, [point, replacement, entities]) is not true ||
+                        point.Code != 21 || point.Values[0] != 31)
+                    {
+                        return false;
+                    }
+
+                    replacementValues[0] = 99;
+                    if (point.Values[0] != 31)
+                    {
+                        return false;
+                    }
+
+                    var selectedGroupValueMethod = typeof(
+                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        "__ExpressFunction_ReplaceSelectedGroupValue",
+                        global::System.Reflection.BindingFlags.Static |
+                            global::System.Reflection.BindingFlags.NonPublic)!;
+                    var secondReplacementValues = new ExpressList<BigInteger>(1) { 51, 52 };
+                    var secondReplacement = new BasePoint(41, secondReplacementValues);
+                    if (selectedGroupValueMethod.Invoke(null, [direct, secondReplacement, entities]) is not true ||
+                        point.Code != 41 || point.Values[0] != 51)
+                    {
+                        return false;
+                    }
+
+
+                    secondReplacementValues[0] = 99;
+                    if (point.Values[0] != 51)
+                    {
+                        return false;
+                    }
+
                     var elementMethod = typeof(
                         TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedAttributeElement",
@@ -13359,6 +13518,11 @@ public sealed class ReachableRuleTests
             throwOnError: true)!.GetMethod(
                 "ValidateAttribute",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var rejectQualifiedConstraint = assembly.GetType(
+            "SelectQualifiedAssignmentConsumer",
+            throwOnError: true)!.GetMethod(
+                "RejectQualifiedConstraint",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var attributeValid = (bool)validateAttribute.Invoke(null, null)!;
 
         using (Assert.Multiple())
@@ -13366,6 +13530,7 @@ public sealed class ReachableRuleTests
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(FailureEvidence)));
             await Assert.That(attributeValid).IsTrue();
+            await Assert.That((bool)rejectQualifiedConstraint.Invoke(null, null)!).IsTrue();
         }
     }
 

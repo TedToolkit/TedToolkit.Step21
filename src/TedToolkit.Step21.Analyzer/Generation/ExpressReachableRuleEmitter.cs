@@ -1869,6 +1869,9 @@ internal static class ExpressReachableRuleEmitter
             string? assignedEntityCode = null;
             ExpressBoundNamedType? assignedEntityType = null;
             ExpressBoundAttribute? assignedAttribute = null;
+            string? assignedGroupEntityCode = null;
+            ExpressBoundNamedType? assignedGroupEntityType = null;
+            ExpressBoundNamedType? assignedGroupType = null;
             var assignedMemberSuffix = "";
             var assignedAggregateDepth = 0;
             string? rangeSourceCode = null;
@@ -1978,6 +1981,9 @@ internal static class ExpressReachableRuleEmitter
                         .Distinct()
                         .Single();
                     var groupType = new ExpressBoundNamedType(groupReference, groupSyntax.Span);
+                    assignedGroupEntityCode = targetCode;
+                    assignedGroupEntityType = targetType as ExpressBoundNamedType;
+                    assignedGroupType = groupType;
                     targetCode = $"(({ExpressExpressionEmitter.BoundTypeName(groupType)})({targetCode}))";
                     targetType = groupType;
                     targetIsOptional = false;
@@ -1999,6 +2005,9 @@ internal static class ExpressReachableRuleEmitter
                     assignedAttribute = attribute;
                     assignedMemberSuffix = "";
                     assignedAggregateDepth = 0;
+                    assignedGroupEntityCode = null;
+                    assignedGroupEntityType = null;
+                    assignedGroupType = null;
                     targetCode = $"(({ExpressExpressionEmitter.BoundTypeName(sourceEntity)})({targetCode}))."
                         + ExpressEntityProjection.ToPascalCase(attribute.Name);
                     targetType = attribute.Type;
@@ -2116,7 +2125,8 @@ internal static class ExpressReachableRuleEmitter
                         selectedAssignmentAttribute,
                         selectedAssignmentAttributeLevel,
                         valueExpression,
-                        replacement);
+                        replacement,
+                        allocateTemporaryName);
                 }
 
                 if (rangeKind is null)
@@ -2147,6 +2157,19 @@ internal static class ExpressReachableRuleEmitter
                     + $"&& {lower} <= {upper} && {upper} <= {length}{singleElementGuard} => {rebuilt}, "
                     + "_ => throw new global::System.InvalidOperationException("
                     + "\"An EXPRESS range assignment index was outside the carrier bounds.\") })";
+            }
+
+            string AdaptAssignment(string replacement)
+            {
+                var adapted = AdaptRangeAssignment(replacement);
+                return selectedAssignmentCarrier is null && assignedGroupType is null
+                    ? EnforceAssignmentTypeRules(
+                        plan,
+                        targetType,
+                        adapted,
+                        allocateTemporaryName,
+                        [])
+                    : adapted;
             }
 
             var valueCanBeIndeterminate = CanEmitIndeterminate(plan, valueExpression)
@@ -2818,12 +2841,15 @@ internal static class ExpressReachableRuleEmitter
                         .AddStatement(CreateAssignmentStatement(
                             plan,
                             targetCode,
-                            AdaptRangeAssignment(presentValue),
+                            AdaptAssignment(presentValue),
                             assignedEntityCode,
                             assignedEntityType,
                             assignedAttribute,
                             assignedMemberSuffix,
                             assignedAggregateDepth,
+                            assignedGroupEntityCode,
+                            assignedGroupEntityType,
+                            assignedGroupType,
                             targetType));
                     presence.Else().AddStatement(new CustomExpression(optionalUnsetCode));
                     owner.AddStatement(presence);
@@ -2842,12 +2868,15 @@ internal static class ExpressReachableRuleEmitter
                         .AddStatement(CreateAssignmentStatement(
                             plan,
                             targetCode,
-                            AdaptRangeAssignment(presentValue),
+                            AdaptAssignment(presentValue),
                             assignedEntityCode,
                             assignedEntityType,
                             assignedAttribute,
                             assignedMemberSuffix,
                             assignedAggregateDepth,
+                            assignedGroupEntityCode,
+                            assignedGroupEntityType,
+                            assignedGroupType,
                             targetType));
                     presence.Else().AddStatement(new CustomExpression(unknownResult).Return);
                     owner.AddStatement(presence);
@@ -2866,12 +2895,15 @@ internal static class ExpressReachableRuleEmitter
             owner.AddStatement(CreateAssignmentStatement(
                 plan,
                 targetCode,
-                AdaptRangeAssignment(valueCode),
+                AdaptAssignment(valueCode),
                 assignedEntityCode,
                 assignedEntityType,
                 assignedAttribute,
                 assignedMemberSuffix,
                 assignedAggregateDepth,
+                assignedGroupEntityCode,
+                assignedGroupEntityType,
+                assignedGroupType,
                 targetType));
             return true;
         }
@@ -4587,6 +4619,207 @@ internal static class ExpressReachableRuleEmitter
         return thenFallsThrough || elseFallsThrough;
     }
 
+    private static string EnforceAssignmentTypeRules(
+        ExpressReachableRulePlan plan,
+        ExpressBoundType type,
+        string source,
+        Func<string, string> allocateTemporaryName,
+        HashSet<ExpressBoundSymbol> visited)
+    {
+        if (type is not ExpressBoundNamedType named
+            || named.Declaration.Kind == ExpressDeclarationKind.Entity
+            || !visited.Add(named.Declaration))
+        {
+            return source;
+        }
+
+        var declaration = plan.Resolver.GetDefinedType(named.Declaration);
+        var candidate = allocateTemporaryName("__expressConstrainedAssignment");
+        var statements = new List<string>();
+        if (declaration.UnderlyingType is ExpressBoundNamedType
+            { Declaration.Kind: not ExpressDeclarationKind.Entity, } underlyingName)
+        {
+            statements.Add("_ = " + EnforceAssignmentTypeRules(
+                plan,
+                underlyingName,
+                $"({candidate}).Value",
+                allocateTemporaryName,
+                new HashSet<ExpressBoundSymbol>(visited)) + ";");
+        }
+
+        var whereClause = plan.GetSemanticDeclaration(declaration)
+            .ChildRules("whereClause")
+            .SingleOrDefault();
+        if (whereClause is not null)
+        {
+            foreach (var rule in whereClause.ChildRules("domainRule"))
+            {
+                var expression = plan.GetExpression(rule.RequiredChild("expression"));
+                var emitted = ExpressExpressionEmitter.Emit(
+                    expression,
+                    CreateContext(
+                        plan,
+                        candidate,
+                        "entities",
+                        allocateTemporaryName: allocateTemporaryName));
+                var condition = $"({ExpressExpressionEmitter.AsLogical(expression, emitted.Code)}) "
+                    + "== global::TedToolkit.Step21.LogicalValue.True";
+                statements.Add($"if (!({condition})) throw new global::System.InvalidOperationException("
+                    + "\"The assigned EXPRESS value violates a declared type constraint.\");");
+            }
+        }
+
+        if (statements.Count == 0)
+        {
+            return source;
+        }
+
+        var targetName = ExpressExpressionEmitter.BoundTypeName(named);
+        return $"((global::System.Func<{targetName}, {targetName}>)("
+            + $"{candidate} => {{ {string.Join(" ", statements)} return {candidate}; }}))({source})";
+    }
+
+    private static string CreateGroupAssignmentExpression(
+        ExpressReachableRulePlan plan,
+        ExpressBoundNamedType declaredEntity,
+        ExpressBoundNamedType groupType,
+        string entity,
+        string replacement,
+        string variablePrefix)
+    {
+        var groupProjection = plan.EntityProjections.Single(projection => ReferenceEquals(
+            projection.Entity.Symbol,
+            groupType.Declaration));
+        var groupAttributes = groupProjection.EffectiveAttributes;
+        bool SameStorage(
+            ExpressEntityAttributeProjection left,
+            ExpressEntityAttributeProjection right)
+        {
+            return ReferenceEquals(left.StorageEntity.Symbol, right.StorageEntity.Symbol)
+                && StringComparer.OrdinalIgnoreCase.Equals(
+                    left.StorageAttributeName,
+                    right.StorageAttributeName);
+        }
+
+        string CopyValue(ExpressBoundType type, string source)
+        {
+            if (plan.Resolver.GetAggregateType(type) is not { } aggregate)
+            {
+                return source;
+            }
+
+            var unwrapped = type;
+            var wrappers = ResolveTransparentDefinedWrappers(plan.Resolver, ref unwrapped);
+            var aggregateSource = wrappers.Count == 0 ? source : $"({source}).ReadOnlyValue";
+            var aggregateName = ExpressExpressionEmitter.BoundTypeName(aggregate);
+            var copied = aggregate.Kind == ExpressAggregateKind.Array
+                ? $"new {aggregateName}({aggregateSource})"
+                : $"({aggregateName})[..{aggregateSource}]";
+            for (var index = wrappers.Count - 1; index >= 0; index--)
+            {
+                copied = "new "
+                    + ExpressExpressionEmitter.BoundTypeName(wrappers[index])
+                    + $"({copied})";
+            }
+
+            return copied;
+        }
+
+        var targets = new List<(
+            string Type,
+            IReadOnlyList<(string TargetMember, string SourceMember, ExpressBoundType Type)> Attributes)>();
+        foreach (var projection in plan.EntityProjections.Where(projection =>
+                     projection.PhysicalComponents.Any(component => ReferenceEquals(
+                         component.Symbol,
+                         groupType.Declaration))
+                     && projection.PhysicalComponents.Any(component => ReferenceEquals(
+                         component.Symbol,
+                         declaredEntity.Declaration))))
+        {
+            var attributes = groupAttributes.Select(groupAttribute =>
+            {
+                var target = projection.EffectiveAttributes.Single(candidate => SameStorage(
+                    candidate,
+                    groupAttribute));
+                return (
+                    target.StorageMemberName,
+                    groupAttribute.Name,
+                    groupAttribute.Type);
+            }).ToArray();
+            targets.Add((
+                "global::TedToolkit.Step21.Generated."
+                    + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
+                    + "."
+                    + projection.Name,
+                attributes));
+        }
+
+        foreach (var projection in plan.ComplexEntityProjections.Where(projection =>
+                     projection.Components.Any(component => ReferenceEquals(
+                         component.Entity.Symbol,
+                         groupType.Declaration))
+                     && projection.Components.Any(component => ReferenceEquals(
+                         component.Entity.Symbol,
+                         declaredEntity.Declaration))))
+        {
+            var attributes = groupAttributes.Select(groupAttribute =>
+            {
+                var target = projection.Properties.Single(candidate => SameStorage(
+                    candidate,
+                    groupAttribute));
+                return (
+                    target.StorageMemberName,
+                    groupAttribute.Name,
+                    groupAttribute.Type);
+            }).ToArray();
+            targets.Add((
+                "global::TedToolkit.Step21.Generated."
+                    + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
+                    + "."
+                    + projection.Name,
+                attributes));
+        }
+
+        var entityType = ExpressExpressionEmitter.BoundTypeName(declaredEntity);
+        var sourceType = ExpressExpressionEmitter.BoundTypeName(groupType);
+        var entityVariable = variablePrefix + "Entity";
+        var sourceVariable = variablePrefix + "Source";
+        var code = $"((global::System.Func<{entityType}, {sourceType}, {entityType}>)"
+            + $"(({entityVariable}, {sourceVariable}) => {{ switch ({entityVariable}) {{ ";
+        for (var targetIndex = 0; targetIndex < targets.Count; targetIndex++)
+        {
+            var targetVariable = variablePrefix
+                + "Target"
+                + targetIndex.ToString(CultureInfo.InvariantCulture);
+            code += "case "
+                + targets[targetIndex].Type
+                + " "
+                + targetVariable
+                + ": ";
+            foreach (var attribute in targets[targetIndex].Attributes)
+            {
+                code += targetVariable
+                    + "."
+                    + attribute.TargetMember
+                    + " = "
+                    + CopyValue(attribute.Type, sourceVariable + "." + attribute.SourceMember)
+                    + "; ";
+            }
+
+            code += "break; ";
+        }
+
+        code += "default: throw new global::System.InvalidOperationException("
+            + "\"EXPRESS group assignment target has no mutable generated entity projection.\"); } return "
+            + entityVariable
+            + "; }))(("
+            + entity
+            + "), ("
+            + replacement
+            + "))";
+        return code;
+    }
+
     private static Custom CreateAssignmentStatement(
         ExpressReachableRulePlan plan,
         string targetCode,
@@ -4596,8 +4829,25 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundAttribute? assignedAttribute,
         string assignedMemberSuffix,
         int assignedAggregateDepth,
+        string? assignedGroupEntityCode,
+        ExpressBoundNamedType? assignedGroupEntityType,
+        ExpressBoundNamedType? assignedGroupType,
         ExpressBoundType assignedTargetType)
     {
+        if (assignedGroupEntityCode is not null
+            && assignedGroupEntityType is not null
+            && assignedGroupType is not null)
+        {
+            var groupReplacement = CreateGroupAssignmentExpression(
+                plan,
+                assignedGroupEntityType,
+                assignedGroupType,
+                assignedGroupEntityCode,
+                valueCode,
+                "__expressGroupAssignment");
+            return new((ref SourceBuilder source) => source.AppendLine($"_ = {groupReplacement};"));
+        }
+
         if (assignedEntityCode is null || assignedEntityType is null || assignedAttribute is null)
         {
             return new((ref SourceBuilder source) =>
@@ -4907,6 +5157,13 @@ internal static class ExpressReachableRuleEmitter
                 presenceConditions.Add($"({code}) is {{ }} {present}");
                 code = present;
             }
+
+            code = EnforceAssignmentTypeRules(
+                plan,
+                parameter.Name.Type!,
+                code,
+                context.AllocateTemporaryName,
+                []);
 
             if (!parameter.IsVar)
             {
@@ -6704,7 +6961,8 @@ internal static class ExpressReachableRuleEmitter
         ExpressBoundAttribute? selectedAttribute,
         int? selectedAttributeLevel,
         ExpressBoundExpression valueExpression,
-        string replacement)
+        string replacement,
+        Func<string, string> allocateTemporaryName)
     {
         var suffix = valueExpression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
             + "_"
@@ -6888,6 +7146,16 @@ internal static class ExpressReachableRuleEmitter
                         replacement,
                         selectedAttribute.Type,
                         sourceIsDeterminate: true);
+                if (level >= indices.Count)
+                {
+                    adaptedReplacement = EnforceAssignmentTypeRules(
+                        plan,
+                        selectedAttribute.Type,
+                        adaptedReplacement,
+                        allocateTemporaryName,
+                        []);
+                }
+
                 code += "case "
                     + targets[targetIndex].Type
                     + " "
@@ -6915,6 +7183,22 @@ internal static class ExpressReachableRuleEmitter
             int depth,
             HashSet<ExpressBoundSymbol> visited)
         {
+            if (indices.Count == 0
+                && level == 0
+                && selectedGroup is not null
+                && selectedAttribute is null
+                && declaredType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, } groupEntity)
+            {
+                return CreateGroupAssignmentExpression(
+                    plan,
+                    groupEntity,
+                    selectedGroup,
+                    current,
+                    replacement,
+                    "__expressSelectedGroupAssignment_" + suffix + "_");
+            }
+
             if (indices.Count == 0
                 && level == 0
                 && selectedAttributeLevel == 0
@@ -7021,6 +7305,12 @@ internal static class ExpressReachableRuleEmitter
                     replacement,
                     aggregate.ElementType,
                     sourceIsDeterminate: true);
+                adaptedReplacement = EnforceAssignmentTypeRules(
+                    plan,
+                    aggregate.ElementType,
+                    adaptedReplacement,
+                    allocateTemporaryName,
+                    []);
             }
 
             var assigned = aggregate.Kind == ExpressAggregateKind.Array

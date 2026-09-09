@@ -1594,6 +1594,11 @@ internal sealed class ExpressReachableRulePlan
             }
 
             var value = GetExpression(operation.RequiredChild("expression"));
+            if (targetType is not null)
+            {
+                VisitTypeRules(targetType, new HashSet<ExpressBoundSymbol>());
+            }
+
             if (targetType is not null && IsAssignmentCompatible(targetType, value))
             {
                 return true;
@@ -1655,6 +1660,11 @@ internal sealed class ExpressReachableRulePlan
                         && SameStart(candidate.Span, parameterSyntax[index].Span))
                     .Distinct()
                     .Single();
+                if (parameter.Type is not null)
+                {
+                    VisitTypeRules(parameter.Type, new HashSet<ExpressBoundSymbol>());
+                }
+
                 if (parameter.Type is null
                     || IsAssignmentCompatible(parameter.Type, arguments[index]))
                 {
