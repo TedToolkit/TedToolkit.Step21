@@ -36,7 +36,7 @@
       "source": "13.3.1-13.3.2",
       "sourceStatus": "exact-edition2-excerpt",
       "implementationStatus": "partial",
-      "boundary": "Local/parameter assignment, aggregate value copying, qualified aggregate elements, exact integer indices and direct STRING/BINARY ranges are generated statically.",
+      "boundary": "Local/parameter assignment, aggregate value copying, qualified aggregate elements, exact integer indices and direct STRING/BINARY element/range replacement are generated statically.",
       "blocker": "Defined/SELECT range carriers and the complete assignment-compatibility matrix remain open.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_require_integer_assignment_indices" },

@@ -176,6 +176,11 @@ implementation inventory is evidence about current behavior, not a substitute fo
   rejected at the range source location. Defined-type, SELECT and multi-qualifier range carriers remain explicitly
   unsupported until their complete wrapper/dynamic write-back semantics are proved. The candidate passes 13/13
   `ISO21WorkItem=ISO21-009` tests and all 142 `ReachableRuleTests`.
+- The same clause defines single-element STRING/BINARY assignment as replacement of one character or bit. Direct
+  scalar element assignment now uses the range reconstruction path with identical one-based bounds checks and an
+  additional replacement-length-of-one guard. Carrier, index and replacement are each captured once in the generated
+  tuple pattern; the former scalar-to-aggregate cast and generator exception are eliminated without adding runtime
+  state. The expanded range fixture remains green together with the source-gated manifest proof.
 
 Source identities:
 

@@ -12704,7 +12704,9 @@ public sealed class ReachableRuleTests
               END_LOCAL;
               text_value[2:3] := 'XYZ';
               binary_value[2:3] := %0;
-              RETURN((text_value = 'aXYZd') AND (binary_value = %100));
+              text_value[2] := 'Q';
+              binary_value[2] := %1;
+              RETURN((text_value = 'aQYZd') AND (binary_value = %110));
             END_FUNCTION;
             ENTITY sample;
               marker : BOOLEAN;

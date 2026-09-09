@@ -1840,6 +1840,7 @@ internal static class ExpressReachableRuleEmitter
             string? rangeLowerCode = null;
             string? rangeUpperCode = null;
             ExpressScalarKind? rangeKind = null;
+            var rangeRequiresSingleElement = false;
 
             string EmitAssignmentIndex(ExpressSemanticRule indexSyntax)
             {
@@ -1927,19 +1928,25 @@ internal static class ExpressReachableRuleEmitter
 
                 var indexQualifier = qualifier.RequiredChild("indexQualifier");
                 var indexCode = EmitAssignmentIndex(indexQualifier.RequiredChild("index1"));
-                if (indexQualifier.ChildRules("index2").SingleOrDefault() is { } upperIndex)
+                var upperIndex = indexQualifier.ChildRules("index2").SingleOrDefault();
+                if (targetType is ExpressBoundScalarType
+                    { Kind: ExpressScalarKind.String or ExpressScalarKind.Binary, } scalar)
                 {
-                    var scalar = ResolveDefinedValueType(plan, targetType) as ExpressBoundScalarType
-                        ?? throw new InvalidOperationException(
-                            "An EXPRESS range assignment passed validation without a scalar carrier.");
                     rangeSourceCode = targetCode;
                     rangeLowerCode = indexCode;
-                    rangeUpperCode = EmitAssignmentIndex(upperIndex);
+                    rangeUpperCode = upperIndex is null ? indexCode : EmitAssignmentIndex(upperIndex);
                     rangeKind = scalar.Kind;
+                    rangeRequiresSingleElement = upperIndex is null;
                     targetType = scalar;
                     targetIsOptional = false;
                     optionalUnsetCode = null;
                     continue;
+                }
+
+                if (upperIndex is not null)
+                {
+                    throw new InvalidOperationException(
+                        "An EXPRESS range assignment passed validation without a scalar carrier.");
                 }
 
                 var aggregate = (ExpressBoundAggregateType)targetType;
@@ -1971,8 +1978,11 @@ internal static class ExpressReachableRuleEmitter
                 var source = allocateTemporaryName("__expressRangeSource");
                 var lower = allocateTemporaryName("__expressRangeLower");
                 var upper = allocateTemporaryName("__expressRangeUpper");
+                var replacementValue = allocateTemporaryName("__expressRangeReplacement");
                 var length = $"{source}.Length";
-                var inserted = rangeKind == ExpressScalarKind.Binary ? $"({replacement}).ToString()" : replacement;
+                var inserted = rangeKind == ExpressScalarKind.Binary
+                    ? $"{replacementValue}.ToString()"
+                    : replacementValue;
                 var rebuilt = $"global::System.String.Concat({source}.ToString().Substring(0, {lower} - 1), "
                     + $"{inserted}, {source}.ToString().Substring({upper}))";
                 if (rangeKind == ExpressScalarKind.Binary)
@@ -1980,9 +1990,12 @@ internal static class ExpressReachableRuleEmitter
                     rebuilt = $"new global::TedToolkit.Step21.BinaryValue({rebuilt})";
                 }
 
-                return $"(({rangeSourceCode}, {rangeLowerCode}, {rangeUpperCode}) switch {{ "
-                    + $"var ({source}, {lower}, {upper}) when {lower} >= 1 "
-                    + $"&& {lower} <= {upper} && {upper} <= {length} => {rebuilt}, "
+                var singleElementGuard = rangeRequiresSingleElement
+                    ? $" && {replacementValue}.Length == 1"
+                    : "";
+                return $"(({rangeSourceCode}, {rangeLowerCode}, {rangeUpperCode}, {replacement}) switch {{ "
+                    + $"var ({source}, {lower}, {upper}, {replacementValue}) when {lower} >= 1 "
+                    + $"&& {lower} <= {upper} && {upper} <= {length}{singleElementGuard} => {rebuilt}, "
                     + "_ => throw new global::System.InvalidOperationException("
                     + "\"An EXPRESS range assignment index was outside the carrier bounds.\") })";
             }
