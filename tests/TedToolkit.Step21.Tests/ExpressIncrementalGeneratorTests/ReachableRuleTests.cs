@@ -12629,6 +12629,71 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies ARRAY assignment copies the aggregate value instead of sharing mutable slot storage.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_copy_array_values_on_assignment()
+    {
+        const string schema = """
+            SCHEMA array_assignment_copy_model;
+            FUNCTION preserves_copy(marker : BOOLEAN) : BOOLEAN;
+              LOCAL
+                source : ARRAY [1:2] OF INTEGER := [1, 2];
+                assigned : ARRAY [1:2] OF INTEGER := [0, 0];
+              END_LOCAL;
+              assigned := source;
+              source[1] := 9;
+              RETURN((assigned[1] = 1) AND (source[1] = 9));
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+            WHERE
+              aggregate_value_copy : preserves_copy(marker);
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.ArrayAssignmentCopyModel;
+
+            internal static class ArrayAssignmentCopyConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["array assignment copy"], "3;1"),
+                            new FileName("array-copy.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["array_assignment_copy_model"])),
+                        [TedToolkit.Step21.Generated.ArrayAssignmentCopyModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("array_assignment_copy_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true));
+                    return structure.Validate();
+                }
+            }
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/array-assignment-copy.exp", schema));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("ArrayAssignmentCopyConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+    }
+
+    /// <summary>
     /// Verifies procedure actual parameters use assignment-compatible scalar promotions.
     /// </summary>
     [Test]

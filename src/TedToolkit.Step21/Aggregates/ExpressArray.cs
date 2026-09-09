@@ -49,6 +49,28 @@ public sealed class ExpressArray<T> : IExpressArray<T>
         _comparer = comparer ?? EqualityComparer<T>.Default;
     }
 
+    /// <summary>Creates an independent mutable copy of an existing EXPRESS <c>ARRAY</c> value.</summary>
+    /// <param name="source">The source value, including its declared index domain and assigned-slot state.</param>
+    /// <param name="comparer">The equality comparer for <c>UNIQUE</c> validation, or <see langword="null"/> to retain a concrete source comparer when available.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    public ExpressArray(IExpressArray<T> source, IEqualityComparer<T>? comparer = null)
+        : this(
+            source?.LowerIndex ?? throw new ArgumentNullException(nameof(source)),
+            source.UpperIndex,
+            source.IsOptional,
+            source.IsUnique,
+            comparer ?? (source as ExpressArray<T>)?._comparer)
+    {
+        for (var offset = 0; offset < Count; offset++)
+        {
+            var index = checked(LowerIndex + offset);
+            if (source.IsSet(index))
+            {
+                this[index] = source[index];
+            }
+        }
+    }
+
     /// <summary>Gets the inclusive lower EXPRESS index.</summary>
     public int LowerIndex { get; }
 

@@ -40,6 +40,7 @@
       "blocker": "Defined/SELECT range carriers and the complete assignment-compatibility matrix remain open.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_require_integer_assignment_indices" },
+        { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_copy_array_values_on_assignment" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_string_and_binary_ranges" }
       ]
     },

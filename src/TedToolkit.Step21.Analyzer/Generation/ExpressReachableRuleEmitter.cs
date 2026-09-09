@@ -1499,7 +1499,10 @@ internal static class ExpressReachableRuleEmitter
     {
         if (valueExpression.Kind == ExpressExpressionKind.Indeterminate
             || resolver.GetAggregateType(targetType) is not { } targetAggregate
-            || targetAggregate.Kind is not (ExpressAggregateKind.Bag or ExpressAggregateKind.List or ExpressAggregateKind.Set)
+            || targetAggregate.Kind is not (ExpressAggregateKind.Array
+                or ExpressAggregateKind.Bag
+                or ExpressAggregateKind.List
+                or ExpressAggregateKind.Set)
             || valueExpression.Type.DeclaredType is not { } sourceType
             || resolver.GetAggregateType(sourceType) is not { } sourceAggregate
             || sourceAggregate.Kind != targetAggregate.Kind
@@ -1518,7 +1521,9 @@ internal static class ExpressReachableRuleEmitter
         var result = presentAggregate ?? valueCode;
         if (copyValue)
         {
-            result = $"({aggregateName})[..{result}]";
+            result = targetAggregate.Kind == ExpressAggregateKind.Array
+                ? $"new {aggregateName}({result})"
+                : $"({aggregateName})[..{result}]";
         }
 
         var wrappers = ResolveTransparentDefinedWrappers(resolver, ref targetType);

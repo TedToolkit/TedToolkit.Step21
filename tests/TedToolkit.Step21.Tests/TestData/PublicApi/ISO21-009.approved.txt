@@ -1,0 +1,17 @@
+sealed class TedToolkit.Step21.ExpressArray`1 : System.Object
+  interface System.Collections.Generic.IEnumerable<T>
+  interface System.Collections.IEnumerable
+  interface TedToolkit.Step21.IExpressArray<T>
+  constructor (System.Int32 lowerIndex, System.Int32 upperIndex, System.Boolean isOptional = False, System.Boolean isUnique = False, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  constructor (TedToolkit.Step21.IExpressArray<T> source, System.Collections.Generic.IEqualityComparer<T>? comparer = null)
+  property System.Int32 Count { get; }
+  property System.Boolean IsOptional { get; }
+  property System.Boolean IsUnique { get; }
+  property T? Item[System.Int32 index] { get; set; }
+  property System.Int32 LowerIndex { get; }
+  property System.Int32 UpperIndex { get; }
+  method System.Collections.Generic.IEnumerator<T> GetEnumerator()
+  method System.Boolean IsSet(System.Int32 index)
+  method System.Boolean TryGetValue(System.Int32 index, out T? value)
+  method System.Void Unset(System.Int32 index)
+  method TedToolkit.Step21.ValidationResult Validate(System.String path = "$")

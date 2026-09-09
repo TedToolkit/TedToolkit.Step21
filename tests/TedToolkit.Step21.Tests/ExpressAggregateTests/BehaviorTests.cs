@@ -189,6 +189,38 @@ internal sealed class BehaviorTests
     }
 
     /// <summary>
+    /// Verifies ARRAY value copies retain metadata, unset slots, and equality semantics without sharing storage.
+    /// </summary>
+    [Test]
+    public async Task Should_copy_array_values_without_sharing_slot_storage()
+    {
+        var source = new ExpressArray<string>(
+            -1,
+            1,
+            isOptional: true,
+            isUnique: true,
+            comparer: StringComparer.OrdinalIgnoreCase);
+        source[-1] = "A";
+        source[1] = "a";
+
+        var copy = new ExpressArray<string>(source);
+        source[-1] = "changed";
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(copy.LowerIndex).IsEqualTo(-1);
+            await Assert.That(copy.UpperIndex).IsEqualTo(1);
+            await Assert.That(copy.IsOptional).IsTrue();
+            await Assert.That(copy.IsUnique).IsTrue();
+            await Assert.That(copy[-1]).IsEqualTo("A");
+            await Assert.That(copy.IsSet(0)).IsFalse();
+            await Assert.That(copy[1]).IsEqualTo("a");
+            await Assert.That(copy.Validate().Failures.Single().Code)
+                .IsEqualTo("EXPRESS.AGGREGATE.UNIQUE");
+        }
+    }
+
+    /// <summary>
     /// Verifies that valid candidates in all four categories produce empty validation results.
     /// </summary>
     [Test]
