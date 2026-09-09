@@ -12,3 +12,4 @@ STEP21EXP003 | TedToolkit.Step21.Express | Error | Unreadable EXPRESS additional
 STEP21EXP004 | TedToolkit.Step21.Express | Error | Generated C# name collision
 STEP21EXP005 | TedToolkit.Step21.Express | Error | Unsupported generated entity projection
 STEP21EXP006 | TedToolkit.Step21.Express | Error | Unsupported reachable EXPRESS rule
+STEP21EXP007 | TedToolkit.Step21.Express | Error | Invalid Part 21 physical-name map

@@ -29,6 +29,12 @@ internal static class ExpressSourceEmissionStage
         ExpressGeneratorDiagnostics.ReportNameCollisions(context, result, plan.EntityPlan.Collisions);
         ExpressGeneratorDiagnostics.ReportGenerationFailures(context, result, plan.EntityPlan.Failures);
         ExpressGeneratorDiagnostics.ReportReachableRuleFailures(context, result, plan.RuleFailures);
+        ExpressGeneratorDiagnostics.ReportPhysicalNameFailures(context, result, plan.PhysicalNames.Failures);
+        if (plan.PhysicalNames.Failures.Count > 0)
+        {
+            return;
+        }
+
         foreach (var projection in plan.ValueProjections
                      .Where(projection => !plan.InvalidSchemas.Contains(projection.Schema)))
         {
@@ -59,7 +65,8 @@ internal static class ExpressSourceEmissionStage
                     .Where(projection => ReferenceEquals(projection.Schema, schema))
                     .ToArray(),
                 plan.ValueResolver,
-                plan.RulePlans[schema]);
+                plan.RulePlans[schema],
+                plan.PhysicalNames);
         }
     }
 }

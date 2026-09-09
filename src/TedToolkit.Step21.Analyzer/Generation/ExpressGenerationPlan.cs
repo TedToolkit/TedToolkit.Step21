@@ -20,6 +20,7 @@ internal sealed class ExpressGenerationPlan
     private ExpressGenerationPlan(
         ExpressAnalyzedCompilation compilation,
         ExpressGeneratedTypeResolver valueResolver,
+        ExpressPhysicalNameMap physicalNames,
         IEnumerable<ExpressValueProjection> valueProjections,
         ExpressEntityGenerationPlan entityPlan,
         IEnumerable<ExpressComplexEntityProjection> complexProjections,
@@ -29,6 +30,7 @@ internal sealed class ExpressGenerationPlan
     {
         Compilation = compilation;
         ValueResolver = valueResolver;
+        PhysicalNames = physicalNames;
         ValueProjections = new ReadOnlyCollection<ExpressValueProjection>(valueProjections.ToArray());
         EntityPlan = entityPlan;
         ComplexProjections = new ReadOnlyCollection<ExpressComplexEntityProjection>(complexProjections.ToArray());
@@ -47,6 +49,11 @@ internal sealed class ExpressGenerationPlan
     /// Gets the closed generated-type resolver.
     /// </summary>
     internal ExpressGeneratedTypeResolver ValueResolver { get; }
+
+    /// <summary>
+    /// Gets the validated explicit Part 21 physical-name inventory.
+    /// </summary>
+    internal ExpressPhysicalNameMap PhysicalNames { get; }
 
     /// <summary>
     /// Gets value projections in deterministic declaration order.
@@ -82,10 +89,24 @@ internal sealed class ExpressGenerationPlan
     /// Creates the complete deterministic generation plan.
     /// </summary>
     /// <param name="compilation">The analyzed closed schema compilation.</param>
-    /// <returns>The immutable source-emission input.</returns>
+    /// <returns>The immutable source-emission input without physical-name metadata.</returns>
     internal static ExpressGenerationPlan Create(ExpressAnalyzedCompilation compilation)
     {
+        return Create(compilation, []);
+    }
+
+    /// <summary>
+    /// Creates the complete deterministic generation plan.
+    /// </summary>
+    /// <param name="compilation">The analyzed closed schema compilation.</param>
+    /// <param name="inputs">The AdditionalFiles used for schema and physical-name planning.</param>
+    /// <returns>The immutable source-emission input.</returns>
+    internal static ExpressGenerationPlan Create(
+        ExpressAnalyzedCompilation compilation,
+        IEnumerable<ExpressGeneratorInput> inputs)
+    {
         var valueResolver = ExpressGeneratedTypeResolver.Create(compilation);
+        var physicalNames = ExpressPhysicalNameMap.Create(inputs, compilation, valueResolver);
         var valueProjections = ExpressValueProjection.Create(compilation, valueResolver);
         var entityPlan = ExpressEntityGenerationPlan.Create(compilation, valueResolver);
         var complexProjections = ExpressComplexEntityProjection.Create(entityPlan.Projections, valueResolver);
@@ -103,6 +124,7 @@ internal sealed class ExpressGenerationPlan
         return new(
             compilation,
             valueResolver,
+            physicalNames,
             valueProjections,
             entityPlan,
             complexProjections,

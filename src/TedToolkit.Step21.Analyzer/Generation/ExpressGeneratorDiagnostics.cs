@@ -65,6 +65,14 @@ internal static class ExpressGeneratorDiagnostics
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor _invalidPhysicalNameMap = new(
+        "STEP21EXP007",
+        "Invalid Part 21 physical-name map",
+        "{0}",
+        "TedToolkit.Step21.Express",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <summary>
     /// Reports every input, syntax, and binding failure in deterministic order.
     /// </summary>
@@ -73,7 +81,8 @@ internal static class ExpressGeneratorDiagnostics
     internal static void Report(in SourceProductionContext context, ExpressGeneratorCompilation result)
     {
         foreach (var input in result.Inputs
-                     .Where(input => input.Text is null)
+                     .Where(input => input.Text is null
+                         && string.Equals(Path.GetExtension(input.Path), ".exp", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(input => input.Path, StringComparer.Ordinal))
         {
             context.ReportDiagnostic(Diagnostic.Create(_unreadableInput, Location.None, input.Path));
@@ -165,6 +174,29 @@ internal static class ExpressGeneratorDiagnostics
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 _unsupportedReachableRule,
+                CreateLocation(result.Inputs, failure.Location),
+                failure.Message));
+        }
+    }
+
+    /// <summary>
+    /// Reports invalid explicit Part 21 physical-name declarations.
+    /// </summary>
+    /// <param name="context">The source-production context.</param>
+    /// <param name="result">The complete generator compilation.</param>
+    /// <param name="failures">The invalid mapping declarations.</param>
+    internal static void ReportPhysicalNameFailures(
+        in SourceProductionContext context,
+        ExpressGeneratorCompilation result,
+        IEnumerable<ExpressPhysicalNameFailure> failures)
+    {
+        foreach (var failure in failures
+                     .OrderBy(item => item.Location.FilePath, StringComparer.Ordinal)
+                     .ThenBy(item => item.Location.Line)
+                     .ThenBy(item => item.Location.Column))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                _invalidPhysicalNameMap,
                 CreateLocation(result.Inputs, failure.Location),
                 failure.Message));
         }

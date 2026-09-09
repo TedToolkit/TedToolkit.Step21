@@ -27,10 +27,7 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var expressInputs = context.AdditionalTextsProvider
-            .Where(static input => string.Equals(
-                Path.GetExtension(input.Path),
-                ".exp",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(static input => IsGeneratorInput(input.Path))
             .Select(static (input, cancellationToken) => new ExpressGeneratorInput(
                 input.Path,
                 input.GetText(cancellationToken)?.ToString()))
@@ -39,7 +36,7 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(expressInputs, static (productionContext, result) =>
         {
-            var plan = ExpressGenerationPlan.Create(result.Compilation);
+            var plan = ExpressGenerationPlan.Create(result.Compilation, result.Inputs);
             ExpressSourceEmissionStage.Emit(productionContext, result, plan);
         });
     }
@@ -47,8 +44,16 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
     private static ExpressGeneratorCompilation Compile(in ImmutableArray<ExpressGeneratorInput> inputs)
     {
         var readableInputs = inputs
-            .Where(input => input.Text is not null)
+            .Where(input => input.Text is not null
+                && string.Equals(Path.GetExtension(input.Path), ".exp", StringComparison.OrdinalIgnoreCase))
             .Select(input => new ExpressSchemaSource(input.Path, input.Text!));
         return new(inputs, ExpressSchemaCompiler.Analyze(readableInputs));
+    }
+
+    private static bool IsGeneratorInput(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".exp", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".p21map", StringComparison.OrdinalIgnoreCase);
     }
 }
