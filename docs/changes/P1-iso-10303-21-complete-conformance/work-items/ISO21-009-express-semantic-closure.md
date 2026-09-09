@@ -99,6 +99,15 @@ implementation inventory is evidence about current behavior, not a substitute fo
   attribute ALIAS lowering, inferred alias types, and deterministic rejection for constant sources, leaked names and
   not-yet-implemented indexed aliases. This is partial Edition-1-derived evidence only; Edition-2 additions and the
   remaining validation-reachable families stay pending.
+- A separately located ISO 10303-11:2004 excerpt covers clauses 13.1 through 13.9.3. Clause 13.4 directly establishes
+  first-TRUE CASE selection, FALSE/UNKNOWN/non-value non-selection, `OTHERWISE` for an indeterminate selector, and
+  no action when no label matches and `OTHERWISE` is absent. The CASE candidate adds TRUE-only guarded comparison,
+  explicit indeterminate-label handling, once-only selector evaluation and an indeterminate path through otherwise
+  statically exhaustive closed-enumeration cases. No semantics outside the excerpt are inferred from it.
+- CASE proof changed the new focused test from one generator exception to pass, then covered the optional closed-
+  enumeration fall-through neighbor. The candidate passes 4/4 `ISO21WorkItem=ISO21-009` tests and all 133
+  `ReachableRuleTests`; the preceding ALIAS/null candidate also passed the full 711-test Release suite and the complete
+  Release solution build with zero warnings or errors.
 
 Source identities:
 
@@ -108,3 +117,4 @@ Source identities:
 - <https://www.expresslang.org/languages/express>
 - <https://www.expresslang.org/docs/documents/express-pretty/document.html>
 - <https://kikakurui.com/b3/B3700-11-2002-01.html>
+- <https://www.elecenghub.com/NewSamples/ISO/174364973/ISO-10303-11-2004-2.pdf>

@@ -2086,6 +2086,67 @@ internal static class ExpressExpressionEmitter
             + $".Default.Equals(({leftCode}), ({rightCode}))";
     }
 
+    /// <summary>
+    /// Emits the TRUE-only value-equality predicate required when selecting an EXPRESS CASE label.
+    /// </summary>
+    /// <param name="selector">The CASE selector.</param>
+    /// <param name="selectorCode">The generated, once-evaluated selector value.</param>
+    /// <param name="label">The candidate CASE label.</param>
+    /// <param name="labelCode">The generated label value.</param>
+    /// <param name="context">The enclosing schema emission context.</param>
+    /// <returns>A Boolean predicate which is true only for EXPRESS TRUE equality.</returns>
+    /// <exception cref="InvalidOperationException">Schema value equality has no static schema context.</exception>
+    internal static string CaseValueMatches(
+        ExpressBoundExpression selector,
+        string selectorCode,
+        ExpressBoundExpression label,
+        string labelCode,
+        ExpressExpressionEmissionContext context)
+    {
+        if (selector.Kind == ExpressExpressionKind.Indeterminate
+            || label.Kind == ExpressExpressionKind.Indeterminate)
+        {
+            return "false";
+        }
+
+        var selectorValue = selectorCode;
+        var labelValue = labelCode;
+        var conditions = new List<string>();
+        if (MayEmitIndeterminate(selector, context))
+        {
+            var presentSelector = context.AllocateTemporaryName("__expressCaseSelector");
+            conditions.Add($"({selectorCode}) is {{ }} {presentSelector}");
+            selectorValue = presentSelector;
+        }
+
+        if (MayEmitIndeterminate(label, context))
+        {
+            var presentLabel = context.AllocateTemporaryName("__expressCaseLabel");
+            conditions.Add($"({labelCode}) is {{ }} {presentLabel}");
+            labelValue = presentLabel;
+        }
+
+        string match;
+        if (ExpressTypeAnalysis.RequiresSchemaValueEquality(selector.Type)
+            || ExpressTypeAnalysis.RequiresSchemaValueEquality(label.Type))
+        {
+            var equality = context.ResolveValueEquality is null
+                ? throw GenerationError(
+                    selector,
+                    "Entity-containing CASE equality requires an enclosing generated schema operation.")
+                : context.ResolveValueEquality(selector, selectorValue, label, labelValue, null);
+            match = $"({equality}) == global::TedToolkit.Step21.LogicalValue.True";
+        }
+        else
+        {
+            match = ValueEqualityCore(selector, selectorValue, label, labelValue, context);
+        }
+
+        return conditions.Count == 0
+            ? match
+            : $"{string.Join(" && ", conditions)} && ({match})";
+    }
+
     private static string InstanceEquality(
         ExpressBoundExpression expression,
         ExpressBoundExpression left,

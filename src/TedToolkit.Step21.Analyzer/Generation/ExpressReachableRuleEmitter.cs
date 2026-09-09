@@ -3449,26 +3449,29 @@ internal static class ExpressReachableRuleEmitter
         {
             var selectorSyntax = operation.RequiredChild("selector").RequiredChild("expression");
             var selector = plan.GetExpression(selectorSyntax);
-            var emittedSelector = ExpressExpressionEmitter.Emit(
-                selector,
-                CreateContext(
-                    plan,
-                    selfExpression: null,
-                    "entities",
-                    lexicalNames,
-                    safeIndices,
-                    allocateTemporaryName,
-                    selectNarrowings,
-                    pathNarrowings,
-                    determinateLexicals,
-                    safeIndexPaths,
-                    scalarNarrowings));
+            var caseContext = CreateContext(
+                plan,
+                selfExpression: null,
+                "entities",
+                lexicalNames,
+                safeIndices,
+                allocateTemporaryName,
+                selectNarrowings,
+                pathNarrowings,
+                determinateLexicals,
+                safeIndexPaths,
+                scalarNarrowings);
+            var selectorCode = selector.Kind == ExpressExpressionKind.Indeterminate
+                ? "(object?)null"
+                : ExpressExpressionEmitter.Emit(
+                    selector,
+                    caseContext).Code;
             var selectorName = "__case_"
                 + operation.Span.Start.Line.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 + "_"
                 + operation.Span.Start.Column.ToString(System.Globalization.CultureInfo.InvariantCulture);
             owner.AddStatement(new VariableExpression(DataType.Var, selectorName)
-                .AddDefault(new CustomExpression(emittedSelector.Code)));
+                .AddDefault(new CustomExpression(selectorCode)));
             var incomingLexicalNames = lexicalNames.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value,
@@ -3508,25 +3511,20 @@ internal static class ExpressReachableRuleEmitter
                 var comparisons = action.ChildRules("caseLabel").Select(label =>
                 {
                     var expression = plan.GetExpression(label.RequiredChild("expression"));
+                    if (expression.Kind == ExpressExpressionKind.Indeterminate)
+                    {
+                        return "false";
+                    }
+
                     var emitted = ExpressExpressionEmitter.Emit(
                         expression,
-                        CreateContext(
-                            plan,
-                            selfExpression: null,
-                            "entities",
-                            lexicalNames,
-                            safeIndices,
-                            allocateTemporaryName,
-                            selectNarrowings,
-                            pathNarrowings,
-                            determinateLexicals,
-                            safeIndexPaths,
-                            scalarNarrowings));
-                    return ExpressExpressionEmitter.ValueEqualityCore(
+                        caseContext);
+                    return ExpressExpressionEmitter.CaseValueMatches(
                         selector,
                         selectorName,
                         expression,
-                        emitted.Code);
+                        emitted.Code,
+                        caseContext);
                 });
                 var caseCondition = string.Join(" || ", comparisons.Select(comparison => $"({comparison})"));
                 var caseBranch = conditionalCase is null
@@ -3638,7 +3636,7 @@ internal static class ExpressReachableRuleEmitter
                     fallingScalarNarrowings.Add(otherwiseScalarNarrowings);
                 }
             }
-            else if (plan.IsExhaustiveCase(operation))
+            else if (plan.IsExhaustiveCase(operation) && !selector.Type.CanBeIndeterminate)
             {
                 var unmatched = conditionalCase?.Else()
                     ?? throw new InvalidOperationException("CASE requires at least one action.");

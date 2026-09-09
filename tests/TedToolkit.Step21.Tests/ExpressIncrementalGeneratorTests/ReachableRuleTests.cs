@@ -11700,6 +11700,101 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies CASE selects only the first TRUE value-equality result and routes indeterminate values to OTHERWISE.
+    /// </summary>
+    [Test]
+    [Property("ISO21WorkItem", "ISO21-009")]
+    public async Task Should_execute_case_indeterminate_and_first_match_semantics()
+    {
+        const string schema = """
+            SCHEMA case_semantics_model;
+            TYPE case_state = ENUMERATION OF (enabled, disabled);
+            END_TYPE;
+            ENTITY holder;
+              current_state : OPTIONAL case_state;
+            END_ENTITY;
+            FUNCTION indeterminate_selector(marker : BOOLEAN) : INTEGER;
+              CASE ? OF
+                1 : RETURN(10);
+                OTHERWISE : RETURN(30);
+              END_CASE;
+            END_FUNCTION;
+            FUNCTION indeterminate_label(marker : BOOLEAN) : INTEGER;
+              CASE 1 OF
+                ? : RETURN(10);
+                1 : RETURN(20);
+                OTHERWISE : RETURN(30);
+              END_CASE;
+            END_FUNCTION;
+            FUNCTION first_equal_label(marker : BOOLEAN) : INTEGER;
+              CASE 1 OF
+                1 : RETURN(10);
+                1 : RETURN(20);
+                OTHERWISE : RETURN(30);
+              END_CASE;
+            END_FUNCTION;
+            FUNCTION exhaustive_optional_selector(input : holder) : INTEGER;
+              LOCAL
+                result_value : INTEGER := 0;
+              END_LOCAL;
+              CASE input.current_state OF
+                enabled : result_value := 1;
+                disabled : result_value := 2;
+              END_CASE;
+              RETURN(result_value);
+            END_FUNCTION;
+            ENTITY sample;
+              marker : BOOLEAN;
+              item : holder;
+            WHERE
+              selector_uses_otherwise : indeterminate_selector(marker) = 30;
+              indeterminate_label_is_skipped : indeterminate_label(marker) = 20;
+              first_equal_label_wins : first_equal_label(marker) = 10;
+              unmatched_indeterminate_falls_through : exhaustive_optional_selector(item) = 0;
+            END_ENTITY;
+            END_SCHEMA;
+            """;
+        const string consumer = """
+            using TedToolkit.Step21;
+            using TedToolkit.Step21.Generated.CaseSemanticsModel;
+
+            internal static class CaseSemanticsConsumer
+            {
+                internal static ValidationResult Validate()
+                {
+                    var structure = new ExchangeStructure(
+                        new HeaderSection(
+                            new FileDescription(["case semantics"], "3;1"),
+                            new FileName("case.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
+                            new FileSchema(["case_semantics_model"])),
+                        [TedToolkit.Step21.Generated.CaseSemanticsModel.SchemaDescriptor.Instance]);
+                    var section = new DataSection(new SchemaName("case_semantics_model"));
+                    structure.DataSections.Add(section);
+                    _ = structure.Add(section, new Sample(true, new Holder()));
+                    return structure.Validate();
+                }
+            }
+            """;
+        var result = GeneratorHostTests.Run(
+            consumer,
+            ("schemas/case-semantics.exp", schema));
+        var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .ToArray();
+
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics));
+        var assembly = Emit(result.OutputCompilation);
+        var validate = assembly.GetType("CaseSemanticsConsumer", throwOnError: true)!.GetMethod(
+            "Validate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var validation = (ValidationResult)validate.Invoke(null, null)!;
+
+        await Assert.That(validation.IsValid).IsTrue()
+            .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Message)));
+    }
+
+    /// <summary>
     /// Verifies direct, local, and propagated function UNKNOWN results retain a nullable generated representation.
     /// </summary>
     [Test]
