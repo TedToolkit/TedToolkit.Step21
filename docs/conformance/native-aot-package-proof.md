@@ -37,10 +37,14 @@ Package byte reproducibility is a separate proof:
 It requires restored build dependencies, performs two clean non-incremental builds without restore,
 and compares normalized package entries (including assembly, symbols and documentation) plus fixed
 source, provenance, public-API and fixture inputs. It excludes only NuGet archive bookkeeping;
-packing one existing assembly twice is not a substitute for this proof. Native AOT additionally
-requires the locally cached compiler packages and native build toolchain.
+packing one existing assembly twice is not a substitute for this proof.
 
-The command builds and packs the product, restores the consumer from that local package, publishes it for `win-x64` with Native AOT and warnings-as-errors, executes the native artifact, and rejects AOT/trimming warnings or forbidden runtime artifacts.
+The Native AOT command restores its source projects, builds and packs the product, and bootstraps the
+`win-x64` compiler packages from NuGet on a clean machine. It then copies the complete dependency and
+native toolchain closure into an isolated local feed, restores the consumer from only that feed,
+publishes with Native AOT and warnings-as-errors, executes the native artifact, and rejects
+AOT/trimming warnings or forbidden runtime artifacts. A clean machine therefore needs NuGet access
+for the bootstrap stage but does not need a pre-populated global package cache.
 
 Successful runs remove their temporary proof directory. Failed runs retain it and print its exact
 path, preserving the native object, linker response file and local packages for diagnosis. Remove

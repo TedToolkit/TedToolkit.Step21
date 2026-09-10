@@ -28,9 +28,12 @@ $proofRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
     'TedToolkit.Step21.NativeAot.' + [Guid]::NewGuid().ToString('N'))
 $proofSucceeded = $false
 $packageDirectory = Join-Path $proofRoot 'packages'
+$bootstrapPackagesDirectory = Join-Path $proofRoot 'bootstrap-packages'
 $consumerPackagesDirectory = Join-Path $proofRoot 'consumer-packages'
+$bootstrapIntermediateDirectory = (Join-Path $proofRoot 'bootstrap-obj') + [System.IO.Path]::DirectorySeparatorChar
 $intermediateDirectory = (Join-Path $proofRoot 'obj') + [System.IO.Path]::DirectorySeparatorChar
 $publishDirectory = Join-Path $proofRoot 'publish'
+$bootstrapNugetConfigPath = Join-Path $proofRoot 'NuGet.bootstrap.Config'
 $nugetConfigPath = Join-Path $proofRoot 'NuGet.Config'
 $productProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21/TedToolkit.Step21.csproj'
 $analyzerProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj'
@@ -80,10 +83,11 @@ function Invoke-DotNet {
     return $output
 }
 
-function Get-GlobalPackagesDirectories {
+function Get-PackageDirectories {
     $assetsPath = Join-Path $repositoryRoot 'src/TedToolkit.Step21/obj/project.assets.json'
     $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
-    return $assets.packageFolders.PSObject.Properties.Name
+    return @($assets.packageFolders.PSObject.Properties.Name) + @($bootstrapPackagesDirectory) |
+        Select-Object -Unique
 }
 
 function Copy-CachedPackage {
@@ -92,7 +96,7 @@ function Copy-CachedPackage {
         [Parameter(Mandatory = $true)][string] $Version)
 
     $normalizedId = $Id.ToLowerInvariant()
-    $packagePath = Get-GlobalPackagesDirectories |
+    $packagePath = Get-PackageDirectories |
         ForEach-Object { Join-Path $_ "$normalizedId/$Version/$normalizedId.$Version.nupkg" } |
         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         Select-Object -First 1
@@ -119,7 +123,7 @@ function Get-LatestCachedPackageVersion {
     param([Parameter(Mandatory = $true)][string] $Id)
 
     $normalizedId = $Id.ToLowerInvariant()
-    $versions = Get-GlobalPackagesDirectories |
+    $versions = Get-PackageDirectories |
         ForEach-Object {
             Get-ChildItem -LiteralPath (Join-Path $_ $normalizedId) -Directory -ErrorAction SilentlyContinue
         } |
@@ -134,6 +138,17 @@ function Get-LatestCachedPackageVersion {
 }
 
 New-Item -ItemType Directory -Path $packageDirectory | Out-Null
+$bootstrapNugetConfig = @"
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="proof" value="$packageDirectory" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>
+"@
+[System.IO.File]::WriteAllText($bootstrapNugetConfigPath, $bootstrapNugetConfig)
 $nugetConfig = @"
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -145,7 +160,27 @@ $nugetConfig = @"
 "@
 [System.IO.File]::WriteAllText($nugetConfigPath, $nugetConfig)
 
+$buildProject = if ($Ap203) {
+    $ap203Project
+}
+elseif ($Ap214) {
+    $ap214Project
+}
+elseif ($Ap242) {
+    $ap242Project
+}
+else {
+    $productProject
+}
+
 try {
+    foreach ($project in @($analyzerProject, $productProject, $buildProject) | Select-Object -Unique) {
+        Invoke-DotNet -Arguments @(
+            'restore',
+            $project,
+            '--disable-parallel'
+        ) | Out-Null
+    }
     Invoke-DotNet -Arguments @(
         'build',
         $analyzerProject,
@@ -153,18 +188,6 @@ try {
         '--no-restore',
         '--disable-build-servers'
     ) | Out-Null
-    $buildProject = if ($Ap203) {
-        $ap203Project
-    }
-    elseif ($Ap214) {
-        $ap214Project
-    }
-    elseif ($Ap242) {
-        $ap242Project
-    }
-    else {
-        $productProject
-    }
     Invoke-DotNet -Arguments @(
         'build',
         $buildProject,
@@ -210,19 +233,6 @@ try {
         ) | Out-Null
     }
 
-    Copy-ProjectPackageClosure
-    $compilerVersion = Get-LatestCachedPackageVersion -Id 'Microsoft.DotNet.ILCompiler'
-    Copy-CachedPackage -Id 'Microsoft.DotNet.ILCompiler' -Version $compilerVersion
-    Copy-CachedPackage -Id "runtime.$runtimeIdentifier.Microsoft.DotNet.ILCompiler" -Version $compilerVersion
-    foreach ($toolchainPackage in @(
-        'Microsoft.NET.ILLink.Tasks',
-        "Microsoft.NETCore.App.Runtime.$runtimeIdentifier",
-        "Microsoft.WindowsDesktop.App.Runtime.$runtimeIdentifier",
-        "Microsoft.AspNetCore.App.Runtime.$runtimeIdentifier",
-        "Microsoft.NETCore.App.Runtime.NativeAOT.$runtimeIdentifier")) {
-        Copy-CachedPackage -Id $toolchainPackage -Version $compilerVersion
-    }
-
     $schemaProperties = if ($Ap203) {
         @('--property:Ap203PackageProof=true', '--property:Ap203FixtureProof=true')
     }
@@ -234,6 +244,33 @@ try {
     }
     else {
         @()
+    }
+
+    $bootstrapRestoreArguments = @(
+        'restore',
+        $consumerProject,
+        '--runtime', $runtimeIdentifier,
+        '--configfile', $bootstrapNugetConfigPath,
+        '--packages', $bootstrapPackagesDirectory,
+        '--force',
+        '--property:NativeAotProof=true',
+        "--property:BaseIntermediateOutputPath=$bootstrapIntermediateDirectory",
+        "--property:MSBuildProjectExtensionsPath=$bootstrapIntermediateDirectory"
+    )
+    $bootstrapRestoreArguments += $schemaProperties
+    Invoke-DotNet -Arguments $bootstrapRestoreArguments | Out-Null
+
+    Copy-ProjectPackageClosure
+    $compilerVersion = Get-LatestCachedPackageVersion -Id 'Microsoft.DotNet.ILCompiler'
+    Copy-CachedPackage -Id 'Microsoft.DotNet.ILCompiler' -Version $compilerVersion
+    Copy-CachedPackage -Id "runtime.$runtimeIdentifier.Microsoft.DotNet.ILCompiler" -Version $compilerVersion
+    foreach ($toolchainPackage in @(
+        'Microsoft.NET.ILLink.Tasks',
+        "Microsoft.NETCore.App.Runtime.$runtimeIdentifier",
+        "Microsoft.WindowsDesktop.App.Runtime.$runtimeIdentifier",
+        "Microsoft.AspNetCore.App.Runtime.$runtimeIdentifier",
+        "Microsoft.NETCore.App.Runtime.NativeAOT.$runtimeIdentifier")) {
+        Copy-CachedPackage -Id $toolchainPackage -Version $compilerVersion
     }
 
     $restoreArguments = @(
