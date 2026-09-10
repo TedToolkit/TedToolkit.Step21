@@ -12923,6 +12923,12 @@ public sealed class ReachableRuleTests
               accept_positive(input_value);
               RETURN(TRUE);
             END_FUNCTION;
+            FUNCTION entity_reference_assignment(item : child_item) : BOOLEAN;
+              LOCAL base_value : base_item; END_LOCAL;
+              base_value := item;
+              base_value.code := 9;
+              RETURN(item.code = 9);
+            END_FUNCTION;
             FUNCTION compatible_assignments(item : child_item; marker : BOOLEAN) : BOOLEAN;
               LOCAL
                 base_value : base_item;
@@ -12948,6 +12954,7 @@ public sealed class ReachableRuleTests
               compatible : compatible_assignments(item, marker);
               constrained : constrained_assignment(amount);
               constrained_actual : constrained_parameter(amount);
+              entity_reference : entity_reference_assignment(item);
             END_ENTITY;
             END_SCHEMA;
             """;

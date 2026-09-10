@@ -230,6 +230,19 @@ implementation inventory is evidence about current behavior, not a substitute fo
   runtime narrowing, and rejects five neighboring incompatible type families before C# generation. It also proves the
   sourced UNTIL ordering and TRUE/FALSE/UNKNOWN behavior. The Release build has zero warnings and errors;
   `ISO21WorkItem=ISO21-009` passes 18/18 and all 146 `ReachableRuleTests` pass.
+- Candidate `4177e75` closes the remaining assignment behavior that can be determined from the authorized excerpt.
+  Group-qualified replacement copies every partial-entity attribute into the existing generated entity projection,
+  preserves entity references, and independently copies mutable aggregate values. Direct assignments, procedure
+  actuals, and SELECT-qualified terminal elements/attributes now evaluate reachable target defined-type `WHERE`
+  rules before accepting the value. The focused corpus additionally proves entity-reference assignment, direct and
+  procedure constraint rejection, selected-element constraint rejection, and both direct/SELECT group replacement.
+  The Release build has zero warnings or errors; the source-gated manifest test passes; `ISO21WorkItem=ISO21-009`
+  passes 18/18; and all 146 `ReachableRuleTests` pass.
+- The source boundary now separately records three inputs that the excerpt references without defining: the complete
+  constraint taxonomy in missing clauses 5–12, level-4 parser applicability, and the Annex B valid-complex-instance
+  relation. Procedure `VAR` declaration/copy-back semantics are likewise absent from clause 13.8 and the supplied
+  files. Per the approved source rule these domains are `source-excluded`; they are neither inferred nor blockers for
+  the source-bounded profile, and the overall full-standard conformance claim remains blocked.
 
 Source identities:
 

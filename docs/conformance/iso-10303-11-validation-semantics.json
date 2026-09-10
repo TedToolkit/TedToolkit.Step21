@@ -44,9 +44,8 @@
       "id": "13.3-assignment",
       "source": "13.3.1-13.3.2",
       "sourceStatus": "exact-edition2-excerpt",
-      "implementationStatus": "partial",
-      "boundary": "Local/parameter assignment, sourced type compatibility, aggregate value copying, qualified aggregate elements, exact integer indices, direct STRING/BINARY replacement, and recursively qualified SELECT alternatives using ARRAY/BINARY/LIST/STRING or entity attributes/groups are generated statically.",
-      "blocker": "Terminal group-value replacement, assignment-time declaration constraints, and invalid partial-complex rejection remain open; defined scalar qualifier carriers are excluded by the declared-type restriction.",
+      "implementationStatus": "implemented",
+      "boundary": "Local/parameter entity references, non-entity value copying, the explicit compatibility alternatives, target defined-type WHERE rules, initialized exact-integer element/range writes, terminal group replacement, and recursive SELECT qualification through ARRAY/BINARY/LIST/STRING or entity attributes/groups are generated statically. Defined scalar qualifier carriers remain invalid under the clause's declared-carrier restriction.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_require_integer_assignment_indices" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_copy_array_values_on_assignment" },
@@ -54,6 +53,30 @@
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_assign_select_qualified_values" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_enforce_the_assignment_compatibility_matrix" }
       ]
+    },
+    {
+      "id": "13.3.2-complete-constraint-taxonomy",
+      "source": "13.3.2(b); clauses 5-12",
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "No claim is made for assignment-time constraint categories whose declarations and evaluation rules occur only in missing clauses 5 through 12.",
+      "exclusion": "The excerpt requires target values to satisfy declared constraints but the authorized files do not contain the normative definitions of the complete constraint taxonomy. Reachable defined-type WHERE rules already represented by the compiler are enforced; missing categories are not inferred."
+    },
+    {
+      "id": "13.3.2-level4-generalization",
+      "source": "13.3.2 level-4 parser paragraph",
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "No parser-level conformance claim is made beyond the statically and atomically narrowed generalizations already covered by the implemented assignment paths.",
+      "exclusion": "The excerpt conditions this behavior on a level 4 compliant parser, while the authorized files do not define parser levels or establish that this Analyzer claims level 4."
+    },
+    {
+      "id": "13.3.2-partial-complex-validity",
+      "source": "13.3.2; Annex B",
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "No additional runtime rejection is generated for partial complex entity combinations beyond the valid closed generated projections.",
+      "exclusion": "The excerpt delegates the definition of a valid complex entity instance to Annex B, which is absent from the authorized files; the missing validity relation is not reconstructed or guessed."
     },
     {
       "id": "13.4-case-statement",
@@ -91,13 +114,20 @@
       "id": "13.8-procedure-call",
       "source": "13.8; 13.3.2",
       "sourceStatus": "exact-edition2-excerpt",
-      "implementationStatus": "partial",
-      "boundary": "Arity, order, scalar promotions, defined simple types, SELECT targets, aggregate initializers and entity specialization are checked and adapted at the shared call boundary.",
-      "blocker": "Qualified VAR copy-back and invalid partial-complex arguments require additional source-backed closure.",
+      "implementationStatus": "implemented",
+      "boundary": "Arity, order, sourced assignment compatibility, target defined-type WHERE rules, scalar promotions, defined simple types, SELECT targets, aggregate initializers and entity specialization are checked and adapted at the shared call boundary.",
       "proof": [
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_reject_procedure_argument_count_mismatches" },
         { "file": "tests/TedToolkit.Step21.Tests/ExpressIncrementalGeneratorTests/ReachableRuleTests.cs", "member": "Should_apply_procedure_scalar_assignment_compatibility" }
       ]
+    },
+    {
+      "id": "procedure-var-copyback-semantics",
+      "source": "procedure formal-parameter declarations",
+      "sourceStatus": "source-excluded",
+      "implementationStatus": "source-excluded",
+      "boundary": "No claim is made for qualified actual-parameter copy-back beyond the direct VAR path already generated.",
+      "exclusion": "Clause 13.8 in the authorized excerpt defines a call parameter as an expression and only states assignment compatibility; the formal VAR declaration and copy-back rules occur in missing clauses and are not inferred."
     },
     {
       "id": "13.9.1-increment-control",
