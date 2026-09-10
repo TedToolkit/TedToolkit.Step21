@@ -32,7 +32,8 @@ Approved
 
 初始 baseline 只识别完整 clear-text syntax，若干 anchor/reference/signature、ZIP/directory、occurrence、
 mapping、population 与 EXPRESS 能力仍返回 capability diagnostics。当前交付已关闭授权来源明确描述的
-这些能力；缺失的 Part 11 constant/short-name 定义保留负 PICS 答案，因此仍不声明完整 processor conformance。
+这些能力；schema-defining document 显式提供的 short names 保持正 PICS 且不推断缩写，缺失的 Part 11
+constant/evaluated-set 定义使 EXPRESS constant names 保持负 PICS，因此仍不声明完整 processor conformance。
 
 <!-- section: scope -->
 ## Scope and non-goals

@@ -10,8 +10,8 @@
 
 交付可机械验证的 Annex D PICS/逐条 normative traceability 与真实 processor 旅程，证明 classes
 `4;1`、`4;2`、来源已描述的 `4;3` facilities 及允许的 `2;1`/`3;1` 兼容在同一 candidate 上读写；
-授权 ISO 11 文件未描述的完整 constant/short-name 语义明确 source-excluded，并保持 class-1 性能、旧
-API/AP packages 和 Native AOT。
+授权 ISO 11 文件未描述的完整 constant/evaluated-set 语义明确 source-excluded；schema-supplied short
+names 保持正 PICS 且不推断缩写；同时保持 class-1 性能、旧 API/AP packages 和 Native AOT。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
