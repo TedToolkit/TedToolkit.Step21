@@ -1692,6 +1692,27 @@ internal sealed class ExpressReachableRulePlan
                 return true;
             }
 
+            var concatenatedKind = actual.Type.Kind != ExpressExpressionTypeKind.Aggregate
+                && actual.Kind == ExpressExpressionKind.Binary
+                && actual.Operation == "+"
+                ? actual.Children.Select(child => child.Type.Kind).FirstOrDefault(kind =>
+                    kind is ExpressExpressionTypeKind.Binary or ExpressExpressionTypeKind.String)
+                : ExpressExpressionTypeKind.Unresolved;
+            if (concatenatedKind is ExpressExpressionTypeKind.Binary or ExpressExpressionTypeKind.String
+                && TryGetScalarKind(concatenatedKind, out var concatenatedScalar))
+            {
+                return IsAssignmentCompatible(
+                    target,
+                    new ExpressBoundScalarType(
+                        concatenatedScalar,
+                        constraintText: null,
+                        isFixed: false,
+                        actual.Span),
+                    [],
+                    [],
+                    allowRuntimeGeneralization: true);
+            }
+
             return actual.Type.DeclaredType is { } actualType
                 ? IsAssignmentCompatible(target, actualType, [], [], allowRuntimeGeneralization: true)
                 : TryGetScalarKind(actual.Type.Kind, out var actualScalar)

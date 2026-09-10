@@ -13057,10 +13057,38 @@ public sealed class ReachableRuleTests
         var result = GeneratorHostTests.Run(
             consumer,
             ("schemas/assignment-compatibility.exp", schema));
+        var concatenationResult = GeneratorHostTests.Run(("schemas/assignment-concatenation.exp", """
+            SCHEMA assignment_concatenation_model;
+            TYPE text_value = STRING; END_TYPE;
+            TYPE value_choice = SELECT (text_value); END_TYPE;
+            FUNCTION concatenate_values(choice : value_choice; bits : BINARY) : BOOLEAN;
+              LOCAL
+                text_result : STRING;
+                binary_result : BINARY;
+                text_values : SET OF STRING := [];
+              END_LOCAL;
+              text_result := '';
+              binary_result := %0;
+              IF 'STRING' IN TYPEOF(choice) THEN
+                text_result := choice + text_result;
+              END_IF;
+              binary_result := binary_result + bits;
+              text_values := text_values + text_result;
+              RETURN(TRUE);
+            END_FUNCTION;
+            ENTITY sample;
+              choice : value_choice;
+              bits : BINARY;
+            WHERE compatible : concatenate_values(choice, bits);
+            END_ENTITY;
+            END_SCHEMA;
+            """));
         var invalidResults = invalidSchemas
             .Select((text, index) => GeneratorHostTests.Run(($"schemas/invalid-assignment-{index}.exp", text)))
             .ToArray();
         var diagnostics = result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())
+            .Concat(concatenationResult.Diagnostics)
+            .Concat(concatenationResult.OutputCompilation.GetDiagnostics())
             .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
             .ToArray();
 
