@@ -14,8 +14,8 @@ internal sealed class ConformanceManifestTests
         var manifest = document.RootElement;
         var requirements = manifest.GetProperty("requirements").EnumerateArray().ToArray();
         var ids = requirements.Select(item => item.GetProperty("id").GetString()!).ToArray();
-        var blockers = requirements.Where(item =>
-                item.GetProperty("status").GetString() == "blocked-source")
+        var sourceExcluded = requirements.Where(item =>
+                item.GetProperty("status").GetString() == "source-excluded")
             .ToArray();
 
         foreach (var requirement in requirements)
@@ -24,7 +24,7 @@ internal sealed class ConformanceManifestTests
             var status = requirement.GetProperty("status").GetString();
             await Assert.That(requirement.GetProperty("source").GetString()).IsNotEmpty();
             await Assert.That(requirement.GetProperty("implementation").GetString()).IsNotEmpty();
-            await Assert.That(status).IsIn("implemented", "not-applicable", "blocked-source");
+            await Assert.That(status).IsIn("implemented", "not-applicable", "source-excluded");
             await Assert.That(applicability).IsIn("applicable", "not-applicable");
 
             if (status == "not-applicable")
@@ -39,8 +39,11 @@ internal sealed class ConformanceManifestTests
             var proofMember = proof.GetProperty("member").GetString()!;
             await Assert.That(File.Exists(proofPath)).IsTrue();
             await Assert.That(await File.ReadAllTextAsync(proofPath)).Contains(proofMember);
-            if (status == "blocked-source")
-                await Assert.That(requirement.GetProperty("blocker").GetString()).IsNotEmpty();
+            if (status == "source-excluded")
+            {
+                await Assert.That(applicability).IsEqualTo("applicable");
+                await Assert.That(requirement.GetProperty("exclusion").GetString()).IsNotEmpty();
+            }
         }
 
         var pics = manifest.GetProperty("pics");
@@ -94,7 +97,7 @@ internal sealed class ConformanceManifestTests
                 "F-ecmascript",
                 "G-uuid-anchor",
             ]);
-            await Assert.That(blockers.Select(item => item.GetProperty("id").GetString()!)).IsEquivalentTo([
+            await Assert.That(sourceExcluded.Select(item => item.GetProperty("id").GetString()!)).IsEquivalentTo([
                 "4.3-classification",
                 "6.4.4-express-constants",
                 "12.1-value-mapping",

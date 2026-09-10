@@ -12,6 +12,7 @@ Approved
 
 - Priority: P1
 <!-- approval-source: user-approved-authorized-iso-source-derived-profile-revision-2026-09-09 -->
+<!-- scope-revision: user-approved-source-exclusion-rule-2026-09-10 -->
 <!-- candidate-binding: none -->
 
 ## Route
@@ -24,21 +25,22 @@ Approved
 <!-- section: goal-rationale -->
 ## Goal and rationale
 
-让 .NET 消费者能够通过一个 schema-neutral runtime 读取、验证、编辑并写出满足 ISO 10303-21:2016
-Edition 3 syntactical conformance classes 1、2、3 和 schema conformance 的交换结构。完成定义以标准 Annex D
-PICS 及全部适用于 processor 的规范性条款逐项有证据为准，而不是以 AP/B-rep fixture 或“语法能解析”为准。
+让 .NET 消费者能够通过一个 schema-neutral runtime 读取、验证、编辑并写出授权 ISO 10303-21:2016 与
+已提供 ISO 10303-11:2004 文件明确描述的交换结构能力。完成定义以 Annex D PICS 与来源追踪逐项有证据
+为准，而不是以 AP/B-rep fixture 或“语法能解析”为准；Part 11 文件未描述的行为标为 source-excluded，
+不推测实现，也不计入 conformance claim。
 
-当前 grammar 已识别完整 clear-text syntax，但 anchor/reference/signature 操作、ZIP/directory transport、
-value/constant occurrence、short names 的部分映射、完整 complex mapping、部分 Annex E population 和所需
-EXPRESS 约束仍返回 capability/unsupported diagnostics，因此不能声明完整 processor conformance。
+初始 baseline 只识别完整 clear-text syntax，若干 anchor/reference/signature、ZIP/directory、occurrence、
+mapping、population 与 EXPRESS 能力仍返回 capability diagnostics。当前交付已关闭授权来源明确描述的
+这些能力；缺失的 Part 11 constant/short-name 定义保留负 PICS 答案，因此仍不声明完整 processor conformance。
 
 <!-- section: scope -->
 ## Scope and non-goals
 
 - In scope: ISO 10303-21:2016 clauses 4–14 与 normative annexes A–G 中适用于软件 processor 的读取、写出、映射、验证、安全和 PICS 能力；补齐这些映射与 schema conformance 所必需的 ISO 10303-11:2004 types、inheritance、constraints、constants、functions/procedures/rules 语义。
-- In scope: conformance classes `4;1`、`4;2`、`4;3` 以及标准允许的 edition-1/2 compatibility levels；entity/value/constant occurrences；short names；全部 string encodings；anchor/tags；local/external/directory/ZIP references；CMS signatures；schema populations；完整 internal/external complex mapping；Annex F binding；UUID anchor mapping；PICS/implementation limits。
+- In scope: conformance classes `4;1`、`4;2`、来源已描述的 `4;3` facilities 以及标准允许的 edition-1/2 compatibility levels；entity/value occurrences；来源已描述或 schema 显式提供的 constant/short-name 能力；全部 string encodings；anchor/tags；local/external/directory/ZIP references；CMS signatures；schema populations；来源已描述的 internal/external complex mapping；Annex F binding；UUID anchor mapping；PICS/implementation limits。
 - Non-goals: AP203/AP214/AP242、B-rep、PMI、CAD/BIM 业务含义；ISO 10303-22 SDAI API、Part 28 XML、Part 14 EXPRESS-X 或任意其他分册；数据库/ORM/JSON；通用脚本执行环境；物理磁带、软盘和多卷介质管理。
-- Normative disposition: 非本 .NET processor 的物理介质协议或 informative annex 必须在 PICS/traceability 中说明不适用及理由；任何适用于读取/写出的 normative processor requirement 不得以“unsupported”关闭。
+- Normative disposition: 非本 .NET processor 的物理介质协议或 informative annex 必须在 PICS/traceability 中说明不适用及理由；授权文件明确描述且适用于读取/写出的要求不得以“unsupported”关闭，Part 11 输入缺失的定义必须 source-excluded 且不得推测。
 - Compatibility: 既有 class-1 API、直接实体引用、mutable editing、atomic read/write、确定性 canonical output、schema-neutral dependency、诊断可定位性、包隔离和 Native AOT 均保留。新增能力默认不执行隐式网络、文件系统或机器证书访问。
 
 <!-- section: behavior-contract -->
@@ -47,9 +49,9 @@ EXPRESS 约束仍返回 capability/unsupported diagnostics，因此不能声明�
 <!-- behavior-change: OB-01 -->
 | ID | Observable boundary | Current | Expected | Preserved |
 | --- | --- | --- | --- | --- |
-| OB-01 | Edition 3 read/write and conformance report | 完整语法，但若干合法 standard facilities 显式 unsupported | Annex D PICS 中声明支持的 class 1/2/3 read/write 项全部工作；其余 normative 条款均有 implemented 或 justified-not-applicable evidence | 既有 class-1 成功/失败结果与原子性 |
+| OB-01 | Edition 3 read/write and conformance report | 完整语法，但若干合法 standard facilities 显式 unsupported | Annex D PICS 中声明支持的 read/write 项全部工作；其余来源已描述条款均有 implemented 或 justified-not-applicable evidence，输入缺失项明确 source-excluded | 既有 class-1 成功/失败结果与原子性 |
 | OB-02 | External resource and trust boundary | 无 resolver/signature trust API | 调用方显式提供资源、base URI、配额、证书/信任和时间；runtime 执行 ISO resolution/archive/CMS 语义且从不隐式 I/O | schema-neutral、deterministic、AOT-ready |
-| OB-03 | EXPRESS-to-exchange mapping and schema conformance | 部分合法 mapping/validation-reachable semantics 被拒绝 | 每个 clause 11/12 mapping 和完成 schema conformance 所需约束均可静态生成、读取、验证和写回 | 无 general-purpose EXPRESS invocation API |
+| OB-03 | EXPRESS-to-exchange mapping and schema conformance | 部分合法 mapping/validation-reachable semantics 被拒绝 | 授权文件描述的 clause 11/12 mapping 与验证可达约束均可静态生成、读取、验证和写回；缺失定义 source-excluded | 无 general-purpose EXPRESS invocation API |
 
 <!-- acceptance-case: AC-01 -->
 ### AC-01 — 条款与 PICS 完整闭环
@@ -58,17 +60,17 @@ EXPRESS 约束仍返回 capability/unsupported diagnostics，因此不能声明�
 Scenario: 每项适用的规范要求都有可执行证据
   Given ISO 10303-21:2016 的规范性 clauses、annexes 与 Annex D PICS
   When repository conformance verifier 检查 read、write、mapping、limits 和 not-applicable dispositions
-  Then 零适用项处于 syntax-only、unsupported、unmapped 或无 primary proof 状态
+  Then 零来源已描述的适用项处于 syntax-only、unsupported、unmapped 或无 primary proof 状态，输入缺失项明确 source-excluded
 ```
 
 <!-- acceptance-case: AC-02 -->
-### AC-02 — 三个 syntactical conformance class 双向工作
+### AC-02 — 已声明 syntactical conformance class 双向工作
 
 ```gherkin
 Scenario: class 1、2、3 交换结构按声明读写
-  Given 覆盖 4;1、4;2、4;3 及合法 2;1/3;1 compatibility 的标准条款 fixture
+  Given 覆盖 4;1、4;2、来源已描述的 4;3 facilities 及合法 2;1/3;1 compatibility 的标准条款 fixture
   When 消费者读取、写出并重读每个 fixture
-  Then implementation_level、occurrences、short names、strings、sections 和语义均满足对应 class
+  Then 已声明支持的 implementation_level、occurrences、short names、strings、sections 和语义均满足对应 class，完整 4;3 与缺失短名能力保持 PICS false
 ```
 
 <!-- acceptance-case: AC-03 -->
@@ -116,9 +118,9 @@ Scenario: 所有标准 determination methods 产生正确 population
 
 ```gherkin
 Scenario: 每种 EXPRESS-to-Part-21 mapping 均可完成 schema-conformant round trip
-  Given 覆盖所有 simple/aggregate/defined/enumeration/select types、constants、inheritance evaluated sets、internal/external complex mapping、redeclarations，以及约束可达的 function/procedure/rule 依赖与所需 algorithm statements 的 schema
+  Given 覆盖授权 Part 11 文件明确描述的 simple/aggregate/defined/enumeration/select types、constants、inheritance evaluated sets、internal/external complex mapping、redeclarations，以及约束可达的 function/procedure/rule 依赖与所需 algorithm statements 的 schema
   When Analyzer 生成类型并由 runtime 读取、验证、写出和重读实例
-  Then 值、identity、physical attribute order、constraints 和 mapping selection 与标准一致，每个 Part-11 可达语义家族都在 corpus 中闭环且没有 function、procedure、rule 或 statement 被跳过
+  Then 值、identity、physical attribute order、constraints 和 mapping selection 与来源一致，每个来源已描述的 Part-11 可达语义家族都在 corpus 中闭环，文件未描述的行为明确 source-excluded
 ```
 
 <!-- acceptance-case: AC-08 -->
@@ -183,8 +185,8 @@ normative unit/contract evidence。
 <!-- primary-proof: AC-09 purpose=boundary shape=integration -->
 | Contract | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
-| AC-01 | Primary | PICS/traceability verifier reports zero applicable unsupported/unproven row | Run repository ISO conformance verifier and clause-manifest contract tests |
-| AC-02 | Primary | Class 1/2/3 plus compatible 2;1/3;1 positive/neighbor-invalid matrix reads and writes exactly as declared | Run Part21 conformance-class contract suite |
+| AC-01 | Primary | PICS/traceability verifier reports zero source-described applicable unsupported/unproven row and explicit source exclusions for missing inputs | Run repository ISO conformance verifier and clause-manifest contract tests |
+| AC-02 | Primary | Declared class 1/2 and source-described class-3/compatible 2;1/3;1 positive/neighbor-invalid matrix reads and writes exactly as declared | Run Part21 conformance-class contract suite |
 | AC-03 | Primary | Every anchor/item/tag/occurrence/UUID partition round-trips and invalid combinations fail atomically | Run anchor and occurrence component suites |
 | AC-04 | Primary | Local/external/directory/ZIP references resolve with correct identity/null/cycle/schema behavior and resource controls | Run isolated in-memory resource-provider integration suite |
 | AC-05 | Primary | Multiple CMS signatures distinguish malformed/not-evaluated/invalid/untrusted/trusted results, apply the explicit publication matrix, and sign exact covered bytes atomically | Run deterministic certificate/CMS integration suite |
@@ -199,7 +201,7 @@ normative unit/contract evidence。
 ## Completion
 
 完成需要 AC-01 至 AC-09 在同一 candidate binding 上全部通过；AP-004 为 Active；Annex D PICS 和逐条 normative traceability
-没有适用的 syntax-only/unsupported/unproven 项；ADR-0009 为 Accepted；所有新增 public/package surface 有
+没有来源已描述且适用的 syntax-only/unsupported/unproven 项，输入缺失项全部明确 source-excluded 且不进入完整一致性声明；ADR-0009 为 Accepted；所有新增 public/package surface 有
 API snapshot、SemVer 和 migration 文档；现有 class-1、三个 AP 包、确定性、atomicity 和 Native AOT 证明保持
 绿色；安全与实现评审均 Ready；无外部部署、证书或网络 handoff。临时 change/work-item records 在 merge 与
 reference release 后依共享 lifecycle 清理，持久 conformance/PICS、architecture、ADR 和消费者文档保留。

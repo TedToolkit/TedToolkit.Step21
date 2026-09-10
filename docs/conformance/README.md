@@ -21,13 +21,15 @@ This index states what the current package delivers, what the grammars recognize
 
 Repository-owned semantic round-trip fixtures compare entity identity, generated type, values, aggregate semantics, and reference identity after write/read. Canonical formatting may differ from the input; the opt-in external corpus is syntax evidence only.
 
-## Syntax recognized; operation unsupported
+## Source-excluded operations
 
 | Facility | Observable boundary |
 | --- | --- |
-| EXPRESS constant occurrences | Constant occurrence names remain a separately tracked DATA-binding capability. |
+| EXPRESS constant occurrences | Constant occurrence names remain a separately tracked DATA-binding capability because the supplied ISO 10303-11 files do not describe the required evaluation contract. |
+| Implicit physical short names | Explicit schema-supplied names work; no additional entity, SELECT, or enumeration name is derived without an ISO definition. |
 
-These are operational capability failures, not syntax errors. The public `ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.
+These are deliberate source exclusions, not syntax errors or pending inferred implementations. The public
+`ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.
 
 ## Outside the public contract
 

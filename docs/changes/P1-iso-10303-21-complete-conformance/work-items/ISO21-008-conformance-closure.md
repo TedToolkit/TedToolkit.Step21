@@ -4,17 +4,20 @@
 <!-- work-item-id: ISO21-008 -->
 
 <!-- approval-source: user-approved-recommended-iso21-005-split-and-continue-2026-09-09 -->
+<!-- scope-revision: user-approved-source-exclusion-rule-2026-09-10 -->
 
 ## Outcome
 
 交付可机械验证的 Annex D PICS/逐条 normative traceability 与真实 processor 旅程，证明 classes
-`4;1`、`4;2`、`4;3` 及允许的 `2;1`/`3;1` 兼容在同一 candidate 上完整读写，并保持 class-1 性能、旧 API/AP packages 和 Native AOT。
+`4;1`、`4;2`、来源已描述的 `4;3` facilities 及允许的 `2;1`/`3;1` 兼容在同一 candidate 上读写；
+授权 ISO 11 文件未描述的完整 constant/short-name 语义明确 source-excluded，并保持 class-1 性能、旧
+API/AP packages 和 Native AOT。
 
 <!-- work-item: scope -->
 ## Scope and non-goals
 
-- Target delivery area or exact public/persisted contract: machine-readable clause/PICS manifest、processor conformance report、implementation limits、all-class end-to-end fixtures、consumer docs/API/package/AOT/performance evidence.
-- In scope: clauses 4-14 and applicable normative Annexes A-G、read/write PICS、entity/value/constant and short-name encodings、all string encodings、reference/archive/signature/population/Annex-F rows and justified processor not-applicable rows.
+- Target delivery area or exact public/persisted contract: machine-readable clause/PICS manifest、processor conformance report、implementation limits、declared-class end-to-end fixtures、consumer docs/API/package/AOT/performance evidence.
+- In scope: clauses 4-14 and applicable normative Annexes A-G、read/write PICS、entity/value/constant and short-name encodings、all string encodings、reference/archive/signature/population/Annex-F rows、justified processor not-applicable rows，以及缺失 Part 11 输入的明确 source-excluded disposition。
 - Non-goals: physical tape/diskette/multi-volume media operations、informative annex implementation、AP/B-rep/PMI semantics、other STEP parts、remote package publication or a broader platform promise than tested.
 - Likely touchpoints (non-binding): conformance manifest/verifier、public report/limits、contract/integration fixtures、docs/conformance、packed consumer、allocation harness and AOT scripts.
 
@@ -24,21 +27,21 @@
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
 | ISO21-001 through ISO21-004, ISO21-006 and ISO21-007 Verified | Every independently deliverable capability, binding and security boundary has exact candidate-bound proof and supplied manifests | Work-item completion evidence on the authoritative integration revision |
-| ISO21-005 and ISO21-009 Verified before final closure | Schema-supplied physical mappings and the independently reviewed Part 11 clause/semantic/test profile derived from the user-authorized ISO source replace every `blocked-source` PICS row before ISO21-008 may become Verified | ISO21-005 and ISO21-009 completion evidence on the authoritative integration revision |
+| ISO21-005 and ISO21-009 Verified before final closure | Schema-supplied physical mappings and the independently reviewed Part 11 clause/semantic/test profile classify every former `blocked-source` row as implemented or source-excluded without inference before ISO21-008 may become Verified | ISO21-005 and ISO21-009 completion evidence on the authoritative integration revision |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
 
 | Parent contract | Responsibility | Contribution or supplied input |
 | --- | --- | --- |
-| AC-01 | Owns | Zero applicable unsupported/unmapped/unproven PICS or normative row |
-| AC-02 | Owns | End-to-end syntactical classes 1/2/3 and edition compatibility read/write behavior |
+| AC-01 | Owns | Zero source-described applicable unsupported/unmapped/unproven PICS or normative row; every missing-input row is explicit source-excluded |
+| AC-02 | Owns | End-to-end declared classes 1/2, source-described class-3 facilities and edition compatibility read/write behavior |
 
 <!-- work-item: delivery-constraints -->
 ## Constraints
 
-- Every manifest row names normative source, applicability, implementation location and exactly one executable primary proof or justified not-applicable rationale.
-- A green AP corpus or syntax parser is never sufficient for a normative row; full claims remain absent until the verifier closes all applicable rows.
+- Every manifest row names normative source, applicability, implementation location and exactly one executable primary proof, justified not-applicable rationale, or missing-input source exclusion.
+- A green AP corpus or syntax parser is never sufficient for a normative row; a full conformance claim remains absent while any applicable row is source-excluded.
 - Measure the approved fixed class-1 scenario against `63b2757` on the same Release runtime: median 20-iteration allocation regression is at most `max(5%, 16 KiB)` and unused feature factories create zero objects.
 - Preserve cumulative runtime/generated API snapshots, diagnostics, deterministic outputs, AP203/AP214/AP242 package proofs and core Native AOT execution.
 
@@ -49,15 +52,15 @@
 <!-- primary-proof: AC-02 purpose=acceptance shape=contract -->
 | Contract or gate | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
-| AC-01 | Primary | Conformance verifier reports zero applicable syntax-only, unsupported, unmapped or unproven clause/PICS row | Run the repository ISO conformance verifier and manifest contract tests in Release |
-| AC-02 | Primary | Positive and neighboring-invalid matrices for every declared implementation level read, write and reread with exact class semantics | Run the all-class processor contract suite in Release |
-| Full compatibility/AOT | Conditional | Full solution, public/generated baselines, AP package/fixture/reproducibility proofs and core packed Native AOT journey pass | Run `dotnet test TedToolkit.Step21.slnx -c Release --no-restore`, package scripts and `pwsh -File build/verify-native-aot.ps1` |
+| AC-01 | Primary | Conformance verifier reports zero source-described applicable syntax-only, unsupported, unmapped or unproven clause/PICS row and enumerates every source exclusion | Run the repository ISO conformance verifier and manifest contract tests in Release |
+| AC-02 | Primary | Positive and neighboring-invalid matrices for every declared supported implementation level/facility read, write and reread with exact semantics | Run the conformance-class processor contract suite in Release |
+| Full compatibility/AOT | Conditional | Full solution, public/generated baselines, AP package/fixture/reproducibility proofs and core packed Native AOT journey pass | Run the Release test executables through `dotnet run`, the full Release solution build, package scripts and `pwsh -File build/verify-native-aot.ps1` |
 | Class-1 feature isolation | Conditional | Fixed scenario stays within the approved allocation bound and creates zero unused feature-service objects | Run baseline/candidate Release allocation harness and tracking-factory tests |
 
 <!-- work-item: definition-of-done -->
 ## Done
 
-- AC-01 and AC-02 pass on the same candidate as every prerequisite proof; no applicable row remains unsupported or unproven.
+- AC-01 and AC-02 pass on the same candidate as every prerequisite proof; no source-described applicable row remains unsupported or unproven, and source-excluded rows remain negative PICS answers rather than conformance claims.
 - Durable conformance/architecture/consumer docs replace stale capability claims; API/SemVer, full regression, package, performance and Native AOT evidence pass.
 
 <!-- work-item: completion-evidence -->
@@ -83,8 +86,8 @@ all commands/results; API/SemVer/docs state; baseline/candidate allocation value
 - Latest full Release no-incremental solution build completed in 5:02.74 with 0 warnings and 0 errors. Latest packed
   Native AOT proof ended `PACKED_AOT_OK` and `NATIVE_AOT_PACKAGE_PROOF_OK` for win-x64 with a 6,863,872-byte
   executable and compiler package 10.0.11.
-- Final verification remains gated by ISO21-005 and ISO21-009, the separately approved class-1 allocation benchmark, the README
-  approval gate, final candidate-bound review, and a commit revision.
+- ISO21-005 and ISO21-009 are now Verified. Final verification remains gated by the separately approved class-1
+  allocation benchmark, durable README/manifest synchronization, final candidate-bound review, and a commit revision.
 
 ## Risks and implementation notes
 
