@@ -111,11 +111,27 @@ jobs:
             tests/TedToolkit.Step21.IntegrationTests/bin/Release/**
 
   verify-unit-tests:
-    name: Verify unit tests
+    name: Verify unit tests (${{ matrix.name }})
     needs:
       - compare-antlr-generation
       - verify-native-aot-package
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: classes-a-c
+            filter: /*/*/(A*|B*|C*)/*
+            minimum: 179
+          - name: classes-d-i
+            filter: /*/*/(D*|E*|F*|G*|H*|I*)/*
+            minimum: 210
+          - name: classes-l-q-s-z
+            filter: /*/*/(L*|M*|N*|O*|P*|Q*|S*|T*|U*|V*|W*|X*|Y*|Z*)/*
+            minimum: 116
+          - name: classes-r
+            filter: /*/*/R*/*
+            minimum: 227
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,7 +145,12 @@ jobs:
       - name: Build unit test executable
         run: dotnet build tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --disable-build-servers
       - name: Run unit tests
-        run: dotnet run --project tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --no-build --no-restore -- --progress off
+        run: >-
+          dotnet run --project tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj
+          --configuration Release --no-build --no-restore --
+          --treenode-filter "${{ matrix.filter }}"
+          --minimum-expected-tests ${{ matrix.minimum }}
+          --progress off
 
   verify-integration-tests:
     name: Verify integration tests (${{ matrix.name }})
