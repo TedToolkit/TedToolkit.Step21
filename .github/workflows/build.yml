@@ -120,9 +120,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: classes-a-c
-            filter: /*/*/(A*|B*|C*)/*
-            minimum: 179
+          - name: classes-a
+            filter: /*/*/A*/*
+            minimum: 31
+          - name: classes-b
+            filter: /*/*/B*/*
+            minimum: 56
+          - name: combined-repeat
+            filter: /*/*/CombinedRepeatTests/*
+            minimum: 33
+          - name: complex-mapping
+            filter: /*/*/ComplexMappingRoundTripTests/*
+            minimum: 18
+          - name: other-classes-c
+            filter: /*/*/(CanonicalFormatTests|CanonicalSimpleWriterTests|CapabilityTests|ChainedRedeclarationTests|CompilationTests|ConformanceManifestTests|ConstructorTests)/*
+            minimum: 41
           - name: classes-d-i
             filter: /*/*/(D*|E*|F*|G*|H*|I*)/*
             minimum: 210
