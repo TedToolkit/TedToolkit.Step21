@@ -34,9 +34,9 @@ public sealed class ValidationFailure
         string message,
         SourceLocation? sourceLocation = null)
     {
-        ArgumentNullException.ThrowIfNull(code);
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentNullException.ThrowIfNull(message);
+        Guard.NotNull(code);
+        Guard.NotNull(path);
+        Guard.NotNull(message);
         Code = code;
         Path = path;
         Message = message;

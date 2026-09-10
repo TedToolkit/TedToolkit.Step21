@@ -28,9 +28,9 @@ public sealed class SourceLocation
     /// </example>
     public SourceLocation(string filePath, int line, int column)
     {
-        ArgumentNullException.ThrowIfNull(filePath);
-        ArgumentOutOfRangeException.ThrowIfLessThan(line, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(column, 1);
+        Guard.NotNull(filePath);
+        Guard.LessThan(line, 1);
+        Guard.LessThan(column, 1);
         FilePath = filePath;
         Line = line;
         Column = column;

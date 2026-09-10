@@ -30,7 +30,7 @@ internal static class ExpressStructuralValidationEmitter
         "global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<global::System.String, global::TedToolkit.Step21.Entity>>";
 
     private const string INVERSE_CACHE_TYPE =
-        "global::System.Collections.Generic.Dictionary<global::TedToolkit.Step21.Entity, "
+        "global::System.Runtime.CompilerServices.ConditionalWeakTable<global::TedToolkit.Step21.Entity, "
         + "global::System.Collections.Generic.Dictionary<global::System.String, global::System.Object?>>";
 
     /// <summary>
@@ -120,9 +120,7 @@ internal static class ExpressStructuralValidationEmitter
         var inverseContext = rulePlan.ReachableSingularInverseAttributes.Count > 0;
         if (inverseContext)
         {
-            method.AddStatement(new CustomExpression(
-                $"var inverseCache = new {INVERSE_CACHE_TYPE}("
-                + "global::System.Collections.Generic.ReferenceEqualityComparer.Instance)"));
+            method.AddStatement(new CustomExpression($"var inverseCache = new {INVERSE_CACHE_TYPE}()"));
         }
 
         var inverseArgument = inverseContext ? ", inverseCache" : "";

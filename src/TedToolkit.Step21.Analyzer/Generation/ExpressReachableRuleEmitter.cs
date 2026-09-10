@@ -38,7 +38,7 @@ internal static class ExpressReachableRuleEmitter
         "global::System.Collections.Generic.List<global::TedToolkit.Step21.ValidationFailure>";
 
     private const string INVERSE_CACHE_TYPE =
-        "global::System.Collections.Generic.Dictionary<global::TedToolkit.Step21.Entity, "
+        "global::System.Runtime.CompilerServices.ConditionalWeakTable<global::TedToolkit.Step21.Entity, "
         + "global::System.Collections.Generic.Dictionary<global::System.String, global::System.Object?>>";
 
     /// <summary>

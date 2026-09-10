@@ -9,7 +9,7 @@ public sealed class Part21Anchor : IEquatable<Part21Anchor>
     public Part21Anchor(AnchorName name, ParameterValue item, IEnumerable<Part21AnchorTag>? tags = null)
     {
         _ = name.Value;
-        ArgumentNullException.ThrowIfNull(item);
+        Guard.NotNull(item);
         ValidateItem(item, nameof(item));
         var snapshot = (tags ?? []).ToArray();
         if (snapshot.Any(tag => tag is null))
@@ -76,7 +76,7 @@ public sealed class Part21AnchorTag : IEquatable<Part21AnchorTag>
     {
         Part21NameValidation.ValidateTag(name, nameof(name));
 
-        ArgumentNullException.ThrowIfNull(item);
+        Guard.NotNull(item);
         Part21Anchor.ValidateItem(item, nameof(item));
         Name = name;
         Item = item;

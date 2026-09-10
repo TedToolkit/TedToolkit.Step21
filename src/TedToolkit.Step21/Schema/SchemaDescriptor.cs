@@ -117,7 +117,7 @@ public abstract class SchemaDescriptor
     /// </param>
     protected void ConfigureEntityTypeIdentity(Func<Entity, string?, bool> matcher)
     {
-        ArgumentNullException.ThrowIfNull(matcher);
+        Guard.NotNull(matcher);
         if (_entityTypeIdentity is not null)
             throw new InvalidOperationException("Entity type identity can be configured only once.");
         _entityTypeIdentity = matcher;

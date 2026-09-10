@@ -12,9 +12,9 @@ public sealed class HeaderSection
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public HeaderSection(FileDescription fileDescription, FileName fileName, FileSchema fileSchema)
     {
-        ArgumentNullException.ThrowIfNull(fileDescription);
-        ArgumentNullException.ThrowIfNull(fileName);
-        ArgumentNullException.ThrowIfNull(fileSchema);
+        Guard.NotNull(fileDescription);
+        Guard.NotNull(fileName);
+        Guard.NotNull(fileSchema);
 
         FileDescription = fileDescription;
         FileName = fileName;

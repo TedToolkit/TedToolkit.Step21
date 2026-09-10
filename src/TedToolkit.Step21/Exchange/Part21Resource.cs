@@ -32,7 +32,7 @@ internal static class Part21NameValidation
 {
     internal static string CanonicalDigits(string digits, string parameterName, string displayName)
     {
-        ArgumentNullException.ThrowIfNull(digits, parameterName);
+        Guard.NotNull(digits, parameterName);
         if (digits.Length == 0 || digits.Any(character => character is < '0' or > '9'))
             throw new FormatException($"A {displayName} must contain only decimal digits.");
 
@@ -47,7 +47,7 @@ internal static class Part21NameValidation
 
     internal static void ValidateConstant(string value, string parameterName, string displayName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0
             || !IsUpper(value[0])
             || !ContainsOnlyUpperOrDigit(value, 1))
@@ -58,7 +58,7 @@ internal static class Part21NameValidation
 
     internal static void ValidateEnumeration(string value, string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0
             || !IsUpper(value[0])
             || !ContainsOnlyUpperOrDigit(value, 1))
@@ -69,7 +69,7 @@ internal static class Part21NameValidation
 
     internal static void ValidateTag(string value, string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0
             || !IsUpper(value[0]) && !IsLower(value[0])
             || !ContainsOnlyTagCharacters(value, 1))
@@ -81,7 +81,7 @@ internal static class Part21NameValidation
 
     internal static void ValidateAnchorName(string value, string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0
             || value.Contains('#')
             || !ValidateUriCharacters(value, out var hasNonDigit)
@@ -91,7 +91,7 @@ internal static class Part21NameValidation
 
     internal static void ValidateResource(string value, string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0 || !ValidateUriCharacters(value, out _))
             throw new FormatException("The resource is not a valid Part 21 URI-reference spelling.");
 

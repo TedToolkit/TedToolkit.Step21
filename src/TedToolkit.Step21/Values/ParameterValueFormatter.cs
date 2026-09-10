@@ -13,8 +13,8 @@ internal static class ParameterValueFormatter
     /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
     internal static string Format(ParameterValue value, Func<Entity, EntityInstanceName> getEntityName)
     {
-        ArgumentNullException.ThrowIfNull(value);
-        ArgumentNullException.ThrowIfNull(getEntityName);
+        Guard.NotNull(value);
+        Guard.NotNull(getEntityName);
         var builder = new Part21TextBuilder(int.MaxValue, static () => throw new OutOfMemoryException());
         Append(builder, value, getEntityName);
         return builder.ToString();
@@ -26,9 +26,9 @@ internal static class ParameterValueFormatter
         Func<Entity, EntityInstanceName> getEntityName,
         Part21StringEncoding stringEncoding = Part21StringEncoding.Canonical)
     {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(value);
-        ArgumentNullException.ThrowIfNull(getEntityName);
+        Guard.NotNull(builder);
+        Guard.NotNull(value);
+        Guard.NotNull(getEntityName);
         switch (value.Kind)
         {
             case ParameterValueKind.Omitted:
@@ -123,16 +123,21 @@ internal static class ParameterValueFormatter
         string text,
         Part21StringEncoding encoding)
     {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(text);
+        Guard.NotNull(builder);
+        Guard.NotNull(text);
         if (GetEncodedStringOctetCount(text, encoding) > Part21StringTokenLimits.MaximumStoredOctets)
             Part21StringTokenLimits.Throw();
 
         builder.Append('\'');
         var alphabet = 'A';
         var extended = ExtendedEncoding.None;
-        foreach (var rune in text.EnumerateRunes())
+        var remaining = text.AsSpan();
+        while (!remaining.IsEmpty)
         {
+            if (UnicodeScalar.DecodeFromUtf16(remaining, out var rune, out var consumed) != OperationStatus.Done)
+                Part21StringTokenLimits.ThrowInvalidUnicodeScalar();
+            remaining = remaining[consumed..];
+
             var nextExtended = GetExtendedEncoding(rune, encoding);
             if (nextExtended != ExtendedEncoding.None)
             {
@@ -177,7 +182,7 @@ internal static class ParameterValueFormatter
         var remaining = text.AsSpan();
         while (!remaining.IsEmpty)
         {
-            if (System.Text.Rune.DecodeFromUtf16(remaining, out var rune, out var consumed) != OperationStatus.Done)
+            if (UnicodeScalar.DecodeFromUtf16(remaining, out var rune, out var consumed) != OperationStatus.Done)
                 Part21StringTokenLimits.ThrowInvalidUnicodeScalar();
             remaining = remaining[consumed..];
 
@@ -215,7 +220,7 @@ internal static class ParameterValueFormatter
         return count;
     }
 
-    private static int GetEncodedRuneOctetCount(System.Text.Rune rune, Part21StringEncoding encoding, ref char alphabet)
+    private static int GetEncodedRuneOctetCount(UnicodeScalar rune, Part21StringEncoding encoding, ref char alphabet)
     {
         if (rune.Value is <= 0x1F or 0x7F)
             return 5;
@@ -306,7 +311,7 @@ internal static class ParameterValueFormatter
 
     private static void AppendEncodedRune(
         Part21TextBuilder builder,
-        System.Text.Rune rune,
+        UnicodeScalar rune,
         Part21StringEncoding encoding,
         ref char alphabet)
     {
@@ -347,13 +352,13 @@ internal static class ParameterValueFormatter
         }
     }
 
-    private static void AppendXEncodedRune(Part21TextBuilder builder, System.Text.Rune rune)
+    private static void AppendXEncodedRune(Part21TextBuilder builder, UnicodeScalar rune)
     {
         builder.Append("\\X\\");
         builder.AppendFormattable(rune.Value, "X2");
     }
 
-    private static ExtendedEncoding GetExtendedEncoding(System.Text.Rune rune, Part21StringEncoding encoding)
+    private static ExtendedEncoding GetExtendedEncoding(UnicodeScalar rune, Part21StringEncoding encoding)
     {
         if (rune.Value <= 0x7F)
             return ExtendedEncoding.None;
@@ -384,7 +389,7 @@ internal static class ParameterValueFormatter
 
     private static void AppendExtendedValue(
         Part21TextBuilder builder,
-        System.Text.Rune rune,
+        UnicodeScalar rune,
         ExtendedEncoding encoding)
     {
         if (encoding == ExtendedEncoding.X4)
@@ -403,7 +408,7 @@ internal static class ParameterValueFormatter
         X4,
     }
 
-    private static bool TryEncodeIso8859(System.Text.Rune rune, out char page, out byte value)
+    private static bool TryEncodeIso8859(UnicodeScalar rune, out char page, out byte value)
     {
         if (rune.Value is >= 0xA0 and <= 0xFE)
         {
@@ -422,7 +427,7 @@ internal static class ParameterValueFormatter
                 continue;
             try
             {
-                var byteCount = encoding.GetBytes(characters[..characterCount], bytes);
+                var byteCount = EncodingCompat.GetBytes(encoding, characters[..characterCount], bytes);
                 if (byteCount == 1 && bytes[0] is >= 0xA0 and <= 0xFE)
                 {
                     page = (char)('A' + index);

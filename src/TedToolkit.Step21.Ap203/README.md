@@ -53,8 +53,9 @@ range `[1.0.0,2.0.0)`. It does not add an AP203 reader/writer facade, registry, 
 kernel conversion, JSON/XML serialization, or a second parser/writer. Consumers do not receive the
 EXPRESS source, generator implementation, or RoslynHelper as runtime assets.
 
-The package targets .NET 10. AP214, AP242, AP203 Edition 2, and schema extensions absent from the
-pinned long form are outside this package's supported boundary. The checked-in OCCT extension
+The package ships `netstandard2.0` and `net8.0` runtime assets. Later .NET consumers select the
+`net8.0` asset. AP214, AP242, AP203 Edition 2, and schema extensions absent from the pinned long
+form are outside this package's supported boundary. The checked-in OCCT extension
 fixture records this boundary and must fail explicitly; the OCCT sample is interoperability evidence,
 not a claim of complete AP203 conformance.
 

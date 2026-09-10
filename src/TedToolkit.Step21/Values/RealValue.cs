@@ -49,7 +49,7 @@ public readonly struct RealValue : IEquatable<RealValue>, IComparable<RealValue>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite.</exception>
     public static RealValue FromDouble(double value)
     {
-        if (!double.IsFinite(value))
+        if (double.IsNaN(value) || double.IsInfinity(value))
         {
             throw new ArgumentOutOfRangeException(nameof(value), value, "An EXPRESS REAL value must be finite.");
         }

@@ -106,7 +106,7 @@ public sealed class ExpressList<T> : IList<T>, IExpressList<T>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public ValidationResult Validate(string path = "$")
     {
-        ArgumentNullException.ThrowIfNull(path);
+        Guard.NotNull(path);
         var failures = ExpressAggregateValidation.ValidateBounds(Count, LowerBound, UpperBound, path);
         if (IsUnique)
             ExpressAggregateValidation.AddUniquenessFailure(_items, _comparer, path, failures);

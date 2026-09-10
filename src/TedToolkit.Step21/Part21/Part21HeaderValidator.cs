@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 
@@ -8,7 +9,7 @@ internal static class Part21HeaderValidator
 {
     internal static IReadOnlyList<ValidationFailure> Validate(HeaderSection header)
     {
-        ArgumentNullException.ThrowIfNull(header);
+        Guard.NotNull(header);
         var failures = new List<ValidationFailure>();
         ValidateRequiredList(
             header.FileDescription.Description,
@@ -147,8 +148,13 @@ internal static class Part21HeaderValidator
     private static int CountCharactersThrough(string value, int limit)
     {
         var count = 0;
-        foreach (var unused in value.EnumerateRunes())
+        var remaining = value.AsSpan();
+        while (!remaining.IsEmpty)
         {
+            var status = UnicodeScalar.DecodeFromUtf16(remaining, out _, out var consumed);
+            if (status != OperationStatus.Done)
+                consumed = 1;
+            remaining = remaining[consumed..];
             count++;
             if (count == limit)
                 break;
@@ -203,7 +209,7 @@ internal static class Part21HeaderValidator
             else if (arcCount == 1 && rootArc < 2)
             {
                 if (!int.TryParse(
-                    suffix[start..position],
+                    suffix[start..position].ToString(),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
                     out var secondArc)

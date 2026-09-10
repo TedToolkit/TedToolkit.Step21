@@ -82,7 +82,7 @@ public sealed class ExpressSet<T> : ICollection<T>, IExpressSet<T>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public ValidationResult Validate(string path = "$")
     {
-        ArgumentNullException.ThrowIfNull(path);
+        Guard.NotNull(path);
         var failures = ExpressAggregateValidation.ValidateBounds(Count, LowerBound, UpperBound, path);
         ExpressAggregateValidation.AddUniquenessFailure(_items, _comparer, path, failures);
         return new ValidationResult(failures);

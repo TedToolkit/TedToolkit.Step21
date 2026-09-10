@@ -16,7 +16,7 @@ public sealed class UserDefinedHeaderEntity
     public UserDefinedHeaderEntity(string keyword, IEnumerable<ParameterValue> parameters)
     {
         ValidateKeyword(keyword);
-        ArgumentNullException.ThrowIfNull(parameters);
+        Guard.NotNull(parameters);
         var snapshot = parameters.ToArray();
         if (snapshot.Any(value => value is null))
             throw new ArgumentException("User-defined header parameters cannot contain null values.", nameof(parameters));
@@ -33,7 +33,7 @@ public sealed class UserDefinedHeaderEntity
 
     private static void ValidateKeyword(string keyword)
     {
-        ArgumentNullException.ThrowIfNull(keyword);
+        Guard.NotNull(keyword);
         if (keyword.Length < 2
             || keyword[0] != '!'
             || keyword[1] is not (>= 'A' and <= 'Z') && keyword[1] != '_'

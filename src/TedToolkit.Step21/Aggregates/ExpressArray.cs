@@ -153,7 +153,7 @@ public sealed class ExpressArray<T> : IExpressArray<T>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public ValidationResult Validate(string path = "$")
     {
-        ArgumentNullException.ThrowIfNull(path);
+        Guard.NotNull(path);
         var failures = new List<ValidationFailure>();
         var assigned = new List<T>();
         for (var offset = 0; offset < _values.Length; offset++)

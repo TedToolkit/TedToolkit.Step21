@@ -17,7 +17,7 @@ internal static class ExchangeStructureWriter
         TextWriter destination,
         ExchangeStructureWriteOptions options)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        Guard.NotNull(options);
         WriteCore(structure, destination, options);
     }
 
@@ -334,7 +334,7 @@ internal static class ExchangeStructureWriter
             }
         }
 
-        var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
+        var sectionIndexes = new Dictionary<DataSection, int>(Step21ReferenceEqualityComparer.Instance);
         for (var index = 0; index < structure.DataSections.Count; index++)
         {
             sectionIndexes.Add(structure.DataSections[index], index);

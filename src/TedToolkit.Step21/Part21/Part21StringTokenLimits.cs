@@ -26,7 +26,7 @@ internal static class Part21StringTokenLimits
         var index = 0;
         while (!remaining.IsEmpty)
         {
-            if (Rune.DecodeFromUtf16(remaining, out _, out var consumed) != OperationStatus.Done)
+            if (UnicodeScalar.DecodeFromUtf16(remaining, out _, out var consumed) != OperationStatus.Done)
             {
                 invalidIndex = index;
                 return true;

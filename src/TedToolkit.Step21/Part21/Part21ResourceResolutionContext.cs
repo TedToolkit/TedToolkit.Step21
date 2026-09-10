@@ -23,11 +23,11 @@ internal sealed class Part21ResourceResolutionContext
     private readonly ExchangeStructureReadOptions _options;
     private readonly Dictionary<string, LoadedDocument?> _documents = new(StringComparer.Ordinal);
     private readonly Dictionary<ExchangeStructure, List<ExchangeStructure>> _populationDependencies =
-        new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<ExchangeStructure> _completedStructures = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<ExchangeStructure> _physicallyHydratedStructures = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<Entity> _hydratedDomainProjections = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Entity, Entity> _domainProjectionSources = new(ReferenceEqualityComparer.Instance);
+        new(Step21ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ExchangeStructure> _completedStructures = new(Step21ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ExchangeStructure> _physicallyHydratedStructures = new(Step21ReferenceEqualityComparer.Instance);
+    private readonly HashSet<Entity> _hydratedDomainProjections = new(Step21ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Entity, Entity> _domainProjectionSources = new(Step21ReferenceEqualityComparer.Instance);
     private HashSet<ExchangeStructure>? _deferredPopulationValidations;
     private readonly List<ExchangeStructure> _completionOrder = [];
     private readonly List<ExchangeStructure> _physicalHydrationOrder = [];
@@ -151,7 +151,7 @@ internal sealed class Part21ResourceResolutionContext
         }
 
         var declared = Convert.FromBase64String(externalFile.MessageDigest);
-        externalFile.DigestStatus = CryptographicOperations.FixedTimeEquals(digest, declared)
+        externalFile.DigestStatus = FixedTimeEquals(digest, declared)
             ? SchemaPopulationDigestStatus.Verified
             : SchemaPopulationDigestStatus.Mismatch;
     }
@@ -159,7 +159,7 @@ internal sealed class Part21ResourceResolutionContext
     internal void CompleteSchemaPopulation(ExchangeStructure structure)
     {
         var result = new List<ExchangeStructure>();
-        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { structure };
+        var visited = new HashSet<ExchangeStructure>(Step21ReferenceEqualityComparer.Instance) { structure };
         var pending = new Stack<ExchangeStructure>();
         if (_populationDependencies.TryGetValue(structure, out var direct))
         {
@@ -230,7 +230,7 @@ internal sealed class Part21ResourceResolutionContext
 
     internal void DeferDomainProjectionHydration(Func<ICollection<Step21Diagnostic>, int> hydration)
     {
-        ArgumentNullException.ThrowIfNull(hydration);
+        Guard.NotNull(hydration);
         (_deferredDomainProjectionHydrations ??= []).Add(hydration);
     }
 
@@ -267,7 +267,7 @@ internal sealed class Part21ResourceResolutionContext
         if (IsPopulationClosureComplete(structure))
             return false;
         RecordDeferredPopulationValidationMutation(structure);
-        (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance))
+        (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(Step21ReferenceEqualityComparer.Instance))
             .Add(structure);
         return true;
     }
@@ -305,7 +305,7 @@ internal sealed class Part21ResourceResolutionContext
     {
         if (!_populationDependencies.TryGetValue(structure, out var direct) || direct.Count == 0)
             return true;
-        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { structure };
+        var visited = new HashSet<ExchangeStructure>(Step21ReferenceEqualityComparer.Instance) { structure };
         var pending = new Stack<ExchangeStructure>();
         for (var index = direct.Count - 1; index >= 0; index--)
             pending.Push(direct[index]);
@@ -328,7 +328,7 @@ internal sealed class Part21ResourceResolutionContext
     internal ValidationResult ValidateCompletedDependencies(ExchangeStructure root)
     {
         var failures = new List<ValidationFailure>();
-        var visited = new HashSet<ExchangeStructure>(ReferenceEqualityComparer.Instance) { root };
+        var visited = new HashSet<ExchangeStructure>(Step21ReferenceEqualityComparer.Instance) { root };
         var pending = new Stack<ExchangeStructure>();
         if (_populationDependencies.TryGetValue(root, out var direct))
         {
@@ -841,7 +841,7 @@ internal sealed class Part21ResourceResolutionContext
         string source;
         try
         {
-            source = StrictUtf8.GetString(bytes.Span);
+            source = EncodingCompat.GetString(StrictUtf8, bytes.Span);
         }
         catch (DecoderFallbackException)
         {
@@ -1118,7 +1118,7 @@ internal sealed class Part21ResourceResolutionContext
         if (path.Contains('\\') || path.StartsWith("/", StringComparison.Ordinal))
             ThrowCapability("P21-RESOURCE-ARCHIVE-PATH", $"Archive entry '{path}' is not a scoped relative path.");
         var segments = new List<string>();
-        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in path.Split(['/' ], StringSplitOptions.RemoveEmptyEntries))
         {
             if (segment == ".")
                 continue;
@@ -1129,13 +1129,13 @@ internal sealed class Part21ResourceResolutionContext
                 segments.RemoveAt(segments.Count - 1);
                 continue;
             }
-            if (segment.Contains(':'))
+            if (segment.IndexOf(':') >= 0)
                 ThrowCapability("P21-RESOURCE-ARCHIVE-PATH", $"Archive entry '{path}' contains a drive or scheme separator.");
             segments.Add(segment);
         }
         if (segments.Count == 0)
             ThrowCapability("P21-RESOURCE-ARCHIVE-PATH", "An archive entry path cannot be empty.");
-        return string.Join('/', segments);
+        return string.Join("/", segments);
     }
 
     private static bool IsExternalStructureFailure(Exception exception) =>
@@ -1217,7 +1217,7 @@ internal sealed class Part21ResourceResolutionContext
                 continue;
             (transaction.OriginalPopulationDependencies ??= new Dictionary<
                 ExchangeStructure,
-                List<ExchangeStructure>>(ReferenceEqualityComparer.Instance)).Add(
+                List<ExchangeStructure>>(Step21ReferenceEqualityComparer.Instance)).Add(
                 structure,
                 [.. _populationDependencies[structure]]);
         }
@@ -1239,7 +1239,7 @@ internal sealed class Part21ResourceResolutionContext
         {
             (transaction.OriginalDeferredPopulationValidations ??= new Dictionary<
                 ExchangeStructure,
-                bool>(ReferenceEqualityComparer.Instance)).TryAdd(
+                bool>(Step21ReferenceEqualityComparer.Instance)).TryAdd(
                 structure,
                 _deferredPopulationValidations?.Contains(structure) == true);
         }
@@ -1336,7 +1336,7 @@ internal sealed class Part21ResourceResolutionContext
             if (original.Value)
             {
                 (_deferredPopulationValidations ??= new HashSet<ExchangeStructure>(
-                    ReferenceEqualityComparer.Instance)).Add(original.Key);
+                    Step21ReferenceEqualityComparer.Instance)).Add(original.Key);
             }
             else
             {
@@ -1428,7 +1428,11 @@ internal sealed class Part21ResourceResolutionContext
 
         if (actualLength != entry.Length)
             ThrowArchiveFormat($"ZIP entry '{entry.FullName}' does not match its declared length.");
+#if NETSTANDARD2_0
+        if (!ZipArchiveCompat.TryGetCrc32(entry, out var expectedCrc) || ~crc != expectedCrc)
+#else
         if (~crc != entry.Crc32)
+#endif
             ThrowArchiveFormat($"ZIP entry '{entry.FullName}' does not match its declared CRC-32.");
     }
 
@@ -1437,6 +1441,16 @@ internal sealed class Part21ResourceResolutionContext
         foreach (var value in bytes)
             crc = Crc32Table[(crc ^ value) & 0xff] ^ crc >> 8;
         return crc;
+    }
+
+    private static bool FixedTimeEquals(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+    {
+        if (left.Length != right.Length)
+            return false;
+        var difference = 0;
+        for (var index = 0; index < left.Length; index++)
+            difference |= left[index] ^ right[index];
+        return difference == 0;
     }
 
     private static uint[] CreateCrc32Table()

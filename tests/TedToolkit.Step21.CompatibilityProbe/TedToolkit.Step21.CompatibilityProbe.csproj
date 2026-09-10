@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseCandidatePackage)' != 'true'">
+    <ProjectReference Include="..\..\src\TedToolkit.Step21\TedToolkit.Step21.csproj" />
+    <ProjectReference Include="..\..\src\TedToolkit.Step21.Analyzer\TedToolkit.Step21.Analyzer.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <Analyzer Include="..\..\src\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.Step21.Analyzer.dll" />
+    <Analyzer Include="..\..\src\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\Antlr4.Runtime.Standard.dll" />
+    <Analyzer Include="..\..\src\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\System.Memory.dll" />
+    <Analyzer Include="..\..\src\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll" />
+    <Analyzer Include="..\..\src\TedToolkit.Step21.Analyzer\bin\$(Configuration)\netstandard2.0\ZString.dll" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseCandidatePackage)' == 'true'">
+    <PackageReference Include="TedToolkit.Step21" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <AdditionalFiles Include="compatibility-probe.exp" />
+    <None Include="..\TedToolkit.Step21.Tests\TestData\Cms\primary-certificate.der.b64"
+          Link="TestData\Cms\primary-certificate.der.b64"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\TedToolkit.Step21.Tests\TestData\Cms\primary-private-key.pkcs8.b64"
+          Link="TestData\Cms\primary-private-key.pkcs8.b64"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

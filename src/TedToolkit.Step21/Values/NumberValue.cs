@@ -38,7 +38,7 @@ public readonly struct NumberValue : IEquatable<NumberValue>, IComparable<Number
     public static bool TryParse(string? text, out NumberValue value)
     {
         value = default;
-        if (string.IsNullOrEmpty(text))
+        if (text is null || text.Length == 0)
         {
             return false;
         }
@@ -108,7 +108,7 @@ public readonly struct NumberValue : IEquatable<NumberValue>, IComparable<Number
     /// <exception cref="ArgumentException"><paramref name="format"/> is not a valid EXPRESS format.</exception>
     public string Format(string format)
     {
-        ArgumentNullException.ThrowIfNull(format);
+        Guard.NotNull(format);
         if (format.Length == 0)
         {
             format = Kind == NumberValueKind.Integer ? "7I" : "10.1E";

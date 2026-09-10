@@ -5,8 +5,8 @@ internal sealed class Part21SourceSpan
 {
     internal Part21SourceSpan(SourceLocation start, SourceLocation end)
     {
-        ArgumentNullException.ThrowIfNull(start);
-        ArgumentNullException.ThrowIfNull(end);
+        Guard.NotNull(start);
+        Guard.NotNull(end);
         if (!string.Equals(start.FilePath, end.FilePath, StringComparison.Ordinal))
             throw new ArgumentException("A source span must remain within one file.", nameof(end));
         if (end.Line < start.Line || end.Line == start.Line && end.Column < start.Column)
@@ -25,7 +25,7 @@ internal abstract class Part21SyntaxNode
 {
     protected Part21SyntaxNode(Part21SourceSpan span)
     {
-        ArgumentNullException.ThrowIfNull(span);
+        Guard.NotNull(span);
         Span = span;
     }
 
@@ -44,7 +44,7 @@ internal sealed class ExchangeStructureSyntax : Part21SyntaxNode
         Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(header);
+        Guard.NotNull(header);
         Header = header;
         Anchor = anchor;
         Reference = reference;
@@ -90,9 +90,9 @@ internal sealed class HeaderSectionSyntax : Part21SyntaxNode
         Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(fileDescription);
-        ArgumentNullException.ThrowIfNull(fileName);
-        ArgumentNullException.ThrowIfNull(fileSchema);
+        Guard.NotNull(fileDescription);
+        Guard.NotNull(fileName);
+        Guard.NotNull(fileSchema);
         FileDescription = fileDescription;
         FileName = fileName;
         FileSchema = fileSchema;
@@ -113,7 +113,7 @@ internal sealed class HeaderEntitySyntax : Part21SyntaxNode
     internal HeaderEntitySyntax(string name, IEnumerable<ValueSyntax> parameters, Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
+        Guard.NotNull(name);
         Name = name;
         Parameters = SyntaxSnapshot.Create(parameters);
     }
@@ -140,8 +140,8 @@ internal sealed class AnchorSyntax : Part21SyntaxNode
         Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(item);
+        Guard.NotNull(name);
+        Guard.NotNull(item);
         Name = name;
         Item = item;
         Tags = SyntaxSnapshot.Create(tags);
@@ -159,8 +159,8 @@ internal sealed class AnchorTagSyntax : Part21SyntaxNode
     internal AnchorTagSyntax(string name, ValueSyntax item, Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(item);
+        Guard.NotNull(name);
+        Guard.NotNull(item);
         Name = name;
         Item = item;
     }
@@ -183,8 +183,8 @@ internal sealed class ReferenceSyntax : Part21SyntaxNode
     internal ReferenceSyntax(ValueSyntax name, ValueSyntax resource, Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(resource);
+        Guard.NotNull(name);
+        Guard.NotNull(resource);
         Name = name;
         Resource = resource;
     }
@@ -227,7 +227,7 @@ internal sealed class EntityInstanceSyntax : Part21SyntaxNode
         Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
+        Guard.NotNull(name);
         Name = name;
         Kind = kind;
         Records = SyntaxSnapshot.Create(records);
@@ -245,7 +245,7 @@ internal sealed class EntityRecordSyntax : Part21SyntaxNode
     internal EntityRecordSyntax(string name, IEnumerable<ValueSyntax> parameters, Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(name);
+        Guard.NotNull(name);
         Name = name;
         Parameters = SyntaxSnapshot.Create(parameters);
     }
@@ -260,8 +260,8 @@ internal sealed class SignatureSectionSyntax : Part21SyntaxNode
     internal SignatureSectionSyntax(ValueSyntax content, int startIndex, Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(content);
-        ArgumentOutOfRangeException.ThrowIfNegative(startIndex);
+        Guard.NotNull(content);
+        Guard.Negative(startIndex);
         Content = content;
         StartIndex = startIndex;
     }
@@ -301,7 +301,7 @@ internal sealed class ValueSyntax : Part21SyntaxNode
         Part21SourceSpan span)
         : base(span)
     {
-        ArgumentNullException.ThrowIfNull(text);
+        Guard.NotNull(text);
         Kind = kind;
         Text = text;
         TypeName = typeName;
@@ -321,7 +321,7 @@ internal static class SyntaxSnapshot
 {
     internal static IReadOnlyList<T> Create<T>(IEnumerable<T> values)
     {
-        ArgumentNullException.ThrowIfNull(values);
+        Guard.NotNull(values);
         return Array.AsReadOnly(values.ToArray());
     }
 }

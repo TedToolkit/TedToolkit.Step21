@@ -140,4 +140,4 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.
 - Writing is canonical and semantically equivalent; it is not byte-preserving and does not retain comments or original formatting.
 
-The package targets .NET 10. The analyzer is packaged as build-time infrastructure; analyzer implementation libraries do not become consumer runtime assets. Native AOT proof currently executes on `win-x64`, without implying that this is the only usable runtime identifier.
+The package ships `netstandard2.0` and `net8.0` runtime assets. Later .NET consumers select the `net8.0` asset. The analyzer is packaged as build-time infrastructure; analyzer implementation libraries do not become consumer runtime assets. Native AOT proof currently executes on `win-x64`, without implying that this is the only usable runtime identifier.

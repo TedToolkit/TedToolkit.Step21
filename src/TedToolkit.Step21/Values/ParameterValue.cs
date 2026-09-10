@@ -90,7 +90,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
     public static ParameterValue FromString(string value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         return new(ParameterValueKind.String, text: value);
     }
 
@@ -100,7 +100,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
     public static ParameterValue FromBinary(BinaryValue value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         return new(ParameterValueKind.Binary, binary: value);
     }
 
@@ -115,7 +115,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not a declared logical state.</exception>
     public static ParameterValue FromLogical(LogicalValue value)
     {
-        if (!Enum.IsDefined(value))
+        if (!Enum.IsDefined(typeof(LogicalValue), value))
             throw new ArgumentOutOfRangeException(nameof(value), value, "The value must be a declared LOGICAL state.");
 
         return new(ParameterValueKind.Logical, logical: value);
@@ -138,7 +138,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
     public static ParameterValue FromEntity(Entity value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         return new(ParameterValueKind.Entity, entity: value);
     }
 
@@ -184,7 +184,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     /// <exception cref="ArgumentException"><paramref name="values"/> contains <see langword="null"/>.</exception>
     public static ParameterValue FromAggregate(IEnumerable<ParameterValue> values)
     {
-        ArgumentNullException.ThrowIfNull(values);
+        Guard.NotNull(values);
         var snapshot = values.ToArray();
         if (snapshot.Any(value => value is null))
             throw new ArgumentException("An aggregate parameter cannot contain null elements.", nameof(values));
@@ -201,7 +201,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
     public static ParameterValue FromTyped(string typeName, ParameterValue value)
     {
         ValidateName(typeName, nameof(typeName));
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         return new(ParameterValueKind.Typed, text: typeName, inner: value);
     }
 
@@ -404,7 +404,7 @@ public sealed class ParameterValue : IEquatable<ParameterValue>
 
     private static void ValidateName(string value, string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(value, parameterName);
+        Guard.NotNull(value, parameterName);
         if (value.Length == 0
             || value[0] is < 'A' or > 'Z'
             || value.Skip(1).Any(character => character is not (>= 'A' and <= 'Z')

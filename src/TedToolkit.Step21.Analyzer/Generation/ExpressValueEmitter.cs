@@ -394,14 +394,13 @@ internal static class ExpressValueEmitter
         return method;
     }
 
-    private static Statement CreateThrowIfNull(string parameterName)
+    private static IfStatement CreateThrowIfNull(string parameterName)
     {
-        var invoke = new DataType("global::System.ArgumentNullException")
-            .Type
-            .Sub("ThrowIfNull")
-            .Invoke()
-            .AddArgument(SourceComposer.Argument(parameterName.ToSimpleName()));
-        return new(invoke);
+        var exception = new DataType("global::System.ArgumentNullException")
+            .New
+            .AddArgument(SourceComposer.Argument(parameterName.ToLiteral()));
+        return new IfStatement(new CustomExpression($"{parameterName} is null"))
+            .AddStatement(exception.Throw);
     }
 
     private static ObjectCreationExpression CreateObject(string typeName, IExpression argument)

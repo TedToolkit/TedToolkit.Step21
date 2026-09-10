@@ -21,8 +21,8 @@ public static class ExpressAggregateView
         IExpressArray<TSource> source,
         Func<TSource, TResult> projector)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(projector);
+        Guard.NotNull(source);
+        Guard.NotNull(projector);
         return new ArrayProjection<TSource, TResult>(source, projector);
     }
 
@@ -36,8 +36,8 @@ public static class ExpressAggregateView
         IExpressList<TSource> source,
         Func<TSource, TResult> projector)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(projector);
+        Guard.NotNull(source);
+        Guard.NotNull(projector);
         return new ListProjection<TSource, TResult>(source, projector);
     }
 
@@ -51,8 +51,8 @@ public static class ExpressAggregateView
         IExpressBag<TSource> source,
         Func<TSource, TResult> projector)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(projector);
+        Guard.NotNull(source);
+        Guard.NotNull(projector);
         return new BagProjection<TSource, TResult>(source, projector);
     }
 
@@ -66,8 +66,8 @@ public static class ExpressAggregateView
         IExpressSet<TSource> source,
         Func<TSource, TResult> projector)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(projector);
+        Guard.NotNull(source);
+        Guard.NotNull(projector);
         return new SetProjection<TSource, TResult>(source, projector);
     }
 

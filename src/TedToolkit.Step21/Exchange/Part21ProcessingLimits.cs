@@ -19,16 +19,16 @@ public sealed class Part21ProcessingLimits
         int maximumItemCount = 1048576,
         long maximumArchiveEntryBytes = 67108864)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumInputCharacters);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumOutputCharacters);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumUriCharacters);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSignatureCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumSignatureBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumTotalSignatureBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCmsSignerCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumNestingDepth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumItemCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumArchiveEntryBytes);
+        Guard.NegativeOrZero(maximumInputCharacters);
+        Guard.NegativeOrZero(maximumOutputCharacters);
+        Guard.NegativeOrZero(maximumUriCharacters);
+        Guard.NegativeOrZero(maximumSignatureCount);
+        Guard.NegativeOrZero(maximumSignatureBytes);
+        Guard.NegativeOrZero(maximumTotalSignatureBytes);
+        Guard.NegativeOrZero(maximumCmsSignerCount);
+        Guard.NegativeOrZero(maximumNestingDepth);
+        Guard.NegativeOrZero(maximumItemCount);
+        Guard.NegativeOrZero(maximumArchiveEntryBytes);
 
         MaximumInputCharacters = maximumInputCharacters;
         MaximumOutputCharacters = maximumOutputCharacters;

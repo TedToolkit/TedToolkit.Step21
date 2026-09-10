@@ -69,7 +69,7 @@ public sealed class ExpressBag<T> : ICollection<T>, IExpressBag<T>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public ValidationResult Validate(string path = "$")
     {
-        ArgumentNullException.ThrowIfNull(path);
+        Guard.NotNull(path);
         return new ValidationResult(ExpressAggregateValidation.ValidateBounds(Count, LowerBound, UpperBound, path));
     }
 

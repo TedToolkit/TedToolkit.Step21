@@ -24,7 +24,7 @@ public sealed class DataSection
     /// <exception cref="InvalidOperationException"><paramref name="schemaName"/> is the invalid default value.</exception>
     public DataSection(SchemaName schemaName, string name)
     {
-        ArgumentNullException.ThrowIfNull(name);
+        Guard.NotNull(name);
         _ = schemaName.Value;
         SchemaName = schemaName;
         Name = name;

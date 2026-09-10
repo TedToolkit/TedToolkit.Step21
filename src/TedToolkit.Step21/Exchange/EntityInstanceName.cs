@@ -20,7 +20,7 @@ public readonly struct EntityInstanceName : IEquatable<EntityInstanceName>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="digits"/> represents zero.</exception>
     public EntityInstanceName(string digits)
     {
-        ArgumentNullException.ThrowIfNull(digits);
+        Guard.NotNull(digits);
         if (digits.Length == 0)
             throw new FormatException("An entity instance name must contain decimal digits.");
 

@@ -61,7 +61,7 @@ public sealed class Part21SignatureVerificationOptions
 {
     private readonly ReadOnlyCollection<Part21Certificate> _trustedRoots;
     private readonly ReadOnlyCollection<Part21Certificate> _additionalCertificates;
-    private readonly IReadOnlySet<string> _revokedFingerprints;
+    private readonly ISet<string> _revokedFingerprints;
 
     /// <summary>
     /// Creates an immutable verification input snapshot. Revocation entries identify signer
@@ -101,7 +101,7 @@ public sealed class Part21SignatureVerificationOptions
         IEnumerable<Part21Certificate> certificates,
         string parameterName)
     {
-        ArgumentNullException.ThrowIfNull(certificates, parameterName);
+        Guard.NotNull(certificates, parameterName);
         var result = certificates.ToArray();
         if (result.Any(static certificate => certificate is null))
             throw new ArgumentException("Certificate collections cannot contain null values.", parameterName);
@@ -150,7 +150,7 @@ public sealed class Part21CmsSigner : IPart21SignatureSigner
     /// <summary>Creates a signer that retains, but does not own, the supplied certificate and private key.</summary>
     public Part21CmsSigner(X509Certificate2 certificate, Oid? digestAlgorithm = null)
     {
-        ArgumentNullException.ThrowIfNull(certificate);
+        Guard.NotNull(certificate);
         if (!certificate.HasPrivateKey)
             throw new ArgumentException("A CMS signer certificate must have a private key.", nameof(certificate));
         _certificate = certificate;
@@ -215,9 +215,9 @@ public sealed class ExchangeStructureWriteOptions
         Part21ProcessingLimits processingLimits,
         Part21StringEncoding stringEncoding)
     {
-        ArgumentNullException.ThrowIfNull(signers);
-        ArgumentNullException.ThrowIfNull(processingLimits);
-        if (!Enum.IsDefined(stringEncoding))
+        Guard.NotNull(signers);
+        Guard.NotNull(processingLimits);
+        if (!Enum.IsDefined(typeof(Part21StringEncoding), stringEncoding))
             throw new ArgumentOutOfRangeException(nameof(stringEncoding));
         var result = signers.ToArray();
         if (result.Any(static signer => signer is null))

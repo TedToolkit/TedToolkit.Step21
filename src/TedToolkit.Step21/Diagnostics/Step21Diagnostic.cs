@@ -51,8 +51,8 @@ public sealed class Step21Diagnostic
         string message,
         SourceLocation? sourceLocation = null)
     {
-        ArgumentNullException.ThrowIfNull(code);
-        ArgumentNullException.ThrowIfNull(message);
+        Guard.NotNull(code);
+        Guard.NotNull(message);
         Code = code;
         Severity = severity;
         Message = message;

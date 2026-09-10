@@ -16,7 +16,7 @@ public readonly struct SchemaName : IEquatable<SchemaName>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
     public SchemaName(string value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         _value = value;
     }
 

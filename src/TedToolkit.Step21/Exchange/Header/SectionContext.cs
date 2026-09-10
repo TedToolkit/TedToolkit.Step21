@@ -12,7 +12,7 @@ public sealed class SectionContext
     /// </exception>
     public SectionContext(string? sectionName, IEnumerable<string> contextIdentifiers)
     {
-        ArgumentNullException.ThrowIfNull(contextIdentifiers);
+        Guard.NotNull(contextIdentifiers);
         ContextIdentifiers = IsoValueSnapshot.Create(contextIdentifiers, nameof(contextIdentifiers));
         if (ContextIdentifiers.Count == 0)
         {

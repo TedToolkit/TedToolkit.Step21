@@ -12,7 +12,7 @@ public sealed class SectionLanguage
     /// </exception>
     public SectionLanguage(string? sectionName, string languageCode)
     {
-        ArgumentNullException.ThrowIfNull(languageCode);
+        Guard.NotNull(languageCode);
         if (!Iso639Part2BibliographicCodes.Contains(languageCode))
         {
             throw new ArgumentException(

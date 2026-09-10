@@ -1,0 +1,10 @@
+SCHEMA compatibility_probe;
+
+TYPE label = STRING;
+END_TYPE;
+
+ENTITY node;
+  name : label;
+END_ENTITY;
+
+END_SCHEMA;

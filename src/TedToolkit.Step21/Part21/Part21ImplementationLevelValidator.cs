@@ -9,7 +9,7 @@ internal static class Part21ImplementationLevelValidator
 
     internal static Part21ReadFeatureScan GetReadFeatureScan(ExchangeStructureSyntax syntax)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
+        Guard.NotNull(syntax);
         if (syntax.Header.FileDescription.Parameters.Count < 2
             || syntax.Header.FileDescription.Parameters[1].Kind != Part21ValueKind.String)
         {
@@ -29,7 +29,7 @@ internal static class Part21ImplementationLevelValidator
         ExchangeStructureSyntax syntax,
         Part21ReadGraphFeatures graphFeatures)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
+        Guard.NotNull(syntax);
         if (!TryReadLevel(syntax.Header.FileDescription, out var level))
             return;
 
@@ -46,7 +46,7 @@ internal static class Part21ImplementationLevelValidator
         bool writesSignature,
         Part21StringEncoding stringEncoding)
     {
-        ArgumentNullException.ThrowIfNull(structure);
+        Guard.NotNull(structure);
 
         var level = structure.Header.FileDescription.ImplementationLevel;
         var diagnostics = new List<Step21Diagnostic>();
@@ -58,7 +58,7 @@ internal static class Part21ImplementationLevelValidator
 
     internal static void ValidateForMultiFileZip(ExchangeStructureSyntax syntax)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
+        Guard.NotNull(syntax);
         if (!TryReadLevel(syntax.Header.FileDescription, out var level))
             return;
         if (level is not ("4;1" or "3;1" or "2;1"))

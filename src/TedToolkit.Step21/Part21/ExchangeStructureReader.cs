@@ -15,7 +15,7 @@ internal static class ExchangeStructureReader
     internal static IReadOnlyCollection<SchemaDescriptor> SnapshotDescriptors(
         IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(schemaDescriptors);
+        Guard.NotNull(schemaDescriptors);
         var snapshot = schemaDescriptors.ToArray();
         if (snapshot.Any(descriptor => descriptor is null))
             throw new ArgumentException("Schema descriptor collections cannot contain null values.", nameof(schemaDescriptors));
@@ -80,8 +80,8 @@ internal static class ExchangeStructureReader
 
     internal static string ReadToEnd(TextReader source, Part21ProcessingLimits limits)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(limits);
+        Guard.NotNull(source);
+        Guard.NotNull(limits);
         var buffer = ArrayPool<char>.Shared.Rent(4096);
         var result = new StringBuilder();
         try
@@ -240,7 +240,7 @@ internal static class ExchangeStructureReader
 
         var physicalComponents = new Dictionary<
             Entity,
-            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(ReferenceEqualityComparer.Instance);
+            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(Step21ReferenceEqualityComparer.Instance);
         var domainProjections = new DomainProjectionContext(structure, physicalComponents, resolutionContext);
         foreach (var allocation in allocations)
         {
@@ -426,7 +426,7 @@ internal static class ExchangeStructureReader
                 continue;
             }
 
-            if (additionalHeader.Name.StartsWith('!'))
+            if (additionalHeader.Name.StartsWith("!", StringComparison.Ordinal))
                 continue;
 
             // Clause 8.3 requires application-defined header keywords to begin with '!'.
@@ -1374,7 +1374,7 @@ internal static class ExchangeStructureReader
         var sawUserDefined = false;
         foreach (var syntax in additionalEntities)
         {
-            if (!syntax.Name.StartsWith('!'))
+            if (!syntax.Name.StartsWith("!", StringComparison.Ordinal))
             {
                 if (sawUserDefined && IsStandardAdditionalHeaderName(syntax.Name))
                 {
@@ -1871,7 +1871,7 @@ internal static class ExchangeStructureReader
         }
 
         return int.TryParse(
-            code.AsSpan(prefix.Length),
+            code.Substring(prefix.Length),
             NumberStyles.None,
             CultureInfo.InvariantCulture,
             out parameterIndex);
@@ -1892,7 +1892,7 @@ internal static class ExchangeStructureReader
         parameterIndex = -1;
         return end > start
             && int.TryParse(
-                message.AsSpan(start, end - start),
+                message.Substring(start, end - start),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
             out parameterIndex);
@@ -1926,9 +1926,9 @@ internal static class ExchangeStructureReader
         Part21ResourceResolutionContext? resolutionContext)
     {
         private readonly Dictionary<Entity, Dictionary<SchemaDescriptor, Entity>> _projections =
-            new(ReferenceEqualityComparer.Instance);
-        private readonly HashSet<Entity> _hydratedProjections = new(ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<Entity, Entity> _projectionSources = new(ReferenceEqualityComparer.Instance);
+            new(Step21ReferenceEqualityComparer.Instance);
+        private readonly HashSet<Entity> _hydratedProjections = new(Step21ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<Entity, Entity> _projectionSources = new(Step21ReferenceEqualityComparer.Instance);
         private readonly List<DomainProjectionBinding> _pending = [];
 
         internal Entity Project(SchemaDescriptor receivingDescriptor, Entity source)
@@ -1951,7 +1951,7 @@ internal static class ExchangeStructureReader
                 return source;
             }
 
-            byDescriptor ??= new Dictionary<SchemaDescriptor, Entity>(ReferenceEqualityComparer.Instance);
+            byDescriptor ??= new Dictionary<SchemaDescriptor, Entity>(Step21ReferenceEqualityComparer.Instance);
             _projections[source] = byDescriptor;
             byDescriptor.Add(receivingDescriptor, projection);
             _projectionSources.Add(projection, source);
@@ -2185,8 +2185,8 @@ internal static class Part21LexicalValueDecoder
     internal static BinaryValue DecodeBinary(string text)
     {
         var normalized = text[1..^1]
-            .Replace("\\N\\", string.Empty, StringComparison.Ordinal)
-            .Replace("\\F\\", string.Empty, StringComparison.Ordinal);
+            .Replace("\\N\\", string.Empty)
+            .Replace("\\F\\", string.Empty);
         var unusedBits = normalized[0] - '0';
         if (unusedBits is < 0 or > 3 || unusedBits > (normalized.Length - 1) * 4)
             throw new FormatException("The BINARY unused-bit count exceeds the encoded bit count.");

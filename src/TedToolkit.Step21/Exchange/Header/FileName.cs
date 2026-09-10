@@ -28,11 +28,11 @@ public sealed class FileName
         string originatingSystem,
         string authorization)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(timeStamp);
-        ArgumentNullException.ThrowIfNull(preprocessorVersion);
-        ArgumentNullException.ThrowIfNull(originatingSystem);
-        ArgumentNullException.ThrowIfNull(authorization);
+        Guard.NotNull(name);
+        Guard.NotNull(timeStamp);
+        Guard.NotNull(preprocessorVersion);
+        Guard.NotNull(originatingSystem);
+        Guard.NotNull(authorization);
 
         Name = name;
         TimeStamp = timeStamp;

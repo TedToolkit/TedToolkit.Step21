@@ -12,15 +12,15 @@ namespace TedToolkit.Step21;
 /// </remarks>
 public sealed class ExchangeStructure
 {
-    private static readonly IReadOnlySet<string> EmptyOccurrenceNames =
+    private static readonly ISet<string> EmptyOccurrenceNames =
         new HashSet<string>(StringComparer.Ordinal);
 
     private readonly Dictionary<EntityInstanceName, EntityRegistration> _registrationsByName = [];
-    private readonly Dictionary<Entity, EntityRegistration> _registrationsByEntity = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Entity, EntityRegistration> _registrationsByEntity = new(Step21ReferenceEqualityComparer.Instance);
     private readonly Dictionary<EntityInstanceName, Entity> _resolvedExternalEntitiesByName = [];
     private readonly Dictionary<Entity, EntityInstanceName> _resolvedExternalNamesByEntity =
-        new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Entity, Entity> _domainProjectionSources = new(ReferenceEqualityComparer.Instance);
+        new(Step21ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Entity, Entity> _domainProjectionSources = new(Step21ReferenceEqualityComparer.Instance);
     private readonly List<EntityRegistration> _registrations = [];
     private readonly ReadOnlyCollection<EntityRegistration> _registrationView;
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
@@ -56,8 +56,8 @@ public sealed class ExchangeStructure
     /// </exception>
     public ExchangeStructure(HeaderSection header, IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(header);
-        ArgumentNullException.ThrowIfNull(schemaDescriptors);
+        Guard.NotNull(header);
+        Guard.NotNull(schemaDescriptors);
 
         var descriptorSnapshot = schemaDescriptors.ToArray();
         if (descriptorSnapshot.Any(descriptor => descriptor is null))
@@ -132,7 +132,7 @@ public sealed class ExchangeStructure
     {
         get
         {
-            var visited = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+            var visited = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
             foreach (var structure in new[] { this }.Concat(_includedPopulationStructures))
             {
                 foreach (var registration in structure._registrations)
@@ -174,7 +174,7 @@ public sealed class ExchangeStructure
         TextReader source,
         IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
     {
-        ArgumentNullException.ThrowIfNull(source);
+        Guard.NotNull(source);
         var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
         return ExchangeStructureReader.Read(
             ExchangeStructureReader.ReadToEnd(source, Part21ProcessingLimits.Default),
@@ -213,8 +213,8 @@ public sealed class ExchangeStructure
         IReadOnlyCollection<SchemaDescriptor> schemaDescriptors,
         ExchangeStructureReadOptions options)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(options);
+        Guard.NotNull(source);
+        Guard.NotNull(options);
         var descriptors = ExchangeStructureReader.SnapshotDescriptors(schemaDescriptors);
         return ExchangeStructureReader.Read(
             ExchangeStructureReader.ReadToEnd(source, options.ProcessingLimits),
@@ -238,7 +238,7 @@ public sealed class ExchangeStructure
     /// </remarks>
     public void Write(TextWriter destination)
     {
-        ArgumentNullException.ThrowIfNull(destination);
+        Guard.NotNull(destination);
         ExchangeStructureWriter.Write(this, destination);
     }
 
@@ -247,8 +247,8 @@ public sealed class ExchangeStructure
     /// <param name="options">The signing capabilities used in signature-section order.</param>
     public void Write(TextWriter destination, ExchangeStructureWriteOptions options)
     {
-        ArgumentNullException.ThrowIfNull(destination);
-        ArgumentNullException.ThrowIfNull(options);
+        Guard.NotNull(destination);
+        Guard.NotNull(options);
         ExchangeStructureWriter.Write(this, destination, options);
     }
 
@@ -269,8 +269,8 @@ public sealed class ExchangeStructure
     /// </remarks>
     public void WriteEntity(TextWriter destination, Entity entity)
     {
-        ArgumentNullException.ThrowIfNull(destination);
-        ArgumentNullException.ThrowIfNull(entity);
+        Guard.NotNull(destination);
+        Guard.NotNull(entity);
         ExchangeStructureWriter.WriteEntity(this, destination, entity);
     }
 
@@ -283,9 +283,9 @@ public sealed class ExchangeStructure
         Entity entity,
         Part21ProcessingLimits processingLimits)
     {
-        ArgumentNullException.ThrowIfNull(destination);
-        ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(processingLimits);
+        Guard.NotNull(destination);
+        Guard.NotNull(entity);
+        Guard.NotNull(processingLimits);
         ExchangeStructureWriter.WriteEntity(this, destination, entity, processingLimits);
     }
 
@@ -340,7 +340,7 @@ public sealed class ExchangeStructure
     /// <exception cref="ArgumentNullException"><paramref name="entity"/> is <see langword="null"/>.</exception>
     public bool Remove(Entity entity)
     {
-        ArgumentNullException.ThrowIfNull(entity);
+        Guard.NotNull(entity);
         return _registrationsByEntity.TryGetValue(entity, out var registration) && Remove(registration);
     }
 
@@ -361,8 +361,8 @@ public sealed class ExchangeStructure
     public ValidationResult Validate()
     {
         var failures = new List<ValidationFailure>(Part21HeaderValidator.Validate(Header));
-        IReadOnlySet<string> externalEntityNames = EmptyOccurrenceNames;
-        IReadOnlySet<string> externalValueNames = EmptyOccurrenceNames;
+        ISet<string> externalEntityNames = EmptyOccurrenceNames;
+        ISet<string> externalValueNames = EmptyOccurrenceNames;
         List<ValidationFailure>? referenceFailures = null;
         if (_references is { Count: > 0, })
         {
@@ -384,10 +384,10 @@ public sealed class ExchangeStructure
         ValidateDataSectionNames(failures, dataSections);
         ValidateSectionHeaderDeclarations(failures, dataSections);
         var sectionFailures = new ValidationFailure?[dataSections.Length];
-        var sectionIndexes = new Dictionary<DataSection, int>(ReferenceEqualityComparer.Instance);
-        var descriptorsBySection = new Dictionary<DataSection, SchemaDescriptor>(ReferenceEqualityComparer.Instance);
+        var sectionIndexes = new Dictionary<DataSection, int>(Step21ReferenceEqualityComparer.Instance);
+        var descriptorsBySection = new Dictionary<DataSection, SchemaDescriptor>(Step21ReferenceEqualityComparer.Instance);
         var entitiesBySection = new Dictionary<DataSection, List<KeyValuePair<string, Entity>>>(
-            ReferenceEqualityComparer.Instance);
+            Step21ReferenceEqualityComparer.Instance);
         for (var index = 0; index < dataSections.Length; index++)
         {
             var sectionPath = $"DataSections[{index}]";
@@ -423,7 +423,7 @@ public sealed class ExchangeStructure
             entitiesBySection.Add(dataSection, []);
         }
 
-        var visited = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        var visited = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
         foreach (var registration in _registrations)
         {
             if (!visited.Add(registration.Entity))
@@ -666,8 +666,8 @@ public sealed class ExchangeStructure
 
     private void ValidateAnchors(
         ICollection<ValidationFailure> failures,
-        IReadOnlySet<string> externalEntityNames,
-        IReadOnlySet<string> externalValueNames)
+        ISet<string> externalEntityNames,
+        ISet<string> externalValueNames)
     {
         if (_anchors is null)
             return;
@@ -716,8 +716,8 @@ public sealed class ExchangeStructure
         ParameterValue item,
         string path,
         ICollection<ValidationFailure> failures,
-        IReadOnlySet<string> externalEntityNames,
-        IReadOnlySet<string> externalValueNames)
+        ISet<string> externalEntityNames,
+        ISet<string> externalValueNames)
     {
         if (item.TryGetEntity(out var entity))
         {
@@ -801,8 +801,8 @@ public sealed class ExchangeStructure
 
     private void ValidateUserDefinedHeaderEntities(
         ICollection<ValidationFailure> failures,
-        IReadOnlySet<string> externalEntityNames,
-        IReadOnlySet<string> externalValueNames)
+        ISet<string> externalEntityNames,
+        ISet<string> externalValueNames)
     {
         if (_userDefinedHeaderEntities is null)
             return;
@@ -840,8 +840,8 @@ public sealed class ExchangeStructure
         ParameterValue value,
         string path,
         ICollection<ValidationFailure> failures,
-        IReadOnlySet<string> externalEntityNames,
-        IReadOnlySet<string> externalValueNames,
+        ISet<string> externalEntityNames,
+        ISet<string> externalValueNames,
         SchemaDescriptor? firstDescriptor)
     {
         if (value.Kind == ParameterValueKind.Resource)
@@ -1039,37 +1039,37 @@ public sealed class ExchangeStructure
 
     internal void SetSchemaPopulations(IReadOnlyList<SchemaPopulationDefinition> populations)
     {
-        ArgumentNullException.ThrowIfNull(populations);
+        Guard.NotNull(populations);
         _schemaPopulations = [.. populations];
     }
 
     internal void SetSchemaPopulationExternalFiles(IReadOnlyList<SchemaPopulationExternalFile> externalFiles)
     {
-        ArgumentNullException.ThrowIfNull(externalFiles);
+        Guard.NotNull(externalFiles);
         _schemaPopulationExternalFiles = [.. externalFiles];
     }
 
     internal void SetSectionLanguages(IReadOnlyList<SectionLanguage> declarations)
     {
-        ArgumentNullException.ThrowIfNull(declarations);
+        Guard.NotNull(declarations);
         _sectionLanguages = [.. declarations];
     }
 
     internal void SetSectionContexts(IReadOnlyList<SectionContext> declarations)
     {
-        ArgumentNullException.ThrowIfNull(declarations);
+        Guard.NotNull(declarations);
         _sectionContexts = [.. declarations];
     }
 
     internal void SetUserDefinedHeaderEntities(IReadOnlyList<UserDefinedHeaderEntity> entities)
     {
-        ArgumentNullException.ThrowIfNull(entities);
+        Guard.NotNull(entities);
         _userDefinedHeaderEntities = [.. entities];
     }
 
     internal void SetIncludedPopulationStructures(IReadOnlyList<ExchangeStructure> structures)
     {
-        ArgumentNullException.ThrowIfNull(structures);
+        Guard.NotNull(structures);
         _includedPopulationStructures = Array.AsReadOnly(structures.ToArray());
     }
 
@@ -1077,7 +1077,7 @@ public sealed class ExchangeStructure
         ISchemaDomainEquivalenceProvider? provider,
         IReadOnlyList<SchemaDomainEquivalence> equivalences)
     {
-        ArgumentNullException.ThrowIfNull(equivalences);
+        Guard.NotNull(equivalences);
         foreach (var endpoint in equivalences.SelectMany(item => new[] { item.Source, item.Target }).Distinct())
         {
             var descriptor = _schemaDescriptors.FirstOrDefault(candidate => SchemaIdentifiersAssociate(
@@ -1100,8 +1100,8 @@ public sealed class ExchangeStructure
         out IReadOnlyList<ParameterValue> projectedParameters,
         out string? error)
     {
-        ArgumentNullException.ThrowIfNull(equivalence);
-        ArgumentNullException.ThrowIfNull(sourceParameters);
+        Guard.NotNull(equivalence);
+        Guard.NotNull(sourceParameters);
         projectedParameters = Array.Empty<ParameterValue>();
         error = null;
         if (_domainEquivalenceProvider is null)
@@ -1140,10 +1140,10 @@ public sealed class ExchangeStructure
             return false;
         }
 
-        var allowedEntities = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        var allowedEntities = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
         foreach (var parameter in sourceParameters)
             CollectParameterEntities(parameter, allowedEntities);
-        var projectedEntities = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        var projectedEntities = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
         foreach (var parameter in snapshot)
             CollectParameterEntities(parameter, projectedEntities);
         if (!projectedEntities.IsSubsetOf(allowedEntities))
@@ -1180,8 +1180,8 @@ public sealed class ExchangeStructure
         out SchemaDescriptor sourceDescriptor,
         out SchemaDomainEquivalence equivalence)
     {
-        ArgumentNullException.ThrowIfNull(receivingDescriptor);
-        ArgumentNullException.ThrowIfNull(source);
+        Guard.NotNull(receivingDescriptor);
+        Guard.NotNull(source);
         projection = null!;
         var owningDescriptor = FindOwningDescriptor(source);
         sourceDescriptor = owningDescriptor!;
@@ -1277,7 +1277,7 @@ public sealed class ExchangeStructure
 
     internal void SetSignatures(IReadOnlyList<Part21Signature> signatures)
     {
-        ArgumentNullException.ThrowIfNull(signatures);
+        Guard.NotNull(signatures);
         _signatures = Array.AsReadOnly(signatures.ToArray());
         _signatureReports = _signatures.Count == 0
             ? Array.Empty<Part21ResourceSignatureReport>()
@@ -1287,7 +1287,7 @@ public sealed class ExchangeStructure
 
     internal void SetSignatureReports(IReadOnlyList<Part21ResourceSignatureReport> reports)
     {
-        ArgumentNullException.ThrowIfNull(reports);
+        Guard.NotNull(reports);
         _signatureReports = Array.AsReadOnly(reports.ToArray());
     }
 
@@ -1359,7 +1359,7 @@ public sealed class ExchangeStructure
 
     internal void SetResolvedReference(Part21Reference reference, ParameterValue? value)
     {
-        ArgumentNullException.ThrowIfNull(reference);
+        Guard.NotNull(reference);
         reference.SetResolution(value);
         if (reference.Kind != Part21ReferenceKind.EntityInstance
             || value is null
@@ -1516,8 +1516,9 @@ public sealed class ExchangeStructure
             .Select(item => item.Section!)
             .ToList();
         var populationDescriptorsBySection = new Dictionary<DataSection, SchemaDescriptor>(
-            descriptorsBySection,
-            ReferenceEqualityComparer.Instance);
+            Step21ReferenceEqualityComparer.Instance);
+        foreach (var pair in descriptorsBySection)
+            populationDescriptorsBySection.Add(pair.Key, pair.Value);
         var allEntries = validSections
             .SelectMany(section => entitiesBySection[section]
                 .Select(entry => new PopulationEntry(entry.Key, entry.Value, section, this)))
@@ -1526,7 +1527,7 @@ public sealed class ExchangeStructure
         {
             var included = _includedPopulationStructures[structureIndex];
             var includedSections = new List<DataSection>();
-            var seenIncludedSections = new HashSet<DataSection>(ReferenceEqualityComparer.Instance);
+            var seenIncludedSections = new HashSet<DataSection>(Step21ReferenceEqualityComparer.Instance);
             foreach (var section in included.DataSections)
             {
                 if (section is not null && seenIncludedSections.Add(section))
@@ -1550,8 +1551,8 @@ public sealed class ExchangeStructure
         }
         var populationEntities = new HashSet<Entity>(
             allEntries.Select(entry => entry.Entity),
-            ReferenceEqualityComparer.Instance);
-        var claimedSections = new HashSet<DataSection>(ReferenceEqualityComparer.Instance);
+            Step21ReferenceEqualityComparer.Instance);
+        var claimedSections = new HashSet<DataSection>(Step21ReferenceEqualityComparer.Instance);
         foreach (var definition in schemaPopulations)
         {
             var governedNames = definition.GovernedSectionNames is null
@@ -1622,8 +1623,8 @@ public sealed class ExchangeStructure
         SchemaDescriptor descriptor,
         IReadOnlyDictionary<DataSection, SchemaDescriptor> populationDescriptorsBySection)
     {
-        var inputSet = new HashSet<DataSection>(inputSections, ReferenceEqualityComparer.Instance);
-        var selected = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        var inputSet = new HashSet<DataSection>(inputSections, Step21ReferenceEqualityComparer.Instance);
+        var selected = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
         foreach (var entry in allEntries.Where(entry => inputSet.Contains(entry.DataSection)))
             selected.Add(entry.Entity);
 
@@ -1631,7 +1632,7 @@ public sealed class ExchangeStructure
         {
             var available = new HashSet<Entity>(
                 allEntries.Select(entry => entry.Entity),
-                ReferenceEqualityComparer.Instance);
+                Step21ReferenceEqualityComparer.Instance);
             foreach (var entry in allEntries.Where(entry => inputSet.Contains(entry.DataSection)))
             {
                 foreach (var reference in entry.Entity.DirectReferences)
@@ -1666,7 +1667,7 @@ public sealed class ExchangeStructure
         HashSet<Entity>? visited = null;
         while (TryGetDomainProjectionSource(current, owner, out var source))
         {
-            visited ??= new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+            visited ??= new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
             if (!visited.Add(current))
                 break;
             current = source;
@@ -1697,9 +1698,9 @@ public sealed class ExchangeStructure
         SchemaDescriptor governingDescriptor,
         IReadOnlyList<PopulationEntry> entries,
         IReadOnlyDictionary<DataSection, SchemaDescriptor> descriptorsBySection,
-        IReadOnlySet<Entity> populationEntities)
+        ISet<Entity> populationEntities)
     {
-        var selected = new HashSet<Entity>(entries.Select(entry => entry.Entity), ReferenceEqualityComparer.Instance);
+        var selected = new HashSet<Entity>(entries.Select(entry => entry.Entity), Step21ReferenceEqualityComparer.Instance);
         var hasOutsideReference = entries.Any(entry => entry.Entity.DirectReferences.Any(reference =>
         {
             if (reference is null)
@@ -1739,7 +1740,7 @@ public sealed class ExchangeStructure
     {
         var failures = new List<ValidationFailure>();
         var detached = new ExchangeStructure(Header, _schemaDescriptors);
-        var detachedSections = new Dictionary<DataSection, DataSection>(ReferenceEqualityComparer.Instance);
+        var detachedSections = new Dictionary<DataSection, DataSection>(Step21ReferenceEqualityComparer.Instance);
         foreach (var section in entries.Select(entry => entry.DataSection))
         {
             if (detachedSections.ContainsKey(section))
@@ -1751,9 +1752,9 @@ public sealed class ExchangeStructure
             detachedSections.Add(section, clone);
         }
 
-        var clones = new Dictionary<Entity, Entity>(ReferenceEqualityComparer.Instance);
+        var clones = new Dictionary<Entity, Entity>(Step21ReferenceEqualityComparer.Instance);
         var projections = new Dictionary<Entity, IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(
-            ReferenceEqualityComparer.Instance);
+            Step21ReferenceEqualityComparer.Instance);
         foreach (var entry in entries)
         {
             try
@@ -1843,11 +1844,11 @@ public sealed class ExchangeStructure
     {
         var failures = new List<ValidationFailure>();
         var projected = new ExchangeStructure(Header, _schemaDescriptors);
-        var projectedSections = new Dictionary<DataSection, DataSection>(ReferenceEqualityComparer.Instance);
-        var projectedEntities = new Dictionary<Entity, Entity>(ReferenceEqualityComparer.Instance);
+        var projectedSections = new Dictionary<DataSection, DataSection>(Step21ReferenceEqualityComparer.Instance);
+        var projectedEntities = new Dictionary<Entity, Entity>(Step21ReferenceEqualityComparer.Instance);
         var projectedComponents = new Dictionary<
             Entity,
-            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(ReferenceEqualityComparer.Instance);
+            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>>(Step21ReferenceEqualityComparer.Instance);
         foreach (var entry in entries)
         {
             if (!projectedSections.TryGetValue(entry.DataSection, out var section))
@@ -2077,7 +2078,7 @@ public sealed class ExchangeStructure
         var end = message.IndexOf(' ', start);
         parameterIndex = -1;
         return end > start && int.TryParse(
-            message.AsSpan(start, end - start),
+            message.Substring(start, end - start),
             NumberStyles.None,
             CultureInfo.InvariantCulture,
             out parameterIndex);
@@ -2085,8 +2086,8 @@ public sealed class ExchangeStructure
 
     private void PrepareAdd(DataSection dataSection, Entity entity)
     {
-        ArgumentNullException.ThrowIfNull(dataSection);
-        ArgumentNullException.ThrowIfNull(entity);
+        Guard.NotNull(dataSection);
+        Guard.NotNull(entity);
         if (!DataSections.Any(candidate => ReferenceEquals(candidate, dataSection)))
         {
             throw new ArgumentException(
@@ -2106,7 +2107,7 @@ public sealed class ExchangeStructure
     private static IReadOnlyList<Entity> CaptureGraph(Entity root)
     {
         var graph = new List<Entity>();
-        var visited = new HashSet<Entity>(ReferenceEqualityComparer.Instance);
+        var visited = new HashSet<Entity>(Step21ReferenceEqualityComparer.Instance);
         var pending = new Stack<Entity>();
         pending.Push(root);
 
@@ -2150,7 +2151,7 @@ public sealed class ExchangeStructure
         return additions;
     }
 
-    private static EntityInstanceName FindSmallestUnusedName(IReadOnlySet<EntityInstanceName> usedNames)
+    private static EntityInstanceName FindSmallestUnusedName(ISet<EntityInstanceName> usedNames)
     {
         var digits = "1";
         while (true)

@@ -22,7 +22,7 @@ public sealed class ValidationResult
     /// </example>
     public ValidationResult(IEnumerable<ValidationFailure> failures)
     {
-        ArgumentNullException.ThrowIfNull(failures);
+        Guard.NotNull(failures);
         Failures = Array.AsReadOnly(failures.ToArray());
     }
 

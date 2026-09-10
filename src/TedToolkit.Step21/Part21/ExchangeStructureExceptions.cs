@@ -21,7 +21,7 @@ public sealed class ExchangeStructureSyntaxException : Exception
     public ExchangeStructureSyntaxException(IEnumerable<Step21Diagnostic> diagnostics)
         : base("The ISO 10303-21 exchange structure contains syntax errors.")
     {
-        ArgumentNullException.ThrowIfNull(diagnostics);
+        Guard.NotNull(diagnostics);
         Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
     }
 
@@ -52,7 +52,7 @@ public sealed class ExchangeStructureBindingException : Exception
     public ExchangeStructureBindingException(IEnumerable<Step21Diagnostic> diagnostics)
         : base("The ISO 10303-21 exchange structure could not be bound to the supplied schemas.")
     {
-        ArgumentNullException.ThrowIfNull(diagnostics);
+        Guard.NotNull(diagnostics);
         Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
     }
 
@@ -86,7 +86,7 @@ public sealed class ExchangeStructureReadValidationException : Exception
     public ExchangeStructureReadValidationException(ValidationResult validationResult)
         : base("The ISO 10303-21 exchange structure is invalid and cannot be published.")
     {
-        ArgumentNullException.ThrowIfNull(validationResult);
+        Guard.NotNull(validationResult);
         ValidationResult = validationResult;
     }
 
@@ -120,7 +120,7 @@ public sealed class ExchangeStructureWriteValidationException : Exception
     public ExchangeStructureWriteValidationException(ValidationResult validationResult)
         : base("The ISO 10303-21 exchange structure is invalid and cannot be written.")
     {
-        ArgumentNullException.ThrowIfNull(validationResult);
+        Guard.NotNull(validationResult);
         ValidationResult = validationResult;
     }
 
@@ -151,7 +151,7 @@ public sealed class ExchangeStructureCapabilityException : Exception
     public ExchangeStructureCapabilityException(IEnumerable<Step21Diagnostic> diagnostics)
         : base("The ISO 10303-21 exchange structure requires an unsupported capability.")
     {
-        ArgumentNullException.ThrowIfNull(diagnostics);
+        Guard.NotNull(diagnostics);
         Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
     }
 

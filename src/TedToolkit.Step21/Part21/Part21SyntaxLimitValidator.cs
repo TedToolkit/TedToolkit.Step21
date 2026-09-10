@@ -12,8 +12,8 @@ internal static class Part21SyntaxLimitValidator
         Part21ProcessingLimits limits,
         Part21ReadFeatureScan featureScan)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
-        ArgumentNullException.ThrowIfNull(limits);
+        Guard.NotNull(syntax);
+        Guard.NotNull(limits);
 
         CheckCount(syntax.Header.AdditionalEntities.Count, limits, "additional header entity");
         CheckCount(syntax.DataSections.Count, limits, "data section");

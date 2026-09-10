@@ -30,6 +30,7 @@
     <File Path="src/grammar/STEPParser.g4" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/TedToolkit.Step21.CompatibilityProbe/TedToolkit.Step21.CompatibilityProbe.csproj" />
     <Project Path="tests/TedToolkit.Step21.IntegrationTests/TedToolkit.Step21.IntegrationTests.csproj" />
     <Project Path="tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj" />
   </Folder>

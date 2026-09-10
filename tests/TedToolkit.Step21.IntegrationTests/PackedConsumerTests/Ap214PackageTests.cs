@@ -29,7 +29,7 @@ internal sealed class Ap214PackageTests
     public async Task Should_bound_the_precompiled_ap214_native_static_caches()
     {
         var assemblyPath = Path.Combine(RepositoryPaths.FindRoot(), "src", "TedToolkit.Step21.Ap214",
-            "bin", "Release", "net10.0", "TedToolkit.Step21.Ap214.dll");
+            "bin", "Release", "net8.0", "TedToolkit.Step21.Ap214.dll");
         using var stream = File.OpenRead(assemblyPath);
         using var image = new PEReader(stream);
         var metadata = image.GetMetadataReader();
@@ -368,7 +368,9 @@ internal sealed class Ap214PackageTests
                     "AP214_SCHEMA_REJECTED code=P21-BIND-SCHEMA partial-model=false");
                 await Assert.That(Directory.Exists(generatedRoot)
                     && Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories).Any()).IsFalse();
-                await Assert.That(packageEntries).Contains("lib/net10.0/TedToolkit.Step21.Ap214.dll");
+                await Assert.That(packageEntries).Contains("lib/netstandard2.0/TedToolkit.Step21.Ap214.dll");
+                await Assert.That(packageEntries).Contains("lib/net8.0/TedToolkit.Step21.Ap214.dll");
+                await Assert.That(packageEntries).DoesNotContain("lib/net10.0/TedToolkit.Step21.Ap214.dll");
                 await Assert.That(ReadNormalizedPackageManifest(packagePath)).IsEqualTo(
                     ReadNormalizedPackageManifest(repeatPackagePath));
                 await Assert.That(packageEntries).Contains("README.md");
@@ -572,7 +574,9 @@ internal sealed class Ap214PackageTests
                     + "runtime-assemblies=1 schema-assemblies=2");
                 await Assert.That(ReadNormalizedPackageManifest(packagePath)).IsEqualTo(
                     ReadNormalizedPackageManifest(repeatPackagePath));
-                await Assert.That(entries).Contains("lib/net10.0/TedToolkit.Step21.Ap242.dll");
+                await Assert.That(entries).Contains("lib/netstandard2.0/TedToolkit.Step21.Ap242.dll");
+                await Assert.That(entries).Contains("lib/net8.0/TedToolkit.Step21.Ap242.dll");
+                await Assert.That(entries).DoesNotContain("lib/net10.0/TedToolkit.Step21.Ap242.dll");
                 await Assert.That(entries).Contains("README.md");
                 await Assert.That(entries.Any(path => path.EndsWith(".exp", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(entries.Any(path => path.StartsWith("analyzers/", StringComparison.OrdinalIgnoreCase))).IsFalse();

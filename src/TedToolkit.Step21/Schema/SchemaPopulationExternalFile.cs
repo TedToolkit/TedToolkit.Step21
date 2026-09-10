@@ -51,7 +51,7 @@ public sealed class SchemaPopulationExternalFile
     /// <summary>Creates an external-file identification from its ISO triple.</summary>
     public SchemaPopulationExternalFile(Uri location, string? timeStamp = null, string? messageDigest = null)
     {
-        ArgumentNullException.ThrowIfNull(location);
+        Guard.NotNull(location);
         if (location.OriginalString.Length == 0)
             throw new ArgumentException("An external schema-population URI cannot be empty.", nameof(location));
         try

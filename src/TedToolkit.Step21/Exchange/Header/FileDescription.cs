@@ -17,7 +17,7 @@ public sealed class FileDescription
     public FileDescription(IEnumerable<string> description, string implementationLevel)
     {
         Description = IsoValueSnapshot.Create(description, nameof(description));
-        ArgumentNullException.ThrowIfNull(implementationLevel);
+        Guard.NotNull(implementationLevel);
         ImplementationLevel = implementationLevel;
     }
 

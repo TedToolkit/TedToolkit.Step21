@@ -125,7 +125,9 @@ internal sealed class PackageTests
                     "AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6");
                 await Assert.That(Directory.Exists(generatedRoot)
                     && Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.AllDirectories).Any()).IsFalse();
-                await Assert.That(packageEntries).Contains("lib/net10.0/TedToolkit.Step21.Ap203.dll");
+                await Assert.That(packageEntries).Contains("lib/netstandard2.0/TedToolkit.Step21.Ap203.dll");
+                await Assert.That(packageEntries).Contains("lib/net8.0/TedToolkit.Step21.Ap203.dll");
+                await Assert.That(packageEntries).DoesNotContain("lib/net10.0/TedToolkit.Step21.Ap203.dll");
                 await Assert.That(packageEntries).Contains("README.md");
                 await Assert.That(packageEntries.Any(path => path.EndsWith(".exp", StringComparison.OrdinalIgnoreCase))).IsFalse();
                 await Assert.That(packageEntries.Any(path => path.StartsWith("analyzers/", StringComparison.OrdinalIgnoreCase))).IsFalse();
@@ -354,6 +356,9 @@ internal sealed class PackageTests
                 await Assert.That(packageEntries).Contains("analyzers/dotnet/cs/TedToolkit.RoslynHelper.dll");
                 await Assert.That(packageEntries).Contains("analyzers/dotnet/cs/ZString.dll");
                 await Assert.That(packageEntries).Contains("analyzers/dotnet/cs/System.Memory.dll");
+                await Assert.That(packageEntries).Contains("lib/netstandard2.0/TedToolkit.Step21.dll");
+                await Assert.That(packageEntries).Contains("lib/net8.0/TedToolkit.Step21.dll");
+                await Assert.That(packageEntries).DoesNotContain("lib/net10.0/TedToolkit.Step21.dll");
                 await Assert.That(packageEntries).Contains("README.md");
                 await Assert.That(packagedReadme).IsEqualTo(projectReadme);
                 await Assert.That(packageEntries.Any(path => path.StartsWith(
@@ -510,7 +515,7 @@ internal sealed class PackageTests
     private static PackageAssemblyContract InspectPackageAssembly(string packagePath)
     {
         using var archive = ZipFile.OpenRead(packagePath);
-        var entry = archive.GetEntry("lib/net10.0/TedToolkit.Step21.Ap203.dll")
+        var entry = archive.GetEntry("lib/net8.0/TedToolkit.Step21.Ap203.dll")
             ?? throw new InvalidOperationException("The packaged AP203 assembly is missing.");
         using var assemblyStream = new MemoryStream();
         using (var entryStream = entry.Open())

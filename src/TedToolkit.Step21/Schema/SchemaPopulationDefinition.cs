@@ -23,7 +23,7 @@ public sealed class SchemaPopulationDefinition
         IEnumerable<string>? governedSectionNames = null)
     {
         _ = schemaName.Value;
-        if (!Enum.IsDefined(determination))
+        if (!Enum.IsDefined(typeof(SchemaPopulationDetermination), determination))
             throw new ArgumentOutOfRangeException(nameof(determination));
 
         SchemaName = schemaName;

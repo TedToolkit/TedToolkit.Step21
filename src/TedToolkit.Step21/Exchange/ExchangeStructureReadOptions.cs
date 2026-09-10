@@ -28,10 +28,10 @@ public sealed class Part21ResourceContent
     /// <summary>Creates byte-oriented clear text, archive, or other-format content.</summary>
     public Part21ResourceContent(Uri identity, Part21ResourceContentKind kind, ReadOnlyMemory<byte> bytes)
     {
-        ArgumentNullException.ThrowIfNull(identity);
+        Guard.NotNull(identity);
         if (kind == Part21ResourceContentKind.Directory)
             throw new ArgumentException("Directory content requires an entry collection.", nameof(kind));
-        if (!Enum.IsDefined(kind))
+        if (!Enum.IsDefined(typeof(Part21ResourceContentKind), kind))
             throw new ArgumentOutOfRangeException(nameof(kind));
 
         Identity = identity;
@@ -43,8 +43,8 @@ public sealed class Part21ResourceContent
     /// <summary>Creates an in-memory directory from a stable entry snapshot.</summary>
     public Part21ResourceContent(Uri identity, IReadOnlyDictionary<string, ReadOnlyMemory<byte>> entries)
     {
-        ArgumentNullException.ThrowIfNull(identity);
-        ArgumentNullException.ThrowIfNull(entries);
+        Guard.NotNull(identity);
+        Guard.NotNull(entries);
         if (entries.Keys.Any(static name => name is null))
             throw new ArgumentException("Directory entry names cannot be null.", nameof(entries));
 
@@ -52,7 +52,7 @@ public sealed class Part21ResourceContent
         Kind = Part21ResourceContentKind.Directory;
         Bytes = ReadOnlyMemory<byte>.Empty;
         Entries = new ReadOnlyDictionary<string, ReadOnlyMemory<byte>>(
-            new Dictionary<string, ReadOnlyMemory<byte>>(entries, StringComparer.Ordinal));
+            entries.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
     }
 
     /// <summary>Gets the stable identity used by the per-read cache.</summary>
@@ -95,13 +95,15 @@ public sealed class Part21ResourceLimits
         long maximumArchiveUncompressedBytes = 268435456,
         double maximumCompressionRatio = 100)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumResourceCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumReferenceDepth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumArchiveDepth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumTotalBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumArchiveEntryCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumArchiveUncompressedBytes);
-        if (!double.IsFinite(maximumCompressionRatio) || maximumCompressionRatio <= 0)
+        Guard.NegativeOrZero(maximumResourceCount);
+        Guard.NegativeOrZero(maximumReferenceDepth);
+        Guard.NegativeOrZero(maximumArchiveDepth);
+        Guard.NegativeOrZero(maximumTotalBytes);
+        Guard.NegativeOrZero(maximumArchiveEntryCount);
+        Guard.NegativeOrZero(maximumArchiveUncompressedBytes);
+        if (double.IsNaN(maximumCompressionRatio)
+            || double.IsInfinity(maximumCompressionRatio)
+            || maximumCompressionRatio <= 0)
             throw new ArgumentOutOfRangeException(nameof(maximumCompressionRatio));
 
         MaximumResourceCount = maximumResourceCount;
@@ -212,7 +214,7 @@ public sealed class ExchangeStructureReadOptions
         Part21SignatureVerificationOptions? signatureVerification,
         ISchemaDomainEquivalenceProvider? domainEquivalenceProvider)
     {
-        ArgumentNullException.ThrowIfNull(processingLimits);
+        Guard.NotNull(processingLimits);
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
         if (baseUri is not null)

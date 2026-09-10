@@ -13,7 +13,7 @@ public sealed class BinaryValue : IEquatable<BinaryValue>
     /// <example><code>var value = new BinaryValue("00101");</code></example>
     public BinaryValue(string bits)
     {
-        ArgumentNullException.ThrowIfNull(bits);
+        Guard.NotNull(bits);
         if (bits.Any(bit => bit is not ('0' or '1')))
             throw new FormatException("An EXPRESS BINARY value may contain only '0' and '1'.");
 

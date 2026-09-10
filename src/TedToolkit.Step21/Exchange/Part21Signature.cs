@@ -52,8 +52,8 @@ public sealed class Part21Certificate
         _encoded = encoded.ToArray();
         try
         {
-            using var certificate = X509CertificateLoader.LoadCertificate(_encoded);
-            Fingerprint = certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256);
+            using var certificate = CertificateCompat.Load(_encoded);
+            Fingerprint = EncodingCompat.GetSha256Fingerprint(certificate);
         }
         catch (System.Security.Cryptography.CryptographicException exception)
         {
@@ -67,7 +67,7 @@ public sealed class Part21Certificate
     /// <summary>Gets the immutable encoded certificate bytes.</summary>
     public ReadOnlyMemory<byte> Encoded => _encoded.ToArray();
 
-    internal X509Certificate2 Load() => X509CertificateLoader.LoadCertificate(_encoded);
+    internal X509Certificate2 Load() => CertificateCompat.Load(_encoded);
 }
 
 /// <summary>Reports cryptographic and trust results for one CMS signer.</summary>

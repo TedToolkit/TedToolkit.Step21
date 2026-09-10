@@ -9,8 +9,8 @@ internal static class ExchangeStructureSyntaxParser
 {
     internal static ExchangeStructureSyntax Parse(string source, string filePath)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(filePath);
+        Guard.NotNull(source);
+        Guard.NotNull(filePath);
 
         if (Part21StringTokenLimits.TryGetInvalidUnicodeScalarIndex(source, out var invalidIndex))
         {

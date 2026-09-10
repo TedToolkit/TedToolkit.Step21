@@ -46,8 +46,9 @@ Distinct custom EXPRESS schemas remain supported through the Analyzer workflow.
 
 ## Package boundary
 
-The package targets .NET 10, contains generated schema code, and declares the tested
-`TedToolkit.Step21` runtime range `[1.0.0,2.0.0)`. It does not add a reader/writer facade, registry,
+The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consumers select the
+`net8.0` asset. It contains generated schema code and declares the tested `TedToolkit.Step21`
+runtime range `[1.0.0,2.0.0)`. It does not add a reader/writer facade, registry,
 reflection-based discovery, CAD-kernel conversion, or a second runtime. Consumers do not receive the
 EXPRESS source, generator implementation, or Analyzer-only dependencies as runtime assets.
 

@@ -126,34 +126,8 @@ internal static class Part21SignatureEngine
 
     internal static byte[] EncodeCoveredCharacters(StringBuilder content)
     {
-        ArgumentNullException.ThrowIfNull(content);
-        var byteCount = 0;
-        var isAscii = true;
-        foreach (var chunk in content.GetChunks())
-        {
-            foreach (var character in chunk.Span)
-            {
-                if (character >= '\u0080')
-                    isAscii = false;
-                if (IsCovered(character))
-                    byteCount++;
-            }
-        }
-
-        if (!isAscii)
-            return EncodeCoveredCharacters(content.ToString().AsSpan());
-
-        var result = new byte[byteCount];
-        var offset = 0;
-        foreach (var chunk in content.GetChunks())
-        {
-            foreach (var character in chunk.Span)
-            {
-                if (IsCovered(character))
-                    result[offset++] = (byte)character;
-            }
-        }
-        return result;
+        Guard.NotNull(content);
+        return EncodeCoveredCharacters(content.ToString().AsSpan());
     }
 
     private static int GetCoveredByteCount(ReadOnlySpan<char> content)
@@ -165,10 +139,10 @@ internal static class Part21SignatureEngine
             if (IsCovered(content[index]))
                 continue;
 
-            result = checked(result + StrictUtf8.GetByteCount(content[segmentStart..index]));
+            result = checked(result + StrictUtf8.GetByteCount(content[segmentStart..index].ToString()));
             segmentStart = index + 1;
         }
-        return checked(result + StrictUtf8.GetByteCount(content[segmentStart..]));
+        return checked(result + StrictUtf8.GetByteCount(content[segmentStart..].ToString()));
     }
 
     private static void EncodeCoveredCharacters(ReadOnlySpan<char> content, Span<byte> destination)
@@ -180,12 +154,13 @@ internal static class Part21SignatureEngine
             if (IsCovered(content[index]))
                 continue;
 
-            destinationOffset += StrictUtf8.GetBytes(
+            destinationOffset += EncodingCompat.GetBytes(
+                StrictUtf8,
                 content[segmentStart..index],
                 destination[destinationOffset..]);
             segmentStart = index + 1;
         }
-        _ = StrictUtf8.GetBytes(content[segmentStart..], destination[destinationOffset..]);
+        _ = EncodingCompat.GetBytes(StrictUtf8, content[segmentStart..], destination[destinationOffset..]);
     }
 
     private static bool IsCovered(char character) =>
@@ -331,17 +306,31 @@ internal static class Part21SignatureEngine
         if (options.IsRevoked(fingerprint))
             return Part21SignatureTrustStatus.Revoked;
 
+        var trustedRoots = verification.Loaded.Take(options.TrustedRoots.Count).ToArray();
+        var additionalCertificates = verification.Loaded
+            .Skip(options.TrustedRoots.Count)
+            .Concat(embeddedCertificates.Cast<X509Certificate2>())
+            .ToArray();
+#if NETSTANDARD2_0
+        var explicitCertificates = trustedRoots.Concat(additionalCertificates).ToArray();
+        return NetFrameworkCertificateChain.IsTrusted(
+            certificate,
+            time,
+            trustedRoots,
+            explicitCertificates)
+            ? Part21SignatureTrustStatus.Trusted
+            : Part21SignatureTrustStatus.Untrusted;
+#else
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.DisableCertificateDownloads = true;
         chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
         chain.ChainPolicy.VerificationTime = time;
-        foreach (var root in verification.Loaded.Take(options.TrustedRoots.Count))
+        foreach (var root in trustedRoots)
             chain.ChainPolicy.CustomTrustStore.Add(root);
-        foreach (var additional in verification.Loaded.Skip(options.TrustedRoots.Count))
+        foreach (var additional in additionalCertificates)
             chain.ChainPolicy.ExtraStore.Add(additional);
-        chain.ChainPolicy.ExtraStore.AddRange(embeddedCertificates);
         if (!chain.Build(certificate) || chain.ChainElements.Count == 0)
             return Part21SignatureTrustStatus.Untrusted;
 
@@ -361,6 +350,7 @@ internal static class Part21SignatureEngine
         return verification.IsTrustedRoot(GetFingerprint(chainRoot)!)
             ? Part21SignatureTrustStatus.Trusted
             : Part21SignatureTrustStatus.Untrusted;
+#endif
     }
 
     private static void ThrowIfRejected(
@@ -424,7 +414,7 @@ internal static class Part21SignatureEngine
         try
         {
             using var hash = IncrementalHash.CreateHash(name);
-            hash.AppendData(content);
+            hash.AppendData(content.ToArray());
             return hash.GetHashAndReset();
         }
         catch (Exception exception) when (exception is CryptographicException or PlatformNotSupportedException)
@@ -433,8 +423,9 @@ internal static class Part21SignatureEngine
         }
     }
 
-    private static string? GetFingerprint(X509Certificate2? certificate) => certificate?.GetCertHashString(
-        HashAlgorithmName.SHA256);
+    private static string? GetFingerprint(X509Certificate2? certificate) => certificate is null
+        ? null
+        : EncodingCompat.GetSha256Fingerprint(certificate);
 
     private static ExchangeStructureBindingException Malformed(
         string code,
@@ -465,7 +456,7 @@ internal static class Part21SignatureEngine
 
         internal X509Certificate2[] Loaded { get; }
 
-        internal IReadOnlySet<string> TrustedRootFingerprints { get; }
+        internal ISet<string> TrustedRootFingerprints { get; }
 
         internal X509Certificate2Collection ExtraStore { get; }
 

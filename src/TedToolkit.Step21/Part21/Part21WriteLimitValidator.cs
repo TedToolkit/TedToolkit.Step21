@@ -10,9 +10,9 @@ internal static class Part21WriteLimitValidator
         Part21ProcessingLimits limits,
         bool detectsHighStrings)
     {
-        ArgumentNullException.ThrowIfNull(structure);
-        ArgumentNullException.ThrowIfNull(projectedEntities);
-        ArgumentNullException.ThrowIfNull(limits);
+        Guard.NotNull(structure);
+        Guard.NotNull(projectedEntities);
+        Guard.NotNull(limits);
 
         var usesClass3Occurrence = false;
         var containsHighString = false;
@@ -196,9 +196,9 @@ internal static class Part21WriteLimitValidator
         IEnumerable<IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>>> projectedEntities,
         Part21ProcessingLimits limits)
     {
-        ArgumentNullException.ThrowIfNull(structure);
-        ArgumentNullException.ThrowIfNull(projectedEntities);
-        ArgumentNullException.ThrowIfNull(limits);
+        Guard.NotNull(structure);
+        Guard.NotNull(projectedEntities);
+        Guard.NotNull(limits);
 
         var usesClass3Occurrence = false;
         var containsHighString = false;

@@ -9,7 +9,7 @@ public readonly struct SchemaEntityType : IEquatable<SchemaEntityType>
     public SchemaEntityType(SchemaName schemaName, string entityName)
     {
         _ = schemaName.Value;
-        ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
+        Guard.NullOrWhiteSpace(entityName);
         SchemaName = schemaName;
         _entityName = entityName;
     }

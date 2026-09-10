@@ -37,7 +37,8 @@ Distinct custom EXPRESS schemas may continue to use the Analyzer workflow.
 
 ## Compatibility and provenance
 
-- Target framework: `net10.0`.
+- Target frameworks: `netstandard2.0` and `net8.0`; later .NET consumers select the `net8.0`
+  asset.
 - Runtime dependency: `TedToolkit.Step21` `[1.0.0,2.0.0)`; no dependency on AP203 or AP214.
 - Fixed STEPcode revision: `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`.
 - Source: `data/ap242/242_mim_lf.exp`, N11521, superseding N11273.

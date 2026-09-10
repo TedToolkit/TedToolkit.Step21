@@ -29,8 +29,8 @@ internal static class Part21LexicalForms
             || value[10] != 'T'
             || value[13] != ':'
             || value[16] != ':'
-            || !DateOnly.TryParseExact(
-                value.AsSpan(0, 10),
+            || !DateTime.TryParseExact(
+                value.Substring(0, 10),
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -101,7 +101,8 @@ internal static class Part21LexicalForms
             return false;
         }
 
-        var seconds = ((long)date.DayNumber * 86_400) + (hour * 3_600L) + (minute * 60L) + second;
+        var dayNumber = date.Ticks / TimeSpan.TicksPerDay;
+        var seconds = (dayNumber * 86_400) + (hour * 3_600L) + (minute * 60L) + second;
         result = new ParsedTimeStamp(seconds, fraction.ToString(), hasOffset, offsetMinutes);
         return true;
     }

@@ -13,8 +13,8 @@ internal sealed class Part21TextBuilder
 
     internal Part21TextBuilder(int maximumLength, Action throwLimit)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(maximumLength);
-        ArgumentNullException.ThrowIfNull(throwLimit);
+        Guard.Negative(maximumLength);
+        Guard.NotNull(throwLimit);
         _maximumLength = maximumLength;
         _throwLimit = throwLimit;
         _builder = new StringBuilder(Math.Min(maximumLength, 256));
@@ -41,7 +41,7 @@ internal sealed class Part21TextBuilder
 
     internal Part21TextBuilder Append(string value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         EnsureCanAppend(value.Length);
         _ = _builder.Append(value);
         return this;
@@ -50,13 +50,24 @@ internal sealed class Part21TextBuilder
     internal Part21TextBuilder Append(ReadOnlySpan<char> value)
     {
         EnsureCanAppend(value.Length);
+#if NETSTANDARD2_0
+        _ = _builder.Append(value.ToString());
+#else
         _ = _builder.Append(value);
+#endif
         return this;
     }
 
+#if NETSTANDARD2_0
+    internal void AppendFormattable(IFormattable value, string? format = null)
+    {
+        Guard.NotNull(value);
+        Append(value.ToString(format, CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+#else
     internal void AppendFormattable(ISpanFormattable value, ReadOnlySpan<char> format = default)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Guard.NotNull(value);
         var maximumProbe = Remaining == int.MaxValue ? int.MaxValue : Remaining + 1;
         Span<char> initial = stackalloc char[Math.Min(128, maximumProbe)];
         if (value.TryFormat(initial, out var written, format, CultureInfo.InvariantCulture))
@@ -94,6 +105,7 @@ internal sealed class Part21TextBuilder
             }
         }
     }
+#endif
 
     public override string ToString() => _builder.ToString();
 }

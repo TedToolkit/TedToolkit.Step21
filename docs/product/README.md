@@ -6,7 +6,7 @@ Approved
 
 - Product owner or maintainer: repository maintainer
 - Approval owner: repository maintainer
-- Last reviewed: 2026-08-21
+- Last reviewed: 2026-09-10
 
 ## 📝 Clarification and decision log
 
@@ -26,7 +26,9 @@ TedToolkit.Step21 is a C# library for .NET consumers that need to read, interpre
 - Consumers using any EXPRESS schema whose instances are mapped through ISO 10303-21, including but not limited to schemas used by STEP application protocols or IFC.
 - Maintainers who need a schema-neutral physical-file model and compile-time-generated schema types.
 
-The current repository targets .NET 10 for the runtime and .NET Standard 2.0 for its Roslyn component.
+The runtime and maintained precompiled schema packages target .NET Standard 2.0 and .NET 8; the
+Roslyn component targets .NET Standard 2.0. Repository-only build and verification programs may use
+the current repository SDK without raising the consumer package minimum.
 
 ## ⚠️ Problem and evidence
 
