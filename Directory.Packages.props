@@ -9,7 +9,6 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.7" />
     <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.7.15" />
     <PackageVersion Include="TedToolkit.Step21" Version="1.0.0" />
-    <PackageVersion Include="TedToolkit.Step21.AnnexF" Version="1.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap203" Version="1.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap214" Version="1.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap242" Version="1.0.0" />

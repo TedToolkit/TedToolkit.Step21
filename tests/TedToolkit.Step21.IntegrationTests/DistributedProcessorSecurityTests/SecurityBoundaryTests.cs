@@ -5,12 +5,11 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
-using TedToolkit.Step21.AnnexF;
 using TedToolkit.Step21.IntegrationTests.ExternalCorpus;
 
 namespace TedToolkit.Step21.IntegrationTests.DistributedProcessorSecurityTests;
 
-/// <summary>Proves the shared quota, callback, publication, and Annex F threat boundary.</summary>
+/// <summary>Proves the shared quota, callback, and publication threat boundary.</summary>
 internal sealed class SecurityBoundaryTests
 {
     [Test]
@@ -63,7 +62,7 @@ internal sealed class SecurityBoundaryTests
                 .IsEqualTo(resources.MaximumArchiveUncompressedBytes);
             await Assert.That(defaults.GetProperty("maximumCompressionRatio").GetDouble())
                 .IsEqualTo(resources.MaximumCompressionRatio);
-            await Assert.That(threats.Length).IsEqualTo(17);
+            await Assert.That(threats.Length).IsEqualTo(16);
             await Assert.That(threats.Select(item => item.GetProperty("id").GetString()).Distinct().Count())
                 .IsEqualTo(threats.Length);
             var executableTests = typeof(SecurityBoundaryTests)
@@ -86,13 +85,10 @@ internal sealed class SecurityBoundaryTests
         var defaults = Part21ProcessingLimits.Default;
         var read = new ExchangeStructureReadOptions();
         var write = new ExchangeStructureWriteOptions([]);
-        var bridge = new AnnexFModelBridge(CreateStructure(), new Part21Resource("urn:security"));
-
         using (Assert.Multiple())
         {
             await Assert.That(read.ProcessingLimits).IsSameReferenceAs(defaults);
             await Assert.That(write.ProcessingLimits).IsSameReferenceAs(defaults);
-            await Assert.That(bridge.ProcessingLimits).IsSameReferenceAs(defaults);
             await Assert.That(defaults.MaximumInputCharacters).IsGreaterThan(0);
             await Assert.That(defaults.MaximumOutputCharacters).IsGreaterThan(0);
             await Assert.That(defaults.MaximumSignatureBytes).IsGreaterThan(0);
@@ -462,7 +458,7 @@ internal sealed class SecurityBoundaryTests
     }
 
     [Test]
-    public async Task Should_bound_entity_and_annex_f_output_and_uri_before_publication()
+    public async Task Should_bound_entity_and_structure_output_before_publication()
     {
         var structure = CreateStructure();
         var entity = new SecurityEntity(new string('A', 1024));
@@ -542,23 +538,6 @@ internal sealed class SecurityBoundaryTests
                 new Part21ProcessingLimits(
                     maximumOutputCharacters: baselineDestination.ToString().Length + 16))));
 
-        var outputBridge = new AnnexFModelBridge(
-            structure,
-            new Part21Resource("urn:x"),
-            new Part21ProcessingLimits(maximumOutputCharacters: 16));
-        var outputFailure = Assert.Throws<ExchangeStructureCapabilityException>(() => outputBridge.ExportState());
-
-        var uriLimits = new Part21ProcessingLimits(maximumUriCharacters: 8);
-        var bridgeUriFailure = Assert.Throws<JsonException>(() => new AnnexFModelBridge(
-            structure,
-            new Part21Resource("urn:too-long"),
-            uriLimits));
-        structure.Anchors.Add(new Part21Anchor(
-            new AnchorName("resource"),
-            ParameterValue.FromResource(new Part21Resource("urn:too-long"))));
-        var resourceBridge = new AnnexFModelBridge(structure, new Part21Resource("urn:x"), uriLimits);
-        var resourceUriFailure = Assert.Throws<JsonException>(() => resourceBridge.ExportState());
-
         using (Assert.Multiple())
         {
             await Assert.That(entityFailure.Diagnostics.Single().Code)
@@ -569,10 +548,6 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(namedDestination.ToString()).IsEmpty();
             await Assert.That(anchorDestination.ToString()).IsEmpty();
             await Assert.That(referenceDestination.ToString()).IsEmpty();
-            await Assert.That(outputFailure.Diagnostics.Single().Code)
-                .IsEqualTo("P21-PROCESSING-LIMIT-OUTPUT");
-            await Assert.That(bridgeUriFailure.Message).Contains("URI-character");
-            await Assert.That(resourceUriFailure.Message).Contains("URI-character");
         }
     }
 
@@ -624,42 +599,6 @@ internal sealed class SecurityBoundaryTests
             await Assert.That(depthWrite.Diagnostics.Single().Code).IsEqualTo("P21-PROCESSING-LIMIT-NESTING");
             await Assert.That(itemDestination.ToString()).IsEmpty();
             await Assert.That(depthDestination.ToString()).IsEmpty();
-        }
-    }
-
-    [Test]
-    public async Task Should_apply_annex_f_input_item_and_depth_limits_without_mutation()
-    {
-        var structure = CreateStructure();
-        structure.Anchors.Add(new Part21Anchor(
-            new AnchorName("list"),
-            ParameterValue.FromAggregate([ParameterValue.FromAggregate([ParameterValue.Omitted])])));
-        var state = new AnnexFModelBridge(structure, new Part21Resource("urn:security")).ExportState();
-        var originalName = structure.Header.FileName.Name;
-        var originalAnchor = structure.Anchors.Single();
-
-        var inputBridge = new AnnexFModelBridge(
-            structure,
-            new Part21Resource("urn:security"),
-            new Part21ProcessingLimits(maximumInputCharacters: state.Length - 1));
-        await Assert.That(() => inputBridge.ApplyState(state)).Throws<JsonException>();
-
-        var itemBridge = new AnnexFModelBridge(
-            structure,
-            new Part21Resource("urn:security"),
-            new Part21ProcessingLimits(maximumItemCount: 2));
-        await Assert.That(() => itemBridge.ApplyState(state)).Throws<JsonException>();
-
-        var depthBridge = new AnnexFModelBridge(
-            structure,
-            new Part21Resource("urn:security"),
-            new Part21ProcessingLimits(maximumNestingDepth: 2));
-        await Assert.That(() => depthBridge.ApplyState(state)).Throws<JsonException>();
-
-        using (Assert.Multiple())
-        {
-            await Assert.That(structure.Header.FileName.Name).IsEqualTo(originalName);
-            await Assert.That(structure.Anchors.Single()).IsSameReferenceAs(originalAnchor);
         }
     }
 

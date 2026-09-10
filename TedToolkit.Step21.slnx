@@ -17,7 +17,6 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/TedToolkit.Step21.Analyzer/TedToolkit.Step21.Analyzer.csproj" />
-    <Project Path="src/TedToolkit.Step21.AnnexF/TedToolkit.Step21.AnnexF.csproj" />
     <Project Path="src/TedToolkit.Step21.Ap203/TedToolkit.Step21.Ap203.csproj" />
     <Project Path="src/TedToolkit.Step21.Ap214/TedToolkit.Step21.Ap214.csproj" />
     <Project Path="src/TedToolkit.Step21.Ap242/TedToolkit.Step21.Ap242.csproj" />

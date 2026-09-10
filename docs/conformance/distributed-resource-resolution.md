@@ -40,8 +40,7 @@ actual output byte count and validates the declared length and CRC-32. Other-for
 output both count toward the total-byte limit, and over-limit opaque input is rejected before conversion.
 ZIP directory entries count toward the entry limit even though they do not produce extracted content.
 The shared `Part21ProcessingLimits` additionally bounds root characters, URI/path characters, and each individual
-uncompressed entry before extraction. Its immutable finite default is reused by reads, writes, signatures, and the
-optional Annex F bridge.
+uncompressed entry before extraction. Its immutable finite default is reused by reads, writes, and signatures.
 
 Focused proof is the `DistributedResourceResolutionTests` suite plus the cumulative public-API snapshot. Signature
 trust, SDAI domain equivalence, constant occurrences, and the integrated adversarial quota matrix belong to their

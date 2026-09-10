@@ -2,11 +2,7 @@ using System.Buffers;
 using System.Globalization;
 using System.Text;
 
-#if ANNEXF_SHARED_TEXT_BUILDER
-namespace TedToolkit.Step21.AnnexF;
-#else
 namespace TedToolkit.Step21;
-#endif
 
 // Centralizes output accounting so every formatter rejects before retaining text beyond its budget.
 internal sealed class Part21TextBuilder

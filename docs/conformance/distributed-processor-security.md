@@ -1,16 +1,15 @@
 # Distributed processor security and atomicity
 
 `Part21ProcessingLimits` is the immutable shared quota policy for root input, physical value item/depth checks,
-canonical output, URI text, CMS sections/signers, one archive entry, and the optional Annex F bridge. `Part21ProcessingLimits.Default` is a
-single finite instance reused by ordinary reads, writes, and bridges. Existing graph-wide resource limits remain in
+canonical output, URI text, CMS sections/signers, and one archive entry. `Part21ProcessingLimits.Default` is a
+single finite instance reused by ordinary reads and writes. Existing graph-wide resource limits remain in
 `Part21ResourceLimits`; the two immutable objects are snapshotted by each operation and never grant I/O or trust.
 
 The machine-readable threat matrix and exact defaults are in
 [`distributed-processor-security.json`](distributed-processor-security.json). Every matrix row names focused test
 methods that are mechanically resolved to discovered tests by the primary security gate. Library-controlled read
 failures return no model. Library-controlled write failures occur while output is privately staged and therefore
-produce zero destination characters. Annex F parses and validates a complete candidate before replacing any model
-collection.
+produce zero destination characters.
 Exceptions raised by caller-owned readers, writers, providers, converters, or signers remain caller failures.
 
 Parsed reads and projected writes apply the same item and nesting limits before schema binding or recursive
@@ -26,7 +25,7 @@ checks and a per-entry ceiling in addition to graph-wide count, size, depth, and
 length is rejected before allocating decoded CMS bytes. Every `TextReader`, including a partially consumed
 `StringReader`, is consumed through the same bounded `maximum + 1` chunk path.
 
-Canonical Part 21 and Annex F JSON output share one source implementation of a capped text builder. Each character
+Canonical Part 21 output uses a capped text builder. Each character
 segment, escape, formatted numeric value, occurrence-name/resource component, entity record, and CMS Base64 value
 reserves its remaining quota before it is retained; a limit failure therefore performs work and allocation
 proportional to the configured bound rather than materializing an unbounded intermediate value. CMS Base64 preflight

@@ -1,6 +1,6 @@
 # TedToolkit.Step21
 
-TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and writing ISO 10303-21 exchange structures against compile-time-generated EXPRESS schema types. It is schema-neutral: STEP application protocols and IFC are interoperability evidence, not alternate public models.
+TedToolkit.Step21 is a C# library for .NET consumers that reads, edits, validates, and writes ISO 10303-21 exchange structures against compile-time-generated EXPRESS schema types. It is schema-neutral: STEP application protocols and IFC are interoperability evidence, not alternate public models.
 
 [![Build](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml/badge.svg)](https://github.com/TedToolkit/TedToolkit.Step21/actions/workflows/build.yml)
 
@@ -16,7 +16,6 @@ TedToolkit.Step21 is a .NET 10 library for reading, editing, validating, and wri
 | Path | Responsibility |
 | --- | --- |
 | `src/TedToolkit.Step21` | Public runtime, generated ISO 10303-21 parser, and packaged analyzer. |
-| `src/TedToolkit.Step21.AnnexF` | Optional engine-neutral ISO 10303-21 Annex F ECMAScript binding; [host guide](src/TedToolkit.Step21.AnnexF/README.md). |
 | `src/TedToolkit.Step21.Ap203` | Optional precompiled AP203 Amendment 1 `CONFIG_CONTROL_DESIGN` package. |
 | `src/TedToolkit.Step21.Ap214` | Optional precompiled AP214 `AUTOMOTIVE_DESIGN` package; [consumer guide](src/TedToolkit.Step21.Ap214/README.md). |
 | `src/TedToolkit.Step21.Ap242` | AP242 N11521 MIM long-form stable package; [consumer guide](src/TedToolkit.Step21.Ap242/README.md). |

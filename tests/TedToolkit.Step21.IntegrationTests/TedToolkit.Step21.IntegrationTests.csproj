@@ -14,7 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TedToolkit.Step21\TedToolkit.Step21.csproj" />
-    <ProjectReference Include="..\..\src\TedToolkit.Step21.AnnexF\TedToolkit.Step21.AnnexF.csproj" />
     <ProjectReference Include="..\..\src\TedToolkit.Step21.Analyzer\TedToolkit.Step21.Analyzer.csproj" />
     <ProjectReference Include="..\..\src\TedToolkit.Step21.Ap203\TedToolkit.Step21.Ap203.csproj"
                       ReferenceOutputAssembly="false" />
@@ -24,7 +23,6 @@
 
   <ItemGroup>
     <None Update="ExternalCorpus\manifest.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="TestData\AnnexF\annex-f-integration.js" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

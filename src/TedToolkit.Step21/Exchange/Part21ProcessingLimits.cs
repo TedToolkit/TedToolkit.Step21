@@ -1,12 +1,12 @@
 namespace TedToolkit.Step21;
 
-/// <summary>Bounds untrusted ISO 10303-21 parsing, signing, writing, and language-binding work.</summary>
+/// <summary>Bounds untrusted ISO 10303-21 parsing, signing, and writing work.</summary>
 public sealed class Part21ProcessingLimits
 {
     /// <summary>Gets the shared finite defaults used when a caller does not supply limits.</summary>
     public static Part21ProcessingLimits Default { get; } = new();
 
-    /// <summary>Creates positive processing limits for one read, write, or Annex F bridge.</summary>
+    /// <summary>Creates positive processing limits for one read or write.</summary>
     public Part21ProcessingLimits(
         int maximumInputCharacters = 67108864,
         int maximumOutputCharacters = 67108864,
@@ -42,13 +42,13 @@ public sealed class Part21ProcessingLimits
         MaximumArchiveEntryBytes = maximumArchiveEntryBytes;
     }
 
-    /// <summary>Gets the maximum characters accepted from a root source or bridge state.</summary>
+    /// <summary>Gets the maximum characters accepted from a root source.</summary>
     public int MaximumInputCharacters { get; }
 
     /// <summary>Gets the maximum characters staged before one atomic output publication.</summary>
     public int MaximumOutputCharacters { get; }
 
-    /// <summary>Gets the maximum characters in one URI presented to a provider or bridge.</summary>
+    /// <summary>Gets the maximum characters in one URI presented to a provider.</summary>
     public int MaximumUriCharacters { get; }
 
     /// <summary>Gets the maximum signature sections or signing callbacks in one operation.</summary>

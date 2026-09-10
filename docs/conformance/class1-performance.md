@@ -18,9 +18,8 @@ comparison.
 The probe deliberately uses the ordinary `ExchangeStructure.Read(TextReader, descriptors)` and `Write(TextWriter)`
 overloads. The read overload enters `ExchangeStructureReader.Read` with a null resolution context, and the write
 overload enters `ExchangeStructureWriter` without signing options. Therefore the measured path constructs no resource
-resolver, archive, CMS verification/signing, domain-equivalence, or Annex F adapter object. Annex F remains a separate
-optional assembly with a one-way dependency on the core runtime. Existing focused provider, archive, signature, and
-Annex F tests cover activation only when those capabilities are explicitly supplied or present in the input.
+resolver, archive, CMS verification/signing, or domain-equivalence object. Existing focused provider, archive, and
+signature tests cover activation only when those capabilities are explicitly supplied or present in the input.
 
 Run from the repository root:
 

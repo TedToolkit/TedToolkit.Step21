@@ -5,6 +5,7 @@
 - Owner: repository maintainer
 - Governing scope: ISO 10303-21 Edition 3 anchor/reference、压缩归档、signature、schema population 与 ECMAScript binding 所需的资源、信任和依赖方向
 - Approval source: user explicit approval, 2026-09-06
+- Superseded in part by: [ADR-0012](ADR-0012-exclude-ecmascript-binding.md), which replaces only the Annex F language-binding decision
 
 ## Decision at a glance
 

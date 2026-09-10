@@ -14,10 +14,11 @@ Approved
 | --- | --- | --- | --- | --- | --- |
 | PI-01 | Whether STEP or IFC defines the product boundary | Let ISO 10303-21 govern the product; use application protocols only as evidence | The maintainer stated on 2026-08-21 that the repository is an ISO 10303-21 library, not a STEP- or IFC-specific parser | Positioning, consumers, non-goals, success evidence | Resolved |
 | PI-02 | Whether generated objects need general-purpose serialization | Support ISO 10303-21 writing only | The maintainer explicitly excluded JSON, XML, their extension points, and their dependencies on 2026-08-21 | Intended value, non-goals, downstream implications | Resolved |
+| PI-03 | Whether the .NET library should ship the optional Annex F language binding | Exclude ECMAScript/JavaScript bindings and keep the product focused on .NET read, edit, validation, and write workflows | The maintainer explicitly removed the binding on 2026-09-10 because no JavaScript integration is needed | Non-goals, conformance boundary, package surface | Resolved |
 
 ## 🎯 Positioning
 
-TedToolkit.Step21 serves .NET consumers that need to read, interpret against EXPRESS schemas, and write ISO 10303-21 exchange structures without replacing standard concepts with application-protocol-specific or library-invented domain abstractions. When the standards leave a representation choice open, the library uses idiomatic C# without changing the governed semantics.
+TedToolkit.Step21 is a C# library for .NET consumers that need to read, interpret against EXPRESS schemas, and write ISO 10303-21 exchange structures without replacing standard concepts with application-protocol-specific or library-invented domain abstractions. Its integration surface is C#/.NET API; the presence of a language binding in the ISO standard does not make that other language part of this product. When the standards leave a representation choice open, the library uses idiomatic C# without changing the governed semantics.
 
 ## 👥 Target consumers and situations
 
@@ -41,6 +42,7 @@ Consumers can use one schema-neutral runtime for ISO 10303-21 and obtain generat
 - STEP, IFC, AP203, AP242, and similar artifacts are test and interoperability evidence, not alternate public data models.
 - Generated objects are not designed for JSON, XML, ORM, database, or general object-graph serialization, and the library does not reference those serialization stacks for extensibility.
 - EXPRESS is consumed as the schema language required for ISO 10303-21 mapping; the library is not a general EXPRESS execution environment.
+- ECMAScript/JavaScript language bindings, script engines, and script-host bridges are outside the product boundary because this repository delivers a C# library, not a multi-language SDK.
 - Unsupported ISO clauses or EXPRESS constraints are reported as unsupported; the library does not claim full conformance from syntax-only acceptance.
 - Public domain concepts must trace to ISO 10303-21 or the selected EXPRESS schema. Parser, diagnostic, generated-mapping, and writer machinery may exist only as clearly identified implementation infrastructure, not as additional exchange-structure semantics.
 
