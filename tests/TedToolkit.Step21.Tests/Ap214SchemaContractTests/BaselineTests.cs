@@ -17,7 +17,7 @@ using TedToolkit.Step21.Tests.ExpressGeneratorTests;
 namespace TedToolkit.Step21.Tests.Ap214SchemaContractTests;
 
 /// <summary>
-/// Proves the pinned AP214 source, redistribution evidence, and complete generated contract.
+/// Proves the pinned AP214 source identity and complete generated contract.
 /// </summary>
 internal sealed class BaselineTests
 {
@@ -64,7 +64,7 @@ internal sealed class BaselineTests
         [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
     /// <summary>
-    /// Verifies the checked-in AP214 source and STEPcode attribution retain every approved identity and hash.
+    /// Verifies the cached AP214 publication retains its approved identity and provenance.
     /// </summary>
     [Test]
     public async Task Should_preserve_the_pinned_source_and_redistribution_evidence()
@@ -74,28 +74,20 @@ internal sealed class BaselineTests
         var sourceBytes = File.ReadAllBytes(schemaPath);
         var source = Encoding.UTF8.GetString(sourceBytes);
         var canonicalSource = source.ReplaceLineEndings("\n");
-        var upstreamSource = canonicalSource.ReplaceLineEndings("\r\n");
         var provenance = File.ReadAllText(Path.Combine(directory, "PROVENANCE.md"));
 
         using (Assert.Multiple())
         {
-            await Assert.That(ComputeTextHash(upstreamSource)).IsEqualTo(UpstreamSha256);
+            await Assert.That(Convert.ToHexString(SHA256.HashData(sourceBytes))).IsEqualTo(UpstreamSha256);
             await Assert.That(ComputeTextHash(canonicalSource)).IsEqualTo(CanonicalLfSha256);
-            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "COPYING")))
-                .IsEqualTo("C787486F3E1358CF1CB4456B56E00862DE9C0433E7D49F5501D1289FF8BEF37E");
-            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "AUTHORS")))
-                .IsEqualTo("619EE3D3D9CE6DB690B4A20F36AB30616CB8F1FB8616FAEB85D9685AFDFD15FB");
-            await Assert.That(ComputeCanonicalTextFileHash(Path.Combine(directory, "INTENT.md")))
-                .IsEqualTo("B10C7DCC9C269B383C944ACC139F787CCA050D497142CA03ED90C49EF41CE23F");
             await Assert.That(source).Contains("SCHEMA AUTOMOTIVE_DESIGN;");
             await Assert.That(source).Contains("ISO/DIS 10303-214:2007");
             await Assert.That(source).Contains("2009-06-30");
             await Assert.That(source).Contains(
                 "{ iso standard 10303 part(214) version(3) object(1) automotive-design-schema(1) }");
-            await Assert.That(provenance).Contains("9baa5dadaa1dcfcdc623220d865d36d61ea351e9");
             await Assert.That(provenance).Contains(UpstreamSha256);
-            await Assert.That(provenance).Contains(CanonicalLfSha256);
-            await Assert.That(provenance).Contains("BSD-3-Clause");
+            await Assert.That(provenance).Contains("MBx Interoperability Forum");
+            await Assert.That(provenance).Contains("industry-authoritative source; not ISO");
         }
     }
 
@@ -183,9 +175,6 @@ internal sealed class BaselineTests
 
     private static string RenderPublicApi(Compilation compilation) =>
         GeneratedPublicApi.Render(compilation, "AutomotiveDesign");
-
-    private static string ComputeCanonicalTextFileHash(string path) =>
-        ComputeTextHash(File.ReadAllText(path).ReplaceLineEndings("\n"));
 
     private static string ComputeTextHash(string text) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));

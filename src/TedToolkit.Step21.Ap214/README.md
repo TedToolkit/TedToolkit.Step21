@@ -1,66 +1,37 @@
 # TedToolkit.Step21.Ap214 package guide
 
-TedToolkit.Step21.Ap214 provides the precompiled AP214 Edition 3 AIM long-form
-`AUTOMOTIVE_DESIGN` descriptor and generated schema types for TedToolkit.Step21. Applications that
-do not use AP214 continue to reference only `TedToolkit.Step21`.
-
-## Install and use AP214
-
-```shell
-dotnet add package TedToolkit.Step21.Ap214 --version 1.0.0
-```
-
-Pass the generated descriptor explicitly to the schema-neutral Step21 runtime:
+TedToolkit.Step21.Ap214 provides precompiled AP214 Edition 3 `AUTOMOTIVE_DESIGN` types for the
+schema published by the MBx Interoperability Forum.
 
 ```csharp
 using TedToolkit.Step21;
 using TedToolkit.Step21.Schemas.AutomotiveDesign;
-using Ap214SchemaDescriptor = TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor;
 
 using var input = File.OpenText("model.stp");
-var structure = ExchangeStructure.Read(input, [Ap214SchemaDescriptor.Instance]);
-
-foreach (var product in structure.Entities.OfType<Product>())
-{
-    Console.WriteLine(product.Name);
-}
+var structure = ExchangeStructure.Read(input, [SchemaDescriptor.Instance]);
 ```
 
-Do not add `AP214E3_2010.exp`, another `AUTOMOTIVE_DESIGN` `.exp`, or an equivalent
-`AdditionalFiles` item when using this package. The descriptor and generated schema surface are
-already compiled into the assembly; supplying the same schema again creates duplicate public types.
-Distinct custom EXPRESS schemas remain supported through the Analyzer workflow.
+## Schema identity
 
-## Schema identity and provenance
+- Authority: MBx Interoperability Forum—industry-authoritative, not ISO.
+- ISO status: [ISO 10303-214:2010 is withdrawn](https://www.iso.org/standard/43669.html).
+- Source index: [MBx-IF EXPRESS Schemas](https://www.mbx-if.org/home/mbx/resources/express-schemas/).
+- EXPRESS name: `AUTOMOTIVE_DESIGN`.
+- Source SHA-256: `71AB140FE7F774321BEEE6A31E6FEE2AFC3973FD60350AE2018C74C211FB4295`.
 
-- Package version: `1.0.0`.
-- EXPRESS nominal name: `AUTOMOTIVE_DESIGN`.
-- Generated descriptor: `TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor.Instance`.
-- Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,
-  `data/ap214e3/AP214E3_2010.exp`, identified as ISO/DIS 10303-214:2007 Edition 3.
-- Canonical-LF SHA-256:
-  `9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7`.
-- Redistribution evidence: the pinned STEPcode material is BSD-3-Clause. The package carries its
-  `COPYING`, `AUTHORS`, `INTENT.md` and `PROVENANCE.md` under `third-party/stepcode/`; the source
-  repository retains the same evidence in `schemas/ap214/`.
+No current ISO-hosted AP214 EXP download was found. The exact fallback status is part of the package
+provenance and must not be described as an official ISO publication.
 
-## Package boundary
+The EXP is downloaded explicitly into a Git-ignored local cache and used only during code
+generation. It is not committed or packed. Run `pwsh -NoProfile -File
+build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms` before a local build.
+
+## Distribution boundary
 
 The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consumers select the
-`net8.0` asset. It contains generated schema code and declares the tested `TedToolkit.Step21`
-runtime range `[1.0.0,2.0.0)`. It does not add a reader/writer facade, registry,
-reflection-based discovery, CAD-kernel conversion, or a second runtime. Consumers do not receive the
-EXPRESS source, generator implementation, or Analyzer-only dependencies as runtime assets.
+`net8.0` asset.
 
-The fixed source and package version define the supported baseline. A matching nominal schema name
-or retained OID alone does not prove edition compatibility, and the package does not claim complete
-AP214 conformance.
-
-## Version compatibility
-
-The package follows SemVer independently from the core runtime. A Patch may change implementation,
-documentation, or provenance only while descriptor identity, schema semantics, generated public
-surface, and runtime range remain compatible. A different edition or vendor variant, a descriptor or
-closed-schema change, a removed, renamed, retyped, reordered, newly required, or less nullable public
-member, or incompatible validation/mapping behavior requires a Major version. Every release compares
-the generated public surface and provenance with the approved repository baseline.
+The package remains a local verification artifact. The acknowledgement switch is not a licence;
+the operator must establish applicable rights for download, local processing, and generation.
+Distribution of the EXP is prohibited, and publication of generated or compiled output requires a
+separate rights review as specified by ADR-0013.

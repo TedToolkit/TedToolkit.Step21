@@ -2,11 +2,15 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
-    <Description>Precompiled AP203 Amendment 1 CONFIG_CONTROL_DESIGN types for TedToolkit.Step21.</Description>
+    <Version>2.0.0</Version>
+    <Description>Precompiled ISO/TS 10303-403 AP203 MIM long-form types for TedToolkit.Step21.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
     <PackageTags>step;iso-10303;ap203;config-control-design</PackageTags>
+    <ExpressSchemaId>ap203</ExpressSchemaId>
   </PropertyGroup>
+
+  <Import Project="..\..\build\TedToolkit.Step21.SchemaInputs.targets" />
 
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.Step21\TedToolkit.Step21.csproj"
@@ -27,10 +31,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\..\schemas\ap203\ap203.exp" />
+    <ExpressSchemaInput Include="$(ExpressSchemaCacheRoot)\ap203\mim_lf.exp" />
+    <AdditionalFiles Include="@(ExpressSchemaInput)" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\schemas\ap203\PROVENANCE.md;..\..\schemas\SOURCES.md"
+          Pack="true"
+          PackagePath="third-party/schema-source/"
+          Visible="false" />
     <None Include="README.md"
           Pack="true"
           PackagePath="\"

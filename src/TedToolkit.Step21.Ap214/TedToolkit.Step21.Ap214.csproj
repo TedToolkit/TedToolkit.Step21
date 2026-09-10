@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <ExpressSchemaId>ap214</ExpressSchemaId>
     <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
     <Version>1.0.0</Version>
     <Description>Precompiled AP214 Edition 3 AUTOMOTIVE_DESIGN types for TedToolkit.Step21.</Description>
@@ -8,6 +9,8 @@
     <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
     <PackageTags>step;iso-10303;ap214;automotive-design</PackageTags>
   </PropertyGroup>
+
+  <Import Project="..\..\build\TedToolkit.Step21.SchemaInputs.targets" />
 
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.Step21\TedToolkit.Step21.csproj"
@@ -28,13 +31,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\..\schemas\ap214\AP214E3_2010.exp" />
+    <ExpressSchemaInput Include="$(ExpressSchemaCacheRoot)\ap214\AP214E3_2010.exp" />
+    <AdditionalFiles Include="@(ExpressSchemaInput)" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\schemas\ap214\COPYING;..\..\schemas\ap214\AUTHORS;..\..\schemas\ap214\INTENT.md;..\..\schemas\ap214\PROVENANCE.md"
+    <None Include="..\..\schemas\ap214\PROVENANCE.md;..\..\schemas\SOURCES.md"
           Pack="true"
-          PackagePath="third-party/stepcode/"
+          PackagePath="third-party/schema-source/"
           Visible="false" />
     <None Include="README.md"
           Pack="true"

@@ -33,20 +33,19 @@ internal sealed class BaselineTests
         var expected = new Dictionary<string, string>
         {
             ["packageId"] = "TedToolkit.Step21.Ap242",
-            ["targetFramework"] = "net10.0",
-            ["intendedFirstStableVersion"] = "1.0.0",
-            ["upstreamRevision"] = "9baa5dadaa1dcfcdc623220d865d36d61ea351e9",
-            ["upstreamPath"] = "data/ap242/242_mim_lf.exp",
-            ["sourceFile"] = "242_mim_lf.exp",
-            ["upstreamCanonicalLfSha256"] = "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB",
-            ["sourceCanonicalLfSha256"] = "221222ED7F92873D8A1BBDDAE569ED72C87730E09F56226A92E3F108FC9EB7A0",
-            ["edition"] = "ISO TC184/SC4/WG12 N11521; ISO/TS 10303-442 AP242 MIM long form",
+            ["packageVersion"] = "1.0.0",
+            ["sourceAuthority"] = "ISO",
+            ["sourceAuthorityStatus"] = "official",
+            ["sourceManifest"] = "../SOURCES.json",
+            ["sourceCachePath"] = "ap242/mim_lf.exp",
+            ["sourceSha256"] = "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB",
+            ["edition"] = "ISO 10303-242:2025 AP242 Edition 4; ISO/TS 10303-442 edition 7 MIM long form",
             ["descriptor"] =
                 "TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
             ["runtimeRange"] = "[1.0.0,2.0.0)",
             ["publicApiSnapshot"] = "PublicApi.approved.sha256",
-            ["sourceLicense"] = "BSD-3-Clause",
             ["fixtureSha256"] = "88DA6C164CC685A881A4A52AC7D0BA90E27D649EE9183810887F1A8930AEFD30",
+            ["distribution"] = "local-code-generation-only; EXP and derived output publication require separate rights review",
         };
         var project = XDocument.Load(Path.Combine(
             repositoryRoot, "src", "TedToolkit.Step21.Ap242", "TedToolkit.Step21.Ap242.csproj"));
@@ -64,13 +63,11 @@ internal sealed class BaselineTests
             await Assert.That(manifest.GetProperty("closedSchemas").EnumerateArray()
                 .Select(value => value.GetString())
                 .SequenceEqual(["AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"])).IsTrue();
-            await Assert.That(project.Descendants("TargetFramework").Single().Value)
-                .IsEqualTo(manifest.GetProperty("targetFramework").GetString());
             await Assert.That((string?)runtime.Attribute("VersionOverride"))
                 .IsEqualTo(manifest.GetProperty("runtimeRange").GetString());
-            await Assert.That(Hash(File.ReadAllText(Path.Combine(schemaDirectory, expected["sourceFile"]))
-                    .ReplaceLineEndings("\n")))
-                .IsEqualTo(manifest.GetProperty("sourceCanonicalLfSha256").GetString());
+            await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(
+                    Path.Combine(TestDataDirectory(), "mim_lf.exp")))))
+                .IsEqualTo(manifest.GetProperty("sourceSha256").GetString());
             await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(
                     repositoryRoot,
                     "tests",
@@ -89,8 +86,8 @@ internal sealed class BaselineTests
     [Test]
     public async Task Should_bind_the_complete_pinned_ap242_schema()
     {
-        var source = File.ReadAllText(Path.Combine(TestDataDirectory(), "242_mim_lf.exp"));
-        var result = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("schemas/ap242/242_mim_lf.exp", source)]);
+        var source = File.ReadAllText(Path.Combine(TestDataDirectory(), "mim_lf.exp"));
+        var result = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("schemas/.cache/ap242/mim_lf.exp", source)]);
         using (Assert.Multiple())
         {
             await Assert.That(result.SyntaxDiagnostics).IsEmpty()
@@ -108,40 +105,28 @@ internal sealed class BaselineTests
             .Contains("product").And.Contains("maths_tuple").And.Contains("atom_based_value");
     }
 
-    /// <summary>Verifies the exact patched build input, upstream identity and all redistribution notices.</summary>
+    /// <summary>Verifies the pristine ISO build input and provenance boundary.</summary>
     [Test]
     public async Task Should_preserve_the_pinned_ap242_source_and_redistribution_evidence()
     {
         var directory = TestDataDirectory();
-        var sourcePath = Path.Combine(directory, "242_mim_lf.exp");
+        var sourcePath = Path.Combine(directory, "mim_lf.exp");
         var source = File.ReadAllText(sourcePath);
         var provenance = File.ReadAllText(Path.Combine(directory, "PROVENANCE.md"));
-        var hashes = new Dictionary<string, string>
-        {
-            ["242_mim_lf.exp"] = "221222ED7F92873D8A1BBDDAE569ED72C87730E09F56226A92E3F108FC9EB7A0",
-            ["COPYING"] = "C787486F3E1358CF1CB4456B56E00862DE9C0433E7D49F5501D1289FF8BEF37E",
-            ["AUTHORS"] = "619EE3D3D9CE6DB690B4A20F36AB30616CB8F1FB8616FAEB85D9685AFDFD15FB",
-            ["INTENT.md"] = "B10C7DCC9C269B383C944ACC139F787CCA050D497142CA03ED90C49EF41CE23F",
-        };
+        const string sourceHash = "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB";
 
         using (Assert.Multiple())
         {
             await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(sourcePath))))
-                .IsEqualTo(hashes["242_mim_lf.exp"]);
-            foreach (var entry in hashes)
-            {
-                var canonical = File.ReadAllText(Path.Combine(directory, entry.Key)).ReplaceLineEndings("\n");
-                await Assert.That(Hash(canonical)).IsEqualTo(entry.Value);
-                await Assert.That(provenance).Contains(entry.Value);
-            }
+                .IsEqualTo(sourceHash);
 
             await Assert.That(source).Contains("SCHEMA Ap242_managed_model_based_3d_engineering_mim_lf;");
             await Assert.That(source).Contains("ISO TC184/SC4/WG12 N11521");
             await Assert.That(source).Contains("ISO/TS 10303-442");
             await Assert.That(source).Contains("Supersedes ISO TC184/SC4/WG3 N11273");
-            await Assert.That(provenance).Contains("9baa5dadaa1dcfcdc623220d865d36d61ea351e9");
-            await Assert.That(provenance).Contains("E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB");
-            await Assert.That(provenance).Contains("BSD-3-Clause");
+            await Assert.That(provenance).Contains(sourceHash);
+            await Assert.That(provenance).Contains("Authority: ISO");
+            await Assert.That(provenance).Contains("unmodified ISO publication");
         }
     }
 
@@ -150,8 +135,8 @@ internal sealed class BaselineTests
     public async Task Should_generate_the_approved_ap242_surface()
     {
         var directory = TestDataDirectory();
-        var result = GeneratorHostTests.Run(("schemas/ap242/242_mim_lf.exp",
-            File.ReadAllText(Path.Combine(directory, "242_mim_lf.exp"))));
+        var result = GeneratorHostTests.Run(("schemas/.cache/ap242/mim_lf.exp",
+            File.ReadAllText(Path.Combine(directory, "mim_lf.exp"))));
         await Assert.That(result.Diagnostics.Where(diagnostic =>
                 diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
             .IsEmpty().Because(string.Join(Environment.NewLine, result.Diagnostics));

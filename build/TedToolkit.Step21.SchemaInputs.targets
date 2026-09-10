@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <ExpressSchemaCacheRoot Condition="'$(ExpressSchemaCacheRoot)' == ''">$(MSBuildThisFileDirectory)..\schemas\.cache</ExpressSchemaCacheRoot>
+    <ExpressSchemaFetchCommand>pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)fetch-express-schemas.ps1&quot; -AcknowledgeThirdPartyTerms</ExpressSchemaFetchCommand>
+  </PropertyGroup>
+
+  <Target Name="VerifyExpressSchemaInputs"
+          BeforeTargets="CoreCompile"
+          Condition="'@(ExpressSchemaInput)' != ''">
+    <ItemGroup>
+      <_MissingExpressSchemaInput Include="@(ExpressSchemaInput)"
+                                  Condition="!Exists('%(Identity)')" />
+    </ItemGroup>
+    <Error Condition="'@(_MissingExpressSchemaInput)' != ''"
+           Text="Missing verified EXPRESS schema input: @(_MissingExpressSchemaInput). Run: $(ExpressSchemaFetchCommand)" />
+    <Exec Condition="'$(ExpressSchemaId)' != '' and '@(_MissingExpressSchemaInput)' == ''"
+          Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)fetch-express-schemas.ps1&quot; -Mode Verify -Schema $(ExpressSchemaId) -CacheRoot &quot;$(ExpressSchemaCacheRoot)&quot;" />
+  </Target>
+</Project>

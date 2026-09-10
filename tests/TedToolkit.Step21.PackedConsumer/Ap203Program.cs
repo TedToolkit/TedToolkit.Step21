@@ -5,7 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Schemas.ConfigControlDesign;
+using TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf;
 
 namespace TedToolkit.Step21.PackedConsumer;
 
@@ -13,10 +13,10 @@ internal static class Ap203Program
 {
     private static int Main()
     {
-        var descriptor = global::TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor.Instance;
+        var descriptor = global::TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf.SchemaDescriptor.Instance;
         var schemaAssembly = descriptor.GetType().Assembly;
 
-        if (descriptor.Name.Value != "config_control_design"
+        if (descriptor.Name.Value != "Ap203_configuration_controlled_3d_design_of_mechanical_parts_and_assemblies_mim_lf"
             || typeof(Product).Assembly != schemaAssembly
             || typeof(IBoundedPcurve).Assembly != schemaAssembly)
         {

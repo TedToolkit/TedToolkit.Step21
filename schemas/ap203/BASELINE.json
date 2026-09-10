@@ -1,0 +1,15 @@
+{
+  "packageId": "TedToolkit.Step21.Ap203",
+  "packageVersion": "2.0.0",
+  "previousStableBaseline": "1.0.0 CONFIG_CONTROL_DESIGN Amendment 1",
+  "sourceAuthority": "ISO",
+  "sourceAuthorityStatus": "official",
+  "sourceManifest": "../SOURCES.json",
+  "sourceCachePath": "ap203/mim_lf.exp",
+  "sourceSha256": "255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44",
+  "edition": "ISO/TS 10303-403:2010 AP203 MIM long form",
+  "closedSchemas": ["AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF"],
+  "descriptor": "TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf.SchemaDescriptor",
+  "runtimeRange": "[1.0.0,2.0.0)",
+  "distribution": "local-code-generation-only; EXP and derived output publication require separate rights review"
+}

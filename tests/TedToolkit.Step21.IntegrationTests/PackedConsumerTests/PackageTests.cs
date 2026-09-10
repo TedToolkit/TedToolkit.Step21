@@ -25,7 +25,7 @@ namespace TedToolkit.Step21.IntegrationTests.PackedConsumerTests;
 internal sealed class PackageTests
 {
     private const string Ap203DescriptorTypeName =
-        "TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor";
+        "TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf.SchemaDescriptor";
 
     /// <summary>
     /// Verifies the precompiled AP203 package exposes generated types without consumer schema inputs or analyzer runtime assets.
@@ -67,7 +67,7 @@ internal sealed class PackageTests
                 "--no-build",
                 "--output",
                 packageDirectory);
-            var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+            var packagePath = Directory.GetFiles(packageDirectory, "TedToolkit.Step21.Ap203.2.0.0.nupkg").Single();
             PackageCache.CopyProjectDependencies(
                 packageDirectory,
                 Path.Combine(repositoryRoot, "src", "TedToolkit.Step21", "obj", "project.assets.json"));
@@ -139,7 +139,7 @@ internal sealed class PackageTests
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.Step21.Analyzer");
                 await Assert.That(packageSpecification).DoesNotContain("TedToolkit.RoslynHelper");
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
-                    "TedToolkit.Step21.Ap203/1.0.0",
+                    "TedToolkit.Step21.Ap203/2.0.0",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21/1.0.0",
@@ -205,10 +205,10 @@ internal sealed class PackageTests
 
             var firstPackage = Directory.GetFiles(
                 firstPackageDirectory,
-                "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+                "TedToolkit.Step21.Ap203.2.0.0.nupkg").Single();
             var secondPackage = Directory.GetFiles(
                 secondPackageDirectory,
-                "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+                "TedToolkit.Step21.Ap203.2.0.0.nupkg").Single();
             var firstManifest = ReadNormalizedPackageManifest(firstPackage);
             var secondManifest = ReadNormalizedPackageManifest(secondPackage);
             var packageSpecification = ReadPackageText(firstPackage, "TedToolkit.Step21.Ap203.nuspec");
@@ -218,11 +218,12 @@ internal sealed class PackageTests
                 "src",
                 "TedToolkit.Step21.Ap203",
                 "README.md"));
-            var schemaHash = ComputeCanonicalTextHash(Path.Combine(
+            var schemaHash = ComputeFileHash(Path.Combine(
                 repositoryRoot,
                 "schemas",
+                ".cache",
                 "ap203",
-                "ap203.exp"));
+                "mim_lf.exp"));
             var validFixtureHash = ComputeFileHash(Path.Combine(
                 repositoryRoot,
                 "tests",
@@ -252,17 +253,19 @@ internal sealed class PackageTests
                 await Assert.That(packageSpecification).Contains(
                     "<dependency id=\"TedToolkit.Step21\" version=\"[1.0.0, 2.0.0)\" exclude=\"Build,Analyzers\" />");
                 await Assert.That(packagedReadme).IsEqualTo(projectReadme);
-                await Assert.That(packagedReadme).Contains("STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`");
-                await Assert.That(packagedReadme).Contains("`CONFIG_CONTROL_DESIGN`");
+                await Assert.That(packagedReadme).Contains("official ISO/TS 10303-403 AP203");
+                await Assert.That(packagedReadme).Contains(
+                    "`AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF`");
                 await Assert.That(packagedReadme).Contains("`[1.0.0,2.0.0)`");
-                await Assert.That(packagedReadme).Contains("generated public surface");
+                await Assert.That(packagedReadme).Contains("separate rights review");
                 await Assert.That(schemaHash).IsEqualTo(
-                    "19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251");
+                    "255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44");
                 await Assert.That(validFixtureHash).IsEqualTo(
                     "2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62");
                 await Assert.That(unsupportedFixtureHash).IsEqualTo(
                     "00B8AA7438180351BE42F30972DA96350302E435D3C778184C174CCCFA1B466F");
-                await Assert.That(assemblyContract.DescriptorName).IsEqualTo("config_control_design");
+                await Assert.That(assemblyContract.DescriptorName).IsEqualTo(
+                    "Ap203_configuration_controlled_3d_design_of_mechanical_parts_and_assemblies_mim_lf");
                 await Assert.That(assemblyContract.PublicApiHash).IsEqualTo(approvedApiHash)
                     .Because($"Actual AP203 generated public API SHA-256: {assemblyContract.PublicApiHash}");
             }

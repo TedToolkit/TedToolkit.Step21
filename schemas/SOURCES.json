@@ -1,0 +1,54 @@
+{
+  "formatVersion": 1,
+  "policy": {
+    "purpose": "local-code-generation-only",
+    "gitTracked": false,
+    "packageIncluded": false,
+    "singleInputPerSchema": true,
+    "schemaOverlays": "prohibited",
+    "redistribution": "prohibited-without-separate-rights-review",
+    "rightsReview": "required-before-download-use-generation-or-distribution",
+    "isoTermsUrl": "https://www.iso.org/terms-conditions-licence-agreement.html",
+    "isoCopyrightUrl": "https://www.iso.org/copyright.html"
+  },
+  "schemas": [
+    {
+      "id": "ap203",
+      "authority": "ISO",
+      "authorityStatus": "official",
+      "standard": "ISO/TS 10303-403:2010 AP203 MIM long form",
+      "standardUrl": "https://www.iso.org/standard/56238.html",
+      "downloadUrl": "https://standards.iso.org/iso/10303/smrl/v12/tech/smrlv12.zip",
+      "archiveEntry": "smrlv12/data/modules/ap203_configuration_controlled_3d_design_of_mechanical_parts_and_assemblies/mim_lf.exp",
+      "cachePath": "ap203/mim_lf.exp",
+      "retrievedOn": "2026-09-10",
+      "sha256": "255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44"
+    },
+    {
+      "id": "ap214",
+      "authority": "MBx Interoperability Forum",
+      "authorityStatus": "industry-authoritative-non-ISO",
+      "standard": "ISO/DIS 10303-214:2007 AP214 Edition 3 AIM long form",
+      "standardUrl": "https://www.iso.org/standard/43669.html",
+      "sourceIndexUrl": "https://www.mbx-if.org/home/mbx/resources/express-schemas/",
+      "downloadUrl": "https://www.mbx-if.org/home/wp-content/uploads/2024/07/AP214E3_2010.zip",
+      "archiveEntry": "AP214E3_2010.exp",
+      "cachePath": "ap214/AP214E3_2010.exp",
+      "rightsNoticeUrl": "https://www.mbx-if.org/home/imprint/",
+      "retrievedOn": "2026-09-10",
+      "sha256": "71AB140FE7F774321BEEE6A31E6FEE2AFC3973FD60350AE2018C74C211FB4295"
+    },
+    {
+      "id": "ap242",
+      "authority": "ISO",
+      "authorityStatus": "official",
+      "standard": "ISO 10303-242:2025 AP242 Edition 4; ISO/TS 10303-442 edition 7 MIM long form",
+      "standardUrl": "https://www.iso.org/standard/84300.html",
+      "downloadUrl": "https://standards.iso.org/iso/ts/10303/-442/ed-7/tech/express/mim_lf.exp",
+      "archiveEntry": null,
+      "cachePath": "ap242/mim_lf.exp",
+      "retrievedOn": "2026-09-10",
+      "sha256": "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB"
+    }
+  ]
+}

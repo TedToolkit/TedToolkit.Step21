@@ -65,20 +65,18 @@ internal sealed class Ap214PackageTests
         var expected = new Dictionary<string, string>
         {
             ["packageId"] = "TedToolkit.Step21.Ap214",
-            ["targetFramework"] = "net10.0",
-            ["intendedFirstStableVersion"] = "1.0.0",
-            ["upstreamRevision"] = "9baa5dadaa1dcfcdc623220d865d36d61ea351e9",
-            ["upstreamPath"] = "data/ap214e3/AP214E3_2010.exp",
-            ["sourceFile"] = "AP214E3_2010.exp",
-            ["sourceCanonicalLfSha256"] = "9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7",
-            ["edition"] = "ISO/DIS 10303-214:2007",
+            ["packageVersion"] = "1.0.0",
+            ["sourceAuthority"] = "MBx Interoperability Forum",
+            ["sourceAuthorityStatus"] = "industry-authoritative-non-ISO",
+            ["sourceManifest"] = "../SOURCES.json",
+            ["sourceCachePath"] = "ap214/AP214E3_2010.exp",
+            ["sourceSha256"] = "71AB140FE7F774321BEEE6A31E6FEE2AFC3973FD60350AE2018C74C211FB4295",
+            ["edition"] = "ISO/DIS 10303-214:2007 AP214 Edition 3",
             ["descriptor"] = "TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor",
             ["runtimeRange"] = "[1.0.0,2.0.0)",
             ["publicApiSnapshot"] = "PublicApi.approved.sha256",
-            ["sourceLicense"] = "BSD-3-Clause",
             ["fixtureSha256"] = "84B04D7AEFF27157B0FBEE09D681977E516C4F16C6CD6C4EF41E34FE8C4EC722",
-            ["fixtureEdition"] = "OCCT AP214IS; test-only migration to the pinned 2007-DIS baseline",
-            ["conformanceScope"] = "Fixed manifold B-rep box: product, topology, geometry, units, values, instance identity and named references; not complete AP214 conformance",
+            ["distribution"] = "local-code-generation-only; EXP and derived output publication require separate rights review",
         };
         var project = XDocument.Load(Path.Combine(
             repositoryRoot, "src", "TedToolkit.Step21.Ap214", "TedToolkit.Step21.Ap214.csproj"));
@@ -95,12 +93,11 @@ internal sealed class Ap214PackageTests
             await Assert.That(manifest.GetProperty("previousStableBaseline").ValueKind).IsEqualTo(JsonValueKind.Null);
             await Assert.That(manifest.GetProperty("closedSchemas").EnumerateArray()
                 .Select(value => value.GetString()).SequenceEqual(["AUTOMOTIVE_DESIGN"])).IsTrue();
-            await Assert.That(project.Descendants("TargetFramework").Single().Value)
-                .IsEqualTo(manifest.GetProperty("targetFramework").GetString());
             await Assert.That((string?)runtime.Attribute("VersionOverride"))
                 .IsEqualTo(manifest.GetProperty("runtimeRange").GetString());
-            await Assert.That(ComputeCanonicalTextHash(Path.Combine(schemaDirectory, expected["sourceFile"])))
-                .IsEqualTo(manifest.GetProperty("sourceCanonicalLfSha256").GetString());
+            await Assert.That(ComputeFileHash(Path.Combine(
+                    repositoryRoot, "schemas", ".cache", expected["sourceCachePath"])))
+                .IsEqualTo(manifest.GetProperty("sourceSha256").GetString());
             await Assert.That(ComputeFileHash(Path.Combine(repositoryRoot, "tests",
                 "TedToolkit.Step21.IntegrationTests", "TestData", "Ap214", "occt-box-10x20x30-ap214.step")))
                 .IsEqualTo(manifest.GetProperty("fixtureSha256").GetString());
@@ -374,13 +371,18 @@ internal sealed class Ap214PackageTests
                 await Assert.That(ReadNormalizedPackageManifest(packagePath)).IsEqualTo(
                     ReadNormalizedPackageManifest(repeatPackagePath));
                 await Assert.That(packageEntries).Contains("README.md");
-                foreach (var evidenceFile in new[] { "COPYING", "AUTHORS", "INTENT.md", "PROVENANCE.md" })
+                foreach (var evidence in new[]
                 {
-                    var evidenceEntry = $"third-party/stepcode/{evidenceFile}";
+                    (Entry: "third-party/schema-source/PROVENANCE.md",
+                        Source: Path.Combine(repositoryRoot, "schemas", "ap214", "PROVENANCE.md")),
+                    (Entry: "third-party/schema-source/SOURCES.md",
+                        Source: Path.Combine(repositoryRoot, "schemas", "SOURCES.md")),
+                })
+                {
+                    var evidenceEntry = evidence.Entry;
                     await Assert.That(packageEntries).Contains(evidenceEntry);
                     await Assert.That(ReadPackageText(packagePath, evidenceEntry).ReplaceLineEndings("\n"))
-                        .IsEqualTo(File.ReadAllText(Path.Combine(
-                            repositoryRoot, "schemas", "ap214", evidenceFile)).ReplaceLineEndings("\n"));
+                        .IsEqualTo(File.ReadAllText(evidence.Source).ReplaceLineEndings("\n"));
                 }
 
                 await Assert.That(packageEntries.Any(path => path.EndsWith(".exp", StringComparison.OrdinalIgnoreCase))).IsFalse();

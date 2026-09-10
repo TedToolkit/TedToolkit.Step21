@@ -5,9 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Schemas.ConfigControlDesign;
+using TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf;
 
-using Ap203SchemaDescriptor = TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor;
+using Ap203SchemaDescriptor = TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf.SchemaDescriptor;
 
 namespace TedToolkit.Step21.PackedConsumer;
 
@@ -112,10 +112,10 @@ internal static class Ap203FixtureProgram
         invalidFace.Bounds.Clear();
         var invalidValidation = reread.Validate();
         var expectedProductFailure = invalidValidation.Failures.Any(failure =>
-            failure.Code == "CONFIG_CONTROL_DESIGN.PRODUCT.FRAME_OF_REFERENCE.AGGREGATE_0.LOWER_BOUND"
+            failure.Code == "AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF.PRODUCT.FRAME_OF_REFERENCE.AGGREGATE_0.LOWER_BOUND"
             && failure.Path.EndsWith(".FrameOfReference", StringComparison.Ordinal));
         var expectedFaceFailure = invalidValidation.Failures.Any(failure =>
-            failure.Code == "CONFIG_CONTROL_DESIGN.FACE.BOUNDS.AGGREGATE_0.LOWER_BOUND"
+            failure.Code == "AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF.FACE.BOUNDS.AGGREGATE_0.LOWER_BOUND"
             && failure.Path.EndsWith(".Bounds", StringComparison.Ordinal));
         if (invalidValidation.IsValid || !expectedProductFailure || !expectedFaceFailure)
         {

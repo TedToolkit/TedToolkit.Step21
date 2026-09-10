@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <ExpressSchemaId>ap242</ExpressSchemaId>
     <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
     <Version>1.0.0</Version>
     <Description>Precompiled AP242 N11521 MIM long-form types for TedToolkit.Step21.</Description>
@@ -8,6 +9,8 @@
     <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
     <PackageTags>step;iso-10303;ap242;managed-model-based-3d-engineering</PackageTags>
   </PropertyGroup>
+
+  <Import Project="..\..\build\TedToolkit.Step21.SchemaInputs.targets" />
 
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.Step21\TedToolkit.Step21.csproj"
@@ -28,13 +31,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\..\schemas\ap242\242_mim_lf.exp" />
+    <ExpressSchemaInput Include="$(ExpressSchemaCacheRoot)\ap242\mim_lf.exp" />
+    <AdditionalFiles Include="@(ExpressSchemaInput)" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\schemas\ap242\COPYING;..\..\schemas\ap242\AUTHORS;..\..\schemas\ap242\INTENT.md;..\..\schemas\ap242\PROVENANCE.md"
+    <None Include="..\..\schemas\ap242\PROVENANCE.md;..\..\schemas\SOURCES.md"
           Pack="true"
-          PackagePath="third-party/stepcode/"
+          PackagePath="third-party/schema-source/"
           Visible="false" />
     <None Include="README.md"
           Pack="true"

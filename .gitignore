@@ -15,5 +15,8 @@ output
 artifacts/test-corpus/
 artifacts
 
+# Third-party AP EXPRESS publications are local code-generation inputs only.
+schemas/.cache/
+
 build/TedToolkit.Step21.Build/appsettings.json
 build/tools/

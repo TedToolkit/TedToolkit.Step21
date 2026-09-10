@@ -7,7 +7,7 @@
 
 using TedToolkit.Step21;
 
-using Ap203 = TedToolkit.Step21.Schemas.ConfigControlDesign;
+using Ap203 = TedToolkit.Step21.Schemas.Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf;
 using Ap242 = TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf;
 
 namespace TedToolkit.Step21.PackedConsumer;
@@ -25,7 +25,7 @@ internal static class Ap203Ap242Program
         var ap242Descriptor = Ap242.SchemaDescriptor.Instance;
         SchemaDescriptor[] descriptors = [ap203Descriptor, ap242Descriptor,];
 
-        if (ap203Descriptor.Name.Value != "config_control_design"
+        if (ap203Descriptor.Name.Value != "Ap203_configuration_controlled_3d_design_of_mechanical_parts_and_assemblies_mim_lf"
             || ap242Descriptor.Name.Value != "Ap242_managed_model_based_3d_engineering_mim_lf"
             || ReferenceEquals(ap203Descriptor, ap242Descriptor)
             || ap203Descriptor.GetType().Assembly == ap242Descriptor.GetType().Assembly

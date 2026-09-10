@@ -17,7 +17,7 @@ $nugetConfigPath = Join-Path $proofRoot 'NuGet.Config'
 $runtimeProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21/TedToolkit.Step21.csproj'
 $packageProject = Join-Path $repositoryRoot 'src/TedToolkit.Step21.Ap203/TedToolkit.Step21.Ap203.csproj'
 $consumerProject = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.PackedConsumer/TedToolkit.Step21.PackedConsumer.csproj'
-$schemaPath = Join-Path $repositoryRoot 'schemas/ap203/ap203.exp'
+$schemaPath = Join-Path $repositoryRoot 'schemas/.cache/ap203/mim_lf.exp'
 $fixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-box-10x20x30-ap203.step'
 $extensionFixturePath = Join-Path $repositoryRoot 'tests/TedToolkit.Step21.IntegrationTests/TestData/Ap203/occt-unsupported-extension-ap203.step'
 
@@ -165,13 +165,13 @@ try {
     $schemaHash = Get-CanonicalTextSha256 $schemaPath
     $fixtureHash = Get-FileSha256 $fixturePath
     $extensionFixtureHash = Get-FileSha256 $extensionFixturePath
-    if (($schemaHash -ne '19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251') -or
+    if (($schemaHash -ne '255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44') -or
         ($fixtureHash -ne '2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62') -or
         ($extensionFixtureHash -ne '00B8AA7438180351BE42F30972DA96350302E435D3C778184C174CCCFA1B466F')) {
-        throw 'A checked-in AP203 source or fixture no longer matches its approved checksum.'
+        throw 'The verified AP203 source cache or a fixture no longer matches its approved checksum.'
     }
 
-    $packagePath = Get-ChildItem -LiteralPath $packageDirectory -Filter 'TedToolkit.Step21.Ap203.1.0.0.nupkg' | Select-Object -ExpandProperty FullName -First 1
+    $packagePath = Get-ChildItem -LiteralPath $packageDirectory -Filter 'TedToolkit.Step21.Ap203.2.0.0.nupkg' | Select-Object -ExpandProperty FullName -First 1
     $packageDigest = Get-NormalizedPackageDigest $packagePath
     Write-Host $joinedOutput
     Write-Host "AP203_REPRODUCIBLE_PACKAGE_OK package-sha256=$packageDigest schema-sha256=$schemaHash fixture-sha256=$fixtureHash"

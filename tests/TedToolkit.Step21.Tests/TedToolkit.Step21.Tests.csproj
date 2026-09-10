@@ -8,6 +8,8 @@
     <NoWarn>$(NoWarn);RCS1046</NoWarn>
   </PropertyGroup>
 
+  <Import Project="..\..\build\TedToolkit.Step21.SchemaInputs.targets" />
+
   <ItemGroup>
     <PackageReference Include="TUnit" />
   </ItemGroup>
@@ -18,26 +20,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ExpressSchemaInput Include="$(ExpressSchemaCacheRoot)\ap203\mim_lf.exp;$(ExpressSchemaCacheRoot)\ap214\AP214E3_2010.exp;$(ExpressSchemaCacheRoot)\ap242\mim_lf.exp" />
     <Compile Include="..\TedToolkit.Step21.PackedConsumer\Part21FixtureSignature.cs"
              Link="PackageFixtureTests\Part21FixtureSignature.cs" />
     <None Update="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(ExpressSchemaCacheRoot)\ap242\mim_lf.exp"
+          Link="TestData\Express\Ap242\mim_lf.exp"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\schemas\ap242\*"
           Link="TestData\Express\Ap242\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\schemas\ap203\ap203.exp"
-          Link="TestData\Express\Ap203\ap203.exp"
+    <None Include="$(ExpressSchemaCacheRoot)\ap203\mim_lf.exp"
+          Link="TestData\Express\Ap203\mim_lf.exp"
           CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\schemas\ap214\AP214E3_2010.exp"
+    <None Include="..\..\schemas\ap203\PROVENANCE.md;..\..\schemas\ap203\BASELINE.json"
+          Link="TestData\Express\Ap203\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(ExpressSchemaCacheRoot)\ap214\AP214E3_2010.exp"
           Link="TestData\Express\Ap214\AP214E3_2010.exp"
-          CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\schemas\ap214\COPYING"
-          Link="TestData\Express\Ap214\COPYING"
-          CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\schemas\ap214\AUTHORS"
-          Link="TestData\Express\Ap214\AUTHORS"
-          CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\schemas\ap214\INTENT.md"
-          Link="TestData\Express\Ap214\INTENT.md"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\schemas\ap214\PROVENANCE.md"
           Link="TestData\Express\Ap214\PROVENANCE.md"

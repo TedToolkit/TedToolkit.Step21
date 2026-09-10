@@ -16,6 +16,14 @@ $schemaKey = $Schema.ToLowerInvariant()
 $packageId = "TedToolkit.Step21.$Schema"
 $packageProject = Join-Path $repositoryRoot "src/$packageId/$packageId.csproj"
 $schemaDirectory = Join-Path $repositoryRoot "schemas/$schemaKey"
+$sourceManifestPath = Join-Path $repositoryRoot 'schemas/SOURCES.json'
+$sourceManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
+$schemaSource = @($sourceManifest.schemas | Where-Object { $_.id -eq $schemaKey })
+if ($schemaSource.Count -ne 1) {
+    throw "Expected one source manifest entry for $schemaKey; found $($schemaSource.Count)."
+}
+
+$schemaSourcePath = Join-Path (Join-Path $repositoryRoot 'schemas/.cache') $schemaSource[0].cachePath
 $fixtureDirectory = Join-Path $repositoryRoot (
     "tests/TedToolkit.Step21.IntegrationTests/TestData/$Schema")
 $proofRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
@@ -83,10 +91,13 @@ function Get-InputManifest {
         $packageProject
         (Join-Path $repositoryRoot 'Directory.Build.props')
         (Join-Path $repositoryRoot 'Directory.Packages.props')
+        (Join-Path $repositoryRoot 'build/TedToolkit.Step21.SchemaInputs.targets')
+        (Join-Path $repositoryRoot 'build/fetch-express-schemas.ps1')
+        $sourceManifestPath
+        (Join-Path $repositoryRoot 'schemas/SOURCES.md')
+        (Join-Path $repositoryRoot 'schemas/README.md')
         (Join-Path $schemaDirectory 'PROVENANCE.md')
-        (Join-Path $schemaDirectory 'COPYING')
-        (Join-Path $schemaDirectory 'AUTHORS')
-        (Join-Path $schemaDirectory 'INTENT.md')
+        $schemaSourcePath
     )
     $publicApiPath = Join-Path $schemaDirectory 'PublicApi.approved.sha256'
     if (Test-Path -LiteralPath $publicApiPath -PathType Leaf) {
@@ -99,13 +110,11 @@ function Get-InputManifest {
         }
     }
 
-    $schemaPaths = @(Get-ChildItem -LiteralPath $schemaDirectory -Filter '*.exp' -File |
-        Select-Object -ExpandProperty FullName)
-    if ($schemaPaths.Count -ne 1) {
-        throw "Expected exactly one EXPRESS source in $schemaDirectory; found $($schemaPaths.Count)."
+    $actualSchemaHash = Get-FileSha256 $schemaSourcePath
+    if ($actualSchemaHash -ne $schemaSource[0].sha256) {
+        throw "The cached $schemaKey source does not match schemas/SOURCES.json. Expected $($schemaSource[0].sha256), got $actualSchemaHash."
     }
 
-    $paths += $schemaPaths[0]
     if (Test-Path -LiteralPath $fixtureDirectory -PathType Container) {
         $paths += @(Get-ChildItem -LiteralPath $fixtureDirectory -File -Recurse |
             Select-Object -ExpandProperty FullName)
@@ -119,7 +128,7 @@ function Get-InputManifest {
             }
 
             $relativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $_).Replace('\', '/')
-            $hash = if ([System.IO.Path]::GetExtension($_) -in @('.md', '.exp', '.csproj')) {
+            $hash = if ([System.IO.Path]::GetExtension($_) -in @('.md', '.csproj')) {
                 Get-CanonicalTextSha256 $_
             }
             else {
@@ -180,6 +189,13 @@ New-Item -ItemType Directory -Path $proofRoot | Out-Null
 try {
     $first = Invoke-BuildRound 'first'
     $second = Invoke-BuildRound 'second'
+
+    $unexpectedSchemaEntries = @($first.PackageManifest | Where-Object {
+        ($_ -split '=', 2)[0].EndsWith('.exp', [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($unexpectedSchemaEntries.Count -ne 0) {
+        throw "The package contains prohibited EXPRESS inputs:`n$($unexpectedSchemaEntries -join "`n")"
+    }
 
     $packageDifference = Compare-Object $first.PackageManifest $second.PackageManifest
     if ($packageDifference) {
