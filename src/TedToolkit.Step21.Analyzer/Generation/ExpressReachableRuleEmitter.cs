@@ -8655,7 +8655,7 @@ internal static class ExpressReachableRuleEmitter
             + $"{FunctionMethodName(plan, symbol)}({string.Join(", ", invocationArguments)})))";
     }
 
-    private static bool HasGenericSignature(
+    private static bool CanInvokeGenericFunctionDirectly(
         ExpressReachableRulePlan plan,
         ExpressBoundOpaqueDeclaration declaration)
     {
@@ -8668,9 +8668,11 @@ internal static class ExpressReachableRuleEmitter
                     && SameStart(candidate.Span, parameter.Span))
                 .Distinct()
                 .Single()
-                .Type!);
-        return ExpressTypeAnalysis.GenericTypeLabels(
-            formalTypes.Append(declaration.DeclaredType!)).Count > 0;
+                .Type!)
+            .ToArray();
+        return ExpressTypeAnalysis.GenericTypeLabels([declaration.DeclaredType!,]).Count > 0
+            || (formalTypes.Length > 0
+                && formalTypes.All(type => ExpressTypeAnalysis.GenericTypeLabels([type,]).Count > 0));
     }
 
     private static string ResolveApplication(
@@ -8685,7 +8687,7 @@ internal static class ExpressReachableRuleEmitter
         var symbol = expression.Reference!.SchemaDeclaration!;
         var declaration = plan.GetDeclaration(symbol);
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
-            && HasGenericSignature(plan, genericFunction))
+            && CanInvokeGenericFunctionDirectly(plan, genericFunction))
         {
             var genericArguments = arguments.ToArray();
             var genericFormalTypes = plan.Analysis.GetDeclaration(genericFunction)
@@ -9477,6 +9479,7 @@ internal static class ExpressReachableRuleEmitter
                 }
 
                 if (plan.Resolver.GetAggregateType(targetType) is { } projectedAggregateTarget
+                    && ExpressTypeAnalysis.GenericTypeLabels([targetType,]).Count == 0
                     && actual.Kind != ExpressExpressionKind.AggregateInitializer
                     && ResolveExpressionAggregateCandidates(plan, actual) is { } projectedAggregateCandidates
                     && projectedAggregateCandidates.FirstOrDefault(candidate =>

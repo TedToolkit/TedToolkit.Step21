@@ -31,7 +31,7 @@ build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms` before a local buil
 ## Compatibility and distribution
 
 The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consumers select the
-`net8.0` asset.
+`net8.0` asset. Its supported `TedToolkit.Step21` runtime range is `[1.0.0,2.0.0)`.
 
 The old `CONFIG_CONTROL_DESIGN` descriptor and generated API are not compatibility aliases for this
 schema. A Part 21 file declaring that former schema must use a matching descriptor/package or fail
@@ -40,4 +40,4 @@ the schema boundary explicitly.
 The package remains a local verification artifact. The acknowledgement switch is not a licence;
 the operator must establish applicable rights for download, local processing, and generation.
 Distribution of the EXP is prohibited, and publication of generated or compiled output requires a
-separate rights review as specified by ADR-0013.
+separate rights review as specified by ADR-0014 (which supersedes ADR-0013).

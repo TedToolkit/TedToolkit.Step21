@@ -3,8 +3,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   verify-antlr-generation:
@@ -78,9 +77,28 @@ jobs:
         shell: pwsh
         run: ./build/verify-native-aot.ps1
 
-  run-build-project:
+  verify-solution:
     needs:
       - compare-antlr-generation
       - verify-native-aot-package
-    uses: TedToolkit/TedToolkit/.github/workflows/build.yml@development
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Fetch and verify EXPRESS schema inputs
+        shell: pwsh
+        run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
+      # The release-oriented build pipeline is intentionally excluded here: ADR-0014 requires a
+      # separate rights review before generated or compiled AP artifacts may be published.
+      - name: Restore solution
+        run: dotnet restore TedToolkit.Step21.slnx
+      - name: Build solution
+        run: dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore --disable-build-servers
+      - name: Run unit tests
+        run: dotnet run --project tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --no-build --no-restore -- --progress off
+      - name: Run integration tests
+        run: dotnet run --project tests/TedToolkit.Step21.IntegrationTests/TedToolkit.Step21.IntegrationTests.csproj --configuration Release --no-build --no-restore -- --progress off

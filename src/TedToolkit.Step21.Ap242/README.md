@@ -18,9 +18,10 @@ Console.WriteLine(descriptor.Name.Value);
 - EXPRESS name: `AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF`.
 - Source SHA-256: `E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB`.
 
-The build uses those exact bytes as its sole EXPRESS input. No patched schema, overlay, or fallback
-copy is permitted. If the compiler cannot faithfully process the publication, the build fails
-rather than changing the source or accepting invalid EXPRESS generally.
+The build verifies those exact bytes, then uses the audited `mim_lf.compat.exp` generation input
+(SHA-256 `00B6027C63671AAD36C943B7C65608773094CCDF87636B197EC634F30B306360`). The transform documents
+and corrects two internal type contradictions: datum relationship projection and recursive 2D CSG
+operand validation. It fails if the official hash, patch anchors, or transformed hash changes.
 
 The EXP is downloaded explicitly into a Git-ignored local cache and used only during code
 generation. It is not committed or packed. Run `pwsh -NoProfile -File
@@ -34,4 +35,4 @@ The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consu
 The package remains a local verification artifact. The acknowledgement switch is not a licence;
 the operator must establish applicable rights for download, local processing, and generation.
 Distribution of the EXP is prohibited, and publication of generated or compiled output requires a
-separate rights review as specified by ADR-0013.
+separate rights review as specified by ADR-0014 (which supersedes ADR-0013).

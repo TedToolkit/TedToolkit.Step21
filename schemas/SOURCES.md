@@ -36,6 +36,14 @@ publication.
 - Local cache: `.cache/ap242/mim_lf.exp`
 - Retrieved: 2026-09-10
 - SHA-256: `E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB`
+- Generation input: `.cache/ap242/mim_lf.compat.exp`
+- Generation input SHA-256: `00B6027C63671AAD36C943B7C65608773094CCDF87636B197EC634F30B306360`
+- Compatibility transform: `build/prepare-ap242-schema.ps1`
+
+The official file contains two internally inconsistent expressions. The audited transform projects
+`datum_target.the_datum` through each relationship's `related_shape_aspect` and delegates recursive
+2D CSG validation to a `boolean_operand_2d` helper. It runs only after official-source hash
+verification and produces a separately pinned, Git-ignored generation input.
 
 ## Legal boundary
 

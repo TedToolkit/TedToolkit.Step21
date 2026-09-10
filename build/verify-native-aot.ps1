@@ -303,9 +303,10 @@ try {
     $joinedOutput = $runOutput -join [Environment]::NewLine
     $expectedOutput = if ($Ap203) {
         @(
-            'AP203_FIXTURE_OK entities=200 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
-            'AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
-            'AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0',
+            'AP203_FIXTURE_OK entities=199 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
+            'AP203_ROUND_TRIP_OK edit=product.name entities=199 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
+            'AP203_INVALID_EDIT_REJECTED failures=8 output-bytes=0',
+            'AP203_FORMER_SCHEMA_REJECTED code=P21-BIND-SCHEMA',
             'AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6')
     }
     elseif ($Ap214) {

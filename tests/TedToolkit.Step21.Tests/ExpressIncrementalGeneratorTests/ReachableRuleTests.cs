@@ -11287,7 +11287,7 @@ public sealed class ReachableRuleTests
                 .Contains("SELECT_USEDIN_CARRIER_MODEL.OPTIONAL_SAMPLE.WHERE.UNKNOWN_REFERENCE");
             await Assert.That(mixed.Diagnostics.Concat(mixed.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
-                .IsNotEmpty();
+                .IsEmpty();
             await Assert.That(genericGroup.Diagnostics.Concat(genericGroup.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
@@ -14154,6 +14154,51 @@ public sealed class ReachableRuleTests
             """;
 
         var result = GeneratorHostTests.Run(("schemas/generic-formal-result.exp", source));
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(generatedSource => generatedSource.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(generated);
+        }
+    }
+
+    /// <summary>
+    /// Verifies concrete arguments infer generic labels while non-generic formals retain normal adaptation.
+    /// </summary>
+    [Test]
+    public async Task Should_close_mixed_generic_and_concrete_function_formals()
+    {
+        const string source = """
+            SCHEMA mixed_generic_formal_model;
+            ENTITY sample;
+            END_ENTITY;
+            FUNCTION inspect(values : SET [0:?] OF GENERIC:items;
+                             names : SET [0:?] OF STRING;
+                             history : LIST [0:?] OF GENERIC:chain) : BOOLEAN;
+              RETURN(TRUE);
+            END_FUNCTION;
+            RULE validate FOR (sample);
+              LOCAL
+                values : SET OF sample := [];
+                names : SET OF STRING := [];
+                history : LIST OF sample := [];
+              END_LOCAL;
+            WHERE
+              WR1 : inspect(values, names, history);
+            END_RULE;
+            END_SCHEMA;
+            """;
+
+        var result = GeneratorHostTests.Run(("schemas/mixed-generic-formal.exp", source));
         var generated = string.Join(
             Environment.NewLine,
             result.GeneratedSources.Select(generatedSource => generatedSource.SourceText.ToString()));

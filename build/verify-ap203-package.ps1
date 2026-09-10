@@ -153,9 +153,10 @@ try {
 
     $joinedOutput = $runOutput -join "`n"
     foreach ($expected in @(
-        'AP203_FIXTURE_OK entities=200 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
-        'AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
-        'AP203_INVALID_EDIT_REJECTED failures=9 output-bytes=0',
+        'AP203_FIXTURE_OK entities=199 products=1 faces=6 edges=12 vertices=8 points=27 units=3',
+        'AP203_ROUND_TRIP_OK edit=product.name entities=199 faces=6 edges=12 vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3',
+        'AP203_INVALID_EDIT_REJECTED failures=8 output-bytes=0',
+        'AP203_FORMER_SCHEMA_REJECTED code=P21-BIND-SCHEMA',
         'AP203_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6')) {
         if (-not $joinedOutput.Contains($expected, [StringComparison]::Ordinal)) {
             throw "AP203 package consumer output is missing '$expected'."
@@ -166,8 +167,8 @@ try {
     $fixtureHash = Get-FileSha256 $fixturePath
     $extensionFixtureHash = Get-FileSha256 $extensionFixturePath
     if (($schemaHash -ne '255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44') -or
-        ($fixtureHash -ne '2F40CE06A8646B3AE33A8BD871181A356D413CDD6B864D9C8D484A3D1E127B62') -or
-        ($extensionFixtureHash -ne '00B8AA7438180351BE42F30972DA96350302E435D3C778184C174CCCFA1B466F')) {
+        ($fixtureHash -ne '3FB1C5D2E3C972946223072F5E5539E5B970FEF6DDBEFDF6F07D10FE456FB58C') -or
+        ($extensionFixtureHash -ne 'DE3428DF58D2F861F8583F37A5C101C4DDAD8B18D234026F421AF265FB60A0F8')) {
         throw 'The verified AP203 source cache or a fixture no longer matches its approved checksum.'
     }
 

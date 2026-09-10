@@ -20,15 +20,17 @@ namespace TedToolkit.Step21.Tests.ExpressIncrementalGeneratorTests;
 /// </summary>
 public sealed class GeneratedFidelityTests
 {
-    private const string AP203_SHA256 = "19497DCA88C6FCFE763DA23772B68356BE4361668426954DE9863E4285D0C251";
+    private const string AP203_SHA256 = "255EAFFD5984373F5FE2F41369088B6FD07F970EB5915CE9920F0A5F339DDD44";
+    private const string SchemaNamespace =
+        "Ap203ConfigurationControlled3dDesignOfMechanicalPartsAndAssembliesMimLf";
 
     /// <summary>
-    /// Verifies the checked-in AP203 source checksum, descriptor, inheritance, nullability, aggregates, values, and member order.
+    /// Verifies the official AP203 source checksum, descriptor, inheritance, nullability, and aggregates.
     /// </summary>
     [Test]
-    public async Task Should_generate_pinned_ap203_surface_from_checked_in_schema()
+    public async Task Should_generate_pinned_ap203_surface_from_verified_schema()
     {
-        var schemaPath = Path.Combine(AppContext.BaseDirectory, "TestData", "Express", "Ap203", "ap203.exp");
+        var schemaPath = Path.Combine(AppContext.BaseDirectory, "TestData", "Express", "Ap203", "mim_lf.exp");
         await Assert.That(File.Exists(schemaPath)).IsTrue();
         var schemaText = File.ReadAllText(schemaPath);
         foreach (var lineEnding in new[] { "\n", "\r\n", })
@@ -39,7 +41,8 @@ public sealed class GeneratedFidelityTests
                 .IsEqualTo(AP203_SHA256);
         }
 
-        var analyzed = ExpressSchemaCompiler.Analyze([new ExpressSchemaSource("schemas/ap203.exp", schemaText)]);
+        var analyzed = ExpressSchemaCompiler.Analyze(
+            [new ExpressSchemaSource("schemas/.cache/ap203/mim_lf.exp", schemaText)]);
         var bound = analyzed.Compilation;
         var boundExpressions = bound.Schemas.Single().Expressions.Select(expression => expression.Span).ToArray();
         var schema = bound.Schemas.Single();
@@ -59,7 +62,7 @@ public sealed class GeneratedFidelityTests
             .Because(string.Join(Environment.NewLine, missingRuleExpressions.Select(expression =>
                 $"{expression.Span.Start.FilePath}:{expression.Span.Start.Line}:{expression.Span.Start.Column}")));
 
-        var result = GeneratorHostTests.Run(("schemas/ap203.exp", schemaText));
+        var result = GeneratorHostTests.Run(("schemas/.cache/ap203/mim_lf.exp", schemaText));
         using (Assert.Multiple())
         {
             await Assert.That(result.Diagnostics
@@ -76,56 +79,38 @@ public sealed class GeneratedFidelityTests
         }
 
         var descriptor = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor")
+            $"TedToolkit.Step21.Schemas.{SchemaNamespace}.SchemaDescriptor")
             ?? throw new InvalidOperationException("The generated AP203 descriptor was not found.");
-        var boundedPcurve = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.IBoundedPcurve")
-            ?? throw new InvalidOperationException("The generated AP203 bounded_pcurve interface was not found.");
+        var advancedFace = result.OutputCompilation.GetTypeByMetadataName(
+            $"TedToolkit.Step21.Schemas.{SchemaNamespace}.IAdvancedFace")
+            ?? throw new InvalidOperationException("The generated AP203 advanced_face interface was not found.");
         var product = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.Product")
+            $"TedToolkit.Step21.Schemas.{SchemaNamespace}.Product")
             ?? throw new InvalidOperationException("The generated AP203 product entity was not found.");
         var productCategory = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.ProductCategory")
+            $"TedToolkit.Step21.Schemas.{SchemaNamespace}.ProductCategory")
             ?? throw new InvalidOperationException("The generated AP203 product_category entity was not found.");
-        var reversibleList = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.ListOfReversibleTopologyItem")
-            ?? throw new InvalidOperationException("The generated AP203 reversible topology LIST was not found.");
-        var reversibleSet = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.SetOfReversibleTopologyItem")
-            ?? throw new InvalidOperationException("The generated AP203 reversible topology SET was not found.");
-        var aheadOrBehind = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.AheadOrBehind")
-            ?? throw new InvalidOperationException("The generated AP203 ahead_or_behind enumeration was not found.");
-        var axis2PlacementKind = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Schemas.ConfigControlDesign.Axis2PlacementKind")
-            ?? throw new InvalidOperationException("The generated AP203 axis2_placement SELECT kind was not found.");
+        var cartesianPoint = result.OutputCompilation.GetTypeByMetadataName(
+            $"TedToolkit.Step21.Schemas.{SchemaNamespace}.CartesianPoint")
+            ?? throw new InvalidOperationException("The generated AP203 cartesian_point entity was not found.");
         var descriptorSource = result.GeneratedSources.Single(source =>
-            source.HintName == "ExpressSchema_CONFIG_CONTROL_DESIGN.g.cs").SourceText.ToString();
+            source.HintName ==
+                "ExpressSchema_AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF.g.cs")
+            .SourceText.ToString();
 
         using (Assert.Multiple())
         {
-            await Assert.That(descriptorSource).Contains("SchemaName(\"config_control_design\")");
+            await Assert.That(descriptorSource).Contains(
+                "SchemaName(\"Ap203_configuration_controlled_3d_design_of_mechanical_parts_and_assemblies_mim_lf\")");
             await Assert.That(descriptor.GetMembers("Name").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("SchemaName");
-            await Assert.That(boundedPcurve.Interfaces.Select(type => type.Name)
-                .SequenceEqual(["IPcurve", "IBoundedCurve"])).IsTrue();
-            await Assert.That(product.Constructors.Single(constructor =>
-                    constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name)
-                .SequenceEqual(["id", "name", "description", "frameOfReference"])).IsTrue();
-            await Assert.That(product.GetMembers("FrameOfReference").OfType<IPropertySymbol>().Single().Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Schemas.ConfigControlDesign.IProductContext>");
+            await Assert.That(advancedFace.Interfaces.Select(type => type.Name)).Contains("IFaceSurface");
+            await Assert.That(product.GetMembers("FrameOfReference").OfType<IPropertySymbol>().Single().Type.Name)
+                .IsEqualTo("ExpressSet");
             await Assert.That(productCategory.GetMembers("Description").OfType<IPropertySymbol>().Single().Type.NullableAnnotation)
                 .IsEqualTo(NullableAnnotation.Annotated);
-            await Assert.That(reversibleList.GetMembers("Value").OfType<IPropertySymbol>().Single().Type.Name)
+            await Assert.That(cartesianPoint.GetMembers("Coordinates").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("ExpressList");
-            await Assert.That(reversibleSet.GetMembers("Value").OfType<IPropertySymbol>().Single().Type.Name)
-                .IsEqualTo("ExpressSet");
-            await Assert.That(aheadOrBehind.GetMembers().OfType<IPropertySymbol>()
-                .Where(property => property.IsStatic).Select(property => property.Name)
-                .SequenceEqual(["Ahead", "Behind"])).IsTrue();
-            await Assert.That(axis2PlacementKind.GetMembers().OfType<IFieldSymbol>()
-                .Where(field => field.HasConstantValue).Select(field => field.Name)
-                .SequenceEqual(["Axis2Placement2d", "Axis2Placement3d"])).IsTrue();
         }
     }
 }

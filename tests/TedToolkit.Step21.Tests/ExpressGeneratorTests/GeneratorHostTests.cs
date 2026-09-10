@@ -105,7 +105,13 @@ public sealed class GeneratorHostTests
             references,
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: NullableContextOptions.Enable));
+                nullableContextOptions: NullableContextOptions.Enable,
+                specificDiagnosticOptions: new Dictionary<string, ReportDiagnostic>
+                {
+                    // The test host targets net10.0 while the supported runtime asset targets net8.0.
+                    // Framework assembly unification is expected for this deliberate compatibility probe.
+                    ["CS1701"] = ReportDiagnostic.Suppress,
+                }));
         var additionalTexts = sources
             .Select(source => (AdditionalText)new InMemoryAdditionalText(source.Path, source.Text))
             .ToImmutableArray();

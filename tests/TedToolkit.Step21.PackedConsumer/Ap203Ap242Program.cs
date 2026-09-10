@@ -47,7 +47,7 @@ internal static class Ap203Ap242Program
             ap242Structure = ExchangeStructure.Read(source, descriptors);
         }
 
-        if (ap203Structure.Entities.Count() != 200
+        if (ap203Structure.Entities.Count() != 199
             || ap203Structure.Entities.OfType<Ap203.Product>().Count() != 1
             || ap242Structure.Entities.Count() != 170
             || ap242Structure.Entities.OfType<Ap242.Product>().Count() != 1)
@@ -56,7 +56,7 @@ internal static class Ap203Ap242Program
         }
 
         Console.WriteLine(
-            "PACKED_AP203_AP242_OK ap203-entities=200 ap242-entities=170 "
+            "PACKED_AP203_AP242_OK ap203-entities=199 ap242-entities=170 "
             + "runtime-assemblies=1 schema-assemblies=2");
         return 0;
     }

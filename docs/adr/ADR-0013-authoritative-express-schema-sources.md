@@ -1,13 +1,13 @@
 # ADR-0013: Use authoritative pristine EXPRESS schema sources
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-09-10
 - Decision owner: repository maintainer
 - Decision scope: provenance, storage, compilation, and redistribution metadata for maintained EXPRESS schema packages
 - Applicable product intent: [`../product/README.md`](../product/README.md)
 - Applicable principles: [`AP-001`, `AP-002`, and `AP-003`](../principles/architecture.md)
 - Supersedes: None
-- Superseded by: None
+- Superseded by: ADR-0014
 - Approval source: the repository maintainer explicitly accepted breaking changes, selected ISO authority over STEPcode, and restricted EXP files to non-distributed local code-generation inputs on 2026-09-10
 
 ## 📌 Decision at a glance

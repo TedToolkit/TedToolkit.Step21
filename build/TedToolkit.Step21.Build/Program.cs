@@ -5,24 +5,52 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using Sourcy.DotNet;
-
 using TedToolkit.ModularPipelines;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+var solution = new FileInfo(Path.Combine(repositoryRoot.FullName, "TedToolkit.Step21.slnx"));
+var buildProjectDirectory = new DirectoryInfo(Path.Combine(
+    repositoryRoot.FullName,
+    "build",
+    "TedToolkit.Step21.Build"));
 
 var pipeline = new TedPipeline(
     new()
     {
         BuildFiles =
         [
-            Solutions.TedToolkit_Step21,
+            solution,
         ],
-        Solution = Solutions.TedToolkit_Step21,
+        Solution = solution,
         TestFiles =
         [
+            new FileInfo(Path.Combine(
+                repositoryRoot.FullName,
+                "tests",
+                "TedToolkit.Step21.Tests",
+                "TedToolkit.Step21.Tests.csproj")),
+            new FileInfo(Path.Combine(
+                repositoryRoot.FullName,
+                "tests",
+                "TedToolkit.Step21.IntegrationTests",
+                "TedToolkit.Step21.IntegrationTests.csproj")),
         ],
     },
-    new FileInfo(Path.Combine(Projects.TedToolkit_Step21_Build.Directory!.FullName, "appsettings.json")));
+    new FileInfo(Path.Combine(buildProjectDirectory.FullName, "appsettings.json")));
 
 await pipeline.ExecuteAsync().ConfigureAwait(false);
+
+static DirectoryInfo FindRepositoryRoot(string startPath)
+{
+    for (var directory = new DirectoryInfo(startPath); directory is not null; directory = directory.Parent)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "TedToolkit.Step21.slnx")))
+        {
+            return directory;
+        }
+    }
+
+    throw new DirectoryNotFoundException("Could not locate TedToolkit.Step21.slnx from the build output path.");
+}

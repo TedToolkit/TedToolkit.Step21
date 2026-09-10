@@ -428,7 +428,8 @@ internal static class ExpressExpressionEmitter
     internal static string LikeMatch(string input, string pattern)
     {
         const string tokenPattern = "@\"!\\\\[\\s\\S]|![\\s\\S]|\\\\[\\s\\S]|[\\s\\S]\"";
-        var tokens = $"global::System.Text.RegularExpressions.Regex.Matches(({pattern}), {tokenPattern})";
+        var tokens = "global::System.Linq.Enumerable.Cast<global::System.Text.RegularExpressions.Match>("
+            + $"global::System.Text.RegularExpressions.Regex.Matches(({pattern}), {tokenPattern}))";
         var converted = "global::System.Linq.Enumerable.Select("
             + $"{tokens}, __token => __token.Value switch {{ "
             + "\"@\" => @\"\\p{L}\", \"^\" => @\"\\p{Lu}\", "
@@ -1603,7 +1604,8 @@ internal static class ExpressExpressionEmitter
             + "global::TedToolkit.Step21.RealValue, global::TedToolkit.Step21.RealValue?>)("
             + $"({leftValue}, {rightValue}) => {{ if ({rightValue}.Significand.IsZero) {{ return null; }} "
             + $"var {quotient} = {leftValue}.ToDouble() / {rightValue}.ToDouble(); "
-            + $"return global::System.Double.IsFinite({quotient}) "
+            + $"return !global::System.Double.IsNaN({quotient}) "
+            + $"&& !global::System.Double.IsInfinity({quotient}) "
             + $"? global::TedToolkit.Step21.RealValue.FromDouble({quotient}) : null; }}))"
             + $"({promotedLeft}, {promotedRight})";
     }
@@ -2482,8 +2484,12 @@ internal static class ExpressExpressionEmitter
             + "_"
             + expression.Span.Start.Column.ToString(CultureInfo.InvariantCulture);
         var result = "__expressMath_" + suffix;
-        return $"(global::System.Math.{operation}({string.Join(", ", values)}) is var {result} "
-            + $"&& global::System.Double.IsFinite({result}) ? "
+        var invocation = operation == "Log2"
+            ? $"global::System.Math.Log({string.Join(", ", values)}, 2.0)"
+            : $"global::System.Math.{operation}({string.Join(", ", values)})";
+        return $"({invocation} is var {result} "
+            + $"&& !global::System.Double.IsNaN({result}) "
+            + $"&& !global::System.Double.IsInfinity({result}) ? "
             + $"global::TedToolkit.Step21.RealValue.FromDouble({result}) : "
             + "(global::TedToolkit.Step21.RealValue?)null)";
     }

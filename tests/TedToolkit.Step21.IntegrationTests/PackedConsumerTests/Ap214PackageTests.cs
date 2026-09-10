@@ -321,7 +321,7 @@ internal sealed class Ap214PackageTests
                 "TedToolkit.Step21.Ap214.1.0.0.nupkg").Single();
             var ap203PackagePath = Directory.GetFiles(
                 packageDirectory,
-                "TedToolkit.Step21.Ap203.1.0.0.nupkg").Single();
+                "TedToolkit.Step21.Ap203.2.0.0.nupkg").Single();
             var packageEntries = ReadPackageEntries(packagePath);
             var packageSpecification = ReadPackageText(packagePath, "TedToolkit.Step21.Ap214.nuspec");
             var ap203PackageSpecification = ReadPackageText(
@@ -339,7 +339,7 @@ internal sealed class Ap214PackageTests
                 await Assert.That(runOutput).Contains("PACKED_AP214_OK");
                 await Assert.That(customRunOutput).Contains("PACKED_AOT_OK");
                 await Assert.That(coexistRunOutput).Contains(
-                    "PACKED_AP203_AP214_OK ap203-entities=200 ap214-entities=173 "
+                    "PACKED_AP203_AP214_OK ap203-entities=199 ap214-entities=173 "
                     + "runtime-assemblies=1 schema-assemblies=2");
                 await Assert.That(fixtureOutput).Contains(
                     "AP214_DUPLICATE_DESCRIPTOR_REJECTED input-chars=0");
@@ -400,18 +400,19 @@ internal sealed class Ap214PackageTests
                 await Assert.That(packageReadme).Contains(
                     "A different edition or vendor variant");
                 await Assert.That(packageReadme).Contains("requires a Major version");
-                await Assert.That(ComputeCanonicalTextHash(Path.Combine(
+                await Assert.That(ComputeFileHash(Path.Combine(
                     repositoryRoot,
                     "schemas",
+                    ".cache",
                     "ap214",
                     "AP214E3_2010.exp"))).IsEqualTo(
-                    "9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7");
+                    "71AB140FE7F774321BEEE6A31E6FEE2AFC3973FD60350AE2018C74C211FB4295");
                 await Assert.That(File.ReadAllText(Path.Combine(
                     repositoryRoot,
                     "schemas",
                     "ap214",
                     "PublicApi.approved.sha256")).Trim()).IsEqualTo(
-                    "B1ADD873603E9B5D3DB9349FE3F0F20464EEE644C8B3A5E487F5575BA6591D2C");
+                    "FAC1A0104AB47A028B3623CE5B423C2A9265E7796E9B57839E589349C6729919");
                 await Assert.That(runtimeLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21.Ap214/1.0.0",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
@@ -422,7 +423,7 @@ internal sealed class Ap214PackageTests
                     "TedToolkit.Step21/1.0.0",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(coexistLibraries.Count(name => name.Equals(
-                    "TedToolkit.Step21.Ap203/1.0.0",
+                    "TedToolkit.Step21.Ap203/2.0.0",
                     StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(coexistLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21.Ap214/1.0.0",
@@ -572,7 +573,7 @@ internal sealed class Ap214PackageTests
                 await Assert.That(fixtureRun.Output).Contains(
                     "AP242_EXTENSION_REJECTED code=P21-BIND-ENTITY line=8 column=6");
                 await Assert.That(coexistRun).Contains(
-                    "PACKED_AP203_AP242_OK ap203-entities=200 ap242-entities=170 "
+                    "PACKED_AP203_AP242_OK ap203-entities=199 ap242-entities=170 "
                     + "runtime-assemblies=1 schema-assemblies=2");
                 await Assert.That(ReadNormalizedPackageManifest(packagePath)).IsEqualTo(
                     ReadNormalizedPackageManifest(repeatPackagePath));
@@ -590,7 +591,7 @@ internal sealed class Ap214PackageTests
                 await Assert.That(libraries.Count(name => name.Equals(
                     "TedToolkit.Step21/1.0.0", StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(coexistLibraries.Count(name => name.Equals(
-                    "TedToolkit.Step21.Ap203/1.0.0", StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
+                    "TedToolkit.Step21.Ap203/2.0.0", StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(coexistLibraries.Count(name => name.Equals(
                     "TedToolkit.Step21.Ap242/1.0.0", StringComparison.OrdinalIgnoreCase))).IsEqualTo(1);
                 await Assert.That(coexistLibraries.Count(name => name.Equals(

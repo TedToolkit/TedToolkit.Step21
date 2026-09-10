@@ -78,6 +78,12 @@ public sealed class ExpressIncrementalGenerator : IIncrementalGenerator
         AppendParameterlessAttribute(
             declarations,
             compilation,
+            "AllowNullAttribute",
+            "global::System.AttributeTargets.Field | global::System.AttributeTargets.Parameter | "
+                + "global::System.AttributeTargets.Property");
+        AppendParameterlessAttribute(
+            declarations,
+            compilation,
             "DisallowNullAttribute",
             "global::System.AttributeTargets.Field | global::System.AttributeTargets.Parameter | "
                 + "global::System.AttributeTargets.Property");

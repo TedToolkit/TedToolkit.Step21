@@ -14,6 +14,8 @@ namespace TedToolkit.Step21.PackedConsumer;
 internal static class Ap203FixtureProgram
 {
     private const string EditedProductName = "TedToolkit AP203 OCCT box 10x20x30 mm - edited";
+    private const string OfficialSchemaHeader =
+        "FILE_SCHEMA(('AP203_CONFIGURATION_CONTROLLED_3D_DESIGN_OF_MECHANICAL_PARTS_AND_ASSEMBLIES_MIM_LF'));";
 
     private static int Main(string[] arguments)
     {
@@ -21,9 +23,10 @@ internal static class Ap203FixtureProgram
             return 64;
 
         ExchangeStructure? structure = null;
+        var fixtureText = File.ReadAllText(arguments[0]);
         try
         {
-            using var source = File.OpenText(arguments[0]);
+            using var source = new StringReader(fixtureText);
             structure = ExchangeStructure.Read(source, [Ap203SchemaDescriptor.Instance]);
         }
         catch (ExchangeStructureBindingException exception)
@@ -59,7 +62,7 @@ internal static class Ap203FixtureProgram
         var units = entities.OfType<ISiUnit>().ToArray();
 
         var representationContract = (IRepresentation)representation;
-        if (entities.Length != 200
+        if (entities.Length != 199
             || product.Name.Value != "TedToolkit AP203 OCCT box 10x20x30 mm 1"
             || faces.Length != 6
             || edgeCurves.Length != 12
@@ -103,7 +106,7 @@ internal static class Ap203FixtureProgram
         }
 
         Console.WriteLine(
-            "AP203_ROUND_TRIP_OK edit=product.name entities=200 faces=6 edges=12 "
+            "AP203_ROUND_TRIP_OK edit=product.name entities=199 faces=6 edges=12 "
             + "vertices=8 points=27 units=metre,radian,steradian shared-vertex-degrees=3,3,3,3,3,3,3,3");
 
         var invalidProduct = reread.Entities.OfType<Product>().Single();
@@ -141,6 +144,33 @@ internal static class Ap203FixtureProgram
 
         Console.WriteLine(
             $"AP203_INVALID_EDIT_REJECTED failures={invalidValidation.Failures.Count} output-bytes=0");
+
+        // The official MIM-LF package is a breaking replacement, not an alias for the former
+        // CONFIG_CONTROL_DESIGN contract. Keep this boundary executable beside the migrated fixture.
+        if (!fixtureText.Contains(OfficialSchemaHeader, StringComparison.Ordinal))
+        {
+            return 26;
+        }
+
+        var formerSchemaFixture = fixtureText.Replace(
+            OfficialSchemaHeader,
+            "FILE_SCHEMA(('CONFIG_CONTROL_DESIGN'));",
+            StringComparison.Ordinal);
+        try
+        {
+            using var source = new StringReader(formerSchemaFixture);
+            _ = ExchangeStructure.Read(source, [Ap203SchemaDescriptor.Instance]);
+            return 27;
+        }
+        catch (ExchangeStructureBindingException exception)
+        {
+            if (exception.Diagnostics.Count != 1 || exception.Diagnostics[0].Code != "P21-BIND-SCHEMA")
+            {
+                return 28;
+            }
+
+            Console.WriteLine("AP203_FORMER_SCHEMA_REJECTED code=P21-BIND-SCHEMA");
+        }
 
         ExchangeStructure? unsupported = null;
         try

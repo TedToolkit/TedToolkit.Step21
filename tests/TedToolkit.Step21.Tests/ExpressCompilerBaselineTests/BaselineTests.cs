@@ -53,9 +53,6 @@ internal sealed class BaselineTests
         var cases = new[]
         {
             new CaseDefinition(
-                "ap203",
-                [new("schemas/ap203/ap203.exp", "Ap203/ap203.exp", "ExpressSchema_CONFIG_CONTROL_DESIGN.g.cs")]),
-            new CaseDefinition(
                 "syntax-withholding",
                 [
                     new("schemas/syntax-invalid.exp", "Baseline/syntax-invalid.exp", "ExpressSchema_SYNTAX_INVALID.g.cs"),

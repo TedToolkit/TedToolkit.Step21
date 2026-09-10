@@ -39,6 +39,9 @@ internal sealed class BaselineTests
             ["sourceManifest"] = "../SOURCES.json",
             ["sourceCachePath"] = "ap242/mim_lf.exp",
             ["sourceSha256"] = "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB",
+            ["generationInputCachePath"] = "ap242/mim_lf.compat.exp",
+            ["generationInputSha256"] = "00B6027C63671AAD36C943B7C65608773094CCDF87636B197EC634F30B306360",
+            ["compatibilityTransform"] = "../../build/prepare-ap242-schema.ps1",
             ["edition"] = "ISO 10303-242:2025 AP242 Edition 4; ISO/TS 10303-442 edition 7 MIM long form",
             ["descriptor"] =
                 "TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
@@ -86,8 +89,9 @@ internal sealed class BaselineTests
     [Test]
     public async Task Should_bind_the_complete_pinned_ap242_schema()
     {
-        var source = File.ReadAllText(Path.Combine(TestDataDirectory(), "mim_lf.exp"));
-        var result = ExpressSchemaCompiler.Compile([new ExpressSchemaSource("schemas/.cache/ap242/mim_lf.exp", source)]);
+        var source = File.ReadAllText(Path.Combine(TestDataDirectory(), "mim_lf.compat.exp"));
+        var result = ExpressSchemaCompiler.Compile(
+            [new ExpressSchemaSource("schemas/.cache/ap242/mim_lf.compat.exp", source)]);
         using (Assert.Multiple())
         {
             await Assert.That(result.SyntaxDiagnostics).IsEmpty()
@@ -105,13 +109,15 @@ internal sealed class BaselineTests
             .Contains("product").And.Contains("maths_tuple").And.Contains("atom_based_value");
     }
 
-    /// <summary>Verifies the pristine ISO build input and provenance boundary.</summary>
+    /// <summary>Verifies the pristine ISO source, audited generation input, and provenance boundary.</summary>
     [Test]
     public async Task Should_preserve_the_pinned_ap242_source_and_redistribution_evidence()
     {
         var directory = TestDataDirectory();
         var sourcePath = Path.Combine(directory, "mim_lf.exp");
+        var generationInputPath = Path.Combine(directory, "mim_lf.compat.exp");
         var source = File.ReadAllText(sourcePath);
+        var generationInput = File.ReadAllText(generationInputPath);
         var provenance = File.ReadAllText(Path.Combine(directory, "PROVENANCE.md"));
         const string sourceHash = "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB";
 
@@ -119,6 +125,8 @@ internal sealed class BaselineTests
         {
             await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(sourcePath))))
                 .IsEqualTo(sourceHash);
+            await Assert.That(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(generationInputPath))))
+                .IsEqualTo("00B6027C63671AAD36C943B7C65608773094CCDF87636B197EC634F30B306360");
 
             await Assert.That(source).Contains("SCHEMA Ap242_managed_model_based_3d_engineering_mim_lf;");
             await Assert.That(source).Contains("ISO TC184/SC4/WG12 N11521");
@@ -127,6 +135,10 @@ internal sealed class BaselineTests
             await Assert.That(provenance).Contains(sourceHash);
             await Assert.That(provenance).Contains("Authority: ISO");
             await Assert.That(provenance).Contains("unmodified ISO publication");
+            await Assert.That(source).DoesNotContain("FUNCTION valid_csg_2d_operand");
+            await Assert.That(generationInput).Contains("FUNCTION valid_csg_2d_operand");
+            await Assert.That(generationInput).Contains(
+                "the_datum                    : SET [1 : ?] OF datum := get_datums_for_datum_target(SELF);");
         }
     }
 
@@ -135,8 +147,8 @@ internal sealed class BaselineTests
     public async Task Should_generate_the_approved_ap242_surface()
     {
         var directory = TestDataDirectory();
-        var result = GeneratorHostTests.Run(("schemas/.cache/ap242/mim_lf.exp",
-            File.ReadAllText(Path.Combine(directory, "mim_lf.exp"))));
+        var result = GeneratorHostTests.Run(("schemas/.cache/ap242/mim_lf.compat.exp",
+            File.ReadAllText(Path.Combine(directory, "mim_lf.compat.exp"))));
         await Assert.That(result.Diagnostics.Where(diagnostic =>
                 diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error))
             .IsEmpty().Because(string.Join(Environment.NewLine, result.Diagnostics));

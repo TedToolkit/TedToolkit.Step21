@@ -26,6 +26,12 @@ The EXP is downloaded explicitly into a Git-ignored local cache and used only du
 generation. It is not committed or packed. Run `pwsh -NoProfile -File
 build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms` before a local build.
 
+Do not add `AP214E3_2010.exp` as a consumer `AdditionalFiles` input: this package already contains
+the compiled `AUTOMOTIVE_DESIGN` contract, and duplicate generation is rejected.
+Distinct custom EXPRESS schemas remain supported through the analyzer package. A different edition or vendor variant
+is a different compatibility baseline and requires a Major version rather than a silent package
+replacement.
+
 ## Distribution boundary
 
 The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consumers select the
@@ -34,4 +40,4 @@ The package ships `netstandard2.0` and `net8.0` runtime assets; later .NET consu
 The package remains a local verification artifact. The acknowledgement switch is not a licence;
 the operator must establish applicable rights for download, local processing, and generation.
 Distribution of the EXP is prohibited, and publication of generated or compiled output requires a
-separate rights review as specified by ADR-0013.
+separate rights review as specified by ADR-0014 (which supersedes ADR-0013).

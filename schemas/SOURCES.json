@@ -5,7 +5,7 @@
     "gitTracked": false,
     "packageIncluded": false,
     "singleInputPerSchema": true,
-    "schemaOverlays": "prohibited",
+    "schemaOverlays": "only-audited-hash-pinned-compatibility-transforms",
     "redistribution": "prohibited-without-separate-rights-review",
     "rightsReview": "required-before-download-use-generation-or-distribution",
     "isoTermsUrl": "https://www.iso.org/terms-conditions-licence-agreement.html",
@@ -47,6 +47,9 @@
       "downloadUrl": "https://standards.iso.org/iso/ts/10303/-442/ed-7/tech/express/mim_lf.exp",
       "archiveEntry": null,
       "cachePath": "ap242/mim_lf.exp",
+      "generationInputPath": "ap242/mim_lf.compat.exp",
+      "generationInputSha256": "00B6027C63671AAD36C943B7C65608773094CCDF87636B197EC634F30B306360",
+      "compatibilityTransform": "build/prepare-ap242-schema.ps1",
       "retrievedOn": "2026-09-10",
       "sha256": "E7E93CF97880FD87D634E4B9EE58400DA0A1BE6C06A1DE76EC13807ECDC15CCB"
     }
