@@ -107,7 +107,10 @@ internal sealed class BaselineTests
             .ToArray());
         var generatedSources = result.GeneratedSources
             .OrderBy(source => source.HintName, StringComparer.Ordinal)
-            .Select(source => new GeneratedSourceSnapshot(source.HintName, Hash(source.SourceText.ToString())))
+            // The approval is a cross-platform content contract, not a host newline contract.
+            .Select(source => new GeneratedSourceSnapshot(
+                source.HintName,
+                Hash(source.SourceText.ToString().ReplaceLineEndings("\n"))))
             .ToArray();
 
         return new CaseSnapshot(

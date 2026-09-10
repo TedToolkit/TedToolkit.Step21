@@ -77,7 +77,8 @@ jobs:
         shell: pwsh
         run: ./build/verify-native-aot.ps1
 
-  verify-solution:
+  verify-solution-build:
+    name: Verify Release solution build
     needs:
       - compare-antlr-generation
       - verify-native-aot-package
@@ -98,7 +99,88 @@ jobs:
         run: dotnet restore TedToolkit.Step21.slnx
       - name: Build solution
         run: dotnet build TedToolkit.Step21.slnx --configuration Release --no-restore --disable-build-servers
+      # The hosted runner is bounded to roughly 50 minutes. Preserve the one authoritative build,
+      # then let the slower test suites consume it in independent jobs.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-integration-build
+          compression-level: 1
+          retention-days: 1
+          path: |
+            src/**/bin/Release/**
+            tests/TedToolkit.Step21.IntegrationTests/bin/Release/**
+
+  verify-unit-tests:
+    name: Verify unit tests
+    needs:
+      - compare-antlr-generation
+      - verify-native-aot-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Fetch and verify EXPRESS schema inputs
+        shell: pwsh
+        run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
+      - name: Build unit test executable
+        run: dotnet build tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --disable-build-servers
       - name: Run unit tests
         run: dotnet run --project tests/TedToolkit.Step21.Tests/TedToolkit.Step21.Tests.csproj --configuration Release --no-build --no-restore -- --progress off
-      - name: Run integration tests
-        run: dotnet run --project tests/TedToolkit.Step21.IntegrationTests/TedToolkit.Step21.IntegrationTests.csproj --configuration Release --no-build --no-restore -- --progress off
+
+  verify-integration-tests:
+    name: Verify integration tests (${{ matrix.name }})
+    needs: verify-solution-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: contracts-and-security
+            # DownloadAndParseTests remains an explicit external-corpus opt-in; without its
+            # environment flag TUnit reports the intentional skip with a failing process code.
+            filter: /*/*/(CapabilityDocumentationTests|SecurityBoundaryTests|PackageCacheTests|ManifestTests)/*
+            minimum: 23
+          - name: ap203-package
+            filter: /*/*/PackageTests/*
+            minimum: 3
+          - name: ap214-package
+            filter: /*/*/Ap214PackageTests/(Should_bound_the_precompiled_ap214_native_static_caches|Should_match_the_initial_ap214_compatibility_manifest|Should_build_and_run_the_precompiled_ap214_package_only_consumer)
+            minimum: 3
+          - name: ap242-package
+            filter: /*/*/Ap214PackageTests/Should_build_and_run_the_precompiled_ap242_package_and_fixture_consumer
+            minimum: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Fetch and verify EXPRESS schema inputs
+        shell: pwsh
+        run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
+      - name: Restore solution dependencies
+        run: dotnet restore TedToolkit.Step21.slnx
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-integration-build
+          path: .
+      - name: Run integration test shard
+        run: >-
+          dotnet ./tests/TedToolkit.Step21.IntegrationTests/bin/Release/net10.0/TedToolkit.Step21.IntegrationTests.dll
+          --treenode-filter "${{ matrix.filter }}"
+          --minimum-expected-tests ${{ matrix.minimum }}
+          --progress off
+
+  verify-ci:
+    name: Verify CI
+    needs:
+      - verify-unit-tests
+      - verify-integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All build, unit, integration, ANTLR, and Native AOT checks passed."
