@@ -95,10 +95,11 @@ Normative completeness is a positive proof obligation. Search-based absence of `
 
 ## Source-bounded closure evidence — 2026-09-10
 
-- The Part 21 manifest contains 36 normative rows: 30 implemented, 2 processor-not-applicable, and 4
-  source-excluded. The exclusions are the complete class-3 claim, typed EXPRESS constant DATA hydration, implicit
-  short-name derivation, and missing Part 11 constant/validation semantics. They retain negative PICS answers and do
-  not enter the conformance claim.
+- The Part 21 manifest contains 46 normative rows: 39 implemented, 2 processor-not-applicable, and 5
+  source-excluded. Clause 12.2 is split into eleven independently evidenced rows. The exclusions are the complete
+  class-3 claim, typed and constant-backed EXPRESS DATA hydration, complete Annex-B evaluated-set semantics, and
+  missing Part 11 constant/validation semantics. Schema-supplied entity, SELECT, and enumeration short-name PICS
+  answers are positive; no abbreviation is inferred. Source exclusions do not enter the conformance claim.
 - The manifest contract passes 2/2 tests. The implementation-level suite passes 44/44 and covers `4;1`, `4;2`,
   source-described `4;3` facilities, and `2;1`/`3;1` compatibility partitions.
 - Candidate `90d6458` adds the reproducible allocation gate. Against `63b2757`, the identical 20-iteration Release

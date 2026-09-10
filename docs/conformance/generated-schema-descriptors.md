@@ -32,7 +32,7 @@ The generated descriptor dispatches each registered entity governed by its schem
 ## Current boundary
 
 Generated descriptors execute the accepted validation-reachable expression/rule closure and support atomic simple and
-flat-`ANDOR` complex read/write mapping, including inherited and redeclared physical components. They do not discover
+source-bounded complex read/write mapping, including inherited and redeclared physical components. They do not discover
 descriptors or acquire external resources. The runtime binds and writes named sections and populations only through
 the explicitly supplied closed descriptor set.
 Structure-local parsed occurrences now hydrate through the atomic

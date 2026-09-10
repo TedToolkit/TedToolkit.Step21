@@ -16,7 +16,7 @@ This index states what the current package delivers, what the grammars recognize
 | Detached CMS signature decoding, explicit signature verification and trust policy, and atomic signing | [CMS signatures](cms-signatures.md) |
 | Annex E schema populations, all determination methods, and explicit domain equivalence | [schema populations](schema-populations.md) |
 | Optional Annex F ECMAScript anchor/model binding with caller-owned host capabilities | [Annex F binding](annex-f-ecmascript-binding.md) |
-| Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
+| Deterministic simple writing and source-bounded complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
 | Pinned class-1 allocation regression and zero unused feature-service construction | [class-1 performance](class1-performance.md) |
 
@@ -27,7 +27,7 @@ Repository-owned semantic round-trip fixtures compare entity identity, generated
 | Facility | Observable boundary |
 | --- | --- |
 | EXPRESS constant occurrences | Constant occurrence names remain a separately tracked DATA-binding capability because the supplied ISO 10303-11 files do not describe the required evaluation contract. |
-| Implicit physical short names | Explicit schema-supplied names work; no additional entity, SELECT, or enumeration name is derived without an ISO definition. |
+| Complete complex-instance evaluated sets | The bounded internal/external mapping profile works, including nested `ONEOF`/`ANDOR`, but complete valid evaluated-set membership is not claimed because ISO 10303-11 Annex B is absent from the supplied files. |
 
 These are deliberate source exclusions, not syntax errors or pending inferred implementations. The public
 `ExchangeStructure.Read` boundary returns the complete exact diagnostic set and never publishes a partial model.
@@ -37,7 +37,7 @@ These are deliberate source exclusions, not syntax errors or pending inferred im
 - General JSON or XML model serialization, attributes, or unrelated adapter frameworks. The optional Annex F
   package uses a private versioned JSON bridge solely to cross caller-selected ECMAScript hosts.
 - Byte-preserving round trips, comment retention, or original formatting retention.
-- Complex mapping beyond the supported flat `ANDOR` hierarchy; ISO 10303-22 repositories and inferred domain equivalence.
+- ISO 10303-22 repositories and inferred domain equivalence.
 - General EXPRESS interpretation, arbitrary algorithm execution, or a public function/procedure invocation API.
 - Public syntax nodes, ANTLR contexts, parser/reader/writer façades, or descriptor registries.
 

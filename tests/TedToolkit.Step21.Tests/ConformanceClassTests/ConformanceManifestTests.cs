@@ -84,7 +84,17 @@ internal sealed class ConformanceManifestTests
                 "11.1-11.2-data-sections",
                 "11.3-user-defined-data",
                 "12.1-value-mapping",
-                "12.2-entity-mapping",
+                "12.2.1-simple-entity",
+                "12.2.2-optional-explicit",
+                "12.2.3-derived-attributes",
+                "12.2.4-entity-attributes",
+                "12.2.5-complex-entities",
+                "12.2.6-derived-redeclaration",
+                "12.2.7-inverse-redeclaration",
+                "12.2.8-explicit-redeclaration",
+                "12.2.9-local-rules",
+                "12.2.10-inverse-attributes",
+                "12.2.11-entity-type-names",
                 "12.3-12.6-schema-constant-rule",
                 "13-print-control-semantics",
                 "13-print-control-placement",
@@ -101,6 +111,7 @@ internal sealed class ConformanceManifestTests
                 "4.3-classification",
                 "6.4.4-express-constants",
                 "12.1-value-mapping",
+                "12.2.5-complex-entities",
                 "12.3-12.6-schema-constant-rule",
             ]);
             foreach (var className in new[] { "class1", "class2" })
@@ -124,10 +135,15 @@ internal sealed class ConformanceManifestTests
             foreach (var encodingName in new[] { "entityShortNames", "selectShortNames", "enumerationShortNames" })
             {
                 await Assert.That(shortNameEncodings.GetProperty(encodingName).GetProperty("read").GetBoolean())
-                    .IsFalse();
+                    .IsTrue();
                 await Assert.That(shortNameEncodings.GetProperty(encodingName).GetProperty("write").GetBoolean())
-                    .IsFalse();
+                    .IsTrue();
             }
+
+            await Assert.That(requirements
+                .Where(item => item.GetProperty("id").GetString()!.StartsWith("12.2.", StringComparison.Ordinal))
+                .Select(item => item.GetProperty("source").GetString()!))
+                .IsEquivalentTo(Enumerable.Range(1, 11).Select(index => $"12.2.{index}"));
 
             foreach (var encodingName in new[] { "x", "iso8859Page", "x2", "x4", "utf8" })
             {

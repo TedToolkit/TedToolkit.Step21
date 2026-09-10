@@ -42,7 +42,7 @@ No failed attempt exposes its private structure, generated entities, syntax grap
 External resource acquisition is opt-in through the explicit resource provider. External value occurrences (`@n`)
 can bind through typed parameters, while signature verification is documented separately in
 [CMS signatures](cms-signatures.md). Anchor and reference declarations retain the schema-neutral round-trip semantics described in the
-[anchor/occurrence/UUID record](anchor-occurrence-uuid.md). Multiple governing schemas and supported flat-`ANDOR`
+[anchor/occurrence/UUID record](anchor-occurrence-uuid.md). Multiple governing schemas and source-bounded
 complex entity mappings use the same structure-local identity space across all data sections.
 
 ## Verification

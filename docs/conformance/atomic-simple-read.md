@@ -44,7 +44,7 @@ originating record location when the generated diagnostic has no EXPRESS source 
 - constant DATA occurrences throw `ExchangeStructureCapabilityException`. The explicit
   resource-options overload binds resolved `@n` values through direct, aggregate, and typed DATA positions.
   External-resource resolution reports missing capability,
-  provider re-entry, archive, and quota failures through the same atomic exception boundary. Supported flat-`ANDOR`
+  provider re-entry, archive, and quota failures through the same atomic exception boundary. Source-bounded
   complex instances and multiple governing schemas are handled by their dedicated mapping/population contracts.
 
 Local entity references are allocated and hydrated atomically. The legacy overload retains dedicated unresolved

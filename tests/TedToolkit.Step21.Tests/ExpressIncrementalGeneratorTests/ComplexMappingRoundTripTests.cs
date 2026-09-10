@@ -134,6 +134,30 @@ public sealed class ComplexMappingRoundTripTests
         END_SCHEMA;
         """;
 
+    private const string NONPHYSICAL_ATTRIBUTE_SCHEMA = """
+        SCHEMA nonphysical_attributes;
+        ENTITY target;
+          owner : child;
+        END_ENTITY;
+        ENTITY root;
+          code : INTEGER;
+          link : target;
+        DERIVE
+          next_code : INTEGER := code + 1;
+        INVERSE
+          targets : SET [0:?] OF target FOR owner;
+        UNIQUE
+          unique_code : code;
+        WHERE
+          positive_code : code > 0;
+        END_ENTITY;
+        ENTITY child SUBTYPE OF (root);
+        INVERSE
+          SELF\root.link : target FOR owner;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     private const string SAFE_GROUP_SCHEMA = """
         SCHEMA safe_group;
         ENTITY surface SUPERTYPE OF (ONEOF (plane, swept_surface));
@@ -545,6 +569,39 @@ public sealed class ComplexMappingRoundTripTests
                 .IsSameReferenceAs(specialized);
             await Assert.That(((Entity)complex).DirectReferences.Single())
                 .IsSameReferenceAs(specialized);
+        }
+    }
+
+    /// <summary>Maps only explicit storage while omitting derived, inverse, inverse-redeclared, and local-rule members.</summary>
+    [Test]
+    public async Task Should_omit_nonphysical_entity_members_from_the_parameter_list()
+    {
+        var descriptor = CreateDescriptor(NONPHYSICAL_ATTRIBUTE_SCHEMA, "NonphysicalAttributes");
+        const string source = """
+            ISO-10303-21;
+            HEADER;
+            FILE_DESCRIPTION(('nonphysical attributes'),'3;1');
+            FILE_NAME('nonphysical.p21','2026-09-10T00:00:00',('Author'),('Org'),'Pre','System','Auth');
+            FILE_SCHEMA(('nonphysical_attributes'));
+            ENDSEC;
+            DATA;
+            #1=CHILD(1,#2);
+            #2=TARGET(#1);
+            ENDSEC;
+            END-ISO-10303-21;
+            """;
+
+        var structure = ExchangeStructure.Read(new StringReader(source), [descriptor]);
+        var output = new StringWriter();
+
+        structure.Write(output);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(output.ToString()).Contains("#1=CHILD(1,#2);");
+            await Assert.That(output.ToString()).Contains("#2=TARGET(#1);");
+            await Assert.That(descriptor.ProjectEntity(structure.Entities.First()).Single().Value.Count)
+                .IsEqualTo(2);
         }
     }
 

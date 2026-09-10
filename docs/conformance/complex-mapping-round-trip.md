@@ -18,13 +18,18 @@ explicit redeclaration has no extra physical parameter: the value remains in the
 the slot, while the old and renamed generated properties address that same storage. A shared ancestor occurs once, and
 an entity with no local physical slots remains present as `ENTITY_NAME()`.
 
-The supported multi-leaf scope is a flat top-level `ANDOR` of two to eight factors, each naming a direct concrete
-subtype of the common declaring entity. Every multi-factor subset receives an internal sealed synthetic entity class
-implementing the existing public leaf interfaces. The class is an implementation detail, so this adds no public entity,
-projection, context, or factory type. Missing, repeated, additional, or nonascending components are rejected during
-binding. Derived redeclarations (which require `*` plus evaluated derived semantics), larger or nested evaluated-set
-expressions, and combinations whose generated property names cannot represent distinct physical storage are outside
-this boundary and are rejected rather than guessed.
+The source-bounded multi-leaf profile enumerates compatible members from direct sibling subtypes or the parsed
+supertype expression, including nested `ONEOF`/`ANDOR`. It generates combinations of two to eight concrete leaves,
+with at most 256 candidate combinations per root. Every supported multi-leaf member receives an internal sealed
+synthetic entity class implementing the existing public leaf interfaces. The class is an implementation detail, so
+this adds no public entity, projection, context, or factory type. Missing, repeated, additional, or nonascending
+components are rejected during binding. Derived redeclarations use the required `*` marker. Combinations outside the
+bounded profile or whose generated property names cannot represent distinct physical storage are rejected rather than
+guessed.
+
+Complete evaluated-set membership and valid-complex-instance semantics are not claimed: clause 12.2.5 delegates
+those definitions to ISO 10303-11 Annex B, which is absent from the supplied authorized Edition 2 files. The bounded
+profile above is executable implementation evidence, not a reconstruction of that missing annex.
 
 ## Canonical writing and semantic comparison
 
@@ -32,8 +37,9 @@ Generated projection retains the clause-required internal form for a named singl
 for an internally allocated multi-leaf value. `Write` and `WriteEntity` format multiple component records inside one
 parenthesized subsuper record and buffer the complete result before touching the supplied destination.
 
-The conformance fixture covers a single-leaf internal value and flat-`ANDOR` multi-leaf values, explicit renamed
-redeclaration, empty/non-empty partial values, OPTIONAL absence, aggregates, references, and BOOLEAN/LOGICAL values. It
+The conformance fixture covers a single-leaf internal value, flat and nested multi-leaf values, unconstrained sibling
+values, explicit and derived redeclarations, empty/non-empty partial values, OPTIONAL absence, aggregates, references,
+and BOOLEAN/LOGICAL values. It
 writes and rereads each supported form, then compares occurrence identities, exact generated CLR types, ordered
 component names, strong values, aggregate order, and normalized reference targets. Source formatting and record order
 are deliberately excluded from semantic equality.

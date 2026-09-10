@@ -46,7 +46,7 @@ internal sealed class CapabilityDocumentationTests
             await Assert.That(conformanceReadme).Contains("Explicit distributed reference");
             await Assert.That(conformanceReadme).Contains("EXPRESS constant occurrences");
             await Assert.That(conformanceReadme).Contains("signature verification");
-            await Assert.That(conformanceReadme).Contains("flat `ANDOR`");
+            await Assert.That(conformanceReadme).Contains("source-bounded complex");
             await Assert.That(conformanceReadme).Contains("Normative evidence");
             await Assert.That(conformanceReadme).Contains("Corpus regression evidence");
         }
