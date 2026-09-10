@@ -41,7 +41,7 @@ internal sealed class CapabilityDocumentationTests
             await Assert.That(packageReadme).Contains("byte-preserving");
             await Assert.That(packageReadme).Contains("Native AOT");
             await Assert.That(conformanceReadme).Contains("Delivered");
-            await Assert.That(conformanceReadme).Contains("Syntax recognized; operation unsupported");
+            await Assert.That(conformanceReadme).Contains("Source-excluded operations");
             await Assert.That(conformanceReadme).Contains("Outside the public contract");
             await Assert.That(conformanceReadme).Contains("Explicit distributed reference");
             await Assert.That(conformanceReadme).Contains("EXPRESS constant occurrences");

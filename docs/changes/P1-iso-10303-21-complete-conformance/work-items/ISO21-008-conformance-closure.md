@@ -42,7 +42,7 @@ API/AP packages 和 Native AOT。
 
 - Every manifest row names normative source, applicability, implementation location and exactly one executable primary proof, justified not-applicable rationale, or missing-input source exclusion.
 - A green AP corpus or syntax parser is never sufficient for a normative row; a full conformance claim remains absent while any applicable row is source-excluded.
-- Measure the approved fixed class-1 scenario against `63b2757` on the same Release runtime: median 20-iteration allocation regression is at most `max(5%, 16 KiB)` and unused feature factories create zero objects.
+- Measure the approved fixed class-1 scenario against `63b2757` on the same Release runtime: median 20-iteration allocation regression is at most `max(5%, 16 KiB)` and the ordinary overload call graph constructs no unused feature services. No artificial runtime factory or counter is added solely for the test.
 - Preserve cumulative runtime/generated API snapshots, diagnostics, deterministic outputs, AP203/AP214/AP242 package proofs and core Native AOT execution.
 
 <!-- work-item: proof-plan -->
@@ -55,7 +55,7 @@ API/AP packages 和 Native AOT。
 | AC-01 | Primary | Conformance verifier reports zero source-described applicable syntax-only, unsupported, unmapped or unproven clause/PICS row and enumerates every source exclusion | Run the repository ISO conformance verifier and manifest contract tests in Release |
 | AC-02 | Primary | Positive and neighboring-invalid matrices for every declared supported implementation level/facility read, write and reread with exact semantics | Run the conformance-class processor contract suite in Release |
 | Full compatibility/AOT | Conditional | Full solution, public/generated baselines, AP package/fixture/reproducibility proofs and core packed Native AOT journey pass | Run the Release test executables through `dotnet run`, the full Release solution build, package scripts and `pwsh -File build/verify-native-aot.ps1` |
-| Class-1 feature isolation | Conditional | Fixed scenario stays within the approved allocation bound and creates zero unused feature-service objects | Run baseline/candidate Release allocation harness and tracking-factory tests |
+| Class-1 feature isolation | Conditional | Fixed scenario stays within the approved allocation bound and ordinary overloads create zero unused feature-service objects | Run `build/verify-class1-allocation.ps1`; inspect the default read/write call boundary and Annex F dependency direction |
 
 <!-- work-item: definition-of-done -->
 ## Done
@@ -92,3 +92,16 @@ all commands/results; API/SemVer/docs state; baseline/candidate allocation value
 ## Risks and implementation notes
 
 Normative completeness is a positive proof obligation. Search-based absence of `unsupported` or a passing aggregate test command cannot replace row-by-row manifest coverage.
+
+## Source-bounded closure evidence — 2026-09-10
+
+- The Part 21 manifest contains 36 normative rows: 30 implemented, 2 processor-not-applicable, and 4
+  source-excluded. The exclusions are the complete class-3 claim, typed EXPRESS constant DATA hydration, implicit
+  short-name derivation, and missing Part 11 constant/validation semantics. They retain negative PICS answers and do
+  not enter the conformance claim.
+- The manifest contract passes 2/2 tests. The implementation-level suite passes 44/44 and covers `4;1`, `4;2`,
+  source-described `4;3` facilities, and `2;1`/`3;1` compatibility partitions.
+- Candidate `90d6458` adds the reproducible allocation gate. Against `63b2757`, the identical 20-iteration Release
+  probe reports baseline 105,728 bytes, candidate 114,992 bytes, and an approved maximum of 122,112 bytes.
+  The ordinary read/write overloads pass no resource or signing context; the optional Annex F assembly retains its
+  one-way dependency on the core runtime.

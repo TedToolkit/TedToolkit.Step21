@@ -149,7 +149,7 @@ Scenario: 不受信任的 distributed exchange structure 被有界处理
 - Normative authority: ISO 10303-21:2016 Edition 3 及其 normative references；ISO 10303-11:2004 仅在 Part 21 mapping/schema conformance 所需范围内，不扩张为通用 interpreter 产品。
 - Security and determinism: 遵循 ADR-0009；网络、文件、证书、时间和撤销状态必须显式注入并可测试。archive 必须有解压前后配额、entry/path 验证和循环边界。
 - Compatibility: 新增 public API 与 packages 需要完整 API snapshot/SemVer 分类；不能通过更改 approved outputs 掩盖既有回归。
-- Performance: 以 committed baseline `63b2757` 在同一 Release runtime 上读取并写出固定普通 class-1 fixture 为基线；预热后 20 次中位线线程分配不得增加超过 `max(5%, 16 KiB)`，且跟踪 factory 证明未使用时零 resolver/archive/CMS/Annex-F 对象创建；具体 fixture 和命令由 work-item map 绑定。
+- Performance: 以 committed baseline `63b2757` 在同一 Release runtime 上读取、写出并重读固定普通 class-1 fixture 为基线；预热后 20 次中位线程分配不得增加超过 `max(5%, 16 KiB)`，且默认 overload 的静态调用边界证明未使用时不创建 resolver/archive/CMS/Annex-F 对象；具体 fixture 和命令由 work-item map 绑定。无需为不存在的 runtime factory 增加计数测试钩子。
 - Recovery: 每个能力保持独立 feature boundary；若某 tranche 失败，保留已验证的前一能力并继续对未交付项报告准确 capability evidence，不伪造 full conformance。
 
 <!-- section: start-conditions -->
@@ -195,7 +195,7 @@ normative unit/contract evidence。
 | AC-08 | Primary | Annex F adapter satisfies every mapped value/model operation without entering the core dependency graph | Run adapter integration suite and package dependency audit |
 | AC-09 | Primary | Quota, traversal, URI, recursion, signature and atomicity attacks fail deterministically with zero partial publication/output | Run security boundary integration suite |
 | Existing compatibility | Conditional | Current runtime/generated public APIs, AP203/AP214/AP242 packages and class-1 semantic journeys remain green | Run full Release tests, public/generated baselines, package proofs and Native AOT journeys |
-| Class-1 feature isolation | Conditional | Fixed class-1 read/write allocation remains within `max(5%, 16 KiB)` of `63b2757` and unused Edition-3 services create zero feature-specific objects | Run the pinned Release allocation scenario for baseline and candidate plus tracking-factory isolation tests |
+| Class-1 feature isolation | Conditional | Fixed class-1 read/write/reread allocation remains within `max(5%, 16 KiB)` of `63b2757` and default overloads create zero feature-specific service objects | Run the pinned Release allocation comparison and inspect the default reader/writer call boundary plus optional-package dependency direction |
 
 <!-- section: completion-criteria -->
 ## Completion

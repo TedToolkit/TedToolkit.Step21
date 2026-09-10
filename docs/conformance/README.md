@@ -18,6 +18,7 @@ This index states what the current package delivers, what the grammars recognize
 | Optional Annex F ECMAScript anchor/model binding with caller-owned host capabilities | [Annex F binding](annex-f-ecmascript-binding.md) |
 | Deterministic simple writing and supported flat `ANDOR` complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
+| Pinned class-1 allocation regression and zero unused feature-service construction | [class-1 performance](class1-performance.md) |
 
 Repository-owned semantic round-trip fixtures compare entity identity, generated type, values, aggregate semantics, and reference identity after write/read. Canonical formatting may differ from the input; the opt-in external corpus is syntax evidence only.
 
