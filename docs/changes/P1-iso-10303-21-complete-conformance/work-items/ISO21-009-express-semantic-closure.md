@@ -255,6 +255,9 @@ implementation inventory is evidence about current behavior, not a substitute fo
   unit run passes 727/727; Release integration passes 35/36 with only the opt-in external-download corpus skipped; and
   `build/verify-native-aot.ps1` reports `PACKED_AOT_OK` plus `NATIVE_AOT_PACKAGE_PROOF_OK` for `win-x64` using compiler
   package 10.0.12.
+- Independent implementation review covered baseline `4fd998588efcc27a4ad9c76660eabf2979663892` through candidate
+  `b69988be48f44c77d77194848dfb2219ca6a2d5c`. After correcting the stale indexed-ALIAS capability sentence, the
+  affected-lane re-review reported no findings and concluded `Ready`.
 
 Source identities:
 
