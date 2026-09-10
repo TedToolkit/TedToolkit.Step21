@@ -105,3 +105,9 @@ Normative completeness is a positive proof obligation. Search-based absence of `
   probe reports baseline 105,728 bytes, candidate 114,992 bytes, and an approved maximum of 122,112 bytes.
   The ordinary read/write overloads pass no resource or signing context; the optional Annex F assembly retains its
   one-way dependency on the core runtime.
+- Product/test candidate `5daafb81d38566714512a95538451ec7e494e6da` passes the no-incremental Release solution
+  build with zero warnings and errors. The resource-bounded full unit run passes 727/727 with zero skips; its public
+  runtime/generated snapshots and AP203/AP214/AP242 surfaces are unchanged. The full integration run executes 36
+  tests: 35 pass, zero fail, and only the explicit opt-in external-download corpus is skipped; all three AP package
+  consumers pass. `build/verify-native-aot.ps1` reports `PACKED_AOT_OK` and
+  `NATIVE_AOT_PACKAGE_PROOF_OK win-x64 executable-bytes=6863872 compiler-package=10.0.12`.
