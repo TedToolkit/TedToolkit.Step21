@@ -6,13 +6,13 @@
     <PackageVersion Include="Antlr4.Runtime.Standard" Version="4.13.1" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.7" />
-    <PackageVersion Include="System.Text.Encoding.CodePages" Version="10.0.0" />
-    <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.7.15" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.12" />
+    <PackageVersion Include="System.Text.Encoding.CodePages" Version="10.0.12" />
+    <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.9.9" />
     <PackageVersion Include="TedToolkit.Step21" Version="1.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap203" Version="2.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap214" Version="1.0.0" />
     <PackageVersion Include="TedToolkit.Step21.Ap242" Version="1.0.0" />
-    <PackageVersion Include="TUnit" Version="1.63.0" />
+    <PackageVersion Include="TUnit" Version="1.66.27" />
   </ItemGroup>
 </Project>

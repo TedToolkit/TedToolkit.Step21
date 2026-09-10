@@ -616,6 +616,17 @@ internal static class ExpressReachableRuleEmitter
                 "Value-based USEDIN requires a statically known attribute role.");
         }
 
+        if (role.Length == 0)
+        {
+            var entity = "__expressUsedInGenericEntity_"
+                + expression.Span.Start.Line.ToString(CultureInfo.InvariantCulture)
+                + "_"
+                + expression.Span.Start.Column.ToString(CultureInfo.InvariantCulture);
+            return $"((global::System.Object?)({candidate})) is global::TedToolkit.Step21.Entity {entity} ? "
+                + $"__ExpressUsedIn<{resultElementType}>({entity}, \"\", {populationExpression}) : "
+                + $"new global::TedToolkit.Step21.ExpressBag<{resultElementType}>(0)";
+        }
+
         var attribute = plan.EntityProjections
             .SelectMany(entity => entity.OwnAttributes.Select(item => (Entity: entity, Attribute: item)))
             .SingleOrDefault(item => string.Equals(
@@ -6284,6 +6295,26 @@ internal static class ExpressReachableRuleEmitter
         if (operation == "AGGREGATE_UNION_ELEMENT")
         {
             string? entityTargetType = null;
+            if (aggregateUnionTargetType is ExpressBoundGenericType genericTarget)
+            {
+                var targetName = ExpressExpressionEmitter.BoundTypeName(genericTarget);
+                if (aggregateUnionSourceType is ExpressBoundGenericType genericSource)
+                {
+                    return string.Equals(
+                        genericSource.TypeLabel,
+                        genericTarget.TypeLabel,
+                        StringComparison.OrdinalIgnoreCase)
+                        && genericSource.IsEntity == genericTarget.IsEntity
+                            ? arguments[0]
+                            : $"({targetName})(global::System.Object)({arguments[0]})";
+                }
+
+                if (!genericTarget.IsEntity)
+                {
+                    return $"({targetName})(global::System.Object)({arguments[0]})";
+                }
+            }
+
             if (aggregateUnionSourceType is ExpressBoundScalarType scalarSource
                 && aggregateUnionTargetType is not null
                 && TryAdaptScalarUnionElement(
@@ -6512,6 +6543,11 @@ internal static class ExpressReachableRuleEmitter
         {
             var sourceTypes = expression.Children
                 .Select((child, index) => aggregateUnionSourceTypeOverrides?[index]
+                    ?? (child.Kind == ExpressExpressionKind.IndexQualifier
+                        && child.Children.Count > 0
+                            ? ResolveExpressionAggregateCandidates(plan, child.Children[0])
+                                .FirstOrDefault()?.ElementType
+                            : null)
                     ?? child.Type.DeclaredType)
                 .ToArray();
             var resultAggregate = expression.Type.DeclaredType as ExpressBoundAggregateType
@@ -6620,11 +6656,23 @@ internal static class ExpressReachableRuleEmitter
                     continue;
                 }
 
-                if ((source is ExpressBoundNamedType namedSource
-                        && target is ExpressBoundNamedType namedTarget
-                        && namedSource.Declaration == namedTarget.Declaration)
-                    || (source is ExpressBoundGenericType { IsEntity: true, }
-                        && target is ExpressBoundGenericType { IsEntity: true, }))
+                if (source is ExpressBoundGenericType genericSource
+                    && target is ExpressBoundGenericType genericTarget)
+                {
+                    var targetType = ExpressExpressionEmitter.BoundTypeName(genericTarget);
+                    values[index] = string.Equals(
+                        genericSource.TypeLabel,
+                        genericTarget.TypeLabel,
+                        StringComparison.OrdinalIgnoreCase)
+                        && genericSource.IsEntity == genericTarget.IsEntity
+                            ? arguments[index]
+                            : $"({targetType})(global::System.Object)({arguments[index]})";
+                    continue;
+                }
+
+                if (source is ExpressBoundNamedType namedSource
+                    && target is ExpressBoundNamedType namedTarget
+                    && namedSource.Declaration == namedTarget.Declaration)
                 {
                     values[index] = arguments[index];
                     continue;
@@ -8540,7 +8588,10 @@ internal static class ExpressReachableRuleEmitter
                 candidate.Entity.Symbol,
                 sourceType.Declaration));
             var sourceVariable = variables[argumentIndex++];
-            foreach (var attribute in source.EffectiveAttributes)
+            var componentAttributes = component.Kind == ExpressExpressionKind.GroupQualifier
+                ? source.OwnAttributes
+                : source.EffectiveAttributes;
+            foreach (var attribute in componentAttributes)
             {
                 supplied.Add(
                     (attribute.StorageEntity.Symbol, attribute.StorageAttributeName),
@@ -8604,6 +8655,24 @@ internal static class ExpressReachableRuleEmitter
             + $"{FunctionMethodName(plan, symbol)}({string.Join(", ", invocationArguments)})))";
     }
 
+    private static bool HasGenericSignature(
+        ExpressReachableRulePlan plan,
+        ExpressBoundOpaqueDeclaration declaration)
+    {
+        var formalTypes = plan.Analysis.GetDeclaration(declaration)
+            .RequiredChild("functionHead")
+            .ChildRules("formalParameter")
+            .SelectMany(formal => formal.ChildRules("parameterId"))
+            .Select(parameter => plan.Schema.LexicalNames
+                .Where(candidate => candidate.Kind == ExpressBoundNameKind.Parameter
+                    && SameStart(candidate.Span, parameter.Span))
+                .Distinct()
+                .Single()
+                .Type!);
+        return ExpressTypeAnalysis.GenericTypeLabels(
+            formalTypes.Append(declaration.DeclaredType!)).Count > 0;
+    }
+
     private static string ResolveApplication(
         ExpressReachableRulePlan plan,
         ExpressBoundExpression expression,
@@ -8616,7 +8685,7 @@ internal static class ExpressReachableRuleEmitter
         var symbol = expression.Reference!.SchemaDeclaration!;
         var declaration = plan.GetDeclaration(symbol);
         if (declaration is ExpressBoundOpaqueDeclaration genericFunction
-            && ExpressTypeAnalysis.GenericTypeLabels([genericFunction.DeclaredType!,]).Count > 0)
+            && HasGenericSignature(plan, genericFunction))
         {
             var genericArguments = arguments.ToArray();
             var genericFormalTypes = plan.Analysis.GetDeclaration(genericFunction)
@@ -11487,6 +11556,23 @@ internal static class ExpressReachableRuleEmitter
             return sourceCanBeIndeterminate
                 ? $"(({source}) is {{ }} {input} ? {scalarProjected} : ({targetName}?)null)"
                 : scalarProjected;
+        }
+
+        if (targetType.ElementType is ExpressBoundGenericType genericTargetElement
+            && (!genericTargetElement.IsEntity
+                || sourceType.ElementType is ExpressBoundGenericType { IsEntity: true, }
+                || sourceType.ElementType is ExpressBoundNamedType
+                { Declaration.Kind: ExpressDeclarationKind.Entity, }))
+        {
+            var input = variablePrefix + "Input";
+            var genericElement = variablePrefix + "GenericElement";
+            var targetElementName = ExpressExpressionEmitter.BoundTypeName(genericTargetElement);
+            var genericProjected = $"({targetName})[..global::System.Linq.Enumerable.Select("
+                + (sourceCanBeIndeterminate ? input : $"({source})")
+                + $", {genericElement} => ({targetElementName})(global::System.Object)({genericElement}))]";
+            return sourceCanBeIndeterminate
+                ? $"(({source}) is {{ }} {input} ? {genericProjected} : ({targetName}?)null)"
+                : genericProjected;
         }
 
         if (targetType.ElementType is not ExpressBoundNamedType targetElement)

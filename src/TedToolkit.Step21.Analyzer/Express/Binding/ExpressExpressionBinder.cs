@@ -372,7 +372,7 @@ internal sealed class ExpressExpressionBinder
             {
                 var declarationSpan = syntax.Production == "constantBody"
                     ? syntax.Span
-                    : syntax.RequiredChild("variableId").Span;
+                    : syntax.ChildRules("variableId").First().Span;
                 var target = FindReference(declarationSpan)?.Target;
                 if (target?.Type is not null)
                 {

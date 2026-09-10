@@ -743,7 +743,10 @@ internal sealed class ExpressReachableRulePlan
                                 projection?.Entity.Symbol)) != true;
                         if (projection is not null)
                         {
-                            suppliedSlots.AddRange(projection.EffectiveAttributes.Select(attribute =>
+                            var componentAttributes = component.Kind == ExpressExpressionKind.GroupQualifier
+                                ? projection.OwnAttributes
+                                : projection.EffectiveAttributes;
+                            suppliedSlots.AddRange(componentAttributes.Select(attribute =>
                                 (attribute.StorageEntity.Symbol, attribute.StorageAttributeName)));
                         }
                     }

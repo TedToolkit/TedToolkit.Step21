@@ -14119,6 +14119,59 @@ public sealed class ReachableRuleTests
     }
 
     /// <summary>
+    /// Verifies generic parameters are closed from arguments when a function result is not generic.
+    /// </summary>
+    [Test]
+    public async Task Should_close_generic_formals_for_a_non_generic_function_result()
+    {
+        const string source = """
+            SCHEMA generic_formal_result_model;
+            ENTITY sample;
+            END_ENTITY;
+            FUNCTION inspect(values : SET [0:?] OF GENERIC:items;
+                             history : LIST [0:?] OF GENERIC:chain) : BOOLEAN;
+              LOCAL
+                extended : LIST OF GENERIC:chain := [];
+                users : BAG OF GENERIC:items := [];
+              END_LOCAL;
+              IF SIZEOF(values) > 0 THEN
+                users := USEDIN(values[1], '');
+                extended := history + values[1];
+              END_IF;
+              RETURN(TRUE);
+            END_FUNCTION;
+            RULE validate FOR (sample);
+              LOCAL
+                values : SET OF sample := [];
+                history : LIST OF sample := [];
+                all_values : SET OF GENERIC := [];
+              END_LOCAL;
+              all_values := all_values + values;
+            WHERE
+              WR1 : inspect(values, history);
+            END_RULE;
+            END_SCHEMA;
+            """;
+
+        var result = GeneratorHostTests.Run(("schemas/generic-formal-result.exp", source));
+        var generated = string.Join(
+            Environment.NewLine,
+            result.GeneratedSources.Select(generatedSource => generatedSource.SourceText.ToString()));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.Diagnostics
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.ToString())));
+            await Assert.That(result.OutputCompilation.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+                .IsEmpty()
+                .Because(generated);
+        }
+    }
+
+    /// <summary>
     /// Verifies dependency cycles stop generation with source evidence.
     /// </summary>
     [Test]

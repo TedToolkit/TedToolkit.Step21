@@ -281,6 +281,37 @@ internal sealed class BindingTests
     }
 
     /// <summary>
+    /// Verifies one initializer supplies the shared declared type for every local name in its declaration.
+    /// </summary>
+    [Test]
+    public async Task Should_contextually_type_an_initializer_shared_by_multiple_locals()
+    {
+        const string source = """
+            SCHEMA shared_local_initializer;
+            FUNCTION initialize : INTEGER;
+              LOCAL
+                i, j, k : INTEGER := 0;
+              END_LOCAL;
+              RETURN(i + j + k);
+            END_FUNCTION;
+            END_SCHEMA;
+            """;
+        var compilation = ExpressSchemaCompiler.Compile(
+        [
+            new ExpressSchemaSource("shared-local-initializer.exp", source),
+        ]);
+        var initializer = compilation.Schemas.Single().Expressions
+            .Single(expression => expression.SourceText == "0");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(compilation.SyntaxDiagnostics).IsEmpty();
+            await Assert.That(compilation.BindingDiagnostics).IsEmpty();
+            await Assert.That(initializer.Type.Kind).IsEqualTo(ExpressExpressionTypeKind.Integer);
+        }
+    }
+
+    /// <summary>
     /// Verifies only constant indices guaranteed by declared aggregate bounds are determinate.
     /// </summary>
     [Test]

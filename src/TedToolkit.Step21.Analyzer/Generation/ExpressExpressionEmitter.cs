@@ -813,7 +813,9 @@ internal static class ExpressExpressionEmitter
             && sourceExpression.Type.DeclaredType is ExpressBoundAggregateType genericSource
             ? BoundTypeName(genericSource.ElementType)
             : EmittedValueTypeName(expression.Type.WithIndeterminate(false), context);
-        var nullValue = $"({resultType}?)null";
+        var nullValue = expression.Type.Kind == ExpressExpressionTypeKind.Generic
+            ? $"default({resultType})"
+            : $"({resultType}?)null";
         if (sourceExpression.Type.Kind == ExpressExpressionTypeKind.Binary)
         {
             return $"(({source}), checked((int)({indexValue}))) switch {{ "
@@ -1700,7 +1702,7 @@ internal static class ExpressExpressionEmitter
                 && left.Type.DeclaredType is not ExpressBoundAggregateType { IsOptional: true, }
                 && right.Type.DeclaredType is not ExpressBoundAggregateType { IsOptional: true, }
                 && (resultAggregate.ElementType is ExpressBoundNamedType
-                    || resultAggregate.ElementType is ExpressBoundGenericType { IsEntity: true, })
+                    || resultAggregate.ElementType is ExpressBoundGenericType)
                 && (!ReferenceEquals(
                         (left.Type.DeclaredType as ExpressBoundAggregateType)?.ElementType
                             ?? left.Type.DeclaredType,
@@ -2274,9 +2276,12 @@ internal static class ExpressExpressionEmitter
         var fallbackType = determinateResultTypeName ?? (result.Type.DeclaredType is ExpressBoundGenericType generic
             ? BoundTypeName(generic)
             : EmittedValueTypeName(determinateResultType, context));
-        var fallback = result.Type.Kind == ExpressExpressionTypeKind.Logical
-            ? "global::TedToolkit.Step21.LogicalValue.Unknown"
-            : $"({fallbackType}?)null";
+        var fallback = result.Type.Kind switch
+        {
+            ExpressExpressionTypeKind.Logical => "global::TedToolkit.Step21.LogicalValue.Unknown",
+            ExpressExpressionTypeKind.Generic => $"default({fallbackType})",
+            _ => $"({fallbackType}?)null",
+        };
         if (operands.Any(operand => operand.Kind == ExpressExpressionKind.Indeterminate))
         {
             return fallback;
