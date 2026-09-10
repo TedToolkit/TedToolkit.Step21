@@ -112,3 +112,10 @@ Normative completeness is a positive proof obligation. Search-based absence of `
   tests: 35 pass, zero fail, and only the explicit opt-in external-download corpus is skipped; all three AP package
   consumers pass. `build/verify-native-aot.ps1` reports `PACKED_AOT_OK` and
   `NATIVE_AOT_PACKAGE_PROOF_OK win-x64 executable-bytes=6863872 compiler-package=10.0.12`.
+- Final conformance candidate `ac6191ad57cad54a73c74fc94841786d78836fe1` closes the independent review's
+  clause-12.2 partition finding: all eleven subclauses have direct proof, 12.2.5 is source-excluded only where the
+  missing ISO 10303-11 Annex B prevents a complete evaluated-set claim, and D.3.2 records all three explicitly
+  schema-supplied short-name categories as readable and writable without inferred abbreviations. Focused results are
+  manifest 2/2, complex mapping 18/18, physical names 4/4, documentation contract 2/2, and Analyzer Release build
+  with zero warnings/errors. The final independent integrated review reports no Blocking, Important, or Minor
+  findings and concludes Ready to merge.

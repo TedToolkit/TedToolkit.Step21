@@ -3,17 +3,17 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: multi-item -->
 
 ## Status
 
-Approved
+Completed
 
 - Priority: P1
 <!-- approval-source: user-approved-authorized-iso-source-derived-profile-revision-2026-09-09 -->
 <!-- scope-revision: user-approved-source-exclusion-rule-2026-09-10 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: ac6191ad57cad54a73c74fc94841786d78836fe1 -->
 
 ## Route
 
