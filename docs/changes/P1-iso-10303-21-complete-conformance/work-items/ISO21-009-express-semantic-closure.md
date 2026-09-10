@@ -243,6 +243,19 @@ implementation inventory is evidence about current behavior, not a substitute fo
   relation. Procedure `VAR` declaration/copy-back semantics are likewise absent from clause 13.8 and the supplied
   files. Per the approved source rule these domains are `source-excluded`; they are neither inferred nor blockers for
   the source-bounded profile, and the overall full-standard conformance claim remains blocked.
+- Full AP242 compilation exposed that the new static compatibility gate initially classified STRING/BINARY
+  concatenation by the bound numeric fallback and then applied that scalar inference too broadly to `aggregate +
+  element`. Candidate `99d31dd` aligns the gate with the existing generated expression result: it recognizes direct or
+  narrowed STRING/BINARY concatenation only for non-aggregate results and preserves the declared aggregate result for
+  element addition. A focused schema covers STRING, BINARY and `SET + STRING`; the complete AP242 project then builds
+  with zero warnings or errors. Candidate `bd31c5b` updates only the resulting AP203 private descriptor-source hash,
+  its manifest checksum, and AP242 generated documentation/public-surface hash; compiler diagnostics, withholding and
+  the remaining source set are unchanged. Both exact snapshot tests pass after synchronization.
+- Candidate verification: the complete Release solution builds with zero warnings or errors; the 727-test unit run
+  passed 725 behavioral tests and isolated only the two expected snapshot updates above, whose exact focused reruns
+  pass; Release integration passes 35/36 with only the opt-in external-download corpus skipped; and
+  `build/verify-native-aot.ps1` reports `PACKED_AOT_OK` plus `NATIVE_AOT_PACKAGE_PROOF_OK` for `win-x64` using compiler
+  package 10.0.12.
 
 Source identities:
 
