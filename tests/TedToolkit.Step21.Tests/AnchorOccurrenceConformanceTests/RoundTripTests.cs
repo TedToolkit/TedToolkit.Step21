@@ -331,7 +331,7 @@ internal sealed class RoundTripTests
 
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.OccurrenceSchema.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.OccurrenceSchema.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 }

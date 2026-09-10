@@ -5,7 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Generated.AutomotiveDesign;
+using TedToolkit.Step21.Schemas.AutomotiveDesign;
 
 namespace TedToolkit.Step21.PackedConsumer;
 
@@ -13,7 +13,7 @@ internal static class Ap214Program
 {
     private static int Main()
     {
-        var descriptor = global::TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor.Instance;
+        var descriptor = global::TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor.Instance;
         var schemaAssembly = descriptor.GetType().Assembly;
 
         if (descriptor.Name.Value != "AUTOMOTIVE_DESIGN"

@@ -342,7 +342,7 @@ internal static class ExpressStructuralValidationEmitter
         var name = $"I{ExpressEntityProjection.ToPascalCase(entity.Name)}";
         return ReferenceEquals(currentSchema, entity.DeclaringSchema)
             ? name
-            : "global::TedToolkit.Step21.Generated."
+            : "global::TedToolkit.Step21.Schemas."
                 + $"{ExpressEntityProjection.ToPascalCase(entity.DeclaringSchema.Name)}.{name}";
     }
 
@@ -1089,7 +1089,7 @@ internal static class ExpressStructuralValidationEmitter
         var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Name)}";
         if (!ReferenceEquals(entity.Schema.Identity, attribute.DeclaringEntity.Symbol.DeclaringSchema))
         {
-            storageInterface = "global::TedToolkit.Step21.Generated."
+            storageInterface = "global::TedToolkit.Step21.Schemas."
                 + $"{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Symbol.DeclaringSchema.Name)}."
                 + storageInterface;
         }
@@ -1552,7 +1552,7 @@ internal static class ExpressStructuralValidationEmitter
         var storageInterface = $"I{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Name)}";
         if (!ReferenceEquals(entity.Schema.Identity, attribute.DeclaringEntity.Symbol.DeclaringSchema))
         {
-            storageInterface = "global::TedToolkit.Step21.Generated."
+            storageInterface = "global::TedToolkit.Step21.Schemas."
                 + $"{ExpressEntityProjection.ToPascalCase(attribute.DeclaringEntity.Symbol.DeclaringSchema.Name)}."
                 + storageInterface;
         }
@@ -1665,7 +1665,7 @@ internal static class ExpressStructuralValidationEmitter
             boundAttribute.DeclaringEntity.Name);
         if (!ReferenceEquals(entity.Schema.Identity, boundAttribute.DeclaringEntity.Symbol.DeclaringSchema))
         {
-            ownerInterface = "global::TedToolkit.Step21.Generated."
+            ownerInterface = "global::TedToolkit.Step21.Schemas."
                 + ExpressEntityProjection.ToPascalCase(boundAttribute.DeclaringEntity.Symbol.DeclaringSchema.Name)
                 + "."
                 + ownerInterface;

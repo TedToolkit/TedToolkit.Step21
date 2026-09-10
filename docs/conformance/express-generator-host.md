@@ -7,7 +7,7 @@ The `TedToolkit.Step21` package carries a C# incremental source generator under 
 For each independently valid schema, the generator retains one path-independent descriptor source with:
 
 - hint name `ExpressSchema_<UPPERCASE_SCHEMA_NAME>.g.cs`;
-- fixed namespace `TedToolkit.Step21.Generated.<SchemaPascalCase>`;
+- fixed namespace `TedToolkit.Step21.Schemas.<SchemaPascalCase>`;
 - public sealed class `SchemaDescriptor` with a private constructor and static `Instance`; and
 - overridden `SchemaName Name` preserving the nominal source name.
 

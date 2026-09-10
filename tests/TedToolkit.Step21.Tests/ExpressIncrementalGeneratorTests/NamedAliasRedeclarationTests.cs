@@ -20,7 +20,7 @@ internal sealed class NamedAliasRedeclarationTests
     {
         var result = GeneratorHostTests.Run("""
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AliasRedeclaration;
+            using TedToolkit.Step21.Schemas.AliasRedeclaration;
             internal static class AliasConsumer
             {
                 internal static bool Check(int scenario)
@@ -38,7 +38,7 @@ internal sealed class NamedAliasRedeclarationTests
                         new HeaderSection(new FileDescription(["alias"], "3;1"),
                             new FileName("alias", "2026-09-04T00:00:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["alias_redeclaration"])),
-                        [TedToolkit.Step21.Generated.AliasRedeclaration.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AliasRedeclaration.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("alias_redeclaration"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, owner);

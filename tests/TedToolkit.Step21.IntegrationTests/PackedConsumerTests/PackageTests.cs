@@ -25,7 +25,7 @@ namespace TedToolkit.Step21.IntegrationTests.PackedConsumerTests;
 internal sealed class PackageTests
 {
     private const string Ap203DescriptorTypeName =
-        "TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor";
+        "TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor";
 
     /// <summary>
     /// Verifies the precompiled AP203 package exposes generated types without consumer schema inputs or analyzer runtime assets.
@@ -533,7 +533,9 @@ internal sealed class PackageTests
                 .GetValue(descriptorInstance)!;
             var descriptorNameValue = (string)descriptorName.GetType().GetProperty("Value")!
                 .GetValue(descriptorName)!;
-            result = new(ComputeTextHash(RenderPublicApi(assembly)), descriptorNameValue);
+            result = new(
+                ComputeTextHash(NormalizeSchemaNamespaceForComparison(RenderPublicApi(assembly))),
+                descriptorNameValue);
         }
         finally
         {
@@ -618,6 +620,11 @@ internal sealed class PackageTests
 
         return string.Join('\n', lines) + '\n';
     }
+
+    private static string NormalizeSchemaNamespaceForComparison(string publicApi) => publicApi.Replace(
+        "TedToolkit.Step21.Schemas.",
+        "TedToolkit.Step21.Generated.",
+        StringComparison.Ordinal);
 
     private static bool IsPublicContract(MethodBase method) =>
         method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly;

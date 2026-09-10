@@ -20,7 +20,7 @@ internal sealed class SelectAggregateMemberTests
     {
         var result = GeneratorHostTests.Run("""
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AggregateMember;
+            using TedToolkit.Step21.Schemas.AggregateMember;
             internal static class AggregateMemberConsumer
             {
                 internal static ValidationResult Validate(int scenario)
@@ -30,7 +30,7 @@ internal sealed class SelectAggregateMemberTests
                             new FileDescription(["aggregates"], "3;1"),
                             new FileName("aggregates.step", "2026-09-04T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["aggregate_member"])),
-                        [TedToolkit.Step21.Generated.AggregateMember.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AggregateMember.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("aggregate_member"));
                     structure.DataSections.Add(section);
                     var direct = new DirectItem();

@@ -271,7 +271,7 @@ public sealed class CanonicalSimpleWriterTests
             throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.WriterModel.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.WriterModel.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 

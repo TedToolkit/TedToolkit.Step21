@@ -1,6 +1,6 @@
 # Generated schema values
 
-The incremental generator maps scalar and nominal value declarations in the supplied closed EXPRESS schema set to strong C# values. These declarations are generated under `TedToolkit.Step21.Generated.<SchemaPascalCase>` and do not require runtime reflection, dynamic code, or a runtime reference to `TedToolkit.RoslynHelper`. Aggregate projection is documented separately in [generated schema aggregates](generated-schema-aggregates.md).
+The incremental generator maps scalar and nominal value declarations in the supplied closed EXPRESS schema set to strong C# values. These declarations are generated under `TedToolkit.Step21.Schemas.<SchemaPascalCase>` and do not require runtime reflection, dynamic code, or a runtime reference to `TedToolkit.RoslynHelper`. Aggregate projection is documented separately in [generated schema aggregates](generated-schema-aggregates.md).
 
 ## Scalar mapping
 

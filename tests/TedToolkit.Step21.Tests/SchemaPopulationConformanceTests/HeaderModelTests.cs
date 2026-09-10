@@ -1103,8 +1103,8 @@ public sealed class HeaderModelTests
         var descriptors = CreateGeneratedDescriptors(
             [("schemas/cyclic-longa.exp", CYCLIC_LONGA_SCHEMA),
                 ("schemas/cyclic-longb.exp", CYCLIC_LONGB_SCHEMA)],
-            "TedToolkit.Step21.Generated.CyclicLonga.SchemaDescriptor",
-            "TedToolkit.Step21.Generated.CyclicLongb.SchemaDescriptor");
+            "TedToolkit.Step21.Schemas.CyclicLonga.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.CyclicLongb.SchemaDescriptor");
 
         var root = ExchangeStructure.Read(
             new StringReader("""
@@ -1788,26 +1788,26 @@ public sealed class HeaderModelTests
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateDescriptors() => CreateGeneratedDescriptors(
         [("schemas/population.exp", SCHEMA), ("schemas/other.exp", OTHER_SCHEMA)],
-        "TedToolkit.Step21.Generated.PopulationModel.SchemaDescriptor",
-        "TedToolkit.Step21.Generated.OtherModel.SchemaDescriptor");
+        "TedToolkit.Step21.Schemas.PopulationModel.SchemaDescriptor",
+        "TedToolkit.Step21.Schemas.OtherModel.SchemaDescriptor");
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateAnnexEDescriptors(string? longbSchema = null) =>
         CreateGeneratedDescriptors(
             [("schemas/longa.exp", LONGA_SCHEMA), ("schemas/longb.exp", longbSchema ?? LONGB_SCHEMA)],
-            "TedToolkit.Step21.Generated.Longa.SchemaDescriptor",
-            "TedToolkit.Step21.Generated.Longb.SchemaDescriptor");
+            "TedToolkit.Step21.Schemas.Longa.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.Longb.SchemaDescriptor");
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateDeterministicCycleDescriptors() =>
         CreateGeneratedDescriptors(
             [("schemas/population.exp", SCHEMA), ("schemas/longb.exp", LONGB_SCHEMA)],
-            "TedToolkit.Step21.Generated.PopulationModel.SchemaDescriptor",
-            "TedToolkit.Step21.Generated.Longb.SchemaDescriptor");
+            "TedToolkit.Step21.Schemas.PopulationModel.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.Longb.SchemaDescriptor");
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateInterfaceDescriptors() => CreateGeneratedDescriptors(
         [("schemas/base_model.exp", INTERFACE_BASE_SCHEMA),
             ("schemas/extension_model.exp", INTERFACE_EXTENSION_SCHEMA)],
-        "TedToolkit.Step21.Generated.BaseModel.SchemaDescriptor",
-        "TedToolkit.Step21.Generated.ExtensionModel.SchemaDescriptor");
+        "TedToolkit.Step21.Schemas.BaseModel.SchemaDescriptor",
+        "TedToolkit.Step21.Schemas.ExtensionModel.SchemaDescriptor");
 
     private static IReadOnlyCollection<SchemaDescriptor> CreateGeneratedDescriptors(
         (string Path, string Text)[] sources,

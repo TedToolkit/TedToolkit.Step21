@@ -10,8 +10,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 using TedToolkit.Step21;
-using TedToolkit.Step21.Generated.CatalogCore;
-using TedToolkit.Step21.Generated.CatalogModel;
+using TedToolkit.Step21.Schemas.CatalogCore;
+using TedToolkit.Step21.Schemas.CatalogModel;
 
 namespace TedToolkit.Step21.PackedConsumer;
 
@@ -41,8 +41,8 @@ internal static class Program
     {
         SchemaDescriptor[] descriptors =
         [
-            TedToolkit.Step21.Generated.CatalogCore.SchemaDescriptor.Instance,
-            TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance,
+            TedToolkit.Step21.Schemas.CatalogCore.SchemaDescriptor.Instance,
+            TedToolkit.Step21.Schemas.CatalogModel.SchemaDescriptor.Instance,
         ];
         var structure = ExchangeStructure.Read(new StringReader(SOURCE), descriptors);
         var complex = structure.Entities.Single(entity => entity is ILeft && entity is IRight);
@@ -259,7 +259,7 @@ internal static class Program
             || !uniqueText.Contains("#2=INVERSE_OWNER(1,(#1,#1));", StringComparison.Ordinal)
             || !ExchangeStructure.Read(
                     new StringReader(uniqueText),
-                    [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance])
+                    [TedToolkit.Step21.Schemas.CatalogModel.SchemaDescriptor.Instance])
                 .Validate()
                 .IsValid)
         {
@@ -340,7 +340,7 @@ internal static class Program
         {
             _ = ExchangeStructure.Read(
                 new StringReader(invalidSource),
-                [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance]);
+                [TedToolkit.Step21.Schemas.CatalogModel.SchemaDescriptor.Instance]);
             return false;
         }
         catch (ExchangeStructureReadValidationException exception)
@@ -388,7 +388,7 @@ internal static class Program
 
     private static bool VerifyIso8859StringEncoding()
     {
-        var descriptor = TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance;
+        var descriptor = TedToolkit.Step21.Schemas.CatalogModel.SchemaDescriptor.Instance;
         var structure = new ExchangeStructure(
             new HeaderSection(
                 new FileDescription(["éĄ"], "4;1"),
@@ -411,7 +411,7 @@ internal static class Program
                 new FileDescription(["singular inverse"], "3;1"),
                 new FileName("singular.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                 new FileSchema(["catalog_model"])),
-            [TedToolkit.Step21.Generated.CatalogModel.SchemaDescriptor.Instance]);
+            [TedToolkit.Step21.Schemas.CatalogModel.SchemaDescriptor.Instance]);
         structure.DataSections.Add(new DataSection(new SchemaName("catalog_model")));
         return structure;
     }

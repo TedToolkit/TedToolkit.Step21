@@ -19,7 +19,7 @@ internal sealed class ChainedRedeclarationTests
     public async Task Should_resolve_redeclarations_through_an_intermediate_owner()
     {
         var result = GeneratorHostTests.Run("""
-            using TedToolkit.Step21.Generated.Chained;
+            using TedToolkit.Step21.Schemas.Chained;
             using TedToolkit.Step21;
             using System.IO;
             using System.Linq;
@@ -39,13 +39,13 @@ internal sealed class ChainedRedeclarationTests
                         "ISO-10303-21;HEADER;FILE_DESCRIPTION(('chain'),'3;1');" +
                         "FILE_NAME('chain','2026-09-04T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('chained'));ENDSEC;DATA;#1=LEAF_ITEM();#2=LEAF_OWNER(#1);ENDSEC;END-ISO-10303-21;"),
-                        [TedToolkit.Step21.Generated.Chained.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.Chained.SchemaDescriptor.Instance]);
                     var readOwner = structure.Entities.OfType<LeafOwner>().Single();
                     if (!object.ReferenceEquals(((IBaseOwner)readOwner).Item, ((IMiddleOwner)readOwner).Item)) return false;
                     var output = new StringWriter();
                     structure.Write(output);
                     var reread = ExchangeStructure.Read(new StringReader(output.ToString()),
-                        [TedToolkit.Step21.Generated.Chained.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.Chained.SchemaDescriptor.Instance]);
                     var rereadOwner = reread.Entities.OfType<LeafOwner>().Single();
                     var rereadItem = reread.Entities.OfType<LeafItem>().Single();
                     return reread.Validate().IsValid && reread.Entities.Count() == 2 &&

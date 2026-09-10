@@ -22,7 +22,7 @@ internal sealed class SelectValueSpecializationTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.SelectValues;
+            using TedToolkit.Step21.Schemas.SelectValues;
             internal static class ValueConsumer
             {
                 internal static bool Check(int scenario)
@@ -40,11 +40,11 @@ internal sealed class SelectValueSpecializationTests
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input),
-                            [TedToolkit.Step21.Generated.SelectValues.SchemaDescriptor.Instance]);
+                            [TedToolkit.Step21.Schemas.SelectValues.SchemaDescriptor.Instance]);
                         var output = new StringWriter();
                         structure.Write(output);
                         var reread = ExchangeStructure.Read(new StringReader(output.ToString()),
-                            [TedToolkit.Step21.Generated.SelectValues.SchemaDescriptor.Instance]);
+                            [TedToolkit.Step21.Schemas.SelectValues.SchemaDescriptor.Instance]);
                         IRoot child = reread.Entities.OfType<Child>().Single();
                         return scenario == 0 && reread.Validate().IsValid &&
                             child.Exact.TryGetNarrowCode(out var readExact) && readExact.Value.Value == "ok" &&

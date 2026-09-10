@@ -505,7 +505,7 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ExpressionContext;
+            using TedToolkit.Step21.Schemas.ExpressionContext;
 
             internal sealed class ContextProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -532,7 +532,7 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("ContextProbe", throwOnError: true)!;
         var generatedItem = assembly.GetType(
-            "TedToolkit.Step21.Generated.ExpressionContext.Item",
+            "TedToolkit.Step21.Schemas.ExpressionContext.Item",
             throwOnError: true)!;
         var item = Activator.CreateInstance(generatedItem, new BigInteger(5))!;
         var items = new ExpressList<BigInteger> { 1, 2, 3, 4 };
@@ -957,7 +957,7 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.IndeterminateExpression;
+            using TedToolkit.Step21.Schemas.IndeterminateExpression;
 
             internal sealed class IndeterminateProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -989,7 +989,7 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("IndeterminateProbe", throwOnError: true)!;
         var itemType = assembly.GetType(
-            "TedToolkit.Step21.Generated.IndeterminateExpression.OptionalItem",
+            "TedToolkit.Step21.Schemas.IndeterminateExpression.OptionalItem",
             throwOnError: true)!;
         var missing = Activator.CreateInstance(itemType)!;
         var present = Activator.CreateInstance(itemType)!;
@@ -1058,7 +1058,7 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.TemporaryNameExpression;
+            using TedToolkit.Step21.Schemas.TemporaryNameExpression;
 
             internal sealed class TemporaryNameProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -1236,7 +1236,7 @@ internal sealed class GenerationTests
             #nullable enable
             using System.Collections.Generic;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ModelContextExpression;
+            using TedToolkit.Step21.Schemas.ModelContextExpression;
 
             internal sealed class ModelContextProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -1270,7 +1270,7 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("ModelContextProbe", throwOnError: true)!;
         var itemType = assembly.GetType(
-            "TedToolkit.Step21.Generated.ModelContextExpression.Item",
+            "TedToolkit.Step21.Schemas.ModelContextExpression.Item",
             throwOnError: true)!;
         var candidate = Activator.CreateInstance(itemType)!;
         var flags = BindingFlags.Static | BindingFlags.NonPublic;
@@ -1492,14 +1492,14 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.NominalExpression;
+            using TedToolkit.Step21.Schemas.NominalExpression;
 
             internal sealed class NominalExpressionProbe : TedToolkit.Step21.SchemaDescriptor
             {
                 internal static BigInteger Sum(Measure left_measure, Measure right_measure) => {{sum.Code}};
                 internal static LogicalValue ParameterNotEqual(
-                    global::TedToolkit.Step21.Generated.NominalExpression.ParameterValue left_parameter,
-                    global::TedToolkit.Step21.Generated.NominalExpression.ParameterValue right_parameter) =>
+                    global::TedToolkit.Step21.Schemas.NominalExpression.ParameterValue left_parameter,
+                    global::TedToolkit.Step21.Schemas.NominalExpression.ParameterValue right_parameter) =>
                     {{parameterEquality.Code}};
                 internal static LogicalValue LogicalEqual(bool boolean_value, LogicalValue logical_value) =>
                     {{logicalEquality.Code}};
@@ -1532,18 +1532,18 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("NominalExpressionProbe", throwOnError: true)!;
         var measureType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NominalExpression.Measure",
+            "TedToolkit.Step21.Schemas.NominalExpression.Measure",
             throwOnError: true)!;
         var stateType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NominalExpression.State",
+            "TedToolkit.Step21.Schemas.NominalExpression.State",
             throwOnError: true)!;
         var choiceType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NominalExpression.Choice",
+            "TedToolkit.Step21.Schemas.NominalExpression.Choice",
             throwOnError: true)!;
         var one = Activator.CreateInstance(measureType, new BigInteger(1))!;
         var two = Activator.CreateInstance(measureType, new BigInteger(2))!;
         var parameterType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NominalExpression.ParameterValue",
+            "TedToolkit.Step21.Schemas.NominalExpression.ParameterValue",
             throwOnError: true)!;
         var parameterOne = Activator.CreateInstance(parameterType, new RealValue(1, 0))!;
         var parameterTwo = Activator.CreateInstance(parameterType, new RealValue(2, 0))!;
@@ -1599,7 +1599,7 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.EntityEquality;
+            using TedToolkit.Step21.Schemas.EntityEquality;
 
             internal sealed class EntityEqualityProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -1629,7 +1629,7 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("EntityEqualityProbe", throwOnError: true)!;
         var itemType = assembly.GetType(
-            "TedToolkit.Step21.Generated.EntityEquality.Item",
+            "TedToolkit.Step21.Schemas.EntityEquality.Item",
             throwOnError: true)!;
         var left = itemType.GetConstructors().Single().Invoke([new BigInteger(7)]);
         var equalButDistinct = itemType.GetConstructors().Single().Invoke([new BigInteger(7)]);
@@ -1885,7 +1885,7 @@ internal sealed class GenerationTests
             using System.Collections.Generic;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ApplicationExpression;
+            using TedToolkit.Step21.Schemas.ApplicationExpression;
 
             internal sealed class ApplicationExpressionProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -2092,7 +2092,7 @@ internal sealed class GenerationTests
             #nullable enable
             using System.Collections.Generic;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ComplexConstructionExpression;
+            using TedToolkit.Step21.Schemas.ComplexConstructionExpression;
 
             internal sealed class ComplexConstructionProbe : TedToolkit.Step21.SchemaDescriptor
             {
@@ -2121,10 +2121,10 @@ internal sealed class GenerationTests
         var assembly = Emit(result.OutputCompilation);
         var probe = assembly.GetType("ComplexConstructionProbe", throwOnError: true)!;
         var firstType = assembly.GetType(
-            "TedToolkit.Step21.Generated.ComplexConstructionExpression.FirstPart",
+            "TedToolkit.Step21.Schemas.ComplexConstructionExpression.FirstPart",
             throwOnError: true)!;
         var secondType = assembly.GetType(
-            "TedToolkit.Step21.Generated.ComplexConstructionExpression.SecondPart",
+            "TedToolkit.Step21.Schemas.ComplexConstructionExpression.SecondPart",
             throwOnError: true)!;
         var first = Activator.CreateInstance(firstType)!;
         var second = Activator.CreateInstance(secondType)!;

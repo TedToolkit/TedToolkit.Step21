@@ -25,7 +25,7 @@ internal sealed class AggregateSelectSpecializationTests
             using System.Linq;
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AggregateValues;
+            using TedToolkit.Step21.Schemas.AggregateValues;
             internal static class AggregateValueConsumer
             {
                 internal static bool Check(bool invalid)
@@ -34,7 +34,7 @@ internal sealed class AggregateSelectSpecializationTests
                         "FILE_NAME('values','2026-09-05T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('aggregate_values'));ENDSEC;DATA;#1=CHILD((7),('" +
                         (invalid ? "" : "ok") + "'));ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.AggregateValues.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.AggregateValues.SchemaDescriptor.Instance;
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);
@@ -105,7 +105,7 @@ internal sealed class AggregateSelectSpecializationTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AggregateSelectSpecialization;
+            using TedToolkit.Step21.Schemas.AggregateSelectSpecialization;
             internal static class AggregateConsumer
             {
                 internal static bool Check()
@@ -114,7 +114,7 @@ internal sealed class AggregateSelectSpecializationTests
                         "FILE_NAME('aggregate','2026-09-04T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('aggregate_select_specialization'));ENDSEC;DATA;" +
                         "#1=LEAF();#2=LEAF();#3=CHILD((#1),(#1));ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.AggregateSelectSpecialization.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.AggregateSelectSpecialization.SchemaDescriptor.Instance;
                     var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);
                     var child = structure.Entities.OfType<Child>().Single();
                     IRoot root = child;

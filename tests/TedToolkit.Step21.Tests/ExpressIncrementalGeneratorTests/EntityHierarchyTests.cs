@@ -160,7 +160,7 @@ public sealed class EntityHierarchyTests
         using System;
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AggregateRedeclaration;
+        using TedToolkit.Step21.Schemas.AggregateRedeclaration;
         internal static class AggregateRedeclarationConsumer
         {
             internal static bool Exercise()
@@ -228,7 +228,7 @@ public sealed class EntityHierarchyTests
         #nullable enable
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AggregateSelectRedeclaration;
+        using TedToolkit.Step21.Schemas.AggregateSelectRedeclaration;
         internal static class AggregateSelectRedeclarationConsumer
         {
             internal static bool Exercise()
@@ -355,7 +355,7 @@ public sealed class EntityHierarchyTests
         #nullable enable
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.OptionalAggregateSelectRedeclaration;
+        using TedToolkit.Step21.Schemas.OptionalAggregateSelectRedeclaration;
         internal static class OptionalAggregateSelectRedeclarationConsumer
         {
             internal static bool Exercise()
@@ -736,10 +736,10 @@ public sealed class EntityHierarchyTests
     public async Task Should_generate_entity_hierarchy_and_flatten_inherited_attributes_once()
     {
         var result = GeneratorHostTests.Run(("schemas/inheritance.exp", INHERITANCE_SCHEMA));
-        var rootInterface = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.InheritanceModel.IRoot");
-        var leafInterface = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.InheritanceModel.ILeaf");
-        var rootClass = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.InheritanceModel.Root");
-        var leafClass = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.InheritanceModel.Leaf");
+        var rootInterface = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.InheritanceModel.IRoot");
+        var leafInterface = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.InheritanceModel.ILeaf");
+        var rootClass = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.InheritanceModel.Root");
+        var leafClass = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.InheritanceModel.Leaf");
         var leafProperties = leafClass.GetMembers().OfType<IPropertySymbol>().ToArray();
         var leafConstructor = leafClass.Constructors.Single(constructor => constructor.DeclaredAccessibility == Accessibility.Public);
 
@@ -775,8 +775,8 @@ public sealed class EntityHierarchyTests
     {
         var result = GeneratorHostTests.Run(("schemas/inheritance.exp", INHERITANCE_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
-        var targetType = assembly.GetType("TedToolkit.Step21.Generated.InheritanceModel.Target", throwOnError: true)!;
-        var leafType = assembly.GetType("TedToolkit.Step21.Generated.InheritanceModel.Leaf", throwOnError: true)!;
+        var targetType = assembly.GetType("TedToolkit.Step21.Schemas.InheritanceModel.Target", throwOnError: true)!;
+        var leafType = assembly.GetType("TedToolkit.Step21.Schemas.InheritanceModel.Leaf", throwOnError: true)!;
         var firstTarget = Activator.CreateInstance(targetType)!;
         var secondTarget = Activator.CreateInstance(targetType)!;
         var leaf = leafType.GetConstructors().Single().Invoke([firstTarget, null]);
@@ -827,10 +827,10 @@ public sealed class EntityHierarchyTests
             ("schemas/child.exp", CHILD_SCHEMA));
         var childInterface = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ChildModel.IChild");
+            "TedToolkit.Step21.Schemas.ChildModel.IChild");
         var childClass = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ChildModel.Child");
+            "TedToolkit.Step21.Schemas.ChildModel.Child");
 
         using (Assert.Multiple())
         {
@@ -839,9 +839,9 @@ public sealed class EntityHierarchyTests
             await Assert.That(result.OutputCompilation.GetDiagnostics()
                 .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)).IsEmpty();
             await Assert.That(childInterface.Interfaces.Single().ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.Generated.BaseModel.IRoot");
+                .IsEqualTo("TedToolkit.Step21.Schemas.BaseModel.IRoot");
             await Assert.That(RequiredProperty(childClass, "TargetRef").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.Generated.BaseModel.ITarget");
+                .IsEqualTo("TedToolkit.Step21.Schemas.BaseModel.ITarget");
         }
     }
 
@@ -853,7 +853,7 @@ public sealed class EntityHierarchyTests
     {
         const string validConsumer = """
             #nullable enable
-            using TedToolkit.Step21.Generated.InheritanceModel;
+            using TedToolkit.Step21.Schemas.InheritanceModel;
             internal static class Consumer
             {
                 internal static void Edit(ITarget target, IRoot root)
@@ -867,7 +867,7 @@ public sealed class EntityHierarchyTests
             """;
         const string invalidConsumer = """
             #nullable enable
-            using TedToolkit.Step21.Generated.InheritanceModel;
+            using TedToolkit.Step21.Schemas.InheritanceModel;
             internal static class Consumer
             {
                 internal static void Edit(ITarget target, IRoot root)
@@ -904,7 +904,7 @@ public sealed class EntityHierarchyTests
         var result = GeneratorHostTests.Run(("schemas/redeclaration.exp", REDECLARATION_SCHEMA));
         var childClass = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.RedeclarationModel.Child");
+            "TedToolkit.Step21.Schemas.RedeclarationModel.Child");
 
         using (Assert.Multiple())
         {
@@ -918,10 +918,10 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var target = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.RedeclarationModel.Target",
+            "TedToolkit.Step21.Schemas.RedeclarationModel.Target",
             throwOnError: true)!)!;
         var childType = assembly.GetType(
-            "TedToolkit.Step21.Generated.RedeclarationModel.Child",
+            "TedToolkit.Step21.Schemas.RedeclarationModel.Child",
             throwOnError: true)!;
         var child = childType.GetConstructors().Single().Invoke([target]);
 
@@ -948,13 +948,13 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var specialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.NarrowedRedeclaration.Specialized",
+            "TedToolkit.Step21.Schemas.NarrowedRedeclaration.Specialized",
             throwOnError: true)!)!;
         var childType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NarrowedRedeclaration.Child",
+            "TedToolkit.Step21.Schemas.NarrowedRedeclaration.Child",
             throwOnError: true)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.NarrowedRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.NarrowedRedeclaration.IRoot",
             throwOnError: true)!;
         var child = childType.GetConstructors().Single().Invoke([specialized]);
 
@@ -982,7 +982,7 @@ public sealed class EntityHierarchyTests
 
         var childSymbol = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.RenamedNarrowedRedeclaration.Child");
+            "TedToolkit.Step21.Schemas.RenamedNarrowedRedeclaration.Child");
         await Assert.That(childSymbol.GetMembers().OfType<IPropertySymbol>()
             .Where(property => property.DeclaredAccessibility == Accessibility.Public)
             .Select(property => property.Name)).IsEquivalentTo(["SpecializedLink", "DirectReferences"]);
@@ -991,13 +991,13 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.RenamedNarrowedRedeclaration.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.RenamedNarrowedRedeclaration.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.RenamedNarrowedRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.RenamedNarrowedRedeclaration.IRoot",
             throwOnError: true)!;
         var childInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.RenamedNarrowedRedeclaration.IChild",
+            "TedToolkit.Step21.Schemas.RenamedNarrowedRedeclaration.IChild",
             throwOnError: true)!;
         var structure = ExchangeStructure.Read(new StringReader(CreateExchange(
             "RENAMED_NARROWED_REDECLARATION",
@@ -1039,10 +1039,10 @@ public sealed class EntityHierarchyTests
             ("schemas/narrowed.exp", NARROWED_REDECLARATION_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.NarrowedRedeclaration.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.NarrowedRedeclaration.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.NarrowedRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.NarrowedRedeclaration.IRoot",
             throwOnError: true)!;
         var source = CreateExchange(
             "NARROWED_REDECLARATION",
@@ -1117,10 +1117,10 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var childType = assembly.GetType(
-            "TedToolkit.Step21.Generated.NumericRedeclaration.Child",
+            "TedToolkit.Step21.Schemas.NumericRedeclaration.Child",
             throwOnError: true)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.NumericRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.NumericRedeclaration.IRoot",
             throwOnError: true)!;
         var integer = System.Numerics.BigInteger.Parse("18446744073709551616000000000000000001");
         var real = new RealValue(
@@ -1194,7 +1194,7 @@ public sealed class EntityHierarchyTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.NamedAggregateSelectRedeclaration;
+            using TedToolkit.Step21.Schemas.NamedAggregateSelectRedeclaration;
 
             internal static class NamedAggregateSelectConsumer
             {
@@ -1206,7 +1206,7 @@ public sealed class EntityHierarchyTests
                         + "#1=SPECIALIZED();#2=CHILD((#1));ENDSEC;END-ISO-10303-21;";
                     var structure = ExchangeStructure.Read(
                         new StringReader(source),
-                        [TedToolkit.Step21.Generated.NamedAggregateSelectRedeclaration.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.NamedAggregateSelectRedeclaration.SchemaDescriptor.Instance]);
                     var child = structure.Entities.OfType<Child>().Single();
                     IRoot root = child;
                     var count = root.ItemElement.Match(
@@ -1325,10 +1325,10 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.AggregateSelectRedeclaration.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.AggregateSelectRedeclaration.IRoot",
             throwOnError: true)!;
         var structure = ExchangeStructure.Read(
             new StringReader(CreateAggregateSelectExchange("(#1,$)", "(#1)", "(#1,#2)", "(#1,#2)")),
@@ -1338,7 +1338,7 @@ public sealed class EntityHierarchyTests
         var second = structure.Registrations.Single(item => item.Name.Equals(new EntityInstanceName("2"))).Entity;
         var list = child.GetType().GetProperty("ListValue")!.GetValue(child)!;
         var equalChoice = assembly.GetType(
-            "TedToolkit.Step21.Generated.AggregateSelectRedeclaration.EqualChoice",
+            "TedToolkit.Step21.Schemas.AggregateSelectRedeclaration.EqualChoice",
             throwOnError: true)!;
         var equalSecond = equalChoice.GetMethod("FromSecond")!.Invoke(null, [second])!;
         list.GetType().GetMethod("Add")!.Invoke(list, [equalSecond]);
@@ -1405,17 +1405,17 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var specialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.SelectRedeclaration.Specialized",
+            "TedToolkit.Step21.Schemas.SelectRedeclaration.Specialized",
             throwOnError: true)!)!;
         var narrowType = assembly.GetType(
-            "TedToolkit.Step21.Generated.SelectRedeclaration.NarrowChoice",
+            "TedToolkit.Step21.Schemas.SelectRedeclaration.NarrowChoice",
             throwOnError: true)!;
         var narrow = narrowType.GetMethod("FromSpecialized")!.Invoke(null, [specialized])!;
         var childType = assembly.GetType(
-            "TedToolkit.Step21.Generated.SelectRedeclaration.Child",
+            "TedToolkit.Step21.Schemas.SelectRedeclaration.Child",
             throwOnError: true)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.SelectRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.SelectRedeclaration.IRoot",
             throwOnError: true)!;
         var child = childType.GetConstructors().Single().Invoke([narrow, specialized, narrow]);
         var projectedSelect = rootInterface.GetProperty("SelectToSelect")!.GetValue(child)!;
@@ -1474,13 +1474,13 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var riskValue = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.DirectSelectProjection.RiskValue",
+            "TedToolkit.Step21.Schemas.DirectSelectProjection.RiskValue",
             throwOnError: true)!)!;
         var riskLevel = Activator.CreateInstance(
-            assembly.GetType("TedToolkit.Step21.Generated.DirectSelectProjection.RiskLevel", throwOnError: true)!,
+            assembly.GetType("TedToolkit.Step21.Schemas.DirectSelectProjection.RiskLevel", throwOnError: true)!,
             riskValue)!;
         var root = assembly.GetType(
-            "TedToolkit.Step21.Generated.DirectSelectProjection.IPropertyDefinition",
+            "TedToolkit.Step21.Schemas.DirectSelectProjection.IPropertyDefinition",
             throwOnError: true)!;
         var projected = root.GetProperty("Definition")!.GetValue(riskLevel)!;
 
@@ -1532,13 +1532,13 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var specialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.OptionalRedeclaration.Specialized",
+            "TedToolkit.Step21.Schemas.OptionalRedeclaration.Specialized",
             throwOnError: true)!)!;
         var childType = assembly.GetType(
-            "TedToolkit.Step21.Generated.OptionalRedeclaration.Child",
+            "TedToolkit.Step21.Schemas.OptionalRedeclaration.Child",
             throwOnError: true)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.OptionalRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.OptionalRedeclaration.IRoot",
             throwOnError: true)!;
         var integer = System.Numerics.BigInteger.Parse("999999999999999999999999999999999999");
         var child = childType.GetConstructors().Single().Invoke([integer, specialized]);
@@ -1568,10 +1568,10 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.SpecializationRoundTrip.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SpecializationRoundTrip.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.SpecializationRoundTrip.IRoot",
+            "TedToolkit.Step21.Schemas.SpecializationRoundTrip.IRoot",
             throwOnError: true)!;
         var structure = ExchangeStructure.Read(
             new StringReader(CreateSpecializationExchange(CreateValidSpecializationParameters())),
@@ -1670,7 +1670,7 @@ public sealed class EntityHierarchyTests
             ("schemas/specialization-round-trip.exp", SPECIALIZATION_ROUND_TRIP_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.SpecializationRoundTrip.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SpecializationRoundTrip.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var parameters = CreateValidSpecializationParameters();
         parameters[parameterIndex] = broadOnlyValue;
@@ -1737,7 +1737,7 @@ public sealed class EntityHierarchyTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration;
+            using TedToolkit.Step21.Schemas.NarrowedAggregateRedeclaration;
             internal static class BoundsConsumer
             {
                 internal static bool Check(int count)
@@ -1751,14 +1751,14 @@ public sealed class EntityHierarchyTests
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input),
-                            [TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
+                            [TedToolkit.Step21.Schemas.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
                         var child = structure.Entities.OfType<Child>().Single();
                         IRoot root = child;
                         if (!object.ReferenceEquals(root.Items, child.Items)) return false;
                         var output = new StringWriter();
                         structure.Write(output);
                         var reread = ExchangeStructure.Read(new StringReader(output.ToString()),
-                            [TedToolkit.Step21.Generated.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
+                            [TedToolkit.Step21.Schemas.NarrowedAggregateRedeclaration.SchemaDescriptor.Instance]);
                         return count is 1 or 2 && reread.Validate().IsValid &&
                             reread.Entities.OfType<Child>().Single().Items.Count == count;
                     }
@@ -1882,22 +1882,22 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var mostSpecialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.MostSpecialized",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.MostSpecialized",
             throwOnError: true)!)!;
         var specialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.Specialized",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.Specialized",
             throwOnError: true)!)!;
         var leafType = assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.Leaf",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.Leaf",
             throwOnError: true)!;
         var diamondType = assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.DiamondLeaf",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.DiamondLeaf",
             throwOnError: true)!;
         var rootInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.IRoot",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.IRoot",
             throwOnError: true)!;
         var middleInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.OrderedRedeclaration.IMiddle",
+            "TedToolkit.Step21.Schemas.OrderedRedeclaration.IMiddle",
             throwOnError: true)!;
         var leaf = leafType.GetConstructors().Single().Invoke([mostSpecialized]);
         var diamond = diamondType.GetConstructors().Single().Invoke([specialized]);
@@ -1961,7 +1961,7 @@ public sealed class EntityHierarchyTests
         var result = GeneratorHostTests.Run(("schemas/keyword.exp", KEYWORD_PARAMETER_SCHEMA));
         var holderClass = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.KeywordParameter.Holder");
+            "TedToolkit.Step21.Schemas.KeywordParameter.Holder");
 
         using (Assert.Multiple())
         {
@@ -1988,19 +1988,19 @@ public sealed class EntityHierarchyTests
 
         var assembly = Emit(result.OutputCompilation);
         var leafType = assembly.GetType(
-            "TedToolkit.Step21.Generated.InheritedStorageCollision.Leaf",
+            "TedToolkit.Step21.Schemas.InheritedStorageCollision.Leaf",
             throwOnError: true)!;
         var derivedType = assembly.GetType(
-            "TedToolkit.Step21.Generated.InheritedStorageCollision.DerivedLeaf",
+            "TedToolkit.Step21.Schemas.InheritedStorageCollision.DerivedLeaf",
             throwOnError: true)!;
         var firstInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.InheritedStorageCollision.IFirstBase",
+            "TedToolkit.Step21.Schemas.InheritedStorageCollision.IFirstBase",
             throwOnError: true)!;
         var secondInterface = assembly.GetType(
-            "TedToolkit.Step21.Generated.InheritedStorageCollision.ISecondBase",
+            "TedToolkit.Step21.Schemas.InheritedStorageCollision.ISecondBase",
             throwOnError: true)!;
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.InheritedStorageCollision.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.InheritedStorageCollision.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var source = """
             ISO-10303-21;

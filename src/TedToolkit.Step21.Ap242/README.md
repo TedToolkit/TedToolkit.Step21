@@ -14,7 +14,7 @@ dotnet add package TedToolkit.Step21.Ap242 --version 1.0.0 --source <local-feed>
 ```
 
 ```csharp
-using TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf;
+using TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf;
 
 var descriptor = SchemaDescriptor.Instance;
 Console.WriteLine(descriptor.Name.Value);

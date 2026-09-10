@@ -266,7 +266,7 @@ public sealed class AtomicSimpleReadTests
 
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            $"TedToolkit.Step21.Generated.{generatedNamespace}.SchemaDescriptor",
+            $"TedToolkit.Step21.Schemas.{generatedNamespace}.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 

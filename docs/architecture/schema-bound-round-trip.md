@@ -103,6 +103,8 @@ Generated schema metadata implements a runtime schema contract and provides:
 
 ### Generated type system
 
+Every public EXPRESS-derived declaration is emitted under `TedToolkit.Step21.Schemas.<SchemaPascalCase>` as decided by [ADR-0011](../adr/ADR-0011-schema-owned-public-namespaces.md). The schema name, not the containing assembly, NuGet package, application protocol, or generation mechanism, owns this CLR identity. This namespace boundary applies equally to consumer-supplied schemas and maintained precompiled schema packages; internal generated parser artifacts remain implementation infrastructure outside this public schema namespace.
+
 Interfaces are the complete and exclusive representation of EXPRESS entity inheritance. Every EXPRESS entity produces both an interface and a mutable class implementation.
 
 - Each generated entity interface extends exactly its EXPRESS supertype interfaces.

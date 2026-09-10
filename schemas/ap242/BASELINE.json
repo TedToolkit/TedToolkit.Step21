@@ -10,7 +10,7 @@
   "sourceCanonicalLfSha256": "221222ED7F92873D8A1BBDDAE569ED72C87730E09F56226A92E3F108FC9EB7A0",
   "edition": "ISO TC184/SC4/WG12 N11521; ISO/TS 10303-442 AP242 MIM long form",
   "closedSchemas": ["AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"],
-  "descriptor": "TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
+  "descriptor": "TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
   "runtimeRange": "[1.0.0,2.0.0)",
   "publicApiSnapshot": "PublicApi.approved.sha256",
   "sourceLicense": "BSD-3-Clause",

@@ -102,7 +102,7 @@ internal sealed class SelectMemberTests
 
         var generated = GeneratorHostTests.Run("""
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.Intervals;
+            using TedToolkit.Step21.Schemas.Intervals;
             internal static class IntervalConsumer
             {
                 internal static ValidationResult Validate(int alternative)
@@ -112,7 +112,7 @@ internal sealed class SelectMemberTests
                             new FileDescription(["intervals"], "3;1"),
                             new FileName("intervals.step", "2026-09-04T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["intervals"])),
-                        [TedToolkit.Step21.Generated.Intervals.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.Intervals.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("intervals"));
                     structure.DataSections.Add(section);
                     Interval interval;

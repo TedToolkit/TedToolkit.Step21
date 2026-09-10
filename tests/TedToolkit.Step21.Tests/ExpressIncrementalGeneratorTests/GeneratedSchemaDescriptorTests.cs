@@ -108,7 +108,7 @@ public sealed class GeneratedSchemaDescriptorTests
     {
         var result = GeneratorHostTests.Run(("schemas/simple.exp", SIMPLE_SCHEMA));
         var descriptorType = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.SimpleMapping.SchemaDescriptor")
+            "TedToolkit.Step21.Schemas.SimpleMapping.SchemaDescriptor")
             ?? throw new InvalidOperationException(string.Join(
                 Environment.NewLine,
                 result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())));
@@ -132,7 +132,7 @@ public sealed class GeneratedSchemaDescriptorTests
 
         var assembly = Emit(result.OutputCompilation);
         var runtimeType = assembly.GetType(
-            "TedToolkit.Step21.Generated.SimpleMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SimpleMapping.SchemaDescriptor",
             throwOnError: true)!;
         var first = (SchemaDescriptor)runtimeType.GetProperty("Instance")!.GetValue(null)!;
         var second = (SchemaDescriptor)runtimeType.GetProperty("Instance")!.GetValue(null)!;
@@ -143,7 +143,7 @@ public sealed class GeneratedSchemaDescriptorTests
             await Assert.That(second).IsSameReferenceAs(first);
             await Assert.That(first.Name).IsEqualTo(new SchemaName("simple_mapping"));
             await Assert.That(allocated?.GetType().FullName)
-                .IsEqualTo("TedToolkit.Step21.Generated.SimpleMapping.Item");
+                .IsEqualTo("TedToolkit.Step21.Schemas.SimpleMapping.Item");
             await Assert.That(first.AllocateEntity(["UNKNOWN"])).IsNull();
             await Assert.That(first.AllocateEntity(["ITEM", "ITEM"])).IsNull();
         }
@@ -158,7 +158,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/simple.exp", SIMPLE_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptorType = assembly.GetType(
-            "TedToolkit.Step21.Generated.SimpleMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SimpleMapping.SchemaDescriptor",
             throwOnError: true)!;
         var descriptor = (SchemaDescriptor)descriptorType.GetProperty("Instance")!.GetValue(null)!;
         var entity = descriptor.AllocateEntity(["ITEM"])
@@ -191,7 +191,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/scalars.exp", SCALAR_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.ScalarMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.ScalarMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var entity = descriptor.AllocateEntity(["SCALAR_VALUES"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate SCALAR_VALUES.");
@@ -236,7 +236,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/nominal.exp", NOMINAL_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.NominalMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.NominalMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var entity = descriptor.AllocateEntity(["NOMINAL_VALUES"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate NOMINAL_VALUES.");
@@ -277,7 +277,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/references.exp", REFERENCE_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.ReferenceMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.ReferenceMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var target = descriptor.AllocateEntity(["TARGET"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate TARGET.");
@@ -318,7 +318,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/select.exp", SELECT_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.SelectMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SelectMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var target = descriptor.AllocateEntity(["TARGET"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate TARGET.");
@@ -355,13 +355,13 @@ public sealed class GeneratedSchemaDescriptorTests
     {
         var result = GeneratorHostTests.Run(("schemas/aggregates.exp", AGGREGATE_SCHEMA));
         _ = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.AggregateMapping.SchemaDescriptor")
+            "TedToolkit.Step21.Schemas.AggregateMapping.SchemaDescriptor")
             ?? throw new InvalidOperationException(string.Join(
                 Environment.NewLine,
                 result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.AggregateMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.AggregateMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var target = descriptor.AllocateEntity(["TARGET"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate TARGET.");
@@ -417,7 +417,7 @@ public sealed class GeneratedSchemaDescriptorTests
         var result = GeneratorHostTests.Run(("schemas/simple.exp", SIMPLE_SCHEMA));
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.SimpleMapping.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SimpleMapping.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var entity = descriptor.AllocateEntity(["ITEM"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate ITEM.");
@@ -452,7 +452,7 @@ public sealed class GeneratedSchemaDescriptorTests
             source.HintName == "ExpressSchema_GROUPED_HYDRATION.g.cs").SourceText.ToString();
         var assembly = Emit(result.OutputCompilation);
         var descriptor = (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.GroupedHydration.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.GroupedHydration.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
         var entity = descriptor.AllocateEntity(["ITEM_32"])
             ?? throw new InvalidOperationException("The generated descriptor did not allocate ITEM_32.");

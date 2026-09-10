@@ -116,7 +116,7 @@ public sealed class SchemaValueTests
         #nullable enable
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ValueModel;
+        using TedToolkit.Step21.Schemas.ValueModel;
         internal static class ValueConsumer
         {
             internal static bool Exercise()
@@ -186,7 +186,7 @@ public sealed class SchemaValueTests
     {
         var result = GeneratorHostTests.Run(VALUE_CONSUMER, ("schemas/values.exp", VALUE_SCHEMA));
         const string invalidClosedEnumerationConsumer = """
-            using TedToolkit.Step21.Generated.ValueModel;
+            using TedToolkit.Step21.Schemas.ValueModel;
             internal sealed class InvalidConsumer
             {
                 internal static Colour Create() => new Colour("RED");
@@ -195,11 +195,11 @@ public sealed class SchemaValueTests
         var invalidClosedEnumeration = GeneratorHostTests.Run(
             invalidClosedEnumerationConsumer,
             ("schemas/values.exp", VALUE_SCHEMA));
-        var positiveCount = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.PositiveCount");
-        var colour = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.Colour");
-        var openColour = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.OpenColour");
-        var choice = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.Choice");
-        var choiceKind = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.ChoiceKind");
+        var positiveCount = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.PositiveCount");
+        var colour = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.Colour");
+        var openColour = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.OpenColour");
+        var choice = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.Choice");
+        var choiceKind = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.ChoiceKind");
 
         using (Assert.Multiple())
         {
@@ -260,7 +260,7 @@ public sealed class SchemaValueTests
     public async Task Should_connect_all_non_aggregate_values_to_generated_entities()
     {
         var result = GeneratorHostTests.Run(("schemas/values.exp", VALUE_SCHEMA));
-        var holder = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.ValueModel.Holder");
+        var holder = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.ValueModel.Holder");
         var constructor = holder.Constructors.Single(constructor => constructor.DeclaredAccessibility == Accessibility.Public);
 
         using (Assert.Multiple())
@@ -309,22 +309,22 @@ public sealed class SchemaValueTests
         var result = GeneratorHostTests.Run(("schemas/extended-values.exp", EXTENDED_VALUE_SCHEMA));
         var nestedAlias = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.NestedAlias");
+            "TedToolkit.Step21.Schemas.ExtendedValues.NestedAlias");
         var extendedState = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.ExtendedState");
+            "TedToolkit.Step21.Schemas.ExtendedValues.ExtendedState");
         var baseState = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.BaseState");
+            "TedToolkit.Step21.Schemas.ExtendedValues.BaseState");
         var baseChoice = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.BaseChoice");
+            "TedToolkit.Step21.Schemas.ExtendedValues.BaseChoice");
         var baseChoiceKind = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.BaseChoiceKind");
+            "TedToolkit.Step21.Schemas.ExtendedValues.BaseChoiceKind");
         var extendedChoiceKind = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.ExtendedValues.ExtendedChoiceKind");
+            "TedToolkit.Step21.Schemas.ExtendedValues.ExtendedChoiceKind");
 
         using (Assert.Multiple())
         {
@@ -359,7 +359,7 @@ public sealed class SchemaValueTests
             ("schemas/foundation.exp", FOUNDATION_SCHEMA),
             ("schemas/consumer.exp", VALUE_CONSUMER_SCHEMA));
         var holder = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ValueConsumer.Holder")
+            "TedToolkit.Step21.Schemas.ValueConsumer.Holder")
             ?? throw new InvalidOperationException(string.Join(
                 Environment.NewLine,
                 result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())));
@@ -370,9 +370,9 @@ public sealed class SchemaValueTests
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
                 .IsEmpty();
             await Assert.That(RequiredProperty(holder, "MeasuredValue").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.Generated.ValueFoundation.LengthValue");
+                .IsEqualTo("TedToolkit.Step21.Schemas.ValueFoundation.LengthValue");
             await Assert.That(RequiredProperty(holder, "TargetRef").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.Generated.ValueFoundation.ITarget");
+                .IsEqualTo("TedToolkit.Step21.Schemas.ValueFoundation.ITarget");
         }
     }
 
@@ -403,7 +403,7 @@ public sealed class SchemaValueTests
             ("schemas/deferred-select-extension.exp", DEFERRED_SELECT_EXTENSION_SCHEMA));
         var baseChoice = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.DeferredSelectExtension.BaseChoice");
+            "TedToolkit.Step21.Schemas.DeferredSelectExtension.BaseChoice");
 
         using (Assert.Multiple())
         {
@@ -413,7 +413,7 @@ public sealed class SchemaValueTests
             await Assert.That(baseChoice.GetMembers().OfType<IMethodSymbol>().Select(method => method.Name))
                 .Contains("FromIntegerList");
             await Assert.That(result.OutputCompilation.GetTypeByMetadataName(
-                "TedToolkit.Step21.Generated.DeferredSelectExtension.ExtendedChoice")).IsNotNull();
+                "TedToolkit.Step21.Schemas.DeferredSelectExtension.ExtendedChoice")).IsNotNull();
         }
     }
 

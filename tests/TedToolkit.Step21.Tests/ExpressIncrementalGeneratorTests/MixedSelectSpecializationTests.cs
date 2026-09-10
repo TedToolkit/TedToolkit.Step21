@@ -19,7 +19,7 @@ internal sealed class MixedSelectSpecializationTests
     public async Task Should_project_entity_redeclarations_into_mixed_select_domains()
     {
         var result = GeneratorHostTests.Run("""
-            using TedToolkit.Step21.Generated.MixedSpecialization;
+            using TedToolkit.Step21.Schemas.MixedSpecialization;
             internal static class MixedConsumer
             {
                 internal static bool Check()

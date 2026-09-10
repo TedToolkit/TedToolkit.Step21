@@ -18,14 +18,14 @@ Add each `.exp` file to the consumer project as an MSBuild additional file:
 
 The generator consumes all supplied schemas as one closed set. Invalid EXPRESS syntax, binding, unsupported validation-reachable execution, or generated C# name collisions produce source-located build diagnostics and withhold the affected generated schema atomically.
 
-For an EXPRESS schema named `catalog`, generated types are placed in `TedToolkit.Step21.Generated.Catalog`, with its descriptor available as `SchemaDescriptor.Instance`.
+For an EXPRESS schema named `catalog`, generated types are placed in `TedToolkit.Step21.Schemas.Catalog`, with its descriptor available as `SchemaDescriptor.Instance`.
 
 ## Read, navigate, edit, validate, and write
 
 ```csharp
 using TedToolkit.Step21;
-using TedToolkit.Step21.Generated.Catalog;
-using CatalogSchemaDescriptor = TedToolkit.Step21.Generated.Catalog.SchemaDescriptor;
+using TedToolkit.Step21.Schemas.Catalog;
+using CatalogSchemaDescriptor = TedToolkit.Step21.Schemas.Catalog.SchemaDescriptor;
 
 using var input = File.OpenText("catalog.p21");
 var structure = ExchangeStructure.Read(

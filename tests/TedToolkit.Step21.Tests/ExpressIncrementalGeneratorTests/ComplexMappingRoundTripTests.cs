@@ -204,9 +204,9 @@ public sealed class ComplexMappingRoundTripTests
         {
             await Assert.That(entity.GetType().Name).IsEqualTo("__Complex_Left_Marker");
             await Assert.That(entity.GetType().GetInterface(
-                "TedToolkit.Step21.Generated.NestedAndor.ILeft")).IsNotNull();
+                "TedToolkit.Step21.Schemas.NestedAndor.ILeft")).IsNotNull();
             await Assert.That(entity.GetType().GetInterface(
-                "TedToolkit.Step21.Generated.NestedAndor.IMarker")).IsNotNull();
+                "TedToolkit.Step21.Schemas.NestedAndor.IMarker")).IsNotNull();
         }
     }
 
@@ -269,9 +269,9 @@ public sealed class ComplexMappingRoundTripTests
             await Assert.That(complex.GetType().Name).IsEqualTo("__Complex_Left_Right");
             await Assert.That(complex.GetType().IsPublic).IsFalse();
             await Assert.That(complex.GetType().GetInterface(
-                "TedToolkit.Step21.Generated.ComplexMapping.ILeft")).IsNotNull();
+                "TedToolkit.Step21.Schemas.ComplexMapping.ILeft")).IsNotNull();
             await Assert.That(complex.GetType().GetInterface(
-                "TedToolkit.Step21.Generated.ComplexMapping.IRight")).IsNotNull();
+                "TedToolkit.Step21.Schemas.ComplexMapping.IRight")).IsNotNull();
             await Assert.That(complex.GetType().GetProperty("DisplayLabel")!.GetValue(complex)).IsEqualTo("renamed");
             await Assert.That(complex.GetType().GetProperty("Label")!.GetValue(complex)).IsEqualTo("renamed");
             await Assert.That(complex.GetType().GetProperty("Peer")!.GetValue(complex)).IsSameReferenceAs(target);
@@ -549,19 +549,19 @@ public sealed class ComplexMappingRoundTripTests
             "ComplexNarrowedRedeclaration");
         var assembly = descriptor.GetType().Assembly;
         var specialized = Activator.CreateInstance(assembly.GetType(
-            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.Specialized",
+            "TedToolkit.Step21.Schemas.ComplexNarrowedRedeclaration.Specialized",
             throwOnError: true)!)!;
         var complexType = assembly.GetType(
-            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.__Complex_Left_Right",
+            "TedToolkit.Step21.Schemas.ComplexNarrowedRedeclaration.__Complex_Left_Right",
             throwOnError: true)!;
         var complex = Activator.CreateInstance(complexType, nonPublic: true)!;
         var choiceType = assembly.GetType(
-            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.SpecializedChoice",
+            "TedToolkit.Step21.Schemas.ComplexNarrowedRedeclaration.SpecializedChoice",
             throwOnError: true)!;
         var choice = choiceType.GetMethod("FromSpecialized")!.Invoke(null, [specialized]);
         complexType.GetProperty("Link")!.SetValue(complex, choice);
         var rootInterface = complexType.GetInterface(
-            "TedToolkit.Step21.Generated.ComplexNarrowedRedeclaration.IRoot")!;
+            "TedToolkit.Step21.Schemas.ComplexNarrowedRedeclaration.IRoot")!;
 
         using (Assert.Multiple())
         {
@@ -715,7 +715,7 @@ public sealed class ComplexMappingRoundTripTests
             throw new InvalidOperationException(string.Join(Environment.NewLine, emit.Diagnostics));
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            $"TedToolkit.Step21.Generated.{generatedSchemaName}.SchemaDescriptor",
+            $"TedToolkit.Step21.Schemas.{generatedSchemaName}.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 }

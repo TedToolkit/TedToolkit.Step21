@@ -7,8 +7,8 @@
 
 using TedToolkit.Step21;
 
-using Ap203 = TedToolkit.Step21.Generated.ConfigControlDesign;
-using Ap242 = TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf;
+using Ap203 = TedToolkit.Step21.Schemas.ConfigControlDesign;
+using Ap242 = TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf;
 
 namespace TedToolkit.Step21.PackedConsumer;
 

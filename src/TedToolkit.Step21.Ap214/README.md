@@ -14,8 +14,8 @@ Pass the generated descriptor explicitly to the schema-neutral Step21 runtime:
 
 ```csharp
 using TedToolkit.Step21;
-using TedToolkit.Step21.Generated.AutomotiveDesign;
-using Ap214SchemaDescriptor = TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor;
+using TedToolkit.Step21.Schemas.AutomotiveDesign;
+using Ap214SchemaDescriptor = TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor;
 
 using var input = File.OpenText("model.stp");
 var structure = ExchangeStructure.Read(input, [Ap214SchemaDescriptor.Instance]);
@@ -35,7 +35,7 @@ Distinct custom EXPRESS schemas remain supported through the Analyzer workflow.
 
 - Package version: `1.0.0`.
 - EXPRESS nominal name: `AUTOMOTIVE_DESIGN`.
-- Generated descriptor: `TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor.Instance`.
+- Generated descriptor: `TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor.Instance`.
 - Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,
   `data/ap214e3/AP214E3_2010.exp`, identified as ISO/DIS 10303-214:2007 Edition 3.
 - Canonical-LF SHA-256:

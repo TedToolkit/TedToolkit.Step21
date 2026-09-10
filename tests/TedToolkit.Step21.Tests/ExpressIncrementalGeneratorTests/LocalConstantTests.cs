@@ -52,7 +52,7 @@ internal sealed class LocalConstantTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.LocalConstants;
+            using TedToolkit.Step21.Schemas.LocalConstants;
             internal static class ConstantConsumer
             {
                 internal static bool Check(string value, bool expected)
@@ -61,7 +61,7 @@ internal sealed class LocalConstantTests
                         "FILE_NAME('constants','2026-09-05T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('local_constants'));ENDSEC;DATA;#1=SAMPLE('" + value +
                         "');ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.LocalConstants.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.LocalConstants.SchemaDescriptor.Instance;
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);

@@ -197,7 +197,7 @@ public sealed class SameSchemaDataSectionReadTests
 
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.SectionRead.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.SectionRead.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 }

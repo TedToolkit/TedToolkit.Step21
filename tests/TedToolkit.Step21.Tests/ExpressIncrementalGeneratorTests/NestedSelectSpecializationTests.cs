@@ -53,7 +53,7 @@ internal sealed class NestedSelectSpecializationTests
             using System.IO;
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.NestedSpecialization;
+            using TedToolkit.Step21.Schemas.NestedSpecialization;
             internal static class NestedConsumer
             {
                 internal static bool Check()
@@ -66,7 +66,7 @@ internal sealed class NestedSelectSpecializationTests
                         "FILE_NAME('nested','2026-09-04T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('nested_specialization'));ENDSEC;DATA;" +
                         "#1=LEAF();#2=CHILD(#1);ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.NestedSpecialization.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.NestedSpecialization.SchemaDescriptor.Instance;
                     var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);
                     var output = new StringWriter();
                     structure.Write(output);

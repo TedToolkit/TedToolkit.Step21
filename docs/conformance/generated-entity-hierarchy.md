@@ -1,6 +1,6 @@
 # Generated EXPRESS entity hierarchy
 
-Each valid EXPRESS entity produces a public `I<EntityPascalCase>` interface and public `<EntityPascalCase>` class in `TedToolkit.Step21.Generated.<SchemaPascalCase>`. Generated interfaces inherit every direct EXPRESS supertype interface. Generated classes derive directly from `TedToolkit.Step21.Entity`, implement only their own entity interface, and never select a generated class as a primary base.
+Each valid EXPRESS entity produces a public `I<EntityPascalCase>` interface and public `<EntityPascalCase>` class in `TedToolkit.Step21.Schemas.<SchemaPascalCase>`. Generated interfaces inherit every direct EXPRESS supertype interface. Generated classes derive directly from `TedToolkit.Step21.Entity`, implement only their own entity interface, and never select a generated class as a primary base.
 
 Concrete entity classes are sealed; abstract EXPRESS entities produce abstract classes. The classes retain ordinary CLR reference identity. Their bounded `ToString()` result is `<source-schema-name>.<source-entity-name>` and does not traverse relationships or claim ISO 10303-21 serialization.
 

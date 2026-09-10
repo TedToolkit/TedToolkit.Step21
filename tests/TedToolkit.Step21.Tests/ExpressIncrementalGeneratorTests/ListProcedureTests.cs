@@ -34,7 +34,7 @@ internal sealed class ListProcedureTests
                         "FILE_NAME('lists','2026-09-05T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('list_procedures'));ENDSEC;DATA;#1=SAMPLE(" + seed +
                         ");ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.ListProcedures.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.ListProcedures.SchemaDescriptor.Instance;
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);
@@ -172,7 +172,7 @@ internal sealed class ListProcedureTests
                         "FILE_NAME('qualified','2026-09-05T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('qualified_parameter'));ENDSEC;DATA;#1=CHILD_ITEM(1,(2));" +
                         "ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.QualifiedParameter.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.QualifiedParameter.SchemaDescriptor.Instance;
                     var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);
                     return structure.Validate().IsValid;
                 }
@@ -222,7 +222,7 @@ internal sealed class ListProcedureTests
                         "FILE_NAME('procedure','2026-09-05T00:00:00',('A'),('O'),'P','S','');" +
                         "FILE_SCHEMA(('nested_procedure'));ENDSEC;DATA;#1=SAMPLE(2);" +
                         "ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.NestedProcedure.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.NestedProcedure.SchemaDescriptor.Instance;
                     return ExchangeStructure.Read(new StringReader(input), [descriptor]).Validate().IsValid;
                 }
             }

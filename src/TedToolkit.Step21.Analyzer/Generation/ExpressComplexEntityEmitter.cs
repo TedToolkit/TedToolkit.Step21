@@ -89,7 +89,7 @@ internal static class ExpressComplexEntityEmitter
         constructor.Accessibility = TedToolkit.RoslynHelper.Accessibility.INTERNAL;
         type.AddMember(constructor);
         type.AddMember(CreateDirectReferencesProperty(projection, resolver));
-        var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
+        var generatedNamespace = $"TedToolkit.Step21.Schemas.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
         SourceComposer.File()
             .AddNameSpace(SourceComposer.NameSpace(generatedNamespace).AddMember(type))
             .Generate(in context, $"ExpressComplex_{projection.Schema.Name.ToUpperInvariant()}_{projection.Name}");

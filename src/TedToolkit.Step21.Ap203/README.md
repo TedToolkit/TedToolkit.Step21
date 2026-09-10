@@ -14,8 +14,8 @@ Pass the generated descriptor explicitly to the schema-neutral Step21 runtime:
 
 ```csharp
 using TedToolkit.Step21;
-using TedToolkit.Step21.Generated.ConfigControlDesign;
-using Ap203SchemaDescriptor = TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor;
+using TedToolkit.Step21.Schemas.ConfigControlDesign;
+using Ap203SchemaDescriptor = TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor;
 
 using var input = File.OpenText("model.stp");
 var structure = ExchangeStructure.Read(input, [Ap203SchemaDescriptor.Instance]);
@@ -34,7 +34,7 @@ the assembly; supplying the same schema again would generate duplicate public ty
 
 - Package version: `1.0.0`.
 - EXPRESS nominal name: `config_control_design`.
-- Generated descriptor: `TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor.Instance`.
+- Generated descriptor: `TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor.Instance`.
 - Baseline: STEPcode commit `9baa5dadaa1dcfcdc623220d865d36d61ea351e9`,
   `data/ap203/ap203.exp`, described upstream as the AP203 Amendment 1 AIM long form with
   non-semantic modifications.

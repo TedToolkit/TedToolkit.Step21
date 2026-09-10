@@ -4747,7 +4747,7 @@ internal static class ExpressReachableRuleEmitter
                     groupAttribute.Type);
             }).ToArray();
             targets.Add((
-                "global::TedToolkit.Step21.Generated."
+                "global::TedToolkit.Step21.Schemas."
                     + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                     + "."
                     + projection.Name,
@@ -4773,7 +4773,7 @@ internal static class ExpressReachableRuleEmitter
                     groupAttribute.Type);
             }).ToArray();
             targets.Add((
-                "global::TedToolkit.Step21.Generated."
+                "global::TedToolkit.Step21.Schemas."
                     + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                     + "."
                     + projection.Name,
@@ -4921,7 +4921,7 @@ internal static class ExpressReachableRuleEmitter
                 component.Symbol,
                 assignedEntityType.Declaration)))
             .Select(projection => (
-                Type: "global::TedToolkit.Step21.Generated."
+                Type: "global::TedToolkit.Step21.Schemas."
                     + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                     + "."
                     + projection.Name,
@@ -4933,7 +4933,7 @@ internal static class ExpressReachableRuleEmitter
                     component.Entity.Symbol,
                     assignedEntityType.Declaration)))
                 .Select(projection => (
-                    Type: "global::TedToolkit.Step21.Generated."
+                    Type: "global::TedToolkit.Step21.Schemas."
                         + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                         + "."
                         + projection.Name,
@@ -7086,7 +7086,7 @@ internal static class ExpressReachableRuleEmitter
                         component.Symbol,
                         declaredEntity.Declaration)))
                 .Select(projection => (
-                    Type: "global::TedToolkit.Step21.Generated."
+                    Type: "global::TedToolkit.Step21.Schemas."
                         + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                         + "."
                         + projection.Name,
@@ -7101,7 +7101,7 @@ internal static class ExpressReachableRuleEmitter
                             component.Entity.Symbol,
                             declaredEntity.Declaration)))
                     .Select(projection => (
-                        Type: "global::TedToolkit.Step21.Generated."
+                        Type: "global::TedToolkit.Step21.Schemas."
                             + ExpressEntityProjection.ToPascalCase(projection.Schema.Identity.Name)
                             + "."
                             + projection.Name,
@@ -12692,7 +12692,7 @@ internal static class ExpressReachableRuleEmitter
             var cases = orderedCandidates.Select((candidate, index) =>
             {
                 var owner = plan.GetAttributeOwner(candidate);
-                var ownerType = "global::TedToolkit.Step21.Generated."
+                var ownerType = "global::TedToolkit.Step21.Schemas."
                     + ExpressEntityProjection.ToPascalCase(owner.Symbol.DeclaringSchema.Name)
                     + ".I"
                     + ExpressEntityProjection.ToPascalCase(owner.Name);
@@ -12856,7 +12856,7 @@ internal static class ExpressReachableRuleEmitter
     {
         var property = ExpressEntityProjection.ToPascalCase(attribute.Name);
         var owner = plan.GetAttributeOwner(attribute);
-        var ownerType = "global::TedToolkit.Step21.Generated."
+        var ownerType = "global::TedToolkit.Step21.Schemas."
             + ExpressEntityProjection.ToPascalCase(owner.Symbol.DeclaringSchema.Name)
             + ".I"
             + ExpressEntityProjection.ToPascalCase(owner.Name);
@@ -12873,7 +12873,7 @@ internal static class ExpressReachableRuleEmitter
 
         var cases = derivedOverrides.Select((item, index) =>
         {
-            var ownerType = "global::TedToolkit.Step21.Generated."
+            var ownerType = "global::TedToolkit.Step21.Schemas."
                 + ExpressEntityProjection.ToPascalCase(item.Owner.Symbol.DeclaringSchema.Name)
                 + ".I"
                 + ExpressEntityProjection.ToPascalCase(item.Owner.Name);

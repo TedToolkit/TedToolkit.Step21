@@ -27,7 +27,7 @@ internal static class ExpressValueEmitter
     /// <param name="projection">The supported value projection.</param>
     internal static void Emit(in SourceProductionContext context, ExpressValueProjection projection)
     {
-        var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
+        var generatedNamespace = $"TedToolkit.Step21.Schemas.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
         var generatedMembers = projection.Declaration.UnderlyingType switch
         {
             ExpressBoundEnumerationType enumeration => CreateEnumeration(projection, enumeration),

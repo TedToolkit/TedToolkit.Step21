@@ -50,7 +50,7 @@ public sealed class StructuralValidationTests
         #nullable enable
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ValidationModel;
+        using TedToolkit.Step21.Schemas.ValidationModel;
 
         internal sealed class ForeignTarget : ITarget
         {
@@ -116,7 +116,7 @@ public sealed class StructuralValidationTests
 
                 var structure = new ExchangeStructure(
                     TestHeader(),
-                    [TedToolkit.Step21.Generated.ValidationModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ValidationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("validation_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, holder);
@@ -157,7 +157,7 @@ public sealed class StructuralValidationTests
                     TargetChoice.FromTarget(target));
                 var structure = new ExchangeStructure(
                     TestHeader(),
-                    [TedToolkit.Step21.Generated.ValidationModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ValidationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("validation_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, holder);
@@ -168,7 +168,7 @@ public sealed class StructuralValidationTests
             {
                 var structure = new ExchangeStructure(
                     TestHeader(),
-                    [TedToolkit.Step21.Generated.ValidationModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ValidationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("validation_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new ForeignEntity());
@@ -294,14 +294,14 @@ public sealed class StructuralValidationTests
         var second = GeneratorHostTests.Run(
             VALIDATION_CONSUMER,
             ("D:/agent-b/schemas/validation.exp", VALIDATION_SCHEMA));
-        var holder = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Generated.ValidationModel.Holder");
-        var target = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Generated.ValidationModel.Target");
+        var holder = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Schemas.ValidationModel.Holder");
+        var target = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Schemas.ValidationModel.Target");
         var descriptor = RequiredType(
             first.OutputCompilation,
-            "TedToolkit.Step21.Generated.ValidationModel.SchemaDescriptor");
-        var labelType = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Generated.ValidationModel.LabelType");
-        var state = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Generated.ValidationModel.State");
-        var choice = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Generated.ValidationModel.TargetChoice");
+            "TedToolkit.Step21.Schemas.ValidationModel.SchemaDescriptor");
+        var labelType = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Schemas.ValidationModel.LabelType");
+        var state = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Schemas.ValidationModel.State");
+        var choice = RequiredType(first.OutputCompilation, "TedToolkit.Step21.Schemas.ValidationModel.TargetChoice");
         var documentation = holder.GetMembers().OfType<IPropertySymbol>()
             .Concat(target.GetMembers().OfType<IPropertySymbol>())
             .Select(property => property.GetDocumentationCommentXml())
@@ -353,7 +353,7 @@ public sealed class StructuralValidationTests
             await Assert.That(combined).Contains("Validation boundary:");
             await Assert.That(XDocument.Parse(descriptor.GetDocumentationCommentXml()!)
                 .Descendants("see").Select(element => element.Attribute("cref")!.Value))
-                .IsEquivalentTo(new[] { "T:TedToolkit.Step21.Generated.ValidationModel.Target", "T:TedToolkit.Step21.Generated.ValidationModel.Holder", });
+                .IsEquivalentTo(new[] { "T:TedToolkit.Step21.Schemas.ValidationModel.Target", "T:TedToolkit.Step21.Schemas.ValidationModel.Holder", });
             await Assert.That(combined).Contains("VALIDATION_MODEL.HOLDER.REQUIRED_NAME.REQUIRED");
             await Assert.That(combined).Contains("VALIDATION_MODEL.HOLDER.VALUES.AGGREGATE_0.UPPER_BOUND");
             await Assert.That(combined).Contains("VALIDATION_MODEL.HOLDER.VALUES.AGGREGATE_0.UNIQUE");

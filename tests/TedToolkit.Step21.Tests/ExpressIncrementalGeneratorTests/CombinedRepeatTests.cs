@@ -190,7 +190,7 @@ internal sealed class CombinedRepeatTests
                         "FILE_SCHEMA(('combined_repeat'));ENDSEC;DATA;#1=SAMPLE(" +
                         (arguments.Length == 0 ? "" : arguments + ",") + expected +
                         ");ENDSEC;END-ISO-10303-21;";
-                    var descriptor = TedToolkit.Step21.Generated.CombinedRepeat.SchemaDescriptor.Instance;
+                    var descriptor = TedToolkit.Step21.Schemas.CombinedRepeat.SchemaDescriptor.Instance;
                     try
                     {
                         var structure = ExchangeStructure.Read(new StringReader(input), [descriptor]);

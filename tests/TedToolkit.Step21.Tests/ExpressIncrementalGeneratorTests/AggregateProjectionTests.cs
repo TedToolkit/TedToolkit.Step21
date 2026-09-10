@@ -46,7 +46,7 @@ public sealed class AggregateProjectionTests
         using System.Linq;
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AggregateModel;
+        using TedToolkit.Step21.Schemas.AggregateModel;
         internal static class AggregateConsumer
         {
             internal static bool Exercise()
@@ -145,15 +145,15 @@ public sealed class AggregateProjectionTests
             AGGREGATE_CONSUMER,
             ("schemas/aggregate-model.exp", AGGREGATE_SCHEMA));
         var integerList = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.AggregateModel.IntegerList")
+            "TedToolkit.Step21.Schemas.AggregateModel.IntegerList")
             ?? throw new InvalidOperationException(string.Join(
                 Environment.NewLine,
                 result.Diagnostics.Concat(result.OutputCompilation.GetDiagnostics())));
-        var nestedBag = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.AggregateModel.NestedBag");
-        var itemSet = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.AggregateModel.ItemSet");
-        var choiceList = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.AggregateModel.ChoiceList");
-        var matrix = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.AggregateModel.Matrix");
-        var holder = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.AggregateModel.Holder");
+        var nestedBag = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.AggregateModel.NestedBag");
+        var itemSet = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.AggregateModel.ItemSet");
+        var choiceList = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.AggregateModel.ChoiceList");
+        var matrix = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.AggregateModel.Matrix");
+        var holder = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.AggregateModel.Holder");
 
         using (Assert.Multiple())
         {
@@ -165,13 +165,13 @@ public sealed class AggregateProjectionTests
             await Assert.That(RequiredProperty(integerList, "Value").Type.ToDisplayString())
                 .IsEqualTo("TedToolkit.Step21.ExpressList<System.Numerics.BigInteger>");
             await Assert.That(RequiredProperty(nestedBag, "Value").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressBag<TedToolkit.Step21.Generated.AggregateModel.IntegerList>");
+                .IsEqualTo("TedToolkit.Step21.ExpressBag<TedToolkit.Step21.Schemas.AggregateModel.IntegerList>");
             await Assert.That(RequiredProperty(itemSet, "Value").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Generated.AggregateModel.IItem>");
+                .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Schemas.AggregateModel.IItem>");
             await Assert.That(RequiredProperty(choiceList, "Value").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressList<TedToolkit.Step21.Generated.AggregateModel.Choice>");
+                .IsEqualTo("TedToolkit.Step21.ExpressList<TedToolkit.Step21.Schemas.AggregateModel.Choice>");
             await Assert.That(RequiredProperty(matrix, "Value").Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressArray<TedToolkit.Step21.Generated.AggregateModel.IntegerList>");
+                .IsEqualTo("TedToolkit.Step21.ExpressArray<TedToolkit.Step21.Schemas.AggregateModel.IntegerList>");
             await Assert.That(RequiredProperty(holder, "DirectList").Type.ToDisplayString())
                 .IsEqualTo("TedToolkit.Step21.ExpressList<string>");
             await Assert.That(integerList.GetDocumentationCommentXml())
@@ -203,16 +203,16 @@ public sealed class AggregateProjectionTests
             ("schemas/boundary.exp", AGGREGATE_BOUNDARY_SCHEMA));
         var openList = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.AggregateBoundary.OpenList");
+            "TedToolkit.Step21.Schemas.AggregateBoundary.OpenList");
         var symbolicArray = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.AggregateBoundary.SymbolicArray");
+            "TedToolkit.Step21.Schemas.AggregateBoundary.SymbolicArray");
         var remoteItems = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.AggregateBoundary.RemoteItems");
+            "TedToolkit.Step21.Schemas.AggregateBoundary.RemoteItems");
         var holder = RequiredType(
             result.OutputCompilation,
-            "TedToolkit.Step21.Generated.AggregateBoundary.BoundaryHolder");
+            "TedToolkit.Step21.Schemas.AggregateBoundary.BoundaryHolder");
         var generatedText = string.Join(
             Environment.NewLine,
             result.GeneratedSources.Select(source => source.SourceText.ToString()));
@@ -233,7 +233,7 @@ public sealed class AggregateProjectionTests
                 .Contains("ARRAY [lower_index:upper_index] OF INTEGER");
             await Assert.That(RequiredProperty(remoteItems, "Value").Type.ToDisplayString())
                 .IsEqualTo(
-                    "TedToolkit.Step21.ExpressBag<TedToolkit.Step21.Generated.AggregateFoundation.IRemoteItem>");
+                    "TedToolkit.Step21.ExpressBag<TedToolkit.Step21.Schemas.AggregateFoundation.IRemoteItem>");
             await Assert.That(RequiredProperty(holder, "Nested").Type.ToDisplayString())
                 .IsEqualTo(
                     "TedToolkit.Step21.ExpressList<TedToolkit.Step21.ExpressSet<System.Numerics.BigInteger>>");
@@ -241,7 +241,7 @@ public sealed class AggregateProjectionTests
                 .Contains("LIST [0:?] OF SET [1:?] OF INTEGER");
             await Assert.That(RequiredProperty(holder, "Choices").Type.ToDisplayString())
                 .IsEqualTo(
-                    "TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Generated.AggregateFoundation.RemoteChoice>");
+                    "TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Schemas.AggregateFoundation.RemoteChoice>");
             await Assert.That(RequiredProperty(holder, "OptionalValues").Type.NullableAnnotation)
                 .IsEqualTo(NullableAnnotation.Annotated);
             await Assert.That(generatedText)

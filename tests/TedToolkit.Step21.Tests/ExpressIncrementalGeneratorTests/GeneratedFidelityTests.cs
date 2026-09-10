@@ -76,28 +76,28 @@ public sealed class GeneratedFidelityTests
         }
 
         var descriptor = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor")
             ?? throw new InvalidOperationException("The generated AP203 descriptor was not found.");
         var boundedPcurve = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.IBoundedPcurve")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.IBoundedPcurve")
             ?? throw new InvalidOperationException("The generated AP203 bounded_pcurve interface was not found.");
         var product = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.Product")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.Product")
             ?? throw new InvalidOperationException("The generated AP203 product entity was not found.");
         var productCategory = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.ProductCategory")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.ProductCategory")
             ?? throw new InvalidOperationException("The generated AP203 product_category entity was not found.");
         var reversibleList = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.ListOfReversibleTopologyItem")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.ListOfReversibleTopologyItem")
             ?? throw new InvalidOperationException("The generated AP203 reversible topology LIST was not found.");
         var reversibleSet = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.SetOfReversibleTopologyItem")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.SetOfReversibleTopologyItem")
             ?? throw new InvalidOperationException("The generated AP203 reversible topology SET was not found.");
         var aheadOrBehind = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.AheadOrBehind")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.AheadOrBehind")
             ?? throw new InvalidOperationException("The generated AP203 ahead_or_behind enumeration was not found.");
         var axis2PlacementKind = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.ConfigControlDesign.Axis2PlacementKind")
+            "TedToolkit.Step21.Schemas.ConfigControlDesign.Axis2PlacementKind")
             ?? throw new InvalidOperationException("The generated AP203 axis2_placement SELECT kind was not found.");
         var descriptorSource = result.GeneratedSources.Single(source =>
             source.HintName == "ExpressSchema_CONFIG_CONTROL_DESIGN.g.cs").SourceText.ToString();
@@ -113,7 +113,7 @@ public sealed class GeneratedFidelityTests
                     constructor.DeclaredAccessibility == Accessibility.Public).Parameters.Select(parameter => parameter.Name)
                 .SequenceEqual(["id", "name", "description", "frameOfReference"])).IsTrue();
             await Assert.That(product.GetMembers("FrameOfReference").OfType<IPropertySymbol>().Single().Type.ToDisplayString())
-                .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Generated.ConfigControlDesign.IProductContext>");
+                .IsEqualTo("TedToolkit.Step21.ExpressSet<TedToolkit.Step21.Schemas.ConfigControlDesign.IProductContext>");
             await Assert.That(productCategory.GetMembers("Description").OfType<IPropertySymbol>().Single().Type.NullableAnnotation)
                 .IsEqualTo(NullableAnnotation.Annotated);
             await Assert.That(reversibleList.GetMembers("Value").OfType<IPropertySymbol>().Single().Type.Name)

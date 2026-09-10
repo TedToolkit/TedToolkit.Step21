@@ -59,7 +59,7 @@ internal sealed class BaselineTests
     private static Compilation CompileApi(string members) => CSharpCompilation.Create(
         "ApiOracle",
         [CSharpSyntaxTree.ParseText(
-            "#nullable enable\nnamespace TedToolkit.Step21.Generated.AutomotiveDesign; public class Sample { "
+            "#nullable enable\nnamespace TedToolkit.Step21.Schemas.AutomotiveDesign; public class Sample { "
             + members + " }")],
         [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
 
@@ -123,7 +123,8 @@ internal sealed class BaselineTests
         var descriptorSource = result.GeneratedSources.Single(source =>
             source.HintName == "ExpressSchema_AUTOMOTIVE_DESIGN.g.cs").SourceText.ToString();
         var publicApi = RenderPublicApi(result.OutputCompilation);
-        var publicApiHash = ComputeTextHash(publicApi);
+        var publicApiHash = ComputeTextHash(
+            GeneratedPublicApi.NormalizeSchemaNamespaceForComparison(publicApi));
         var approvedPublicApiHash = File.ReadAllText(Path.Combine(directory, "PublicApi.approved.sha256")).Trim();
         var resultsDirectory = Path.Combine(AppContext.BaseDirectory, "TestResults");
         Directory.CreateDirectory(resultsDirectory);
@@ -177,7 +178,7 @@ internal sealed class BaselineTests
         "Ap214");
 
     private static INamedTypeSymbol RequiredType(Compilation compilation, string name) =>
-        compilation.GetTypeByMetadataName($"TedToolkit.Step21.Generated.AutomotiveDesign.{name}")
+        compilation.GetTypeByMetadataName($"TedToolkit.Step21.Schemas.AutomotiveDesign.{name}")
         ?? throw new InvalidOperationException($"The generated AP214 {name} type was not found.");
 
     private static string RenderPublicApi(Compilation compilation) =>

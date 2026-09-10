@@ -21,7 +21,7 @@ internal sealed class RecursiveValueTests
         var result = GeneratorHostTests.Run("""
             using System.Linq;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.RecursiveReferences;
+            using TedToolkit.Step21.Schemas.RecursiveReferences;
             internal static class RecursiveReferenceConsumer
             {
                 internal static bool FindsNestedTarget()
@@ -78,7 +78,7 @@ internal sealed class RecursiveValueTests
     {
         var result = GeneratorHostTests.Run("""
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.RecursiveValues;
+            using TedToolkit.Step21.Schemas.RecursiveValues;
             internal static class RecursiveConsumer
             {
                 internal static int NestedCount()

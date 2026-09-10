@@ -7,8 +7,8 @@
 
 using TedToolkit.Step21;
 
-using Ap203 = TedToolkit.Step21.Generated.ConfigControlDesign;
-using Ap214 = TedToolkit.Step21.Generated.AutomotiveDesign;
+using Ap203 = TedToolkit.Step21.Schemas.ConfigControlDesign;
+using Ap214 = TedToolkit.Step21.Schemas.AutomotiveDesign;
 
 namespace TedToolkit.Step21.PackedConsumer;
 

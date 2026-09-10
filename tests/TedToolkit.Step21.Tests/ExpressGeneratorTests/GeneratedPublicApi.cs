@@ -26,14 +26,17 @@ internal static class GeneratedPublicApi
             | SymbolDisplayParameterOptions.IncludeExtensionThis)
         .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    internal static string Render(Compilation compilation, string schemaNamespace)
+    internal static string Render(
+        Compilation compilation,
+        string schemaNamespace,
+        string namespaceRoot = "Schemas")
     {
         var result = new StringBuilder();
         var generatedNamespace = RequiredNamespace(
             compilation.GlobalNamespace,
             "TedToolkit",
             "Step21",
-            "Generated",
+            namespaceRoot,
             schemaNamespace);
         foreach (var type in EnumeratePublicTypes(generatedNamespace)
                      .OrderBy(type => type.ToDisplayString(), StringComparer.Ordinal))
@@ -91,6 +94,12 @@ internal static class GeneratedPublicApi
 
         return result.ToString();
     }
+
+    /// <summary>Normalizes the approved namespace migration while retaining every other public API spelling.</summary>
+    internal static string NormalizeSchemaNamespaceForComparison(string publicApi) => publicApi.Replace(
+        "TedToolkit.Step21.Schemas.",
+        "TedToolkit.Step21.Generated.",
+        StringComparison.Ordinal);
 
     private static INamespaceSymbol RequiredNamespace(INamespaceSymbol root, params string[] names)
     {

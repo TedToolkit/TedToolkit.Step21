@@ -7,9 +7,9 @@
 
 using System.Globalization;
 
-using TedToolkit.Step21.Generated.AutomotiveDesign;
+using TedToolkit.Step21.Schemas.AutomotiveDesign;
 
-using Ap214SchemaDescriptor = TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor;
+using Ap214SchemaDescriptor = TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor;
 
 namespace TedToolkit.Step21.PackedConsumer;
 

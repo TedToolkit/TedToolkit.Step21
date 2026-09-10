@@ -203,7 +203,7 @@ public sealed class ReferenceReadTests
 
         var assembly = System.Reflection.Assembly.Load(stream.ToArray());
         return (SchemaDescriptor)assembly.GetType(
-            "TedToolkit.Step21.Generated.ReferenceRead.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.ReferenceRead.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
     }
 }

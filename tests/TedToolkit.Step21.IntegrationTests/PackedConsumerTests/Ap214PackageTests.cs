@@ -72,7 +72,7 @@ internal sealed class Ap214PackageTests
             ["sourceFile"] = "AP214E3_2010.exp",
             ["sourceCanonicalLfSha256"] = "9516315F0A8CBB9A4F6598D92FCE36BEE5189A28D1ACEA1D87E2C411266211B7",
             ["edition"] = "ISO/DIS 10303-214:2007",
-            ["descriptor"] = "TedToolkit.Step21.Generated.AutomotiveDesign.SchemaDescriptor",
+            ["descriptor"] = "TedToolkit.Step21.Schemas.AutomotiveDesign.SchemaDescriptor",
             ["runtimeRange"] = "[1.0.0,2.0.0)",
             ["publicApiSnapshot"] = "PublicApi.approved.sha256",
             ["sourceLicense"] = "BSD-3-Clause",

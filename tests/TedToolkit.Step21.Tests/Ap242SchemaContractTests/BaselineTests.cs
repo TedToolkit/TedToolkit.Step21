@@ -42,7 +42,7 @@ internal sealed class BaselineTests
             ["sourceCanonicalLfSha256"] = "221222ED7F92873D8A1BBDDAE569ED72C87730E09F56226A92E3F108FC9EB7A0",
             ["edition"] = "ISO TC184/SC4/WG12 N11521; ISO/TS 10303-442 AP242 MIM long form",
             ["descriptor"] =
-                "TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
+                "TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor",
             ["runtimeRange"] = "[1.0.0,2.0.0)",
             ["publicApiSnapshot"] = "PublicApi.approved.sha256",
             ["sourceLicense"] = "BSD-3-Clause",
@@ -192,13 +192,13 @@ internal sealed class BaselineTests
                 .IsEqualTo(NullableAnnotation.Annotated);
             await Assert.That(point.GetMembers("Coordinates").OfType<IPropertySymbol>().Single().Type.Name)
                 .IsEqualTo("ExpressList");
-            await Assert.That(Hash(api)).IsEqualTo(
+            await Assert.That(Hash(GeneratedPublicApi.NormalizeSchemaNamespaceForComparison(api))).IsEqualTo(
                 File.ReadAllText(Path.Combine(directory, "PublicApi.approved.sha256")).Trim());
         }
     }
 
     private static INamedTypeSymbol RequiredType(Compilation compilation, string name) =>
-        compilation.GetTypeByMetadataName($"TedToolkit.Step21.Generated.{SchemaNamespace}.{name}")
+        compilation.GetTypeByMetadataName($"TedToolkit.Step21.Schemas.{SchemaNamespace}.{name}")
         ?? throw new InvalidOperationException($"The generated AP242 {name} type was not found.");
 
     private static string TestDataDirectory() => Path.Combine(AppContext.BaseDirectory, "TestData", "Express", "Ap242");

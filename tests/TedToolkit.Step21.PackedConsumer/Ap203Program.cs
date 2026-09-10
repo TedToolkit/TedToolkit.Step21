@@ -5,7 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Generated.ConfigControlDesign;
+using TedToolkit.Step21.Schemas.ConfigControlDesign;
 
 namespace TedToolkit.Step21.PackedConsumer;
 
@@ -13,7 +13,7 @@ internal static class Ap203Program
 {
     private static int Main()
     {
-        var descriptor = global::TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor.Instance;
+        var descriptor = global::TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor.Instance;
         var schemaAssembly = descriptor.GetType().Assembly;
 
         if (descriptor.Name.Value != "config_control_design"

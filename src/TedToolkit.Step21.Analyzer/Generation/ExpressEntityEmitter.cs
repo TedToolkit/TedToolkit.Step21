@@ -38,7 +38,7 @@ internal static class ExpressEntityEmitter
     {
         var entityInterface = CreateInterface(projection, valueResolver);
         var entityClass = CreateClass(projection, valueResolver);
-        var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
+        var generatedNamespace = $"TedToolkit.Step21.Schemas.{ExpressEntityProjection.ToPascalCase(projection.Schema.Name)}";
         var sourceFile = SourceComposer.File()
             .AddNameSpace(SourceComposer.NameSpace(generatedNamespace)
                 .AddMember(entityInterface)
@@ -376,7 +376,7 @@ internal static class ExpressEntityEmitter
         }
 
         var schemaName = ExpressEntityProjection.ToPascalCase(entity.DeclaringSchema.Name);
-        return new($"global::TedToolkit.Step21.Generated.{schemaName}.{interfaceName}");
+        return new($"global::TedToolkit.Step21.Schemas.{schemaName}.{interfaceName}");
     }
 
     private static void AddNullabilityAttributes(Property property, bool isOptional)

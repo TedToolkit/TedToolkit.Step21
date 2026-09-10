@@ -814,7 +814,7 @@ internal sealed class ExpressGeneratedTypeResolver
 
         return ReferenceEquals(currentSchema, symbol.DeclaringSchema)
             ? generatedName
-            : $"global::TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name)}.{generatedName}";
+            : $"global::TedToolkit.Step21.Schemas.{ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name)}.{generatedName}";
     }
 
     private bool TryGetClosedSelect(ExpressBoundType type, out ExpressBoundSelectType select)

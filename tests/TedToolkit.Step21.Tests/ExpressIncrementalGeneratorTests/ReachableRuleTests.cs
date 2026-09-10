@@ -26,7 +26,7 @@ public sealed class ReachableRuleTests
     private const string ENTITY_WHERE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.RuleModel;
+        using TedToolkit.Step21.Schemas.RuleModel;
 
         internal static class RuleConsumer
         {
@@ -37,7 +37,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["rule_model"])),
-                    [TedToolkit.Step21.Generated.RuleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.RuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("rule_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(amount));
@@ -69,7 +69,7 @@ public sealed class ReachableRuleTests
     private const string REACHABLE_DEPENDENCY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DependencyModel;
+        using TedToolkit.Step21.Schemas.DependencyModel;
 
         internal static class DependencyConsumer
         {
@@ -80,7 +80,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dependency_model"])),
-                    [TedToolkit.Step21.Generated.DependencyModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.DependencyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dependency_model"));
                 structure.DataSections.Add(section);
                 var values = new ExpressList<BigInteger>(0) { listed };
@@ -105,7 +105,7 @@ public sealed class ReachableRuleTests
     private const string TYPE_WHERE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.TypeRuleModel;
+        using TedToolkit.Step21.Schemas.TypeRuleModel;
 
         internal static class TypeRuleConsumer
         {
@@ -116,7 +116,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["type_rule_model"])),
-                    [TedToolkit.Step21.Generated.TypeRuleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.TypeRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("type_rule_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new PositiveInteger(amount)));
@@ -140,7 +140,7 @@ public sealed class ReachableRuleTests
     private const string UNIQUE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.UniqueRuleModel;
+        using TedToolkit.Step21.Schemas.UniqueRuleModel;
 
         internal static class UniqueRuleConsumer
         {
@@ -151,7 +151,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unique_rule_model"])),
-                    [TedToolkit.Step21.Generated.UniqueRuleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.UniqueRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unique_rule_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(first));
@@ -204,7 +204,7 @@ public sealed class ReachableRuleTests
     private const string GLOBAL_RULE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.GlobalRuleModel;
+        using TedToolkit.Step21.Schemas.GlobalRuleModel;
 
         internal static class GlobalRuleConsumer
         {
@@ -215,7 +215,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["global_rule_model"])),
-                    [TedToolkit.Step21.Generated.GlobalRuleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.GlobalRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("global_rule_model"));
                 structure.DataSections.Add(section);
                 if (add)
@@ -254,7 +254,7 @@ public sealed class ReachableRuleTests
 
     private const string UNQUALIFIED_ENUMERATION_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.UnqualifiedEnumerationModel;
+        using TedToolkit.Step21.Schemas.UnqualifiedEnumerationModel;
 
         internal static class UnqualifiedEnumerationConsumer
         {
@@ -265,7 +265,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unqualified_enumeration_model"])),
-                    [TedToolkit.Step21.Generated.UnqualifiedEnumerationModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.UnqualifiedEnumerationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unqualified_enumeration_model"));
                 structure.DataSections.Add(section);
                 var transition = discontinuous
@@ -307,7 +307,7 @@ public sealed class ReachableRuleTests
     private const string SCALAR_GENERIC_CHOOSE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ScalarGenericChooseModel;
+        using TedToolkit.Step21.Schemas.ScalarGenericChooseModel;
 
         internal static class ScalarGenericChooseConsumer
         {
@@ -318,7 +318,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["scalar_generic_choose_model"])),
-                    [TedToolkit.Step21.Generated.ScalarGenericChooseModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ScalarGenericChooseModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("scalar_generic_choose_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new Vertex(BigInteger.One)));
@@ -363,7 +363,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_MEMBERSHIP_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectMembershipModel;
+        using TedToolkit.Step21.Schemas.SelectMembershipModel;
 
         internal static class SelectMembershipConsumer
         {
@@ -374,7 +374,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_membership_model"])),
-                    [TedToolkit.Step21.Generated.SelectMembershipModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectMembershipModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_membership_model"));
                 structure.DataSections.Add(section);
                 var candidate = mode == 3 ? null : new Marker("same");
@@ -459,7 +459,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_TYPEOF_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectTypeofModel;
+        using TedToolkit.Step21.Schemas.SelectTypeofModel;
 
         internal static class SelectTypeofConsumer
         {
@@ -470,7 +470,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_typeof_model"])),
-                    [TedToolkit.Step21.Generated.SelectTypeofModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectTypeofModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_typeof_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new EntitySample(
@@ -555,7 +555,7 @@ public sealed class ReachableRuleTests
     private const string DIMENSIONAL_SELECT_CONSUMER = """"
         using System.IO;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DimensionalSelectModel;
+        using TedToolkit.Step21.Schemas.DimensionalSelectModel;
 
         internal static class DimensionalSelectConsumer
         {
@@ -579,7 +579,7 @@ public sealed class ReachableRuleTests
                     using var source = new StringReader(sourceText);
                     var structure = ExchangeStructure.Read(
                         source,
-                        [TedToolkit.Step21.Generated.DimensionalSelectModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.DimensionalSelectModel.SchemaDescriptor.Instance]);
                     return structure.Validate();
                 }
                 catch (ExchangeStructureReadValidationException exception)
@@ -623,7 +623,7 @@ public sealed class ReachableRuleTests
     private const string AGGREGATE_TYPEOF_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AggregateTypeofModel;
+        using TedToolkit.Step21.Schemas.AggregateTypeofModel;
 
         internal static class AggregateTypeofConsumer
         {
@@ -634,7 +634,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["aggregate_typeof_model"])),
-                    [TedToolkit.Step21.Generated.AggregateTypeofModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.AggregateTypeofModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("aggregate_typeof_model"));
                 structure.DataSections.Add(section);
                 for (var mode = 0; mode < 2; mode++)
@@ -681,7 +681,7 @@ public sealed class ReachableRuleTests
     private const string BUILTIN_SHADOWING_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.BuiltinShadowingModel;
+        using TedToolkit.Step21.Schemas.BuiltinShadowingModel;
 
         internal static class BuiltinShadowingConsumer
         {
@@ -692,7 +692,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["builtin_shadowing_model"])),
-                    [TedToolkit.Step21.Generated.BuiltinShadowingModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.BuiltinShadowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("builtin_shadowing_model"));
                 structure.DataSections.Add(section);
                 var holder = new Holder(new ExpressSet<BigInteger>(1)
@@ -839,7 +839,7 @@ public sealed class ReachableRuleTests
     private const string FUNCTION_SELECT_ARGUMENT_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.FunctionSelectArgumentModel;
+        using TedToolkit.Step21.Schemas.FunctionSelectArgumentModel;
 
         internal static class FunctionSelectArgumentConsumer
         {
@@ -850,7 +850,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["function_select_argument_model"])),
-                    [TedToolkit.Step21.Generated.FunctionSelectArgumentModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.FunctionSelectArgumentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("function_select_argument_model"));
                 structure.DataSections.Add(section);
                 var direct = new BaseItem(BigInteger.One);
@@ -1258,7 +1258,7 @@ public sealed class ReachableRuleTests
     private const string DYNAMIC_ENTITY_APPLICATION_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DynamicEntityApplicationModel;
+        using TedToolkit.Step21.Schemas.DynamicEntityApplicationModel;
 
         internal static class DynamicEntityApplicationConsumer
         {
@@ -1269,7 +1269,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["dynamic applications"], "3;1"),
                         new FileName("dynamic-applications.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dynamic_entity_application_model"])),
-                    [TedToolkit.Step21.Generated.DynamicEntityApplicationModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.DynamicEntityApplicationModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dynamic_entity_application_model"));
                 structure.DataSections.Add(section);
                 var accepted = new Accepted(BigInteger.One);
@@ -1374,7 +1374,7 @@ public sealed class ReachableRuleTests
 
     private const string SET_ENTITY_ASSIGNMENT_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SetEntityAssignmentModel;
+        using TedToolkit.Step21.Schemas.SetEntityAssignmentModel;
 
         internal static class SetEntityAssignmentConsumer
         {
@@ -1385,7 +1385,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["set entity assignment"], "3;1"),
                         new FileName("set-entity-assignment.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["set_entity_assignment_model"])),
-                    [TedToolkit.Step21.Generated.SetEntityAssignmentModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SetEntityAssignmentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("set_entity_assignment_model"));
                 structure.DataSections.Add(section);
                 var matchingAnchor = new Anchor();
@@ -1530,7 +1530,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_ASSIGNMENT_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectAssignmentModel;
+        using TedToolkit.Step21.Schemas.SelectAssignmentModel;
 
         internal static class SelectAssignmentConsumer
         {
@@ -1541,7 +1541,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_assignment_model"])),
-                    [TedToolkit.Step21.Generated.SelectAssignmentModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectAssignmentModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_assignment_model"));
                 structure.DataSections.Add(section);
                 var direct = new BaseItem(BigInteger.One);
@@ -1735,7 +1735,7 @@ public sealed class ReachableRuleTests
 
     private const string NUMERIC_ASSIGNMENT_WIDENING_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.NumericAssignmentWideningModel;
+        using TedToolkit.Step21.Schemas.NumericAssignmentWideningModel;
 
         internal static class NumericAssignmentWideningConsumer
         {
@@ -1746,7 +1746,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_assignment_widening_model"])),
-                    [TedToolkit.Step21.Generated.NumericAssignmentWideningModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.NumericAssignmentWideningModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_assignment_widening_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample());
@@ -1811,7 +1811,7 @@ public sealed class ReachableRuleTests
 
     private const string NUMERIC_NVL_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.NumericNvlModel;
+        using TedToolkit.Step21.Schemas.NumericNvlModel;
 
         internal static class NumericNvlConsumer
         {
@@ -1822,7 +1822,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_nvl_model"])),
-                    [TedToolkit.Step21.Generated.NumericNvlModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.NumericNvlModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_nvl_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample());
@@ -1947,7 +1947,7 @@ public sealed class ReachableRuleTests
 
     private const string NULLABLE_AGGREGATE_INITIALIZER_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.NullableAggregateInitializerModel;
+        using TedToolkit.Step21.Schemas.NullableAggregateInitializerModel;
 
         internal static class NullableAggregateInitializerConsumer
         {
@@ -1958,7 +1958,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["nullable_aggregate_initializer_model"])),
-                    [TedToolkit.Step21.Generated.NullableAggregateInitializerModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.NullableAggregateInitializerModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("nullable_aggregate_initializer_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample());
@@ -2091,7 +2091,7 @@ public sealed class ReachableRuleTests
 
     private const string DEFINED_RETURN_BOUNDARY_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DefinedReturnBoundaryModel;
+        using TedToolkit.Step21.Schemas.DefinedReturnBoundaryModel;
 
         internal static class DefinedReturnBoundaryConsumer
         {
@@ -2102,7 +2102,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["defined_return_boundary_model"])),
-                    [TedToolkit.Step21.Generated.DefinedReturnBoundaryModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.DefinedReturnBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("defined_return_boundary_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(true));
@@ -2131,7 +2131,7 @@ public sealed class ReachableRuleTests
 
     private const string NUMERIC_APPLICATION_WIDENING_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.NumericApplicationWideningModel;
+        using TedToolkit.Step21.Schemas.NumericApplicationWideningModel;
 
         internal static class NumericApplicationWideningConsumer
         {
@@ -2142,7 +2142,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["numeric_application_widening_model"])),
-                    [TedToolkit.Step21.Generated.NumericApplicationWideningModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.NumericApplicationWideningModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("numeric_application_widening_model"));
                 structure.DataSections.Add(section);
                 var item = new BaseItem();
@@ -2228,7 +2228,7 @@ public sealed class ReachableRuleTests
 
     private const string SET_APPLICATION_INITIALIZER_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SetApplicationInitializerModel;
+        using TedToolkit.Step21.Schemas.SetApplicationInitializerModel;
 
         internal static class SetApplicationInitializerConsumer
         {
@@ -2239,7 +2239,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["set_application_initializer_model"])),
-                    [TedToolkit.Step21.Generated.SetApplicationInitializerModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SetApplicationInitializerModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("set_application_initializer_model"));
                 structure.DataSections.Add(section);
                 var item = new Item(1);
@@ -2319,7 +2319,7 @@ public sealed class ReachableRuleTests
     private const string OPTIONAL_DEFINED_VALUE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.OptionalDefinedValueModel;
+        using TedToolkit.Step21.Schemas.OptionalDefinedValueModel;
 
         internal static class OptionalDefinedValueConsumer
         {
@@ -2330,7 +2330,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["optional_defined_value_model"])),
-                    [TedToolkit.Step21.Generated.OptionalDefinedValueModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.OptionalDefinedValueModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("optional_defined_value_model"));
                 structure.DataSections.Add(section);
                 var present = new OptionalHolder { Label = new LabelValue("present") };
@@ -2353,7 +2353,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_ATTRIBUTE_QUALIFIER_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectAttributeQualifierModel;
+        using TedToolkit.Step21.Schemas.SelectAttributeQualifierModel;
 
         internal static class SelectAttributeQualifierConsumer
         {
@@ -2364,7 +2364,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_attribute_qualifier_model"])),
-                    [TedToolkit.Step21.Generated.SelectAttributeQualifierModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectAttributeQualifierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_attribute_qualifier_model"));
                 structure.DataSections.Add(section);
                 var basis = new SurfaceValue("basis");
@@ -2446,7 +2446,7 @@ public sealed class ReachableRuleTests
 
     private const string SELECT_LEXICAL_NARROWING_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectLexicalNarrowingModel;
+        using TedToolkit.Step21.Schemas.SelectLexicalNarrowingModel;
 
         internal static class SelectLexicalNarrowingConsumer
         {
@@ -2457,7 +2457,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_lexical_narrowing_model"])),
-                    [TedToolkit.Step21.Generated.SelectLexicalNarrowingModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectLexicalNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_lexical_narrowing_model"));
                 structure.DataSections.Add(section);
                 var surface = new SurfaceValue("surface");
@@ -2565,7 +2565,7 @@ public sealed class ReachableRuleTests
     private const string QUALIFIED_PATH_NARROWING_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.QualifiedPathNarrowingModel;
+        using TedToolkit.Step21.Schemas.QualifiedPathNarrowingModel;
 
         internal static class QualifiedPathNarrowingConsumer
         {
@@ -2584,7 +2584,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["qualified path narrowing"], "3;1"),
                         new FileName("qualified-path.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_path_narrowing_model"])),
-                    [TedToolkit.Step21.Generated.QualifiedPathNarrowingModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.QualifiedPathNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_path_narrowing_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, surface);
@@ -2682,7 +2682,7 @@ public sealed class ReachableRuleTests
     private const string SIZEOF_BRANCH_DETERMINACY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SizeofBranchDeterminacyModel;
+        using TedToolkit.Step21.Schemas.SizeofBranchDeterminacyModel;
 
         internal static class SizeofBranchDeterminacyConsumer
         {
@@ -2693,7 +2693,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["sizeof branch determinacy"], "3;1"),
                         new FileName("sizeof-branch.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["sizeof_branch_determinacy_model"])),
-                    [TedToolkit.Step21.Generated.SizeofBranchDeterminacyModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SizeofBranchDeterminacyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("sizeof_branch_determinacy_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -2778,7 +2778,7 @@ public sealed class ReachableRuleTests
     private const string ASSIGNED_LOCAL_DETERMINACY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AssignedLocalDeterminacyModel;
+        using TedToolkit.Step21.Schemas.AssignedLocalDeterminacyModel;
 
         internal static class AssignedLocalDeterminacyConsumer
         {
@@ -2789,7 +2789,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["assigned local determinacy"], "3;1"),
                         new FileName("assigned-local.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["assigned_local_determinacy_model"])),
-                    [TedToolkit.Step21.Generated.AssignedLocalDeterminacyModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.AssignedLocalDeterminacyModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("assigned_local_determinacy_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -2923,7 +2923,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_SCALAR_NARROWING_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectScalarNarrowingModel;
+        using TedToolkit.Step21.Schemas.SelectScalarNarrowingModel;
 
         internal static class SelectScalarNarrowingConsumer
         {
@@ -2934,7 +2934,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_scalar_narrowing_model"])),
-                    [TedToolkit.Step21.Generated.SelectScalarNarrowingModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectScalarNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_scalar_narrowing_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -3034,7 +3034,7 @@ public sealed class ReachableRuleTests
     private const string SELECT_GROUP_QUALIFIER_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectGroupQualifierModel;
+        using TedToolkit.Step21.Schemas.SelectGroupQualifierModel;
 
         internal static class SelectGroupQualifierConsumer
         {
@@ -3045,7 +3045,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_group_qualifier_model"])),
-                    [TedToolkit.Step21.Generated.SelectGroupQualifierModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectGroupQualifierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_group_qualifier_model"));
                 structure.DataSections.Add(section);
                 var left = new DeepLeft(BigInteger.One, new BigInteger(2));
@@ -3163,7 +3163,7 @@ public sealed class ReachableRuleTests
 
     private const string LOGICAL_BOUNDARY_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.LogicalBoundaryModel;
+        using TedToolkit.Step21.Schemas.LogicalBoundaryModel;
 
         internal static class LogicalBoundaryConsumer
         {
@@ -3174,7 +3174,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
-                    [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -3194,7 +3194,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
-                    [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new PredicateSample(candidate));
@@ -3208,7 +3208,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["logical_boundary_model"])),
-                    [TedToolkit.Step21.Generated.LogicalBoundaryModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.LogicalBoundaryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("logical_boundary_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new LogicalNormalizationSample(candidate));
@@ -3243,7 +3243,7 @@ public sealed class ReachableRuleTests
 
     private const string STRING_CONCAT_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.StringConcatModel;
+        using TedToolkit.Step21.Schemas.StringConcatModel;
 
         internal static class StringConcatConsumer
         {
@@ -3254,7 +3254,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["string_concat_model"])),
-                    [TedToolkit.Step21.Generated.StringConcatModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.StringConcatModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("string_concat_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample());
@@ -3318,7 +3318,7 @@ public sealed class ReachableRuleTests
 
     private const string SELECT_VALUE_EQUALITY_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectValueEqualityModel;
+        using TedToolkit.Step21.Schemas.SelectValueEqualityModel;
 
         internal static class SelectValueEqualityConsumer
         {
@@ -3360,7 +3360,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_value_equality_model"])),
-                    [TedToolkit.Step21.Generated.SelectValueEqualityModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectValueEqualityModel.SchemaDescriptor.Instance]);
                 section = new DataSection(new SchemaName("select_value_equality_model"));
                 structure.DataSections.Add(section);
                 return structure;
@@ -3386,7 +3386,7 @@ public sealed class ReachableRuleTests
 
     private const string ENTITY_SELECT_VALUE_EQUALITY_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.EntitySelectValueEqualityModel;
+        using TedToolkit.Step21.Schemas.EntitySelectValueEqualityModel;
 
         internal static class EntitySelectValueEqualityConsumer
         {
@@ -3397,7 +3397,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_select_value_equality_model"])),
-                    [TedToolkit.Step21.Generated.EntitySelectValueEqualityModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.EntitySelectValueEqualityModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_select_value_equality_model"));
                 structure.DataSections.Add(section);
                 var left = MarkerChoice.FromMarker(new Marker("same"));
@@ -3454,7 +3454,7 @@ public sealed class ReachableRuleTests
 
     private const string SELECT_INSTANCE_EQUALITY_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectInstanceEqualityModel;
+        using TedToolkit.Step21.Schemas.SelectInstanceEqualityModel;
 
         internal static class SelectInstanceEqualityConsumer
         {
@@ -3500,7 +3500,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_instance_equality_model"])),
-                    [TedToolkit.Step21.Generated.SelectInstanceEqualityModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectInstanceEqualityModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_instance_equality_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, sample);
@@ -3557,7 +3557,7 @@ public sealed class ReachableRuleTests
 
     private const string SELECT_USEDIN_CARRIER_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelectUsedinCarrierModel;
+        using TedToolkit.Step21.Schemas.SelectUsedinCarrierModel;
 
         internal static class SelectUsedinCarrierConsumer
         {
@@ -3596,7 +3596,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["select_usedin_carrier_model"])),
-                    [TedToolkit.Step21.Generated.SelectUsedinCarrierModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelectUsedinCarrierModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("select_usedin_carrier_model"));
                 structure.DataSections.Add(section);
                 foreach (var value in values)
@@ -3767,7 +3767,7 @@ public sealed class ReachableRuleTests
 
     private const string ENTITY_VALUE_CYCLE_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.EntityValueCycleModel;
+        using TedToolkit.Step21.Schemas.EntityValueCycleModel;
 
         internal static class EntityValueCycleConsumer
         {
@@ -3778,7 +3778,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_value_cycle_model"])),
-                    [TedToolkit.Step21.Generated.EntityValueCycleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.EntityValueCycleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_value_cycle_model"));
                 structure.DataSections.Add(section);
                 IBase left;
@@ -3863,7 +3863,7 @@ public sealed class ReachableRuleTests
 
     private const string ENTITY_VALUE_AGGREGATE_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.EntityValueAggregateModel;
+        using TedToolkit.Step21.Schemas.EntityValueAggregateModel;
 
         internal static class EntityValueAggregateConsumer
         {
@@ -3874,7 +3874,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_value_aggregate_model"])),
-                    [TedToolkit.Step21.Generated.EntityValueAggregateModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.EntityValueAggregateModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_value_aggregate_model"));
                 structure.DataSections.Add(section);
 
@@ -3985,7 +3985,7 @@ public sealed class ReachableRuleTests
                 {
                     var structure = ExchangeStructure.Read(
                         new StringReader(source),
-                        [TedToolkit.Step21.Generated.EntityValueComplexModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.EntityValueComplexModel.SchemaDescriptor.Instance]);
                     return structure.Validate();
                 }
                 catch (ExchangeStructureReadValidationException exception)
@@ -4054,7 +4054,7 @@ public sealed class ReachableRuleTests
     private const string UNIQUE_VALUE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.UniqueValueModel;
+        using TedToolkit.Step21.Schemas.UniqueValueModel;
 
         internal static class UniqueValueConsumer
         {
@@ -4090,7 +4090,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unique_value_model"])),
-                    [TedToolkit.Step21.Generated.UniqueValueModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.UniqueValueModel.SchemaDescriptor.Instance]);
                 section = new DataSection(new SchemaName("unique_value_model"));
                 structure.DataSections.Add(section);
                 return structure;
@@ -4131,7 +4131,7 @@ public sealed class ReachableRuleTests
     private const string REACHABLE_ALGORITHM_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.UnsupportedModel;
+        using TedToolkit.Step21.Schemas.UnsupportedModel;
 
         internal static class ReachableAlgorithmConsumer
         {
@@ -4142,7 +4142,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["algorithm"], "3;1"),
                         new FileName("algorithm.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["unsupported_model"])),
-                    [TedToolkit.Step21.Generated.UnsupportedModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.UnsupportedModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("unsupported_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(amount));
@@ -4232,7 +4232,7 @@ public sealed class ReachableRuleTests
 
     private const string INDETERMINATE_FUNCTION_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.IndeterminateFunctionModel;
+        using TedToolkit.Step21.Schemas.IndeterminateFunctionModel;
 
         internal static class IndeterminateFunctionConsumer
         {
@@ -4243,7 +4243,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["indeterminate function"], "3;1"),
                         new FileName("indeterminate-function.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["indeterminate_function_model"])),
-                    [TedToolkit.Step21.Generated.IndeterminateFunctionModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.IndeterminateFunctionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("indeterminate_function_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(flag));
@@ -4283,7 +4283,7 @@ public sealed class ReachableRuleTests
     private const string INFERRED_GENERIC_LIST_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.InferredGenericListModel;
+        using TedToolkit.Step21.Schemas.InferredGenericListModel;
 
         internal static class InferredGenericListConsumer
         {
@@ -4294,7 +4294,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["generic list"], "3;1"),
                         new FileName("generic-list.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["inferred_generic_list_model"])),
-                    [TedToolkit.Step21.Generated.InferredGenericListModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.InferredGenericListModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("inferred_generic_list_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(2, 2) { 1, 2 }));
@@ -4324,7 +4324,7 @@ public sealed class ReachableRuleTests
     private const string NUMBER_INDEX_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.NumberIndexModel;
+        using TedToolkit.Step21.Schemas.NumberIndexModel;
 
         internal static class NumberIndexConsumer
         {
@@ -4335,7 +4335,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["number index"], "3;1"),
                         new FileName("number-index.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["number_index_model"])),
-                    [TedToolkit.Step21.Generated.NumberIndexModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.NumberIndexModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("number_index_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(1) { 1, 2 }));
@@ -4450,7 +4450,7 @@ public sealed class ReachableRuleTests
     private const string SAFE_INDEX_CONTROL_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SafeIndexControlModel;
+        using TedToolkit.Step21.Schemas.SafeIndexControlModel;
 
         internal static class SafeIndexControlConsumer
         {
@@ -4461,7 +4461,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["safe index controls"], "3;1"),
                         new FileName("safe-index-controls.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["safe_index_control_model"])),
-                    [TedToolkit.Step21.Generated.SafeIndexControlModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SafeIndexControlModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("safe_index_control_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(true));
@@ -4495,7 +4495,7 @@ public sealed class ReachableRuleTests
     private const string QUALIFIED_SAFE_INDEX_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.QualifiedSafeIndexModel;
+        using TedToolkit.Step21.Schemas.QualifiedSafeIndexModel;
 
         internal static class QualifiedSafeIndexConsumer
         {
@@ -4515,7 +4515,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["qualified safe index"], "3;1"),
                         new FileName("qualified-safe-index.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_safe_index_model"])),
-                    [TedToolkit.Step21.Generated.QualifiedSafeIndexModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.QualifiedSafeIndexModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_safe_index_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, grid);
@@ -4718,7 +4718,7 @@ public sealed class ReachableRuleTests
     private const string FLOW_FACT_LIFECYCLE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.FlowFactLifecycleModel;
+        using TedToolkit.Step21.Schemas.FlowFactLifecycleModel;
 
         internal static class FlowFactLifecycleConsumer
         {
@@ -4742,7 +4742,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["flow fact lifecycle"], "3;1"),
                         new FileName("flow-fact.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["flow_fact_lifecycle_model"])),
-                    [TedToolkit.Step21.Generated.FlowFactLifecycleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.FlowFactLifecycleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("flow_fact_lifecycle_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, firstValue);
@@ -4870,7 +4870,7 @@ public sealed class ReachableRuleTests
     private const string DYNAMIC_GENERIC_ARRAY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DynamicGenericArrayModel;
+        using TedToolkit.Step21.Schemas.DynamicGenericArrayModel;
 
         internal static class DynamicGenericArrayConsumer
         {
@@ -4881,7 +4881,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["dynamic generic array"], "3;1"),
                         new FileName("dynamic-generic-array.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["dynamic_generic_array_model"])),
-                    [TedToolkit.Step21.Generated.DynamicGenericArrayModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.DynamicGenericArrayModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("dynamic_generic_array_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -4982,7 +4982,7 @@ public sealed class ReachableRuleTests
     private const string EXPECTED_GENERIC_BAG_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ExpectedGenericBagModel;
+        using TedToolkit.Step21.Schemas.ExpectedGenericBagModel;
 
         internal static class ExpectedGenericBagConsumer
         {
@@ -4993,7 +4993,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["expected generic bag"], "3;1"),
                         new FileName("expected-generic-bag.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expected_generic_bag_model"])),
-                    [TedToolkit.Step21.Generated.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expected_generic_bag_model"));
                 structure.DataSections.Add(section);
                 var target = new Target();
@@ -5014,7 +5014,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["bag index controls"], "3;1"),
                         new FileName("bag-index-controls.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expected_generic_bag_model"])),
-                    [TedToolkit.Step21.Generated.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ExpectedGenericBagModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expected_generic_bag_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new BagControl(new ExpressBag<BigInteger>(0)));
@@ -5058,7 +5058,7 @@ public sealed class ReachableRuleTests
     private const string CYCLIC_DERIVED_DEPENDENCY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel;
+        using TedToolkit.Step21.Schemas.RepeatedCyclicDerivedModel;
 
         internal static class CyclicDerivedDependencyConsumer
         {
@@ -5076,7 +5076,7 @@ public sealed class ReachableRuleTests
                             "tests",
                             ""),
                         new FileSchema(["repeated_cyclic_derived_model"])),
-                    [TedToolkit.Step21.Generated.RepeatedCyclicDerivedModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.RepeatedCyclicDerivedModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("repeated_cyclic_derived_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(BigInteger.Zero));
@@ -5153,7 +5153,7 @@ public sealed class ReachableRuleTests
     private const string ALGORITHM_CONTROL_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AlgorithmControlModel;
+        using TedToolkit.Step21.Schemas.AlgorithmControlModel;
 
         internal static class AlgorithmControlConsumer
         {
@@ -5171,7 +5171,7 @@ public sealed class ReachableRuleTests
                             "tests",
                             ""),
                         new FileSchema(["algorithm_control_model"])),
-                    [TedToolkit.Step21.Generated.AlgorithmControlModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.AlgorithmControlModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("algorithm_control_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(
@@ -5203,7 +5203,7 @@ public sealed class ReachableRuleTests
     private const string SELF_RECURSIVE_FUNCTION_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SelfRecursiveModel;
+        using TedToolkit.Step21.Schemas.SelfRecursiveModel;
 
         internal static class SelfRecursiveFunctionConsumer
         {
@@ -5214,7 +5214,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["recursive"], "3;1"),
                         new FileName("recursive.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["self_recursive_model"])),
-                    [TedToolkit.Step21.Generated.SelfRecursiveModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SelfRecursiveModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("self_recursive_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(amount));
@@ -5248,7 +5248,7 @@ public sealed class ReachableRuleTests
     private const string MUTUALLY_RECURSIVE_FUNCTION_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.MutuallyRecursiveModel;
+        using TedToolkit.Step21.Schemas.MutuallyRecursiveModel;
 
         internal static class MutuallyRecursiveFunctionConsumer
         {
@@ -5259,7 +5259,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["mutual"], "3;1"),
                         new FileName("mutual.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["mutually_recursive_model"])),
-                    [TedToolkit.Step21.Generated.MutuallyRecursiveModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.MutuallyRecursiveModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("mutually_recursive_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(amount));
@@ -5302,7 +5302,7 @@ public sealed class ReachableRuleTests
 
     private const string MODEL_CONTEXT_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ModelContextModel;
+        using TedToolkit.Step21.Schemas.ModelContextModel;
 
         internal static class ModelContextConsumer
         {
@@ -5313,7 +5313,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["model context"], "3;1"),
                         new FileName("model.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["model_context_model"])),
-                    [TedToolkit.Step21.Generated.ModelContextModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ModelContextModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("model_context_model"));
                 structure.DataSections.Add(section);
                 var target = new Target();
@@ -5370,7 +5370,7 @@ public sealed class ReachableRuleTests
         using System.Linq;
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SingularInverseModel;
+        using TedToolkit.Step21.Schemas.SingularInverseModel;
 
         internal static class SingularInverseConsumer
         {
@@ -5458,7 +5458,7 @@ public sealed class ReachableRuleTests
                 {
                     _ = ExchangeStructure.Read(
                         new StringReader(source),
-                        [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.SingularInverseModel.SchemaDescriptor.Instance]);
                     throw new InvalidOperationException("Invalid singular inverse read unexpectedly succeeded.");
                 }
                 catch (ExchangeStructureReadValidationException exception)
@@ -5512,7 +5512,7 @@ public sealed class ReachableRuleTests
                 {
                     _ = ExchangeStructure.Read(
                         new StringReader(source),
-                        [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.SingularInverseModel.SchemaDescriptor.Instance]);
                     throw new InvalidOperationException("Invalid singular inverse read unexpectedly succeeded.");
                 }
                 catch (ExchangeStructureReadValidationException exception)
@@ -5570,7 +5570,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["singular inverse"], "3;1"),
                         new FileName("singular.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["singular_inverse_model"])),
-                    [TedToolkit.Step21.Generated.SingularInverseModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SingularInverseModel.SchemaDescriptor.Instance]);
                 structure.DataSections.Add(new DataSection(new SchemaName("singular_inverse_model")));
                 return structure;
             }
@@ -5652,7 +5652,7 @@ public sealed class ReachableRuleTests
         using System.IO;
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SingularInverseOrderModel;
+        using TedToolkit.Step21.Schemas.SingularInverseOrderModel;
 
         internal static class SingularInverseOrderConsumer
         {
@@ -5689,7 +5689,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["mixed order"], "3;1"),
                         new FileName("mixed.step", "2026-08-27T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["singular_inverse_order_model"])),
-                    [TedToolkit.Step21.Generated.SingularInverseOrderModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SingularInverseOrderModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("singular_inverse_order_model"));
                 structure.DataSections.Add(section);
 
@@ -5746,7 +5746,7 @@ public sealed class ReachableRuleTests
     private const string SYMBOLIC_BOUND_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.SymbolicBoundModel;
+        using TedToolkit.Step21.Schemas.SymbolicBoundModel;
 
         internal static class SymbolicBoundConsumer
         {
@@ -5757,7 +5757,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["symbolic_bound_model"])),
-                    [TedToolkit.Step21.Generated.SymbolicBoundModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.SymbolicBoundModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("symbolic_bound_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(0, 1)));
@@ -5780,7 +5780,7 @@ public sealed class ReachableRuleTests
     private const string EXPRESSION_BOUND_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ExpressionBoundModel;
+        using TedToolkit.Step21.Schemas.ExpressionBoundModel;
 
         internal static class ExpressionBoundConsumer
         {
@@ -5791,7 +5791,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["expression_bound_model"])),
-                    [TedToolkit.Step21.Generated.ExpressionBoundModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ExpressionBoundModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("expression_bound_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(0, 1) { 1, 2 }));
@@ -5826,7 +5826,7 @@ public sealed class ReachableRuleTests
     private const string INHERITED_RULE_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.InheritedRuleModel;
+        using TedToolkit.Step21.Schemas.InheritedRuleModel;
 
         internal static class InheritedRuleConsumer
         {
@@ -5837,7 +5837,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["rules"], "3;1"),
                         new FileName("rules.step", "2026-08-22T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["inherited_rule_model"])),
-                    [TedToolkit.Step21.Generated.InheritedRuleModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.InheritedRuleModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("inherited_rule_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Child(amount));
@@ -5901,7 +5901,7 @@ public sealed class ReachableRuleTests
 
     private const string COMPLEX_CONSTRUCTOR_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ComplexConstructorModel;
+        using TedToolkit.Step21.Schemas.ComplexConstructorModel;
 
         internal static class ComplexConstructorConsumer
         {
@@ -5912,7 +5912,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["complex constructor"], "3;1"),
                         new FileName("complex-constructor.step", "2026-08-24T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["complex_constructor_model"])),
-                    [TedToolkit.Step21.Generated.ComplexConstructorModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ComplexConstructorModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("complex_constructor_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(new BasePart(new LabelValue("source"))));
@@ -6083,7 +6083,7 @@ public sealed class ReachableRuleTests
     private const string ENTITY_AGGREGATE_LUB_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.EntityAggregateLubModel;
+        using TedToolkit.Step21.Schemas.EntityAggregateLubModel;
 
         internal static class EntityAggregateLubConsumer
         {
@@ -6098,7 +6098,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["entity aggregate lub"], "3;1"),
                         new FileName("entity-aggregate-lub.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["entity_aggregate_lub_model"])),
-                    [TedToolkit.Step21.Generated.EntityAggregateLubModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.EntityAggregateLubModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("entity_aggregate_lub_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, leaf);
@@ -6200,7 +6200,7 @@ public sealed class ReachableRuleTests
     private const string AGGREGATE_SELECT_UNION_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AggregateSelectUnionModel;
+        using TedToolkit.Step21.Schemas.AggregateSelectUnionModel;
 
         internal static class AggregateSelectUnionConsumer
         {
@@ -6226,7 +6226,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["aggregate select union"], "3;1"),
                         new FileName("aggregate-select-union.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["aggregate_select_union_model"])),
-                    [TedToolkit.Step21.Generated.AggregateSelectUnionModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.AggregateSelectUnionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("aggregate_select_union_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, first);
@@ -6396,7 +6396,7 @@ public sealed class ReachableRuleTests
 
     private const string QUALIFIED_ASSIGNMENT_UNKNOWN_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.QualifiedAssignmentUnknownModel;
+        using TedToolkit.Step21.Schemas.QualifiedAssignmentUnknownModel;
 
         internal static class QualifiedAssignmentUnknownConsumer
         {
@@ -6407,7 +6407,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["qualified assignment unknown"], "3;1"),
                         new FileName("qualified-assignment-unknown.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["qualified_assignment_unknown_model"])),
-                    [TedToolkit.Step21.Generated.QualifiedAssignmentUnknownModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.QualifiedAssignmentUnknownModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("qualified_assignment_unknown_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample(present));
@@ -6467,7 +6467,7 @@ public sealed class ReachableRuleTests
 
     private const string ASSIGNMENT_INDETERMINATE_FUNCTION_CONSUMER = """
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.AssignmentIndeterminateFunctionModel;
+        using TedToolkit.Step21.Schemas.AssignmentIndeterminateFunctionModel;
 
         internal static class AssignmentIndeterminateFunctionConsumer
         {
@@ -6478,7 +6478,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["assignment indeterminate function"], "3;1"),
                         new FileName("assignment-indeterminate-function.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["assignment_indeterminate_function_model"])),
-                    [TedToolkit.Step21.Generated.AssignmentIndeterminateFunctionModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.AssignmentIndeterminateFunctionModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("assignment_indeterminate_function_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, new Sample());
@@ -6694,7 +6694,7 @@ public sealed class ReachableRuleTests
     private const string QUERY_RESULT_NARROWING_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.QueryResultNarrowingModel;
+        using TedToolkit.Step21.Schemas.QueryResultNarrowingModel;
 
         internal static class QueryResultNarrowingConsumer
         {
@@ -6726,7 +6726,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["query result narrowing"], "3;1"),
                         new FileName("query-result.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["query_result_narrowing_model"])),
-                    [TedToolkit.Step21.Generated.QueryResultNarrowingModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.QueryResultNarrowingModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("query_result_narrowing_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, point);
@@ -6840,7 +6840,7 @@ public sealed class ReachableRuleTests
     private const string EXHAUSTIVE_SELECT_QUERY_CONSUMER = """
         using System.Numerics;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.ExhaustiveSelectQueryModel;
+        using TedToolkit.Step21.Schemas.ExhaustiveSelectQueryModel;
 
         internal static class ExhaustiveSelectQueryConsumer
         {
@@ -6855,7 +6855,7 @@ public sealed class ReachableRuleTests
                         new FileDescription(["exhaustive select query"], "3;1"),
                         new FileName("exhaustive.step", "2026-08-25T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                         new FileSchema(["exhaustive_select_query_model"])),
-                    [TedToolkit.Step21.Generated.ExhaustiveSelectQueryModel.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.ExhaustiveSelectQueryModel.SchemaDescriptor.Instance]);
                 var section = new DataSection(new SchemaName("exhaustive_select_query_model"));
                 structure.DataSections.Add(section);
                 _ = structure.Add(section, first);
@@ -8615,12 +8615,12 @@ public sealed class ReachableRuleTests
             await Assert.That(diagnostics).IsEmpty()
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(generated).Contains(".DimensionCount(");
-            await Assert.That(generated).DoesNotContain("DimensionCount(new global::TedToolkit.Step21.Generated."
+            await Assert.That(generated).DoesNotContain("DimensionCount(new global::TedToolkit.Step21.Schemas."
                 + "DefinedReturnBoundaryModel.DimensionCount(");
             await Assert.That(string.Join(
                     Environment.NewLine,
                     nestedDefined.GeneratedSources.Select(source => source.SourceText.ToString())))
-                .Contains(".NestedDimension(new global::TedToolkit.Step21.Generated."
+                .Contains(".NestedDimension(new global::TedToolkit.Step21.Schemas."
                     + "NestedDefinedReturnModel.DimensionCount(");
             await Assert.That(differentDefined.Diagnostics.Concat(differentDefined.OutputCompilation.GetDiagnostics())
                 .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
@@ -8705,7 +8705,7 @@ public sealed class ReachableRuleTests
             await Assert.That(diagnostics).IsEmpty()
                 .Because(string.Join(Environment.NewLine, diagnostics));
             await Assert.That(generated).Contains(
-                "global::System.Collections.Generic.IEnumerable<global::TedToolkit.Step21.Generated."
+                "global::System.Collections.Generic.IEnumerable<global::TedToolkit.Step21.Schemas."
                 + "SelectAggregateApplicationModel.IRepresentationItem>");
             await Assert.That(generated).Contains(".Match(");
             await Assert.That(generated).Contains(".Value");
@@ -8808,7 +8808,7 @@ public sealed class ReachableRuleTests
         {
             await Assert.That(diagnostics).IsEmpty()
                 .Because(string.Join(Environment.NewLine, diagnostics));
-            await Assert.That(generated).Contains("new global::TedToolkit.Step21.Generated."
+            await Assert.That(generated).Contains("new global::TedToolkit.Step21.Schemas."
                 + "DefinedApplicationBoundaryModel.PositiveInteger(");
             await Assert.That(generated).Contains(".ToIntegerTruncated()");
         }
@@ -10914,7 +10914,7 @@ public sealed class ReachableRuleTests
             await Assert.That(validation.IsValid).IsTrue()
                 .Because(string.Join(Environment.NewLine, validation.Failures.Select(failure => failure.Code)));
             await Assert.That(generated).Contains(
-                ".Match<global::TedToolkit.Step21.Generated.SelectGroupQualifierModel.ILeft?>");
+                ".Match<global::TedToolkit.Step21.Schemas.SelectGroupQualifierModel.ILeft?>");
         }
     }
 
@@ -11458,7 +11458,7 @@ public sealed class ReachableRuleTests
             Environment.NewLine,
             result.GeneratedSources.Select(source => source.SourceText.ToString()));
         var descriptor = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.UnreachableModel.SchemaDescriptor")
+            "TedToolkit.Step21.Schemas.UnreachableModel.SchemaDescriptor")
             ?? throw new InvalidOperationException("The generated descriptor was not found.");
 
         using (Assert.Multiple())
@@ -11575,7 +11575,7 @@ public sealed class ReachableRuleTests
         const string consumer = """
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AlgorithmStatementModel;
+            using TedToolkit.Step21.Schemas.AlgorithmStatementModel;
 
             internal static class AlgorithmStatementConsumer
             {
@@ -11586,7 +11586,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["algorithm statements"], "3;1"),
                             new FileName("algorithm.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["algorithm_statement_model"])),
-                        [TedToolkit.Step21.Generated.AlgorithmStatementModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AlgorithmStatementModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("algorithm_statement_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(new Holder(amount)));
@@ -11646,7 +11646,7 @@ public sealed class ReachableRuleTests
         const string indexedAliasConsumer = """
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.IndexedAliasModel;
+            using TedToolkit.Step21.Schemas.IndexedAliasModel;
 
             internal static class IndexedAliasConsumer
             {
@@ -11657,7 +11657,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["indexed alias"], "3;1"),
                             new FileName("indexed-alias.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["indexed_alias_model"])),
-                        [TedToolkit.Step21.Generated.IndexedAliasModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.IndexedAliasModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("indexed_alias_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(new ExpressList<BigInteger>(1) { 7 }));
@@ -11787,7 +11787,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.CaseSemanticsModel;
+            using TedToolkit.Step21.Schemas.CaseSemanticsModel;
 
             internal static class CaseSemanticsConsumer
             {
@@ -11798,7 +11798,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["case semantics"], "3;1"),
                             new FileName("case.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["case_semantics_model"])),
-                        [TedToolkit.Step21.Generated.CaseSemanticsModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.CaseSemanticsModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("case_semantics_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true, new Holder()));
@@ -12027,7 +12027,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.UncontrolledRepeatModel;
+            using TedToolkit.Step21.Schemas.UncontrolledRepeatModel;
 
             internal static class UncontrolledRepeatConsumer
             {
@@ -12038,7 +12038,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["uncontrolled repeat"], "3;1"),
                             new FileName("repeat.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["uncontrolled_repeat_model"])),
-                        [TedToolkit.Step21.Generated.UncontrolledRepeatModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.UncontrolledRepeatModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("uncontrolled_repeat_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12133,7 +12133,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.RepeatUntilModel;
+            using TedToolkit.Step21.Schemas.RepeatUntilModel;
 
             internal static class RepeatUntilConsumer
             {
@@ -12144,7 +12144,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["repeat until"], "3;1"),
                             new FileName("repeat-until.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["repeat_until_model"])),
-                        [TedToolkit.Step21.Generated.RepeatUntilModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.RepeatUntilModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("repeat_until_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12233,7 +12233,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.LogicalControlModel;
+            using TedToolkit.Step21.Schemas.LogicalControlModel;
 
             internal static class LogicalControlConsumer
             {
@@ -12244,7 +12244,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["logical controls"], "3;1"),
                             new FileName("logical.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["logical_control_model"])),
-                        [TedToolkit.Step21.Generated.LogicalControlModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.LogicalControlModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("logical_control_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12400,7 +12400,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.FiniteRepeatModel;
+            using TedToolkit.Step21.Schemas.FiniteRepeatModel;
 
             internal static class FiniteRepeatConsumer
             {
@@ -12411,7 +12411,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["finite repeat"], "3;1"),
                             new FileName("repeat.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["finite_repeat_model"])),
-                        [TedToolkit.Step21.Generated.FiniteRepeatModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.FiniteRepeatModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("finite_repeat_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12511,7 +12511,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.RepeatScopeModel;
+            using TedToolkit.Step21.Schemas.RepeatScopeModel;
 
             internal static class RepeatScopeConsumer
             {
@@ -12522,7 +12522,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["repeat scope"], "3;1"),
                             new FileName("repeat-scope.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["repeat_scope_model"])),
-                        [TedToolkit.Step21.Generated.RepeatScopeModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.RepeatScopeModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("repeat_scope_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12604,7 +12604,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AssignmentIndexModel;
+            using TedToolkit.Step21.Schemas.AssignmentIndexModel;
 
             internal static class AssignmentIndexConsumer
             {
@@ -12615,7 +12615,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["assignment index"], "3;1"),
                             new FileName("assignment-index.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["assignment_index_model"])),
-                        [TedToolkit.Step21.Generated.AssignmentIndexModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AssignmentIndexModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("assignment_index_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12761,7 +12761,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ArrayAssignmentCopyModel;
+            using TedToolkit.Step21.Schemas.ArrayAssignmentCopyModel;
 
             internal static class ArrayAssignmentCopyConsumer
             {
@@ -12772,7 +12772,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["array assignment copy"], "3;1"),
                             new FileName("array-copy.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["array_assignment_copy_model"])),
-                        [TedToolkit.Step21.Generated.ArrayAssignmentCopyModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.ArrayAssignmentCopyModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("array_assignment_copy_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12826,7 +12826,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.ProcedureScalarCompatibilityModel;
+            using TedToolkit.Step21.Schemas.ProcedureScalarCompatibilityModel;
 
             internal static class ProcedureScalarCompatibilityConsumer
             {
@@ -12837,7 +12837,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["procedure compatibility"], "3;1"),
                             new FileName("procedure.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["procedure_scalar_compatibility_model"])),
-                        [TedToolkit.Step21.Generated.ProcedureScalarCompatibilityModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.ProcedureScalarCompatibilityModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("procedure_scalar_compatibility_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -12960,7 +12960,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AssignmentCompatibilityModel;
+            using TedToolkit.Step21.Schemas.AssignmentCompatibilityModel;
 
             internal static class AssignmentCompatibilityConsumer
             {
@@ -12971,7 +12971,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["assignment compatibility"], "3;1"),
                             new FileName("assignment-compatibility.step", "2026-09-10T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["assignment_compatibility_model"])),
-                        [TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AssignmentCompatibilityModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("assignment_compatibility_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(new ChildItem(3), true, 2));
@@ -12981,7 +12981,7 @@ public sealed class ReachableRuleTests
                 internal static bool RejectConstraint()
                 {
                     var method = typeof(
-                        TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ConstrainedAssignment",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13002,7 +13002,7 @@ public sealed class ReachableRuleTests
                 internal static bool RejectProcedureConstraint()
                 {
                     var method = typeof(
-                        TedToolkit.Step21.Generated.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.AssignmentCompatibilityModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ConstrainedParameter",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13159,7 +13159,7 @@ public sealed class ReachableRuleTests
             """;
         const string consumer = """
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.RangeAssignmentModel;
+            using TedToolkit.Step21.Schemas.RangeAssignmentModel;
 
             internal static class RangeAssignmentConsumer
             {
@@ -13170,7 +13170,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["range assignment"], "3;1"),
                             new FileName("range.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["range_assignment_model"])),
-                        [TedToolkit.Step21.Generated.RangeAssignmentModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.RangeAssignmentModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("range_assignment_model"));
                     structure.DataSections.Add(section);
                     _ = structure.Add(section, new Sample(true));
@@ -13373,7 +13373,7 @@ public sealed class ReachableRuleTests
         const string consumer = """
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel;
+            using TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel;
 
             internal static class SelectQualifiedAssignmentConsumer
             {
@@ -13384,7 +13384,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["select qualified assignment"], "3;1"),
                             new FileName("select-qualified.step", "2026-09-09T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["select_qualified_assignment_model"])),
-                        [TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("select_qualified_assignment_model"));
                     structure.DataSections.Add(section);
                     var array = new ExpressArray<BigInteger>(2, 3);
@@ -13411,7 +13411,7 @@ public sealed class ReachableRuleTests
                 internal static bool RejectQualifiedConstraint()
                 {
                     var method = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplacePositiveElement",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13439,7 +13439,7 @@ public sealed class ReachableRuleTests
                         new PointList(new ExpressList<IBasePoint>(1) { point }));
                     var direct = PointChoice.FromPoint(point);
                     var descriptor = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedAttribute",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13451,7 +13451,7 @@ public sealed class ReachableRuleTests
                     }
 
                     var groupMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedGroupAttribute",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13461,7 +13461,7 @@ public sealed class ReachableRuleTests
                     }
 
                     var directMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceDirectSelectedAttribute",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13471,7 +13471,7 @@ public sealed class ReachableRuleTests
                     }
 
                     var directGroupMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceDirectSelectedGroupAttribute",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13483,7 +13483,7 @@ public sealed class ReachableRuleTests
                     var replacementValues = new ExpressList<BigInteger>(1) { 31, 32 };
                     var replacement = new BasePoint(21, replacementValues);
                     var groupValueMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceGroupValue",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13500,7 +13500,7 @@ public sealed class ReachableRuleTests
                     }
 
                     var selectedGroupValueMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedGroupValue",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13520,7 +13520,7 @@ public sealed class ReachableRuleTests
                     }
 
                     var elementMethod = typeof(
-                        TedToolkit.Step21.Generated.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
+                        TedToolkit.Step21.Schemas.SelectQualifiedAssignmentModel.SchemaDescriptor).GetMethod(
                         "__ExpressFunction_ReplaceSelectedAttributeElement",
                         global::System.Reflection.BindingFlags.Static |
                             global::System.Reflection.BindingFlags.NonPublic)!;
@@ -13606,7 +13606,7 @@ public sealed class ReachableRuleTests
         var unknownKey = (ValidationResult)validate.Invoke(null, [true, true])!;
         var duplicateKey = (ValidationResult)validate.Invoke(null, [false, true])!;
         var descriptor = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.IndeterminateFunctionModel.SchemaDescriptor")!;
+            "TedToolkit.Step21.Schemas.IndeterminateFunctionModel.SchemaDescriptor")!;
         var maybeAmount = descriptor.GetMembers("__ExpressDerived_Sample_MaybeAmount")
             .OfType<IMethodSymbol>()
             .Single();
@@ -13911,7 +13911,7 @@ public sealed class ReachableRuleTests
             DYNAMIC_GENERIC_ARRAY_CONSUMER,
             ("schemas/dynamic-generic-array.exp", DYNAMIC_GENERIC_ARRAY_SCHEMA));
         var nestedMethod = result.OutputCompilation.GetTypeByMetadataName(
-                "TedToolkit.Step21.Generated.DynamicGenericArrayModel.SchemaDescriptor")!
+                "TedToolkit.Step21.Schemas.DynamicGenericArrayModel.SchemaDescriptor")!
             .GetMembers("__ExpressFunction_NestedArray")
             .OfType<IMethodSymbol>()
             .Single();
@@ -14362,9 +14362,9 @@ public sealed class ReachableRuleTests
             .IsEmpty()
             .Because(string.Join(Environment.NewLine, compilationDiagnostics.Select(item => item.ToString())));
         var targetType = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.SingularInverseModel.Target")!;
+            "TedToolkit.Step21.Schemas.SingularInverseModel.Target")!;
         var targetInterface = result.OutputCompilation.GetTypeByMetadataName(
-            "TedToolkit.Step21.Generated.SingularInverseModel.ITarget")!;
+            "TedToolkit.Step21.Schemas.SingularInverseModel.ITarget")!;
 
         var assembly = Emit(result.OutputCompilation);
         var consumer = assembly.GetType("SingularInverseConsumer", throwOnError: true)!;
@@ -14603,7 +14603,7 @@ public sealed class ReachableRuleTests
             """
             using System.Numerics;
             using TedToolkit.Step21;
-            using TedToolkit.Step21.Generated.AttributeBoundModel;
+            using TedToolkit.Step21.Schemas.AttributeBoundModel;
 
             internal static class AttributeBoundConsumer
             {
@@ -14614,7 +14614,7 @@ public sealed class ReachableRuleTests
                             new FileDescription(["bounds"], "3;1"),
                             new FileName("bounds.step", "2026-09-02T00:00:00+08:00", [""], [""], "tests", "tests", ""),
                             new FileSchema(["attribute_bound_model"])),
-                        [TedToolkit.Step21.Generated.AttributeBoundModel.SchemaDescriptor.Instance]);
+                        [TedToolkit.Step21.Schemas.AttributeBoundModel.SchemaDescriptor.Instance]);
                     var section = new DataSection(new SchemaName("attribute_bound_model"));
                     structure.DataSections.Add(section);
                     var values = new ExpressList<BigInteger>(1);
@@ -14737,7 +14737,7 @@ public sealed class ReachableRuleTests
         {
             var result = GeneratorHostTests.Run(("C:/agent-a/schemas/rules.exp", item.Source));
             var descriptor = result.OutputCompilation.GetTypeByMetadataName(
-                $"TedToolkit.Step21.Generated.{item.SchemaName}.SchemaDescriptor")
+                $"TedToolkit.Step21.Schemas.{item.SchemaName}.SchemaDescriptor")
                 ?? throw new InvalidOperationException($"Descriptor for {item.SchemaName} was not found.");
             var xml = descriptor.GetDocumentationCommentXml()
                 ?? throw new InvalidOperationException($"Descriptor XML for {item.SchemaName} was not found.");

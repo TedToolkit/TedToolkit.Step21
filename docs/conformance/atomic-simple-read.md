@@ -9,7 +9,7 @@ governed by explicitly supplied schemas. They hydrate generated entities through
 using var source = File.OpenText("sample.p21");
 var structure = ExchangeStructure.Read(
     source,
-    [TedToolkit.Step21.Generated.SampleSchema.SchemaDescriptor.Instance]);
+    [TedToolkit.Step21.Schemas.SampleSchema.SchemaDescriptor.Instance]);
 ```
 
 The descriptor collection is snapshotted and checked before the first source read. A null descriptor or duplicate

@@ -51,7 +51,7 @@ public sealed class PhysicalNameMappingTests
         using System.IO;
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.PhysicalNames;
+        using TedToolkit.Step21.Schemas.PhysicalNames;
         internal static class PhysicalNameConsumer
         {
             internal static bool Check(bool shortInput, bool enumerationSelected)
@@ -67,12 +67,12 @@ public sealed class PhysicalNameMappingTests
                     "FILE_SCHEMA(('physical_names'));ENDSEC;DATA;" + record +
                     "ENDSEC;END-ISO-10303-21;";
                 var structure = ExchangeStructure.Read(new StringReader(input),
-                    [TedToolkit.Step21.Generated.PhysicalNames.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.PhysicalNames.SchemaDescriptor.Instance]);
                 var writer = new StringWriter();
                 structure.Write(writer);
                 var output = writer.ToString();
                 var reread = ExchangeStructure.Read(new StringReader(output),
-                    [TedToolkit.Step21.Generated.PhysicalNames.SchemaDescriptor.Instance]);
+                    [TedToolkit.Step21.Schemas.PhysicalNames.SchemaDescriptor.Instance]);
                 var marker = reread.Entities.OfType<Marker>().Single();
                 if (enumerationSelected)
                 {

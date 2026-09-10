@@ -2785,7 +2785,7 @@ internal static class ExpressExpressionEmitter
         var schema = ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name);
         var name = ExpressEntityProjection.ToPascalCase(symbol.Name);
         var prefix = entityInterface ? "I" : "";
-        return $"global::TedToolkit.Step21.Generated.{schema}.{prefix}{name}";
+        return $"global::TedToolkit.Step21.Schemas.{schema}.{prefix}{name}";
     }
 
     private static string DecodeString(ExpressBoundExpression expression)

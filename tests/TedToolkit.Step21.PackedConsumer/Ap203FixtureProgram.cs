@@ -5,9 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Generated.ConfigControlDesign;
+using TedToolkit.Step21.Schemas.ConfigControlDesign;
 
-using Ap203SchemaDescriptor = TedToolkit.Step21.Generated.ConfigControlDesign.SchemaDescriptor;
+using Ap203SchemaDescriptor = TedToolkit.Step21.Schemas.ConfigControlDesign.SchemaDescriptor;
 
 namespace TedToolkit.Step21.PackedConsumer;
 

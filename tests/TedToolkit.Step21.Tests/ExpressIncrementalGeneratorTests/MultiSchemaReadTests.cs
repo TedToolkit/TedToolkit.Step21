@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 using Microsoft.CodeAnalysis;
 
 using TedToolkit.Step21.Tests.ExpressGeneratorTests;
@@ -7,6 +10,9 @@ namespace TedToolkit.Step21.Tests.ExpressIncrementalGeneratorTests;
 /// <summary>Proves typed binding and ISO population behavior across a closed generated schema set.</summary>
 public sealed class MultiSchemaReadTests
 {
+    private const string NamespaceNormalizedPublicApiHash =
+        "716610E0E3E3BF11F3E7CB96AA39FEBB985D962EB11D0C6DABBC77DA7D0BBC04";
+
     private const string BASE_SCHEMA = """
         SCHEMA base_model;
         ENTITY address;
@@ -51,6 +57,32 @@ public sealed class MultiSchemaReadTests
         END_ENTITY;
         END_SCHEMA;
         """;
+
+    /// <summary>Changes only the public namespace root across a representative cross-schema surface.</summary>
+    [Test]
+    public async Task Should_preserve_complete_public_api_shape_across_schema_namespace_migration()
+    {
+        var result = GeneratorHostTests.Run(
+            ("schemas/base.exp", BASE_SCHEMA),
+            ("schemas/tag.exp", TAG_SCHEMA),
+            ("schemas/extension.exp", EXTENSION_SCHEMA));
+        var diagnostics = result.Diagnostics
+            .Concat(result.OutputCompilation.GetDiagnostics())
+            .Where(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error)
+            .ToArray();
+        await Assert.That(diagnostics).IsEmpty()
+            .Because(string.Join(Environment.NewLine, diagnostics.AsEnumerable()));
+
+        var publicApi = string.Concat(
+            GeneratedPublicApi.Render(result.OutputCompilation, "BaseModel"),
+            GeneratedPublicApi.Render(result.OutputCompilation, "TagModel"),
+            GeneratedPublicApi.Render(result.OutputCompilation, "ExtensionModel"));
+        var normalized = GeneratedPublicApi.NormalizeSchemaNamespaceForComparison(publicApi);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
+        Console.WriteLine($"CROSS_SCHEMA_NAMESPACE_NORMALIZED_PUBLIC_API_SHA256={hash}");
+
+        await Assert.That(hash).IsEqualTo(NamespaceNormalizedPublicApiHash);
+    }
 
     /// <summary>Binds each named section under its exact descriptor and retains cross-schema object identity.</summary>
     [Test]
@@ -328,7 +360,7 @@ public sealed class MultiSchemaReadTests
         var descriptors = sources.Select(source =>
         {
             var schemaName = source.Text.Split(';')[0].Split(' ', StringSplitOptions.RemoveEmptyEntries)[1];
-            var typeName = $"TedToolkit.Step21.Generated.{ToPascalCase(schemaName)}.SchemaDescriptor";
+            var typeName = $"TedToolkit.Step21.Schemas.{ToPascalCase(schemaName)}.SchemaDescriptor";
             return (SchemaDescriptor)assembly.GetType(typeName, throwOnError: true)!
                 .GetProperty("Instance")!.GetValue(null)!;
         }).ToArray();

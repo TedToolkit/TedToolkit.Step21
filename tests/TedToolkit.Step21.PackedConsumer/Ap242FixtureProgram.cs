@@ -5,9 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf;
+using TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf;
 
-using Ap242SchemaDescriptor = TedToolkit.Step21.Generated.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor;
+using Ap242SchemaDescriptor = TedToolkit.Step21.Schemas.Ap242ManagedModelBased3dEngineeringMimLf.SchemaDescriptor;
 
 namespace TedToolkit.Step21.PackedConsumer;
 

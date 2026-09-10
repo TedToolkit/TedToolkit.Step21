@@ -43,7 +43,7 @@ public sealed class GeneratedDirectReferencesTests
         using System.Collections.Generic;
         using System.Linq;
         using TedToolkit.Step21;
-        using TedToolkit.Step21.Generated.DirectReferenceModel;
+        using TedToolkit.Step21.Schemas.DirectReferenceModel;
 
         internal sealed class DirectReferenceFixture
         {
@@ -115,7 +115,7 @@ public sealed class GeneratedDirectReferencesTests
     public async Task Should_enumerate_live_nested_physical_occurrences_once_without_deduplication()
     {
         var result = GeneratorHostTests.Run(CONSUMER, ("schemas/direct-references.exp", REFERENCE_SCHEMA));
-        var node = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Generated.DirectReferenceModel.Node");
+        var node = RequiredType(result.OutputCompilation, "TedToolkit.Step21.Schemas.DirectReferenceModel.Node");
         var nodeSource = result.GeneratedSources.Single(source =>
             source.HintName == "ExpressEntity_DIRECT_REFERENCE_MODEL_NODE.g.cs").SourceText.ToString();
 
@@ -210,7 +210,7 @@ public sealed class GeneratedDirectReferencesTests
         var hidden = (Entity)fixtureType.GetProperty("Hidden")!.GetValue(fixture)!;
         var later = (Entity)fixtureType.GetProperty("Later")!.GetValue(fixture)!;
         var descriptorType = assembly.GetType(
-            "TedToolkit.Step21.Generated.DirectReferenceModel.SchemaDescriptor",
+            "TedToolkit.Step21.Schemas.DirectReferenceModel.SchemaDescriptor",
             throwOnError: true)!;
         var descriptor = (SchemaDescriptor)descriptorType.GetProperty("Instance")!.GetValue(null)!;
         var structure = new ExchangeStructure(TestHeader.Create(), [descriptor]);

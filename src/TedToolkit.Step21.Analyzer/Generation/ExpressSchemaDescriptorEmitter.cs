@@ -147,7 +147,7 @@ internal static class ExpressSchemaDescriptorEmitter
             descriptor.AddMember(CreateConstantLookupMethod(valueConstantNames, entityConstants: false));
         }
 
-        var generatedNamespace = $"TedToolkit.Step21.Generated.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
+        var generatedNamespace = $"TedToolkit.Step21.Schemas.{ExpressEntityProjection.ToPascalCase(schema.Name)}";
         shards.Emit(context, generatedNamespace, schema.Name.ToUpperInvariant());
     }
 
@@ -1468,7 +1468,7 @@ internal static class ExpressSchemaDescriptorEmitter
 
         return ReferenceEquals(currentSchema, symbol.DeclaringSchema)
             ? generatedName
-            : "global::TedToolkit.Step21.Generated."
+            : "global::TedToolkit.Step21.Schemas."
                 + $"{ExpressEntityProjection.ToPascalCase(symbol.DeclaringSchema.Name)}.{generatedName}";
     }
 
