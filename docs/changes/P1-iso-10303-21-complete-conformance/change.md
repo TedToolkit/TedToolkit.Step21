@@ -70,7 +70,7 @@ Scenario: 每项适用的规范要求都有可执行证据
 Scenario: class 1、2、3 交换结构按声明读写
   Given 覆盖 4;1、4;2、来源已描述的 4;3 facilities 及合法 2;1/3;1 compatibility 的标准条款 fixture
   When 消费者读取、写出并重读每个 fixture
-  Then 已声明支持的 implementation_level、occurrences、short names、strings、sections 和语义均满足对应 class，完整 4;3 与缺失短名能力保持 PICS false
+  Then 已声明支持的 implementation_level、occurrences、schema-supplied short names、strings、sections 和语义均满足对应 class，完整 4;3 与 EXPRESS constant names 保持 PICS false
 ```
 
 <!-- acceptance-case: AC-03 -->

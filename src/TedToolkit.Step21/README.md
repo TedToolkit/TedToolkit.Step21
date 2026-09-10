@@ -122,7 +122,8 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 
 - Complete ISO 10303-21:2016 Edition 3 clear-text syntax and ISO 10303-11:2004 Edition 2 EXPRESS syntax.
 - Closed-set schema binding, generated scalar/nominal/SELECT/aggregate/entity types, descriptor-based hydration/projection, and the documented statically generated validation-reachable EXPRESS subset.
-- Simple mappings plus the documented supported flat `ANDOR` complex mapping, including inherited/redeclared components.
+- Simple mappings plus the documented source-bounded complex mapping profile, including nested `ONEOF`/`ANDOR`
+  expressions and inherited/redeclared components.
 - Named same-schema and governed multi-schema populations, local cross-section references, deterministic canonical writing, and semantic read-write-read equivalence.
 - A reflection-free, dynamic-code-free package graph verified by a real `win-x64` Native AOT consumer publish/run.
 
@@ -131,8 +132,10 @@ Diagnostics use stable codes and optional `SourceLocation` values containing onl
 - Physical anchor items, tags, all four occurrence-name categories, UUID anchor identity, and schema-neutral `REFERENCE` declarations can be read, edited, validated, canonically written, and reread; see the [conformance record](https://github.com/TedToolkit/TedToolkit.Step21/blob/main/docs/conformance/anchor-occurrence-uuid.md).
 - External resource acquisition is opt-in through per-read capabilities; local fragments, external clear text, in-memory directories, ZIP roots/subsidiaries, UUID registry responses, and other-format conversion are supported. The legacy overload keeps unresolved-reference diagnostics, and no overload performs implicit I/O.
 - Signature sections are decoded as detached CMS. Optional per-read verification accepts trust only through explicit time, signer-certificate revocation input, roots, additional or embedded certificates; `SignatureReports` retains results for every signed resource. Signed writing validates callback output against an independent canonical content snapshot and remains zero-output atomic on failure.
-- Complex mappings outside the documented flat `ANDOR` form are unsupported. Domain equivalence is explicit and
-  schema-qualified; ISO 10303-22 repositories and inferred compatibility are outside the package contract.
+- The complex mapping profile is bounded to at most eight concrete leaves and 256 candidate combinations per root.
+  Complete evaluated-set validity beyond that profile is not claimed because the supplied ISO 10303-11 files omit
+  Annex B. Domain equivalence is explicit and schema-qualified; ISO 10303-22 repositories and inferred compatibility
+  are outside the package contract.
 - This is not a general EXPRESS interpreter: arbitrary algorithmic `RULE`/function bodies and cross-schema executable dependencies are outside the delivered subset. The package exposes no public parser context, raw syntax model, reader/writer façade, registry, or resolver.
 - There is no JSON or XML serialization contract, extension hook, attribute model, or dependency.
 - Writing is canonical and semantically equivalent; it is not byte-preserving and does not retain comments or original formatting.

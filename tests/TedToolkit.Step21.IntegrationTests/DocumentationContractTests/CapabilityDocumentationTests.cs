@@ -40,6 +40,8 @@ internal sealed class CapabilityDocumentationTests
             await Assert.That(packageReadme).Contains("JSON or XML");
             await Assert.That(packageReadme).Contains("byte-preserving");
             await Assert.That(packageReadme).Contains("Native AOT");
+            await Assert.That(packageReadme).Contains("source-bounded complex mapping");
+            await Assert.That(packageReadme).Contains("Annex B");
             await Assert.That(conformanceReadme).Contains("Delivered");
             await Assert.That(conformanceReadme).Contains("Source-excluded operations");
             await Assert.That(conformanceReadme).Contains("Outside the public contract");

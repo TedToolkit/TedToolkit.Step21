@@ -17,7 +17,7 @@ namespace TedToolkit.Step21.Analyzer.Generation;
 /// </summary>
 internal sealed class ExpressComplexEntityProjection
 {
-    private const int MAX_FLAT_ANDOR_FACTORS = 8;
+    private const int MAX_COMPLEX_LEAVES = 8;
 
     private const int MAX_COMPLEX_COMBINATIONS_PER_ROOT = 256;
 
@@ -75,7 +75,7 @@ internal sealed class ExpressComplexEntityProjection
     }
 
     /// <summary>
-    /// Creates supported flat-ANDOR multi-leaf projections.
+    /// Creates source-bounded multi-leaf projections from direct siblings or the parsed supertype expression.
     /// </summary>
     /// <param name="projections">The generated entity projections.</param>
     /// <param name="resolver">The generated type resolver.</param>
@@ -105,7 +105,7 @@ internal sealed class ExpressComplexEntityProjection
                         && StringComparer.OrdinalIgnoreCase.Equals(candidate.Entity.Name, name)))
                     .ToArray();
                 if (selected.Any(candidate => candidate is null)
-                    || selected.Length > MAX_FLAT_ANDOR_FACTORS
+                    || selected.Length > MAX_COMPLEX_LEAVES
                     || selected.Any(candidate => candidate!.Entity.IsAbstract))
                 {
                     continue;
@@ -170,7 +170,7 @@ internal sealed class ExpressComplexEntityProjection
             .Select(candidate => candidate.Entity.Name)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (siblings.Length is < 2 or > MAX_FLAT_ANDOR_FACTORS)
+        if (siblings.Length is < 2 or > MAX_COMPLEX_LEAVES)
         {
             return new();
         }
