@@ -24,19 +24,9 @@ var pipeline = new TedPipeline(
             solution,
         ],
         Solution = solution,
-        TestFiles =
-        [
-            new FileInfo(Path.Combine(
-                repositoryRoot.FullName,
-                "tests",
-                "TedToolkit.Step21.Tests",
-                "TedToolkit.Step21.Tests.csproj")),
-            new FileInfo(Path.Combine(
-                repositoryRoot.FullName,
-                "tests",
-                "TedToolkit.Step21.IntegrationTests",
-                "TedToolkit.Step21.IntegrationTests.csproj")),
-        ],
+        // GitHub Actions runs the sharded unit and integration suites before invoking this
+        // release pipeline. Re-running them here would serialize the expensive AP package tests.
+        TestFiles = [],
     },
     new FileInfo(Path.Combine(buildProjectDirectory.FullName, "appsettings.json")));
 
