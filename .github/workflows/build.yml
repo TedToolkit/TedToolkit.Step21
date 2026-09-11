@@ -6,6 +6,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/development' }}
+
 jobs:
   verify-antlr-generation:
     name: Verify ANTLR generation (${{ matrix.os }})
@@ -80,9 +84,6 @@ jobs:
 
   verify-solution-build:
     name: Verify Release solution build
-    needs:
-      - compare-antlr-generation
-      - verify-native-aot-package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -113,9 +114,6 @@ jobs:
 
   verify-unit-tests:
     name: Verify unit tests (${{ matrix.name }})
-    needs:
-      - compare-antlr-generation
-      - verify-native-aot-package
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -213,6 +211,9 @@ jobs:
   verify-ci:
     name: Verify CI
     needs:
+      - compare-antlr-generation
+      - verify-native-aot-package
+      - verify-solution-build
       - verify-unit-tests
       - verify-integration-tests
     runs-on: ubuntu-latest

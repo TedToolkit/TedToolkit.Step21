@@ -11,6 +11,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var solution = new FileInfo(Path.Combine(repositoryRoot.FullName, "TedToolkit.Step21.slnx"));
+var packageSolution = new FileInfo(Path.Combine(repositoryRoot.FullName, "TedToolkit.Step21.Package.slnx"));
 var buildProjectDirectory = new DirectoryInfo(Path.Combine(
     repositoryRoot.FullName,
     "build",
@@ -21,7 +22,7 @@ var pipeline = new TedPipeline(
     {
         BuildFiles =
         [
-            solution,
+            packageSolution,
         ],
         Solution = solution,
         // GitHub Actions runs the sharded unit and integration suites before invoking this
