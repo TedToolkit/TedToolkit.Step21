@@ -17,7 +17,6 @@ This index states what the current package delivers, what the grammars recognize
 | Annex E schema populations, all determination methods, and explicit domain equivalence | [schema populations](schema-populations.md) |
 | Deterministic simple writing and source-bounded complex read-write-read mapping | [simple writing](canonical-simple-writing.md), [complex mapping](complex-mapping-round-trip.md), [pre-write validation](atomic-prewrite-validation.md) |
 | Packed consumer and real `win-x64` Native AOT publish/run | [package/AOT proof](native-aot-package-proof.md) |
-| Pinned class-1 allocation regression and zero unused feature-service construction | [class-1 performance](class1-performance.md) |
 
 Repository-owned semantic round-trip fixtures compare entity identity, generated type, values, aggregate semantics, and reference identity after write/read. Canonical formatting may differ from the input; the opt-in external corpus is syntax evidence only.
 

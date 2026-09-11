@@ -11,6 +11,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var solution = new FileInfo(Path.Combine(repositoryRoot.FullName, "TedToolkit.Step21.slnx"));
+var packageSolution = new FileInfo(Path.Combine(repositoryRoot.FullName, "TedToolkit.Step21.Package.slnx"));
 var buildProjectDirectory = new DirectoryInfo(Path.Combine(
     repositoryRoot.FullName,
     "build",
@@ -21,22 +22,12 @@ var pipeline = new TedPipeline(
     {
         BuildFiles =
         [
-            solution,
+            packageSolution,
         ],
         Solution = solution,
-        TestFiles =
-        [
-            new FileInfo(Path.Combine(
-                repositoryRoot.FullName,
-                "tests",
-                "TedToolkit.Step21.Tests",
-                "TedToolkit.Step21.Tests.csproj")),
-            new FileInfo(Path.Combine(
-                repositoryRoot.FullName,
-                "tests",
-                "TedToolkit.Step21.IntegrationTests",
-                "TedToolkit.Step21.IntegrationTests.csproj")),
-        ],
+        // GitHub Actions runs the sharded unit and integration suites before invoking this
+        // release pipeline. Re-running them here would serialize the expensive AP package tests.
+        TestFiles = [],
     },
     new FileInfo(Path.Combine(buildProjectDirectory.FullName, "appsettings.json")));
 

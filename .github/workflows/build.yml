@@ -3,7 +3,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/development' }}
 
 jobs:
   verify-antlr-generation:
@@ -79,9 +84,6 @@ jobs:
 
   verify-solution-build:
     name: Verify Release solution build
-    needs:
-      - compare-antlr-generation
-      - verify-native-aot-package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,8 +95,8 @@ jobs:
       - name: Fetch and verify EXPRESS schema inputs
         shell: pwsh
         run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
-      # The release-oriented build pipeline is intentionally excluded here: ADR-0014 requires a
-      # separate rights review before generated or compiled AP artifacts may be published.
+      # TedPipeline runs only after every verification job succeeds. AP projects remain build-only
+      # because ADR-0014 still requires a separate rights review before they may be published.
       - name: Restore solution
         run: dotnet restore TedToolkit.Step21.slnx
       - name: Build solution
@@ -112,9 +114,6 @@ jobs:
 
   verify-unit-tests:
     name: Verify unit tests (${{ matrix.name }})
-    needs:
-      - compare-antlr-generation
-      - verify-native-aot-package
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -212,8 +211,33 @@ jobs:
   verify-ci:
     name: Verify CI
     needs:
+      - compare-antlr-generation
+      - verify-native-aot-package
+      - verify-solution-build
       - verify-unit-tests
       - verify-integration-tests
     runs-on: ubuntu-latest
     steps:
       - run: echo "All build, unit, integration, ANTLR, and Native AOT checks passed."
+
+  release:
+    name: Run TedToolkit pipeline
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Fetch and verify EXPRESS schema inputs
+        shell: pwsh
+        run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
+      - name: Run TedToolkit release pipeline
+        env:
+          NuGet__ApiKey: ${{ secrets.NUGET__APIKEY }}
+          NuGet__Url: ${{ vars.NUGET__URL }}
+          NuGet__Source: ${{ vars.NUGET__SOURCE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet run --project build/TedToolkit.Step21.Build/TedToolkit.Step21.Build.csproj --configuration Release
