@@ -3,7 +3,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   verify-antlr-generation:
@@ -93,7 +94,7 @@ jobs:
       - name: Fetch and verify EXPRESS schema inputs
         shell: pwsh
         run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
-      # Release runs only after every verification job succeeds. AP projects remain build-only
+      # TedPipeline runs only after every verification job succeeds. AP projects remain build-only
       # because ADR-0014 still requires a separate rights review before they may be published.
       - name: Restore solution
         run: dotnet restore TedToolkit.Step21.slnx
@@ -219,12 +220,9 @@ jobs:
       - run: echo "All build, unit, integration, ANTLR, and Native AOT checks passed."
 
   release:
-    name: Publish NuGet package and create GitHub release
+    name: Run TedToolkit pipeline
     needs: verify-ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
