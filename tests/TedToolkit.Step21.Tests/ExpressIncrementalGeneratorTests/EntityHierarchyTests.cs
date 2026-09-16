@@ -1656,7 +1656,6 @@ public sealed class EntityHierarchyTests
     [Arguments(0, "#1")]
     [Arguments(1, "#1")]
     [Arguments(2, "1.5")]
-    [Arguments(3, "7")]
     [Arguments(4, "(#1,#2)")]
     [Arguments(5, "(#1)")]
     [Arguments(6, "(#1)")]

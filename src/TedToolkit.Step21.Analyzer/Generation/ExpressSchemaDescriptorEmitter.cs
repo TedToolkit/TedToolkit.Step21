@@ -859,11 +859,22 @@ internal static class ExpressSchemaDescriptorEmitter
                 .AddStatement(invalid);
         }
 
+        if (kind == ExpressScalarKind.Real)
+        {
+            return new IfStatement(new CustomExpression($"{parameter}.TryGetReal(out var {parameterName})"))
+                .AddStatement(new CustomExpression(createAssignment(parameterName)))
+                .ElseIf(new CustomExpression($"{parameter}.TryGetInteger(out var {parameterName}Integer)"))
+                .AddStatement(new CustomExpression(createAssignment(
+                    $"new global::TedToolkit.Step21.RealValue({parameterName}Integer, "
+                    + "global::System.Numerics.BigInteger.Zero)")))
+                .Else()
+                .AddStatement(invalid);
+        }
+
         var tryGetMethod = kind switch
         {
             ExpressScalarKind.Binary => "TryGetBinary",
             ExpressScalarKind.Integer => "TryGetInteger",
-            ExpressScalarKind.Real => "TryGetReal",
             ExpressScalarKind.String => "TryGetString",
             _ => throw new InvalidOperationException($"Unsupported scalar hydration kind '{kind.ToString()}'."),
         };
@@ -1345,6 +1356,11 @@ internal static class ExpressSchemaDescriptorEmitter
             return $"({parameter}.TryGetInteger(out _) || {parameter}.TryGetReal(out _))";
         }
 
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Real, })
+        {
+            return $"({parameter}.TryGetReal(out _) || {parameter}.TryGetInteger(out _))";
+        }
+
         if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, })
         {
             return $"({parameter}.TryGetBoolean(out _) || ({parameter}.TryGetEnumeration(out var {rawName}Symbol) "
@@ -1394,6 +1410,16 @@ internal static class ExpressSchemaDescriptorEmitter
                 + $"? global::TedToolkit.Step21.NumberValue.FromReal({rawName}Real) "
                 + ": throw new global::System.InvalidOperationException()";
             return CreateReadValueExpression(currentSchema, type, number, resolver, physicalNames);
+        }
+
+        if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Real, })
+        {
+            var real = $"{parameter}.TryGetReal(out var {rawName}Real) "
+                + $"? {rawName}Real : {parameter}.TryGetInteger(out var {rawName}Integer) "
+                + $"? new global::TedToolkit.Step21.RealValue({rawName}Integer, "
+                + "global::System.Numerics.BigInteger.Zero) "
+                + ": throw new global::System.InvalidOperationException()";
+            return CreateReadValueExpression(currentSchema, type, real, resolver, physicalNames);
         }
 
         if (terminal is ExpressBoundScalarType { Kind: ExpressScalarKind.Boolean, })
@@ -1607,11 +1633,18 @@ internal static class ExpressSchemaDescriptorEmitter
                     + $"|| {rawName} != global::TedToolkit.Step21.LogicalValue.Unknown)))";
             }
 
+            if (scalar.Kind == ExpressScalarKind.Real)
+            {
+                return $"({parameter}.TryGetReal(out var {rawName}) "
+                    + $"|| ({parameter}.TryGetInteger(out var {rawName}Integer) "
+                    + $"&& (({rawName} = new global::TedToolkit.Step21.RealValue({rawName}Integer, "
+                    + $"global::System.Numerics.BigInteger.Zero)) == {rawName})))";
+            }
+
             var method = scalar.Kind switch
             {
                 ExpressScalarKind.Binary => "TryGetBinary",
                 ExpressScalarKind.Integer => "TryGetInteger",
-                ExpressScalarKind.Real => "TryGetReal",
                 ExpressScalarKind.String => "TryGetString",
                 _ => throw new InvalidOperationException("NUMBER SELECT alternatives require a later mapping branch."),
             };

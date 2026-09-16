@@ -54,6 +54,21 @@ public sealed class AtomicSimpleReadTests
         END_SCHEMA;
         """;
 
+    private const string REAL_WIDENING_SCHEMA = """
+        SCHEMA real_widening;
+        TYPE real_alias = REAL;
+        END_TYPE;
+        TYPE real_choice = SELECT (real_alias);
+        END_TYPE;
+        ENTITY sample;
+          direct_value : REAL;
+          alias_value : real_alias;
+          values : LIST [1:?] OF REAL;
+          choice : real_choice;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>Reads all simple physical value families and publishes only the validated typed structure.</summary>
     [Test]
     public async Task Should_read_one_simple_data_section_with_exact_typed_values()
@@ -126,6 +141,34 @@ public sealed class AtomicSimpleReadTests
                 && logicals[1].TryGetLogical(out var secondLogical)
                 && secondLogical == LogicalValue.False).IsTrue();
             await Assert.That(structure.Validate().IsValid).IsTrue();
+        }
+    }
+
+    /// <summary>Widens physical INTEGER parameters to exact REAL values in every generated hydration shape.</summary>
+    [Test]
+    public async Task Should_widen_integer_parameters_when_real_is_declared()
+    {
+        var descriptor = CreateDescriptor(REAL_WIDENING_SCHEMA, "RealWidening");
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "real_widening",
+                "#1=SAMPLE(1,2,(3,4.5),REAL_ALIAS(6));")),
+            [descriptor]);
+        var projected = descriptor.ProjectEntity(structure.Entities.Single()).Single().Value;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(projected[0].TryGetReal(out var direct) && direct == new RealValue(1, 0)).IsTrue();
+            await Assert.That(projected[1].TryGetReal(out var alias) && alias == new RealValue(2, 0)).IsTrue();
+            await Assert.That(projected[2].TryGetAggregate(out var values)
+                && values[0].TryGetReal(out var first)
+                && first == new RealValue(3, 0)
+                && values[1].TryGetReal(out var second)
+                && second == new RealValue(45, -1)).IsTrue();
+            await Assert.That(projected[3].TryGetTyped(out var typeName, out var choice)
+                && typeName == "REAL_ALIAS"
+                && choice.TryGetReal(out var selected)
+                && selected == new RealValue(6, 0)).IsTrue();
         }
     }
 
