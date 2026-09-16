@@ -148,14 +148,16 @@ public sealed class AtomicSimpleReadTests
 
     /// <summary>Rejects physical INTEGER parameters for EXPRESS REAL when compatibility is not enabled.</summary>
     [Test]
-    public async Task Should_reject_integer_parameters_when_real_is_declared_by_default()
+    [Arguments("#1=SAMPLE(1,2.,(3.),REAL_ALIAS(6.),7,8);")]
+    [Arguments("#1=SAMPLE(1.,2,(3.),REAL_ALIAS(6.),7,8);")]
+    [Arguments("#1=SAMPLE(1.,2.,(3,4.5),REAL_ALIAS(6.),7,8);")]
+    [Arguments("#1=SAMPLE(1.,2.,(3.),REAL_ALIAS(6),7,8);")]
+    public async Task Should_reject_integer_parameters_when_real_is_declared_by_default(string record)
     {
         var descriptor = CreateDescriptor(REAL_COMPATIBILITY_SCHEMA, "RealCompatibility");
 
         var exception = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
-            new StringReader(CreateExchange(
-                "real_compatibility",
-                "#1=SAMPLE(1,2,(3,4.5),REAL_ALIAS(6),7,8);")),
+            new StringReader(CreateExchange("real_compatibility", record)),
             [descriptor]));
 
         await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
@@ -204,7 +206,12 @@ public sealed class AtomicSimpleReadTests
     public async Task Should_preserve_other_numeric_bindings_when_real_compatibility_is_enabled()
     {
         var descriptor = CreateDescriptor(REAL_COMPATIBILITY_SCHEMA, "RealCompatibility");
+        var probe = new RealCompatibilityProbeDescriptor();
         var options = ExchangeStructureReadOptions.WithCompatibility(Part21ReadCompatibility.IntegerForReal);
+        ExchangeStructure.Read(
+            new StringReader(CreateExchange("real_compatibility", "#1=SAMPLE(8);")),
+            [probe],
+            options);
         var structure = ExchangeStructure.Read(
             new StringReader(CreateExchange(
                 "real_compatibility",
@@ -221,7 +228,8 @@ public sealed class AtomicSimpleReadTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(ParameterValue.FromInteger(8).Kind).IsEqualTo(ParameterValueKind.Integer);
+            await Assert.That(probe.Parameter?.Kind).IsEqualTo(ParameterValueKind.Integer);
+            await Assert.That(probe.HydratedValue).IsEqualTo(new RealValue(8, 0));
             await Assert.That(projected[5].TryGetInteger(out var number) && number == 8).IsTrue();
             await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
                 .Contains("P21-BIND-PARAMETER");
@@ -367,6 +375,43 @@ public sealed class AtomicSimpleReadTests
         return (SchemaDescriptor)assembly.GetType(
             $"TedToolkit.Step21.Schemas.{generatedNamespace}.SchemaDescriptor",
             throwOnError: true)!.GetProperty("Instance")!.GetValue(null)!;
+    }
+
+    private sealed class RealCompatibilityProbeDescriptor : SchemaDescriptor
+    {
+        public override SchemaName Name { get; } = new("REAL_COMPATIBILITY");
+
+        internal ParameterValue? Parameter { get; private set; }
+
+        internal RealValue? HydratedValue { get; private set; }
+
+        protected override Entity? AllocateEntityCore(IReadOnlyList<string> entityNames) =>
+            entityNames.SequenceEqual(["SAMPLE"], StringComparer.Ordinal) ? new ProbeEntity() : null;
+
+        protected override IReadOnlyList<Step21Diagnostic> HydrateEntityCore(
+            ExchangeStructure structure,
+            Entity value,
+            IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components)
+        {
+            Parameter = components.Single().Value.Single();
+            HydratedValue = TryHydrateReal(structure, Parameter, out var hydrated) ? hydrated : null;
+            return [];
+        }
+
+        protected override ValidationResult ValidateCore(
+            ExchangeStructure structure,
+            IReadOnlyList<KeyValuePair<string, Entity>> entities) => new([]);
+
+        protected override IReadOnlyList<Step21Diagnostic> GetCapabilityDiagnosticsCore(
+            ExchangeStructure structure) => [];
+
+        protected override IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> ProjectEntityCore(
+            Entity value) => [];
+    }
+
+    private sealed class ProbeEntity : Entity
+    {
+        public override IEnumerable<Entity> DirectReferences => [];
     }
 
     private sealed class ProbeTextReader : TextReader
