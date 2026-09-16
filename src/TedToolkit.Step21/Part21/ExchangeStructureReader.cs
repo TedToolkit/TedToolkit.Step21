@@ -146,7 +146,10 @@ internal static class ExchangeStructureReader
         if (header is null)
             throw new ExchangeStructureBindingException(bindingDiagnostics);
 
-        var structure = new ExchangeStructure(header, descriptors);
+        var structure = new ExchangeStructure(
+            header,
+            descriptors,
+            resolutionContext?.Compatibility ?? Part21ReadCompatibility.None);
         structure.SetSignatures(signatures);
         resolutionContext?.ConfigureStructure(structure);
         structure.SetSchemaPopulationExternalFiles(BindSchemaPopulationExternalFiles(

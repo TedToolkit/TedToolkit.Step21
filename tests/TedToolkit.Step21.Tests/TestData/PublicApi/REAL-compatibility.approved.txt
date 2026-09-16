@@ -1,0 +1,32 @@
+sealed class TedToolkit.Step21.ExchangeStructureReadOptions : System.Object
+  constructor (System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+  property System.Uri? BaseUri { get; }
+  property TedToolkit.Step21.Part21ReadCompatibility Compatibility { get; }
+  property TedToolkit.Step21.ISchemaDomainEquivalenceProvider? DomainEquivalenceProvider { get; }
+  property System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.SchemaDomainEquivalence> DomainEquivalences { get; }
+  property TedToolkit.Step21.Part21ProcessingLimits ProcessingLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceConverter? ResourceConverter { get; }
+  property TedToolkit.Step21.Part21ResourceLimits ResourceLimits { get; }
+  property TedToolkit.Step21.IPart21ResourceProvider? ResourceProvider { get; }
+  property TedToolkit.Step21.Part21SignatureVerificationOptions? SignatureVerification { get; }
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithCompatibility(TedToolkit.Step21.Part21ReadCompatibility compatibility, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21ProcessingLimits? processingLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null, TedToolkit.Step21.ISchemaDomainEquivalenceProvider? domainEquivalenceProvider = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithDomainEquivalenceProvider(TedToolkit.Step21.ISchemaDomainEquivalenceProvider domainEquivalenceProvider, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithProcessingLimits(TedToolkit.Step21.Part21ProcessingLimits processingLimits, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null, TedToolkit.Step21.Part21SignatureVerificationOptions? signatureVerification = null, TedToolkit.Step21.ISchemaDomainEquivalenceProvider? domainEquivalenceProvider = null)
+  static method TedToolkit.Step21.ExchangeStructureReadOptions WithSignatureVerification(TedToolkit.Step21.Part21SignatureVerificationOptions signatureVerification, System.Uri? baseUri = null, TedToolkit.Step21.IPart21ResourceProvider? resourceProvider = null, TedToolkit.Step21.IPart21ResourceConverter? resourceConverter = null, TedToolkit.Step21.Part21ResourceLimits? resourceLimits = null)
+enum TedToolkit.Step21.Part21ReadCompatibility
+  value None = 0
+  value IntegerForReal = 1
+abstract class TedToolkit.Step21.SchemaDescriptor : System.Object
+  protected constructor ()
+  property abstract TedToolkit.Step21.SchemaName Name { get; }
+  protected abstract method TedToolkit.Step21.Entity? AllocateEntityCore(System.Collections.Generic.IReadOnlyList<System.String> entityNames)
+  protected method System.Void ConfigureEntityTypeIdentity(System.Func<TedToolkit.Step21.Entity, System.String, System.Boolean> matcher)
+  protected method System.Boolean ContainsConstantEntityCore(System.String name)
+  protected method System.Boolean ContainsConstantValueCore(System.String name)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> GetCapabilityDiagnosticsCore(TedToolkit.Step21.ExchangeStructure structure)
+  protected abstract method System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.Step21Diagnostic> HydrateEntityCore(TedToolkit.Step21.ExchangeStructure structure, TedToolkit.Step21.Entity value, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> components)
+  protected method System.Boolean IsEntityReferenceCompatibleCore(TedToolkit.Step21.Entity value)
+  protected abstract method System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, System.Collections.Generic.IReadOnlyList<TedToolkit.Step21.ParameterValue>>> ProjectEntityCore(TedToolkit.Step21.Entity value)
+  protected static method System.Boolean TryHydrateReal(TedToolkit.Step21.ExchangeStructure structure, TedToolkit.Step21.ParameterValue parameter, out TedToolkit.Step21.RealValue value)
+  protected abstract method TedToolkit.Step21.ValidationResult ValidateCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)
+  protected method TedToolkit.Step21.ValidationResult ValidateEntityPopulationCore(TedToolkit.Step21.ExchangeStructure structure, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<System.String, TedToolkit.Step21.Entity>> entities)

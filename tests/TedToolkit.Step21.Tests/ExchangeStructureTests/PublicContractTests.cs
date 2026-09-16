@@ -39,11 +39,11 @@ internal sealed class PublicContractTests
         }
     }
 
-    /// <summary>Preserves the pre-signature CLR constructor while adding signature verification.</summary>
+    /// <summary>Preserves the original CLR constructor while adding explicit read-option factories.</summary>
     [Test]
-    public async Task Should_preserve_the_original_read_options_constructor()
+    public async Task Should_preserve_the_original_read_options_constructor_while_adding_factories()
     {
-        _ = new ExchangeStructureReadOptions(null);
+        var strict = new ExchangeStructureReadOptions(null);
         _ = new ExchangeStructureReadOptions(null, null);
         var constructors = typeof(ExchangeStructureReadOptions)
             .GetConstructors()
@@ -60,10 +60,20 @@ internal sealed class PublicContractTests
         var domainFactory = typeof(ExchangeStructureReadOptions).GetMethod(
             nameof(ExchangeStructureReadOptions.WithDomainEquivalenceProvider),
             BindingFlags.Public | BindingFlags.Static);
+        var compatibilityFactory = typeof(ExchangeStructureReadOptions).GetMethod(
+            nameof(ExchangeStructureReadOptions.WithCompatibility),
+            BindingFlags.Public | BindingFlags.Static);
+        var compatible = ExchangeStructureReadOptions.WithCompatibility(Part21ReadCompatibility.IntegerForReal);
+        var invalid = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ExchangeStructureReadOptions.WithCompatibility((Part21ReadCompatibility)2));
         using (Assert.Multiple())
         {
             await Assert.That(factory).IsNotNull();
             await Assert.That(domainFactory).IsNotNull();
+            await Assert.That(compatibilityFactory).IsNotNull();
+            await Assert.That(strict.Compatibility).IsEqualTo(Part21ReadCompatibility.None);
+            await Assert.That(compatible.Compatibility).IsEqualTo(Part21ReadCompatibility.IntegerForReal);
+            await Assert.That(invalid.ParamName).IsEqualTo("compatibility");
         }
     }
 

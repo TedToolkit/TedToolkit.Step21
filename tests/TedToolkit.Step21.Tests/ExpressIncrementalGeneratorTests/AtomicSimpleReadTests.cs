@@ -54,6 +54,23 @@ public sealed class AtomicSimpleReadTests
         END_SCHEMA;
         """;
 
+    private const string REAL_COMPATIBILITY_SCHEMA = """
+        SCHEMA real_compatibility;
+        TYPE real_alias = REAL;
+        END_TYPE;
+        TYPE real_choice = SELECT (real_alias);
+        END_TYPE;
+        ENTITY sample;
+          direct_value : REAL;
+          alias_value : real_alias;
+          values : LIST [1:?] OF REAL;
+          choice : real_choice;
+          integer_value : INTEGER;
+          number_value : NUMBER;
+        END_ENTITY;
+        END_SCHEMA;
+        """;
+
     /// <summary>Reads all simple physical value families and publishes only the validated typed structure.</summary>
     [Test]
     public async Task Should_read_one_simple_data_section_with_exact_typed_values()
@@ -126,6 +143,88 @@ public sealed class AtomicSimpleReadTests
                 && logicals[1].TryGetLogical(out var secondLogical)
                 && secondLogical == LogicalValue.False).IsTrue();
             await Assert.That(structure.Validate().IsValid).IsTrue();
+        }
+    }
+
+    /// <summary>Rejects physical INTEGER parameters for EXPRESS REAL when compatibility is not enabled.</summary>
+    [Test]
+    public async Task Should_reject_integer_parameters_when_real_is_declared_by_default()
+    {
+        var descriptor = CreateDescriptor(REAL_COMPATIBILITY_SCHEMA, "RealCompatibility");
+
+        var exception = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "real_compatibility",
+                "#1=SAMPLE(1,2,(3,4.5),REAL_ALIAS(6),7,8);")),
+            [descriptor]));
+
+        await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
+            .Contains("P21-BIND-PARAMETER");
+    }
+
+    /// <summary>Promotes every generated REAL hydration shape only when compatibility is explicitly enabled.</summary>
+    [Test]
+    public async Task Should_promote_integer_parameters_when_real_compatibility_is_enabled()
+    {
+        var descriptor = CreateDescriptor(REAL_COMPATIBILITY_SCHEMA, "RealCompatibility");
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "real_compatibility",
+                "#1=SAMPLE(18446744073709551616,-2,(3,4.5),REAL_ALIAS(6),7,8);")),
+            [descriptor],
+            ExchangeStructureReadOptions.WithCompatibility(Part21ReadCompatibility.IntegerForReal));
+        var projected = descriptor.ProjectEntity(structure.Entities.Single()).Single().Value;
+        using var output = new StringWriter();
+        structure.Write(output);
+        var reread = ExchangeStructure.Read(new StringReader(output.ToString()), [descriptor]);
+        var rereadValues = descriptor.ProjectEntity(reread.Entities.Single()).Single().Value;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(projected[0].TryGetReal(out var direct)
+                && direct == new RealValue(System.Numerics.BigInteger.Parse("18446744073709551616"), 0)).IsTrue();
+            await Assert.That(projected[1].TryGetReal(out var alias)
+                && alias == new RealValue(-2, 0)).IsTrue();
+            await Assert.That(projected[2].TryGetAggregate(out var values)
+                && values[0].TryGetReal(out var first)
+                && first == new RealValue(3, 0)
+                && values[1].TryGetReal(out var second)
+                && second == new RealValue(45, -1)).IsTrue();
+            await Assert.That(projected[3].TryGetTyped(out var typeName, out var choice)
+                && typeName == "REAL_ALIAS"
+                && choice.TryGetReal(out var selected)
+                && selected == new RealValue(6, 0)).IsTrue();
+            await Assert.That(rereadValues[0].TryGetReal(out var rereadDirect)
+                && rereadDirect == direct).IsTrue();
+        }
+    }
+
+    /// <summary>Preserves physical INTEGER classification, NUMBER alternatives, and strict INTEGER targets.</summary>
+    [Test]
+    public async Task Should_preserve_other_numeric_bindings_when_real_compatibility_is_enabled()
+    {
+        var descriptor = CreateDescriptor(REAL_COMPATIBILITY_SCHEMA, "RealCompatibility");
+        var options = ExchangeStructureReadOptions.WithCompatibility(Part21ReadCompatibility.IntegerForReal);
+        var structure = ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "real_compatibility",
+                "#1=SAMPLE(1.,2.,(3.),REAL_ALIAS(6.),7,8);")),
+            [descriptor],
+            options);
+        var projected = descriptor.ProjectEntity(structure.Entities.Single()).Single().Value;
+        var exception = Assert.Throws<ExchangeStructureBindingException>(() => ExchangeStructure.Read(
+            new StringReader(CreateExchange(
+                "real_compatibility",
+                "#1=SAMPLE(1.,2.,(3.),REAL_ALIAS(6.),7.,8);")),
+            [descriptor],
+            options));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(ParameterValue.FromInteger(8).Kind).IsEqualTo(ParameterValueKind.Integer);
+            await Assert.That(projected[5].TryGetInteger(out var number) && number == 8).IsTrue();
+            await Assert.That(exception.Diagnostics.Select(diagnostic => diagnostic.Code))
+                .Contains("P21-BIND-PARAMETER");
         }
     }
 
