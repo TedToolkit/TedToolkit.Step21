@@ -25,6 +25,7 @@ public sealed class ExchangeStructure
     private readonly ReadOnlyCollection<EntityRegistration> _registrationView;
     private readonly ReadOnlyCollection<SchemaDescriptor> _schemaDescriptors;
     private readonly ReadOnlyDictionary<SchemaName, SchemaDescriptor> _schemaDescriptorsByName;
+    private readonly Part21ReadCompatibility _readCompatibility;
     private IReadOnlyList<Part21Signature> _signatures = Array.Empty<Part21Signature>();
     private IReadOnlyList<Part21ResourceSignatureReport> _signatureReports =
         Array.Empty<Part21ResourceSignatureReport>();
@@ -55,6 +56,14 @@ public sealed class ExchangeStructure
     /// Two descriptors have names that resolve to the same nominal binding identifier.
     /// </exception>
     public ExchangeStructure(HeaderSection header, IReadOnlyCollection<SchemaDescriptor> schemaDescriptors)
+        : this(header, schemaDescriptors, Part21ReadCompatibility.None)
+    {
+    }
+
+    internal ExchangeStructure(
+        HeaderSection header,
+        IReadOnlyCollection<SchemaDescriptor> schemaDescriptors,
+        Part21ReadCompatibility readCompatibility)
     {
         Guard.NotNull(header);
         Guard.NotNull(schemaDescriptors);
@@ -81,7 +90,11 @@ public sealed class ExchangeStructure
         _schemaDescriptors = Array.AsReadOnly(descriptorSnapshot);
         _schemaDescriptorsByName = new ReadOnlyDictionary<SchemaName, SchemaDescriptor>(descriptorBindings);
         _registrationView = _registrations.AsReadOnly();
+        _readCompatibility = readCompatibility;
     }
+
+    internal bool AllowsIntegerForReal =>
+        (_readCompatibility & Part21ReadCompatibility.IntegerForReal) != 0;
 
     /// <summary>Gets the required ISO header retained by identity.</summary>
     public HeaderSection Header { get; }

@@ -137,7 +137,25 @@ public sealed class Part21ResourceLimits
     public double MaximumCompressionRatio { get; }
 }
 
-/// <summary>Binds explicit resource capabilities and quotas to one exchange-structure read.</summary>
+/// <summary>Specifies opt-in compatibility extensions for one exchange-structure read.</summary>
+/// <remarks>
+/// <see cref="None"/> preserves strict ISO 10303-21 binding. Other values deliberately accept documented
+/// non-standard representations and do not change physical token classification.
+/// </remarks>
+[Flags]
+public enum Part21ReadCompatibility
+{
+    /// <summary>Uses strict ISO 10303-21 binding without compatibility extensions.</summary>
+    None = 0,
+
+    /// <summary>
+    /// Accepts a physical <c>INTEGER</c> parameter when its generated EXPRESS target resolves to <c>REAL</c>.
+    /// </summary>
+    /// <remarks>The integer is promoted exactly to a <see cref="RealValue"/> with a zero decimal exponent.</remarks>
+    IntegerForReal = 1,
+}
+
+/// <summary>Binds explicit capabilities, compatibility extensions, and quotas to one exchange-structure read.</summary>
 public sealed class ExchangeStructureReadOptions
 {
     /// <summary>Creates an immutable per-read resource capability snapshot.</summary>
@@ -153,7 +171,8 @@ public sealed class ExchangeStructureReadOptions
             resourceLimits,
             Part21ProcessingLimits.Default,
             signatureVerification: null,
-            domainEquivalenceProvider: null)
+            domainEquivalenceProvider: null,
+            Part21ReadCompatibility.None)
     {
     }
 
@@ -172,7 +191,8 @@ public sealed class ExchangeStructureReadOptions
             resourceLimits,
             processingLimits ?? throw new ArgumentNullException(nameof(processingLimits)),
             signatureVerification,
-            domainEquivalenceProvider);
+            domainEquivalenceProvider,
+            Part21ReadCompatibility.None);
 
     /// <summary>Creates an immutable per-read signature and resource capability snapshot.</summary>
     public static ExchangeStructureReadOptions WithSignatureVerification(
@@ -187,7 +207,8 @@ public sealed class ExchangeStructureReadOptions
             resourceLimits,
             Part21ProcessingLimits.Default,
             signatureVerification ?? throw new ArgumentNullException(nameof(signatureVerification)),
-            domainEquivalenceProvider: null);
+            domainEquivalenceProvider: null,
+            Part21ReadCompatibility.None);
 
     /// <summary>Creates an immutable per-read domain-equivalence and resource capability snapshot.</summary>
     public static ExchangeStructureReadOptions WithDomainEquivalenceProvider(
@@ -203,7 +224,40 @@ public sealed class ExchangeStructureReadOptions
             resourceLimits,
             Part21ProcessingLimits.Default,
             signatureVerification,
-            domainEquivalenceProvider ?? throw new ArgumentNullException(nameof(domainEquivalenceProvider)));
+            domainEquivalenceProvider ?? throw new ArgumentNullException(nameof(domainEquivalenceProvider)),
+            Part21ReadCompatibility.None);
+
+    /// <summary>Creates an immutable per-read snapshot with explicit compatibility extensions.</summary>
+    /// <param name="compatibility">The compatibility extensions to enable for this read.</param>
+    /// <param name="baseUri">The optional absolute identity of the character source.</param>
+    /// <param name="resourceProvider">The optional capability used to acquire external resources.</param>
+    /// <param name="resourceConverter">The optional capability used to convert other resource representations.</param>
+    /// <param name="resourceLimits">The optional resource and archive quotas.</param>
+    /// <param name="processingLimits">The optional shared read, CMS, URI, archive-entry, and binding limits.</param>
+    /// <param name="signatureVerification">The optional CMS signature-verification inputs.</param>
+    /// <param name="domainEquivalenceProvider">The optional SDAI domain-equivalence provider.</param>
+    /// <returns>An immutable option snapshot applied to the complete resource graph for one read.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="compatibility"/> contains an undefined flag.
+    /// </exception>
+    /// <exception cref="ArgumentException"><paramref name="baseUri"/> is relative or exceeds the URI limit.</exception>
+    public static ExchangeStructureReadOptions WithCompatibility(
+        Part21ReadCompatibility compatibility,
+        Uri? baseUri = null,
+        IPart21ResourceProvider? resourceProvider = null,
+        IPart21ResourceConverter? resourceConverter = null,
+        Part21ResourceLimits? resourceLimits = null,
+        Part21ProcessingLimits? processingLimits = null,
+        Part21SignatureVerificationOptions? signatureVerification = null,
+        ISchemaDomainEquivalenceProvider? domainEquivalenceProvider = null) => new(
+            baseUri,
+            resourceProvider,
+            resourceConverter,
+            resourceLimits,
+            processingLimits ?? Part21ProcessingLimits.Default,
+            signatureVerification,
+            domainEquivalenceProvider,
+            compatibility);
 
     private ExchangeStructureReadOptions(
         Uri? baseUri,
@@ -212,9 +266,12 @@ public sealed class ExchangeStructureReadOptions
         Part21ResourceLimits? resourceLimits,
         Part21ProcessingLimits processingLimits,
         Part21SignatureVerificationOptions? signatureVerification,
-        ISchemaDomainEquivalenceProvider? domainEquivalenceProvider)
+        ISchemaDomainEquivalenceProvider? domainEquivalenceProvider,
+        Part21ReadCompatibility compatibility)
     {
         Guard.NotNull(processingLimits);
+        if ((compatibility & ~Part21ReadCompatibility.IntegerForReal) != 0)
+            throw new ArgumentOutOfRangeException(nameof(compatibility));
         if (baseUri is not null && !baseUri.IsAbsoluteUri)
             throw new ArgumentException("A Part 21 base URI must be absolute.", nameof(baseUri));
         if (baseUri is not null)
@@ -233,6 +290,7 @@ public sealed class ExchangeStructureReadOptions
         SignatureVerification = signatureVerification;
         DomainEquivalenceProvider = domainEquivalenceProvider;
         DomainEquivalences = SnapshotDomainEquivalences(domainEquivalenceProvider?.GetEquivalences());
+        Compatibility = compatibility;
     }
 
     /// <summary>Gets the optional absolute identity of the character source.</summary>
@@ -258,6 +316,9 @@ public sealed class ExchangeStructureReadOptions
 
     /// <summary>Gets the validated caller-supplied SDAI domain-equivalence relation.</summary>
     public IReadOnlyList<SchemaDomainEquivalence> DomainEquivalences { get; }
+
+    /// <summary>Gets the explicit compatibility extensions enabled for this read.</summary>
+    public Part21ReadCompatibility Compatibility { get; }
 
     private static IReadOnlyList<SchemaDomainEquivalence> SnapshotDomainEquivalences(
         IReadOnlyCollection<SchemaDomainEquivalence>? equivalences)

@@ -34,6 +34,9 @@ public sealed class ResolutionTests
           amounts : LIST [1:?] OF INTEGER;
           selected : scalar_choice;
         END_ENTITY;
+        ENTITY real_holder;
+          amount : REAL;
+        END_ENTITY;
         END_SCHEMA;
         """;
 
@@ -100,6 +103,42 @@ public sealed class ResolutionTests
             await Assert.That(output.ToString()).Contains("VALUE_HOLDER(42,(42,42),MEASURE(42));");
             await Assert.That(output.ToString()).Contains("'4;3'");
             await Assert.That(structure.Validate().IsValid).IsTrue();
+        }
+    }
+
+    /// <summary>Applies explicit REAL compatibility to every external resource in the same read graph.</summary>
+    [Test]
+    public async Task Should_apply_real_compatibility_to_external_resources()
+    {
+        var provider = new DictionaryProvider(new Dictionary<string, Part21ResourceContent>
+        {
+            ["https://example.test/models/child.p21"] = ClearText(
+                "https://example.test/models/child.p21",
+                Exchange(
+                    "ANCHOR;<target>=#1;ENDSEC;",
+                    string.Empty,
+                    "#1=REAL_HOLDER(18446744073709551616);")),
+        });
+        var structure = Read(
+            Exchange(
+                string.Empty,
+                "REFERENCE;#90=<child.p21#target>;ENDSEC;",
+                "#1=HOLDER($);"),
+            ExchangeStructureReadOptions.WithCompatibility(
+                Part21ReadCompatibility.IntegerForReal,
+                baseUri: new Uri("https://example.test/models/root.p21"),
+                resourceProvider: provider));
+        var reference = structure.References.Single();
+        _ = reference.TryGetResolvedValue(out var resolved);
+        _ = resolved!.TryGetEntity(out var entity);
+        var amount = entity!.GetType().GetProperty("Amount")!.GetValue(entity);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(reference.ResolutionStatus).IsEqualTo(Part21ReferenceResolutionStatus.Resolved);
+            await Assert.That(amount).IsEqualTo(new RealValue(
+                System.Numerics.BigInteger.Parse("18446744073709551616"),
+                0));
         }
     }
 

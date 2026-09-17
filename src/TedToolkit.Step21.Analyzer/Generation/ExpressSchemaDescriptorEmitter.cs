@@ -859,11 +859,19 @@ internal static class ExpressSchemaDescriptorEmitter
                 .AddStatement(invalid);
         }
 
+        if (kind == ExpressScalarKind.Real)
+        {
+            return new IfStatement(new CustomExpression(
+                    $"TryHydrateReal(structure, {parameter}, out var {parameterName})"))
+                .AddStatement(new CustomExpression(createAssignment(parameterName)))
+                .Else()
+                .AddStatement(invalid);
+        }
+
         var tryGetMethod = kind switch
         {
             ExpressScalarKind.Binary => "TryGetBinary",
             ExpressScalarKind.Integer => "TryGetInteger",
-            ExpressScalarKind.Real => "TryGetReal",
             ExpressScalarKind.String => "TryGetString",
             _ => throw new InvalidOperationException($"Unsupported scalar hydration kind '{kind.ToString()}'."),
         };
@@ -1607,11 +1615,15 @@ internal static class ExpressSchemaDescriptorEmitter
                     + $"|| {rawName} != global::TedToolkit.Step21.LogicalValue.Unknown)))";
             }
 
+            if (scalar.Kind == ExpressScalarKind.Real)
+            {
+                return $"TryHydrateReal(structure, {parameter}, out var {rawName})";
+            }
+
             var method = scalar.Kind switch
             {
                 ExpressScalarKind.Binary => "TryGetBinary",
                 ExpressScalarKind.Integer => "TryGetInteger",
-                ExpressScalarKind.Real => "TryGetReal",
                 ExpressScalarKind.String => "TryGetString",
                 _ => throw new InvalidOperationException("NUMBER SELECT alternatives require a later mapping branch."),
             };
@@ -2016,6 +2028,9 @@ internal static class ExpressSchemaDescriptorEmitter
                 method.IsStatic = true;
                 var selectType = GetGeneratedTypeName(_currentSchema, namedSelect.Declaration);
                 method.AddParameter(SourceComposer.Parameter(
+                    new DataType("global::TedToolkit.Step21.ExchangeStructure"),
+                    "structure"));
+                method.AddParameter(SourceComposer.Parameter(
                     new DataType("global::TedToolkit.Step21.ParameterValue"),
                     "parameter"));
                 method.AddParameter(SourceComposer.Parameter(new DataType("out " + selectType), "value"));
@@ -2042,7 +2057,7 @@ internal static class ExpressSchemaDescriptorEmitter
                 _shards.Add(method, shardName);
             }
 
-            return $"{callName}({parameter}, out {output})";
+            return $"{callName}(structure, {parameter}, out {output})";
         }
     }
 

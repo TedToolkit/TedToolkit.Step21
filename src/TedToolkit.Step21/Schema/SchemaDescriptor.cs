@@ -83,6 +83,33 @@ public abstract class SchemaDescriptor
         Entity value,
         IReadOnlyList<KeyValuePair<string, IReadOnlyList<ParameterValue>>> components);
 
+    /// <summary>
+    /// Reads a physical REAL or applies the owning structure's explicit INTEGER-to-REAL compatibility extension.
+    /// </summary>
+    /// <param name="structure">The structure carrying the per-read compatibility snapshot.</param>
+    /// <param name="parameter">The physical parameter to bind.</param>
+    /// <param name="value">The exact REAL value when binding succeeds.</param>
+    /// <returns><see langword="true"/> when the parameter can bind to an EXPRESS <c>REAL</c> target.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    protected static bool TryHydrateReal(
+        ExchangeStructure structure,
+        ParameterValue parameter,
+        out RealValue value)
+    {
+        Guard.NotNull(structure);
+        Guard.NotNull(parameter);
+        if (parameter.TryGetReal(out value))
+            return true;
+        if (structure.AllowsIntegerForReal && parameter.TryGetInteger(out var integer))
+        {
+            value = new RealValue(integer, System.Numerics.BigInteger.Zero);
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
     /// <summary>Validates one ordered schema-owned entity set in an exchange structure.</summary>
     /// <param name="structure">The exchange structure to validate.</param>
     /// <param name="entities">The complete structure paths and registered entities to validate in path order.</param>

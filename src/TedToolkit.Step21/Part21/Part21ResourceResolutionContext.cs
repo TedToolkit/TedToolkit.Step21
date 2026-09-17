@@ -61,6 +61,8 @@ internal sealed class Part21ResourceResolutionContext
 
     internal Part21ProcessingLimits ProcessingLimits => _options.ProcessingLimits;
 
+    internal Part21ReadCompatibility Compatibility => _options.Compatibility;
+
     internal IReadOnlyList<Part21ResourceSignatureReport> CreateSignatureReports() => _documents.Values
         .Where(static document => document is not null)
         .Select(static document => document!)
@@ -1118,7 +1120,7 @@ internal sealed class Part21ResourceResolutionContext
         if (path.Contains('\\') || path.StartsWith("/", StringComparison.Ordinal))
             ThrowCapability("P21-RESOURCE-ARCHIVE-PATH", $"Archive entry '{path}' is not a scoped relative path.");
         var segments = new List<string>();
-        foreach (var segment in path.Split(['/' ], StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in path.Split(['/'], StringSplitOptions.RemoveEmptyEntries))
         {
             if (segment == ".")
                 continue;
