@@ -8,6 +8,7 @@
     <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
     <PackageTags>step;iso-10303;ap203;config-control-design</PackageTags>
     <ExpressSchemaId>ap203</ExpressSchemaId>
+    <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
   </PropertyGroup>
 
   <Import Project="..\..\build\TedToolkit.Step21.SchemaInputs.targets" />
