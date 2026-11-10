@@ -47,9 +47,4 @@
           Visible="false" />
   </ItemGroup>
 
-
-  <ItemGroup>
-    <None Include="../../.agents/skills/read-step21-ap214/**/*"
-          Pack="true" PackagePath="skills/read-step21-ap214/" />
-  </ItemGroup>
 </Project>
