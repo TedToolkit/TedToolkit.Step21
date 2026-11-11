@@ -1423,6 +1423,10 @@ internal sealed class Part21ResourceResolutionContext
                 output.Write(buffer, 0, read);
             }
         }
+        catch (InvalidDataException exception)
+        {
+            ThrowArchiveFormat($"ZIP entry '{entry.FullName}' is invalid: {exception.Message}");
+        }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
