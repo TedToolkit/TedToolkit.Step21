@@ -224,6 +224,10 @@ jobs:
     name: Run TedToolkit pipeline
     needs: verify-ci
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -234,10 +238,16 @@ jobs:
       - name: Fetch and verify EXPRESS schema inputs
         shell: pwsh
         run: ./build/fetch-express-schemas.ps1 -AcknowledgeThirdPartyTerms
+      - name: Sign in to NuGet.org
+        if: github.ref == 'refs/heads/main'
+        id: nuget
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ArchiTed
       - name: Run TedToolkit release pipeline
         env:
-          NuGet__ApiKey: ${{ secrets.NUGET__APIKEY }}
-          NuGet__Url: ${{ vars.NUGET__URL }}
-          NuGet__Source: ${{ vars.NUGET__SOURCE }}
+          NuGet__ApiKey: ${{ steps.nuget.outputs.NUGET_API_KEY }}
+          NuGet__Url: https://www.nuget.org
+          NuGet__Source: https://api.nuget.org/v3/index.json
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet run --project build/TedToolkit.Step21.Build/TedToolkit.Step21.Build.csproj --configuration Release
