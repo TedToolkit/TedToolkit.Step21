@@ -41,3 +41,7 @@ The package remains a local verification artifact. The acknowledgement switch is
 the operator must establish applicable rights for download, local processing, and generation.
 Distribution of the EXP is prohibited, and publication of generated or compiled output requires a
 separate rights review as specified by ADR-0014 (which supersedes ADR-0013).
+
+## Agent skill
+
+The `read-and-write-step21-models` skill ships in `TedToolkit.Step21`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.Step21` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.Step21@<resolved-version>`.
