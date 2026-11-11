@@ -127,11 +127,11 @@ function Get-LatestCachedPackageVersion {
         ForEach-Object {
             Get-ChildItem -LiteralPath (Join-Path $_ $normalizedId) -Directory -ErrorAction SilentlyContinue
         } |
-        Where-Object { $_.Name -match '^10\.' } |
+        Where-Object { $_.Name -match '^11\.' } |
         Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "$normalizedId.$($_.Name).nupkg") -PathType Leaf } |
         Sort-Object { [Version]$_.Name } -Descending
     if (-not $versions) {
-        throw "No cached .NET 10 package was found for '$Id'. Restore the repository's Native AOT toolchain once before running the offline proof."
+        throw "No cached .NET 11 package was found for '$Id'. Restore the repository's Native AOT toolchain once before running the offline proof."
     }
 
     return $versions[0].Name

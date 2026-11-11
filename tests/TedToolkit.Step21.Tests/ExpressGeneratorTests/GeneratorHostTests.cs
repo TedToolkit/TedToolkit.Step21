@@ -108,7 +108,7 @@ public sealed class GeneratorHostTests
                 nullableContextOptions: NullableContextOptions.Enable,
                 specificDiagnosticOptions: new Dictionary<string, ReportDiagnostic>
                 {
-                    // The test host targets net10.0 while the supported runtime asset targets net8.0.
+                    // The test host targets net11.0 while the supported runtime asset targets net8.0.
                     // Framework assembly unification is expected for this deliberate compatibility probe.
                     ["CS1701"] = ReportDiagnostic.Suppress,
                 }));
