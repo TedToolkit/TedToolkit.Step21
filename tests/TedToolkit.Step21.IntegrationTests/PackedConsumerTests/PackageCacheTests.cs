@@ -98,7 +98,7 @@ internal sealed class PackageCacheTests
                 {
                     frameworks = new Dictionary<string, object>
                     {
-                        ["net10.0"] = new
+                        ["net11.0"] = new
                         {
                             dependencies = new Dictionary<string, object>
                             {
